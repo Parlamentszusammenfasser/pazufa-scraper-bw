@@ -12,6 +12,7 @@ collector = {path = "../pazufa-collector", develop = true}
 openapi-client = {path = "../pazufa-collector/oapicode", develop = true}
 lxml = ">=5.3"
 requests = "^2.32"
+toml = ">=0.10"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3"

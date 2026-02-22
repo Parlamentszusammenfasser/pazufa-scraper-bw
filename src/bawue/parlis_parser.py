@@ -28,7 +28,7 @@ def parse_fundstelle_text(text: str) -> dict:
         result["station_typ"] = type_match.group(1).strip()
 
     ausschuss_match = re.search(
-        r"(Ausschuss\s+(?:für|fuer|f\u00c3\u00bcr)\s+[^0-9]+?)(?:\s+\d{2}\.\d{2}\.|\s+Drucksache)",
+        r"(Ausschuss\s+(?:für|fuer)\s+[^0-9]+?)(?:\s+\d{2}\.\d{2}\.|\s+Drucksache)",
         text,
     )
     if ausschuss_match:

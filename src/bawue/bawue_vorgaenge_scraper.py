@@ -1,5 +1,6 @@
 """BaWue Vorgänge scraper: VorgangsScraper subclass for Baden-Württemberg PARLIS."""
 
+import asyncio
 import logging
 import uuid
 from datetime import date, datetime, timedelta
@@ -70,7 +71,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 loaded = toml.load(config_file)
                 return loaded.get("bawue", {})
             except Exception:
-                logger.debug("Could not load [bawue] section from config file")
+                logger.warning("Could not load [bawue] section from config file: %s", config_file, exc_info=True)
         return {}
 
     async def listing_page_extractor(self, vorgangstyp: str) -> list[str]:
@@ -82,8 +83,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         date_to = date.today()
         date_from = date_to - timedelta(days=self._lookback_days)
 
-        # PARLIS uses synchronous requests — run in the event loop's thread
-        raw_vorgaenge = self._parlis.search(vorgangstyp, date_from, date_to)
+        # PARLIS uses synchronous requests — offload to a thread to avoid blocking the event loop
+        raw_vorgaenge = await asyncio.to_thread(self._parlis.search, vorgangstyp, date_from, date_to)
         logger.info("Found %d Vorgänge for type '%s'", len(raw_vorgaenge), vorgangstyp)
 
         vorgang_ids = []
@@ -100,7 +101,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         The framework calls this for each item returned by listing_page_extractor.
         """
-        raw = self._raw_cache.get(vorgang_id)
+        raw = self._raw_cache.pop(vorgang_id, None)
         if raw is None:
             logger.error("No raw data found for vorgang_id %s", vorgang_id)
             return None
@@ -143,7 +144,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         # Parse date
         datum_str = fund.get("datum", "")
-        zp_start = datetime.strptime(datum_str, "%d.%m.%Y") if datum_str else datetime.now()
+        if datum_str:
+            zp_start = datetime.strptime(datum_str, "%d.%m.%Y")
+        else:
+            zp_start = datetime.now()
+            logger.warning("No date found for Fundstelle '%s', using current time", fund.get("raw", ""))
 
         # Determine gremium
         ausschuss = fund.get("ausschuss", "")

@@ -1,5 +1,9 @@
 """Tests for the BawueVorgaengeScraper item_extractor logic."""
 
+import logging
+from datetime import date
+from unittest.mock import MagicMock, patch
+
 import pytest
 from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.stationstyp import Stationstyp
@@ -170,3 +174,98 @@ class TestBuildVorgang:
         vorgang = scraper_build_vorgang(raw)
 
         assert vorgang.stationen[0].gremium.parlament.value == "BW"
+
+
+def _make_scraper_with_mock_parlis(search_return=None):
+    """Create a minimal BawueVorgaengeScraper without full init, with a mock ParlisClient."""
+    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper._wahlperiode = 17
+    scraper._lookback_days = 7
+    scraper._raw_cache = {}
+    scraper._parlis = MagicMock()
+    scraper._parlis.search.return_value = search_return or []
+    return scraper
+
+
+class TestListingPageExtractor:
+    @pytest.mark.asyncio
+    async def test_search_runs_via_to_thread(self):
+        scraper = _make_scraper_with_mock_parlis(search_return=[])
+
+        with patch("bawue.bawue_vorgaenge_scraper.asyncio.to_thread") as mock_to_thread:
+            mock_to_thread.return_value = []
+            await scraper.listing_page_extractor("Gesetzgebung")
+
+        mock_to_thread.assert_called_once()
+        args = mock_to_thread.call_args[0]
+        assert args[0] is scraper._parlis.search
+        assert args[1] == "Gesetzgebung"
+        assert isinstance(args[2], date)
+        assert isinstance(args[3], date)
+
+    @pytest.mark.asyncio
+    async def test_populates_raw_cache(self):
+        raw = [_make_raw_vorgang("V-200"), _make_raw_vorgang("V-201")]
+        scraper = _make_scraper_with_mock_parlis()
+
+        with patch("bawue.bawue_vorgaenge_scraper.asyncio.to_thread", return_value=raw):
+            ids = await scraper.listing_page_extractor("Gesetzgebung")
+
+        assert ids == ["V-200", "V-201"]
+        assert "V-200" in scraper._raw_cache
+        assert "V-201" in scraper._raw_cache
+
+
+class TestItemExtractor:
+    @pytest.mark.asyncio
+    async def test_consumes_cache_entry(self):
+        scraper = _make_scraper_with_mock_parlis()
+        scraper._raw_cache["V-300"] = _make_raw_vorgang("V-300")
+
+        vorgang = await scraper.item_extractor("V-300")
+
+        assert vorgang is not None
+        assert vorgang.titel == "Test Gesetz"
+        assert "V-300" not in scraper._raw_cache
+
+    @pytest.mark.asyncio
+    async def test_cache_empty_after_all_consumed(self):
+        scraper = _make_scraper_with_mock_parlis()
+        scraper._raw_cache["V-310"] = _make_raw_vorgang("V-310")
+        scraper._raw_cache["V-311"] = _make_raw_vorgang("V-311")
+
+        await scraper.item_extractor("V-310")
+        await scraper.item_extractor("V-311")
+
+        assert scraper._raw_cache == {}
+
+    @pytest.mark.asyncio
+    async def test_missing_cache_entry_returns_none(self):
+        scraper = _make_scraper_with_mock_parlis()
+
+        result = await scraper.item_extractor("V-MISSING")
+
+        assert result is None
+
+
+class TestDatetimeFallbackWarning:
+    def test_missing_date_logs_warning(self, scraper_build_vorgang, caplog):
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+
+        raw = _make_raw_vorgang(
+            "V-400",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Test",
+                    "datum": "",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                },
+            ],
+        )
+
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
+            scraper._build_vorgang(raw)
+
+        assert any("No date found for Fundstelle" in msg for msg in caplog.messages)
