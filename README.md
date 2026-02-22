@@ -1,0 +1,326 @@
+# BaWue Scraper
+
+Collector for the Baden-Württemberg state parliament ([Landtag BW](https://www.landtag-bw.de/)) as part of
+the [Parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser) (PaZuFa) platform. Scrapes
+legislative proceedings (Vorgänge) from the PARLIS system and delivers them to the PaZuFa backend via the
+[pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) framework. Runs as a **framework-managed scraper** —
+the collector framework handles scheduling, caching (Redis), API submission, and error tolerance automatically.
+
+## Anforderungen
+
+Der Landtag Baden-Württemberg veröffentlicht parlamentarische Vorgänge ausschließlich über das geschlossene
+PARLIS-System — ohne offizielle API und ohne Open-Data-Schnittstelle. Dieser Scraper überbrückt diese Lücke, indem er
+strukturierte Daten aus PARLIS extrahiert und sie über das pazufa-collector Framework an das PaZuFa-Backend liefert.
+Ziel ist eine vollständige, maschinenlesbare Abbildung aller Gesetzgebungsvorgänge des Landtags.
+
+### Dokumentenpriorisierung
+
+| Priorität  | Daten                                | Quelle                   |
+|------------|--------------------------------------|--------------------------|
+| **Primär** | Vorgänge + Stationen + Dokumentlinks | PARLIS JSON-API          |
+| **Primär** | Drucksachen-Volltext (PDFs)          | landtag-bw.de            |
+| Ergänzend  | Vorparlamentarische Entwürfe         | Beteiligungsportal BaWue |
+| Optional   | Kabinettsbeschlüsse, Gesetzblatt     | STM / Gesetzblatt BaWue  |
+
+### Identifikation
+
+| Identifikator         | Format    | Beispiel       | Quelle                                                      |
+|-----------------------|-----------|----------------|-------------------------------------------------------------|
+| Vorgangsnummer        | `V-XXXXX` | `V-42771`      | PARLIS HTML / JS                                            |
+| Drucksachennummer     | `WP/NR`   | `17/10266`     | Fundstellen-Regex                                           |
+| Plenarprotokollnummer | `WP/NR`   | `17/141`       | Fundstellen-Regex                                           |
+| API-ID                | UUID v5   | `550e8400-...` | Vom Scraper generiert (`uuid5(NAMESPACE_URL, vorgangs_id)`) |
+
+### Gesammelte Informationen
+
+Übersicht der Felder pro Datenmodell — was aktuell befüllt wird und was noch fehlt:
+
+- **Vorgang**: `titel`, `typ`, `initiatoren`, `stationen`, `wahlperiode`, `ids`, `api_id`
+  — fehlt: `kurztitel`, `links`, `lobbyregister`
+- **Station**: `typ`, `zp_start`, `gremium`, `dokumente`
+  — fehlt: `schlagworte`, `stellungnahmen`, `trojanergefahr`
+- **Dokument**: `link`, `drucksnr`, `typ`, `zp_modifiziert`, `zp_referenz`
+  — fehlt: `volltext`, `hash`, `autoren`, `zusammenfassung` (vom Framework-Dokumentpipeline zu befüllen)
+
+### Datenfluss
+
+**Informationsquellen und Scraper-Komponenten:**
+
+```mermaid
+flowchart LR
+    subgraph Quellen
+        PARLIS["PARLIS JSON-API"]
+        PDF["landtag-bw.de PDFs"]
+        BETEIL["Beteiligungsportal"]
+        STM["STM / Gesetzblatt"]
+    end
+
+    subgraph "pazufa-collector Framework"
+        FW_SCHED["Scheduler / Runner"]
+        FW_CACHE["Redis Cache"]
+        FW_API["API Client (httpx)"]
+        FW_DOC["Document Pipeline"]
+    end
+
+    subgraph "BaWue Scraper Plugin"
+        PC["ParlisClient"]
+        PP["ParlisParser"]
+        EM["EnumMapper"]
+        BVS["BawueVorgaengeScraper"]
+    end
+
+    subgraph PaZuFa-Backend
+        API["Write-API v2"]
+    end
+
+    PARLIS --> PC --> PP --> BVS
+    PDF --> FW_DOC
+    BETEIL -. "nicht implementiert" .-> BVS
+    STM -. "nicht implementiert" .-> BVS
+    BVS --> EM
+    FW_SCHED --> BVS
+    BVS --> FW_CACHE
+    BVS --> FW_API --> API
+    BVS --> FW_DOC
+
+    style BETEIL stroke-dasharray: 5 5
+    style STM stroke-dasharray: 5 5
+```
+
+Gestrichelte Linien (- - -) kennzeichnen noch nicht aktive Pfade.
+
+**Lebenszyklus eines Vorgangs (Stationstypen):**
+
+```mermaid
+flowchart TD
+    PREP_REG["preparl-regent\nRegierungsentwurf\n(Beteiligungsportal)"]
+    PREP_BSL["preparl-regbsl\nKabinettsbeschluss\n(STM)"]
+    INIT["parl-initiativ\nParlamentarische Initiative\n(PARLIS)"]
+    LESUNG1["parl-vollvlsgn\nErste Beratung / Lesung\n(PARLIS)"]
+    AUSSCH["parl-ausschber\nAusschussberatung\n(PARLIS)"]
+    LESUNG23["parl-vollvlsgn\nWeitere Beratungen\n(PARLIS)"]
+    AKZ["parl-akzeptanz\nAnnahme\n(PARLIS)"]
+    ABL["parl-ablehnung\nAblehnung\n(PARLIS)"]
+    VESJA["postparl-vesja\nAusfertigung\n(PARLIS)"]
+    GSBLT["postparl-gsblt\nGesetzblatt\n(Gesetzblatt BaWue)"]
+    KRAFT["postparl-kraft\nInkrafttreten\n(PARLIS)"]
+
+    PREP_REG -.-> INIT
+    PREP_BSL -.-> INIT
+    INIT --> LESUNG1
+    LESUNG1 --> AUSSCH
+    AUSSCH --> LESUNG23
+    LESUNG23 --> AKZ
+    LESUNG23 --> ABL
+    AKZ --> VESJA
+    VESJA --> GSBLT
+    GSBLT --> KRAFT
+
+    style PREP_REG stroke-dasharray: 5 5
+    style PREP_BSL stroke-dasharray: 5 5
+    style GSBLT stroke-dasharray: 5 5
+```
+
+### Umsetzungsstand
+
+| Feature                   | Status              | Anmerkungen                                                                |
+|---------------------------|---------------------|----------------------------------------------------------------------------|
+| PARLIS-Suche (Vorgänge)   | Funktioniert        | Automatische Unterteilung bei zu großen Ergebnismengen                     |
+| Vorgang-Extraktion        | Funktioniert        | Titel, Typ, Initiative, Vorgangs-ID                                        |
+| Station-Extraktion        | Funktioniert        | Aus Fundstellen-Parsing (Datum, Typ, Gremium, Dokumentlinks)               |
+| Enum-Mapping              | Funktioniert        | PARLIS-Begriffe → PaZuFa-Enumerationen (Vorgangs-/Stations-/Dokumententyp) |
+| Caching                   | Framework (Redis)   | Automatische Deduplizierung über pazufa-collector ScraperCache             |
+| API-Einlieferung          | Framework           | Automatisch via pazufa-collector API-Client (httpx)                        |
+| Fehlertoleranz            | Framework           | Einzelne Vorgang-Fehler stoppen die Pipeline nicht                         |
+| Scheduling                | Framework           | Konfigurierbar über `cycle-time-s` in config.toml                          |
+| PDF-Volltext-Extraktion   | Framework-Pipeline  | PyPDF + Kreuzberg/EasyOCR + LLM (via pazufa-collector)                     |
+| Dokumenten-Autoren        | Nicht implementiert | `autoren`-Feld wird leer übergeben                                         |
+| Detail-Seiten (PARLIS)    | Nicht implementiert | Zusätzliche Daten über PARLIS-Detailseiten                                 |
+| Beteiligungsportal        | Nicht implementiert | Vorparlamentarische Entwürfe und Stellungnahmen                            |
+| Kabinettsbeschlüsse (STM) | Nicht implementiert | Signalquelle für neue Regierungsentwürfe                                   |
+| Gesetzblatt-Verkündungen  | Nicht implementiert | Postparlamentarische Phase                                                 |
+| Sitzungskalender          | Nicht implementiert | Framework unterstützt SitzungsScraper-Basisklasse                          |
+
+## Prerequisites
+
+- Python 3.12+
+- [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) (framework dependency, cloned alongside)
+- Redis (optional, for production caching; framework degrades gracefully without it)
+- Tesseract OCR with German language pack (for PDF extraction via framework pipeline)
+
+## Setup
+
+```bash
+# Clone the project and the framework
+git clone <repo-url> pazufa-bawue-scraper
+git clone https://codeberg.org/PaZuFa/pazufa-collector.git
+
+# Enter the project and create virtual environment
+cd pazufa-bawue-scraper
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install with Poetry
+pip install poetry
+poetry install
+
+# Configure
+# Edit config.toml with your API credentials and settings
+```
+
+## Usage
+
+The scraper is run via the pazufa-collector framework runner:
+
+```bash
+# Run the collector framework (discovers and runs all scrapers in scraper-dir)
+python -m collector --config-file config.toml
+
+# The framework automatically:
+# - Discovers BawueVorgaengeScraper in src/bawue/
+# - Runs listing_page_extractor for each Vorgangstyp
+# - Runs item_extractor for each found Vorgang
+# - Caches results in Redis (if configured)
+# - Submits Vorgänge to the PaZuFa backend
+# - Repeats after cycle-time-s seconds
+```
+
+## Configuration
+
+Configuration uses the pazufa-collector 4-tier system: Defaults → TOML (`config.toml`) → Environment variables → CLI.
+
+### Framework configuration (config.toml)
+
+| Section      | Key              | Description                                       |
+|--------------|------------------|---------------------------------------------------|
+| `[main]`     | `collector-uuid` | Unique collector instance ID                      |
+| `[main]`     | `cycle-time-s`   | Seconds between scraping cycles (default: 10800)  |
+| `[cache]`    | `redis-host`     | Redis host (optional)                             |
+| `[cache]`    | `redis-port`     | Redis port (default: 6379)                        |
+| `[backend]`  | `ltzf-api-url`   | PaZuFa backend base URL                           |
+| `[backend]`  | `ltzf-api-key`   | API key with `collector` scope                    |
+| `[scrapers]` | `scraper-dir`    | Directory containing scraper modules              |
+| `[llm]`      | `openai-api-key` | API key for LLM document summarization (optional) |
+
+### BaWue-specific configuration (config.toml `[bawue]` section)
+
+| Key                      | Default | Description                               |
+|--------------------------|---------|-------------------------------------------|
+| `wahlperiode`            | 17      | Current Wahlperiode                       |
+| `parlis-request-delay-s` | 1.0     | Delay between PARLIS requests in seconds  |
+| `scrape-lookback-days`   | 7       | Number of days to look back when scraping |
+
+## Development
+
+### Running tests
+
+```bash
+# Unit tests only (default, fast)
+pytest
+
+# With coverage
+pytest --cov=bawue
+
+# Include integration tests (requires running PaZuFa backend)
+pytest -m integration
+
+# Include slow tests (requires internet, hits live PARLIS)
+pytest -m slow
+
+# All tests
+pytest -m ""
+```
+
+### Linting and formatting
+
+```bash
+ruff check src/ tests/        # lint
+ruff check --fix src/ tests/  # lint with auto-fix
+ruff format src/ tests/       # format
+```
+
+### Docker
+
+```bash
+# Copy pazufa-collector into vendor/ for Docker build
+mkdir -p vendor
+cp -r ../pazufa-collector vendor/pazufa-collector
+
+# Build and run
+docker build -t bawue-scraper .
+docker run bawue-scraper
+```
+
+The Docker image includes Tesseract OCR for PDF text extraction. Redis should be provided as a separate
+service (e.g. via docker-compose).
+
+## Project Structure
+
+```
+pazufa-bawue-scraper/
+├── pyproject.toml                      # Poetry project, depends on pazufa-collector
+├── config.toml                         # Framework + BaWue-specific configuration
+├── Dockerfile                          # Python 3.12, Poetry, Tesseract OCR
+├── src/
+│   └── bawue/
+│       ├── bawue_vorgaenge_scraper.py  # VorgangsScraper subclass (framework auto-discovery)
+│       ├── parlis_client.py            # PARLIS HTTP logic (session, search, pagination)
+│       ├── parlis_parser.py            # HTML parsing + fundstelle regex parsing
+│       ├── enum_mapper.py              # PARLIS → PaZuFa enum mapping
+│       └── types.py                    # RawVorgang, RawFundstelle TypedDicts
+├── tests/
+│   └── unit/
+│       ├── test_bawue_scraper.py       # _build_vorgang / _build_station tests
+│       ├── test_parlis_client.py       # PARLIS HTTP client tests
+│       ├── test_parlis_parser.py       # HTML / fundstelle parsing tests
+│       └── test_enum_mapper.py         # Enum mapping + framework validation tests
+└── docs/
+    ├── architecture.md                 # System overview, data flow, components
+    └── anforderungen.md                # Datenmodelle, API, Enumerationen, Datenquellen
+```
+
+## Architecture
+
+The scraper is a **plugin** for the pazufa-collector framework. It implements the `VorgangsScraper` base class, which
+the framework auto-discovers and orchestrates. The framework handles scheduling, Redis caching, API submission, document
+processing (PDF extraction + LLM summarization), and error tolerance. The BaWue scraper only contains PARLIS-specific
+logic: HTTP communication, HTML parsing, fundstelle regex extraction, and enum mapping.
+
+See [docs/architecture.md](docs/architecture.md) for the full architecture documentation.
+
+**Data source:**
+
+- **PARLIS** — undocumented JSON/HTML API at `parlis.landtag-bw.de` (primary source for Vorgänge)
+
+**Framework-provided capabilities:**
+
+- Redis-based caching with 2-week TTL (replaces file-based cache)
+- Auto-generated httpx API client (replaces hand-written LtzfClient)
+- Auto-generated OpenAPI models (replaces hand-written Pydantic models)
+- Document pipeline: PyPDF + Kreuzberg/EasyOCR + LLM (replaces pdfplumber/pytesseract)
+- Scheduling, error tolerance, and scraper lifecycle management
+
+## Links
+
+### PaZuFa / Parlamentszusammenfasser (Codeberg)
+
+- [PaZuFa Organization](https://codeberg.org/PaZuFa)
+- [parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser) — Main project
+- [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) — Collector framework (dependency)
+- [pazufa-backend](https://codeberg.org/PaZuFa/pazufa-backend) — Backend service
+
+### General
+
+- [Bundestagszusammenfasser](https://bundestagszusammenfasser.de/)
+- [Landtag BaWue](https://www.landtag-bw.de/)
+
+### PaZuFa Documentation
+
+- [Parlamentszusammenfasser docs](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/README.md)
+- [OpenAPI-Spezifikation](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/specs/openapi.yml)
+- [Authentication](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/authentication.md)
+
+### Project Documentation
+
+- [Anforderungen](docs/anforderungen.md) — Datenmodelle, API-Endpunkte, Enumerationen, Datenquellen
+- [Architecture](docs/architecture.md) — System overview, framework integration, data flow, enum mapping

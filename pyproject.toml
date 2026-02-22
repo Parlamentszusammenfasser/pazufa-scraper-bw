@@ -1,0 +1,51 @@
+[tool.poetry]
+name = "pazufa-bawue-scraper"
+version = "0.1.0"
+description = "Baden-Württemberg PARLIS scraper for the PaZuFa collector framework"
+authors = ["schneefisch"]
+readme = "README.md"
+packages = [{include = "bawue", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+collector = {path = "../pazufa-collector", develop = true}
+openapi-client = {path = "../pazufa-collector/oapicode", develop = true}
+lxml = ">=5.3"
+requests = "^2.32"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-cov = "^6.0"
+pytest-mock = "^3.14"
+pytest-asyncio = "^1.3"
+responses = "^0.25"
+ruff = "^0.9"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: marks tests requiring a running PaZuFa backend",
+    "slow: marks tests requiring internet access (e.g. live PARLIS)",
+]
+addopts = "-m 'not integration and not slow'"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
