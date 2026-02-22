@@ -216,6 +216,7 @@ Configuration uses the pazufa-collector 4-tier system: Defaults → TOML (`confi
 
 ```bash
 # Unit tests only (default, fast)
+source .venv/bin/activate
 pytest
 
 # With coverage
@@ -223,9 +224,6 @@ pytest --cov=bawue
 
 # Include integration tests (requires running PaZuFa backend)
 pytest -m integration
-
-# Include slow tests (requires internet, hits live PARLIS)
-pytest -m slow
 
 # All tests
 pytest -m ""

@@ -19,6 +19,7 @@ pytest-cov = "^6.0"
 pytest-mock = "^3.14"
 pytest-asyncio = "^1.3"
 responses = "^0.25"
+pytest-httpserver = "^1.1"
 ruff = "^0.9"
 
 [build-system]
@@ -29,9 +30,8 @@ build-backend = "poetry.core.masonry.api"
 testpaths = ["tests"]
 markers = [
     "integration: marks tests requiring a running PaZuFa backend",
-    "slow: marks tests requiring internet access (e.g. live PARLIS)",
 ]
-addopts = "-m 'not integration and not slow'"
+addopts = "-m 'not integration'"
 
 [tool.ruff]
 target-version = "py312"
