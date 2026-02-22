@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+# ---- Builder stage ----
+FROM python:3.12.9-slim AS builder
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -7,23 +8,46 @@ RUN apt-get update \
         poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
+RUN pip install --no-cache-dir poetry==2.1.1
+
 WORKDIR /app
 
-# Install Poetry
-RUN pip install --no-cache-dir poetry
-
-# Copy dependency manifests first for layer caching
-COPY pyproject.toml poetry.lock* ./
-
-# The collector framework and its openapi-client are expected as local path deps.
-# In Docker, we copy them into the build context.
+COPY pyproject.toml poetry.lock ./
 COPY vendor/pazufa-collector/ vendor/pazufa-collector/
 
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi --only main
+# Rewrite local path dependencies from ../pazufa-collector to vendor/pazufa-collector
+RUN sed -i 's|path = "\.\./pazufa-collector"|path = "vendor/pazufa-collector"|' pyproject.toml \
+    && sed -i 's|path = "\.\./pazufa-collector/oapicode"|path = "vendor/pazufa-collector/oapicode"|' pyproject.toml \
+    && sed -i 's|url = "\.\./pazufa-collector"|url = "vendor/pazufa-collector"|' poetry.lock \
+    && sed -i 's|url = "\.\./pazufa-collector/oapicode"|url = "vendor/pazufa-collector/oapicode"|' poetry.lock
 
-# Copy application code
+RUN poetry config virtualenvs.create false \
+    && poetry lock --regenerate \
+    && poetry install --no-interaction --no-ansi --only main --no-root
+
+# ---- Runtime stage ----
+FROM python:3.12.9-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-deu \
+        poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1000 app \
+    && useradd --uid 1000 --gid app --create-home app
+
+WORKDIR /app
+
+# Copy installed Python packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
 COPY src/ src/
 COPY config.sample.toml .
+
+RUN chown -R app:app /app
+USER app
 
 ENTRYPOINT ["python", "-m", "collector", "--config-file", "config.toml"]
