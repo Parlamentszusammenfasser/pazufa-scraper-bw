@@ -1,0 +1,28 @@
+[main]
+# linearize = false
+collector-uuid = "00000000-0000-0000-0000-000000000001"
+# cycle-time-s = 10800
+
+[cache]
+# redis-host = "localhost"
+# redis-port = 6379
+
+[backend]
+# ltzf-api-url = "http://localhost:80"
+ltzf-api-key = "SET_VIA_ENV"
+
+[scrapers]
+scraper-dir = "./src/bawue"
+# scrapers = []
+
+[logging]
+## api-obj-log = "locallogs"
+
+[llm]
+openai-api-key = "SET_VIA_ENV"
+
+# BaWue-specific configuration
+[bawue]
+wahlperiode = 17
+parlis-request-delay-s = 1.0
+scrape-lookback-days = 7
