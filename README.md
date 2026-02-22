@@ -165,7 +165,7 @@ pip install poetry
 poetry install
 
 # Configure
-# Edit config.toml with your API credentials and settings
+# Edit config.sample.toml with your API credentials and settings
 ```
 
 ## Usage
@@ -174,7 +174,7 @@ The scraper is run via the pazufa-collector framework runner:
 
 ```bash
 # Run the collector framework (discovers and runs all scrapers in scraper-dir)
-python -m collector --config-file config.toml
+python -m collector --config-file config.sample.toml
 
 # The framework automatically:
 # - Discovers BawueVorgaengeScraper in src/bawue/

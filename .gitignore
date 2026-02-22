@@ -1,0 +1,9 @@
+## IDEs
+.idea/
+
+## AI Assistants
+.claude
+CLAUDE.md
+
+## Environment properties
+config.toml

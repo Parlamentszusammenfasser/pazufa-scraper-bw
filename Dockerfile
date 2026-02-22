@@ -24,6 +24,6 @@ RUN poetry config virtualenvs.create false \
 
 # Copy application code
 COPY src/ src/
-COPY config.toml .
+COPY config.sample.toml .
 
 ENTRYPOINT ["python", "-m", "collector", "--config-file", "config.toml"]
