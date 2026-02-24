@@ -165,8 +165,9 @@ Jeder Vorgang durchläuft mehrere Stationen.
 | `tops`    | list[Top]  | Tagesordnungspunkte |
 | `public`  | boolean    | Öffentliche Sitzung |
 
-> **Hinweis:** Sitzungen werden noch nicht implementiert. Das Framework stellt die `SitzungsScraper`-Basisklasse
-> bereit.
+> **Phase 1 implementiert:** `BawueSitzungenScraper` parst den ICS-Kalender-Feed von landtag-bw.de und erzeugt
+> `Sitzung`-Modelle mit `nummer=0` und `tops=[]`. Phase 2 wird diese Felder durch Scraping der Tagesordnungen-PDFs
+> anreichern.
 
 ### Gremium (Ausschuss/Plenum)
 
@@ -397,7 +398,7 @@ Enthält verkündete Gesetze nach der parlamentarischen Verabschiedung. Web-Such
 |------------------------------|--------------------------------------|------------------------------------------------------------------------|-----------|
 | Gesetzgebungsvorgänge        | PARLIS JSON-Endpunkt + Detail-Seiten | `Vorgang` + `Station`                                                  | Primär    |
 | Dokumente                    | PDFs der Drucksachen (landtag-bw.de) | `Dokument` (via Framework-Dokumentpipeline)                            | Primär    |
-| Sitzungstermine              | ICS-Kalender, Plenarsitzungen        | `Sitzung` + `Top` (via `SitzungsScraper`, noch nicht implementiert)    | Primär    |
+| Sitzungstermine              | ICS-Kalender, Plenarsitzungen        | `Sitzung` + `Top` (via `BawueSitzungenScraper`, Phase 1 implementiert)| Primär    |
 | Ausschussarbeit              | PARLIS, Ausschussprotokolle          | `Station` (typ: `parl-ausschber`)                                      | Primär    |
 | Vorparlamentarische Entwürfe | Beteiligungsportal                   | `Station` (typ: `preparl-regent`), `Dokument` (typ: `preparl-entwurf`) | Ergänzend |
 | Kabinettsbeschlüsse          | Kabinettsberichte (STM)              | Signal für neue `Vorgang`-Suche in PARLIS                              | Optional  |
@@ -427,6 +428,7 @@ Defaults → TOML (`config.toml`) → Umgebungsvariablen → CLI-Argumente.
 | `[bawue]`  | `wahlperiode`            | 17       | Aktuelle Wahlperiode                      |
 | `[bawue]`  | `parlis-request-delay-s` | 1.0      | Verzögerung zwischen PARLIS-Anfragen (s)  |
 | `[bawue]`  | `scrape-lookback-days`   | 7        | Anzahl Tage Rückblick beim Scraping       |
+| `[bawue]`  | `ics-url`                | *(landtag-bw.de)* | URL des ICS-Kalender-Feeds für Sitzungen |
 
 ## Referenz: pazufa-collector Framework
 

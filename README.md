@@ -2,7 +2,8 @@
 
 Collector for the Baden-Württemberg state parliament ([Landtag BW](https://www.landtag-bw.de/)) as part of
 the [Parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser) (PaZuFa) platform. Scrapes
-legislative proceedings (Vorgänge) from the PARLIS system and delivers them to the PaZuFa backend via the
+legislative proceedings (Vorgänge) from the PARLIS system and parliamentary sessions (Sitzungen) from the ICS calendar
+feed, delivering them to the PaZuFa backend via the
 [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) framework. Runs as a **framework-managed scraper** —
 the collector framework handles scheduling, caching (Redis), API submission, and error tolerance automatically.
 
@@ -19,6 +20,7 @@ Ziel ist eine vollständige, maschinenlesbare Abbildung aller Gesetzgebungsvorg�
 |------------|--------------------------------------|--------------------------|
 | **Primär** | Vorgänge + Stationen + Dokumentlinks | PARLIS JSON-API          |
 | **Primär** | Drucksachen-Volltext (PDFs)          | landtag-bw.de            |
+| **Primär** | Sitzungstermine (Plenar/Ausschuss)   | ICS-Kalender landtag-bw.de |
 | Ergänzend  | Vorparlamentarische Entwürfe         | Beteiligungsportal BaWue |
 | Optional   | Kabinettsbeschlüsse, Gesetzblatt     | STM / Gesetzblatt BaWue  |
 
@@ -123,33 +125,33 @@ flowchart TD
 
 ### Umsetzungsstand
 
-| Feature                   | Status              | Anmerkungen                                                                |
-|---------------------------|---------------------|----------------------------------------------------------------------------|
-| PARLIS-Suche (Vorgänge)   | Funktioniert        | Automatische Unterteilung bei zu großen Ergebnismengen                     |
-| Vorgang-Extraktion        | Funktioniert        | Titel, Typ, Initiative, Vorgangs-ID                                        |
-| Station-Extraktion        | Funktioniert        | Aus Fundstellen-Parsing (Datum, Typ, Gremium, Dokumentlinks)               |
-| Enum-Mapping              | Funktioniert        | PARLIS-Begriffe → PaZuFa-Enumerationen (Vorgangs-/Stations-/Dokumententyp) |
-| Caching                   | Framework (Redis)   | Automatische Deduplizierung über pazufa-collector ScraperCache             |
-| API-Einlieferung          | Framework           | Automatisch via pazufa-collector API-Client (httpx)                        |
-| Fehlertoleranz            | Framework           | Einzelne Vorgang-Fehler stoppen die Pipeline nicht                         |
-| Scheduling                | Framework           | Konfigurierbar über `cycle-time-s` in config.toml                          |
-| PDF-Volltext-Extraktion   | Framework-Pipeline  | PyPDF + Kreuzberg/EasyOCR + LLM (via pazufa-collector)                     |
-| Dokumenten-Autoren        | Funktioniert        | Aus Fundstelle-Text extrahiert, Fallback auf Initiative                    |
-| Detail-Seiten (PARLIS)    | Nicht implementiert | Zusätzliche Daten über PARLIS-Detailseiten                                 |
-| Beteiligungsportal        | Nicht implementiert | Vorparlamentarische Entwürfe und Stellungnahmen                            |
-| Kabinettsbeschlüsse (STM) | Nicht implementiert | Signalquelle für neue Regierungsentwürfe                                   |
-| Gesetzblatt-Verkündungen  | Nicht implementiert | Postparlamentarische Phase                                                 |
-| Sitzungskalender          | Nicht implementiert | Framework unterstützt SitzungsScraper-Basisklasse                          |
+| Feature                    | Status              | Anmerkungen                                                                |
+|----------------------------|---------------------|----------------------------------------------------------------------------|
+| PARLIS-Suche (Vorgänge)    | Funktioniert        | Automatische Unterteilung bei zu großen Ergebnismengen                     |
+| Vorgang-Extraktion         | Funktioniert        | Titel, Typ, Initiative, Vorgangs-ID                                        |
+| Station-Extraktion         | Funktioniert        | Aus Fundstellen-Parsing (Datum, Typ, Gremium, Dokumentlinks)               |
+| Enum-Mapping               | Funktioniert        | PARLIS-Begriffe → PaZuFa-Enumerationen (Vorgangs-/Stations-/Dokumententyp) |
+| Caching                    | Framework (Redis)   | Automatische Deduplizierung über pazufa-collector ScraperCache             |
+| API-Einlieferung           | Framework           | Automatisch via pazufa-collector API-Client (httpx)                        |
+| Fehlertoleranz             | Framework           | Einzelne Vorgang-Fehler stoppen die Pipeline nicht                         |
+| Scheduling                 | Framework           | Konfigurierbar über `cycle-time-s` in config.toml                          |
+| PDF-Volltext-Extraktion    | Framework-Pipeline  | PyPDF + Kreuzberg/EasyOCR + LLM (via pazufa-collector)                     |
+| Dokumenten-Autoren         | Funktioniert        | Aus Fundstelle-Text extrahiert, Fallback auf Initiative                    |
+| Detail-Seiten (PARLIS)     | Nicht implementiert | Zusätzliche Daten über PARLIS-Detailseiten                                 |
+| Beteiligungsportal         | Nicht implementiert | Vorparlamentarische Entwürfe und Stellungnahmen                            |
+| Kabinettsbeschlüsse (STM)  | Nicht implementiert | Signalquelle für neue Regierungsentwürfe                                   |
+| Gesetzblatt-Verkündungen   | Nicht implementiert | Postparlamentarische Phase                                                 |
+| Sitzungskalender (Phase 1) | Funktioniert        | ICS-Feed-Parsing, Sitzung-Modelle mit `nummer=0`, `tops=[]`                |
+| Sitzungskalender (Phase 2) | Nicht implementiert | Anreicherung mit Tagesordnungen-PDFs für Sitzungsnummern und TOPs          |
 
 ### Next Steps
 
-| # | Feature                         | Priorität | Beschreibung                                                                                                                                                                                                                             |
-|---|---------------------------------|-----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 1 | `asyncio.to_thread()` Wrapping  | Hoch      | Die synchrone `requests.Session` blockiert den Event-Loop des Frameworks. `ParlisClient.search()` in `asyncio.to_thread()` wrappen — kleine Änderung, aber wichtig für korrektes Laufzeitverhalten wenn mehrere Scraper parallel laufen. |
-| 2 | SitzungsScraper (ICS-Kalender)  | Hoch      | Neuer `BawueSitzungenScraper` auf Basis der Framework-`SitzungsScraper`-Klasse. ICS-Feed von landtag-bw.de parsen und `Sitzung` + `Top`-Modelle erzeugen. Sitzungsdaten sind als "Primär" eingestuft.                                    |
-| 3 | ~~Dokument-Autoren~~ | ~~Mittel~~ | ~~Erledigt~~ — Autoren werden aus Fundstelle-Text extrahiert (Fallback auf Initiative). Befüllt `Dokument.autoren` und `Vorgang.initiatoren`.                                                                                           |
-| 4 | Beteiligungsportal (vorparlam.) | Ergänzend | HTML-Scraping des Beteiligungsportals BaWue für vorparlamentarische Entwürfe und Stellungnahmen. Deckt die Stationstypen `preparl-regent` und `preparl-regbsl` ab, die PARLIS nicht liefert.                                             |
-| 5 | Gesetzblatt BaWue (postparlam.) | Ergänzend | Verkündungen im Gesetzblatt erfassen (`postparl-gsblt`). Komplettiert den Gesetzgebungslebenszyklus nach der parlamentarischen Phase.                                                                                                    |
+| # | Feature                            | Priorität | Beschreibung                                                                                                                                                                                 |
+|---|------------------------------------|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1 | ~~SitzungsScraper (ICS-Kalender)~~ | ~~Hoch~~  | ~~Phase 1 implementiert~~ — `BawueSitzungenScraper` parst ICS-Feed, erzeugt `Sitzung`-Modelle mit `nummer=0`, `tops=[]`.                                                                     |
+| 2 | SitzungsScraper Phase 2 (TOPs)     | Hoch      | Anreicherung: Tagesordnungen-PDFs von landtag-bw.de scrapen, Sitzungsnummern aus Dateinamen extrahieren, TOPs aus PDFs parsen.                                                               |
+| 3 | Beteiligungsportal (vorparlam.)    | Ergänzend | HTML-Scraping des Beteiligungsportals BaWue für vorparlamentarische Entwürfe und Stellungnahmen. Deckt die Stationstypen `preparl-regent` und `preparl-regbsl` ab, die PARLIS nicht liefert. |
+| 4 | Gesetzblatt BaWue (postparlam.)    | Ergänzend | Verkündungen im Gesetzblatt erfassen (`postparl-gsblt`). Komplettiert den Gesetzgebungslebenszyklus nach der parlamentarischen Phase.                                                        |
 
 ## Prerequisites
 
@@ -187,11 +189,11 @@ The scraper is run via the pazufa-collector framework runner:
 python -m collector --config-file config.sample.toml
 
 # The framework automatically:
-# - Discovers BawueVorgaengeScraper in src/bawue/
-# - Runs listing_page_extractor for each Vorgangstyp
-# - Runs item_extractor for each found Vorgang
+# - Discovers BawueVorgaengeScraper and BawueSitzungenScraper in src/bawue/
+# - Runs listing_page_extractor for each Vorgangstyp / ICS feed URL
+# - Runs item_extractor for each found Vorgang / date key
 # - Caches results in Redis (if configured)
-# - Submits Vorgänge to the PaZuFa backend
+# - Submits Vorgänge and Sitzungen to the PaZuFa backend
 # - Repeats after cycle-time-s seconds
 ```
 
@@ -214,11 +216,12 @@ Configuration uses the pazufa-collector 4-tier system: Defaults → TOML (`confi
 
 ### BaWue-specific configuration (config.toml `[bawue]` section)
 
-| Key                      | Default | Description                               |
-|--------------------------|---------|-------------------------------------------|
-| `wahlperiode`            | 17      | Current Wahlperiode                       |
-| `parlis-request-delay-s` | 1.0     | Delay between PARLIS requests in seconds  |
-| `scrape-lookback-days`   | 7       | Number of days to look back when scraping |
+| Key                      | Default                    | Description                                |
+|--------------------------|----------------------------|--------------------------------------------|
+| `wahlperiode`            | 17                         | Current Wahlperiode                        |
+| `parlis-request-delay-s` | 1.0                        | Delay between PARLIS requests in seconds   |
+| `scrape-lookback-days`   | 7                          | Number of days to look back when scraping  |
+| `ics-url`                | *(landtag-bw.de ICS feed)* | URL of the ICS calendar feed for Sitzungen |
 
 ## Development
 
@@ -272,13 +275,19 @@ pazufa-bawue-scraper/
 ├── src/
 │   └── bawue/
 │       ├── bawue_vorgaenge_scraper.py  # VorgangsScraper subclass (framework auto-discovery)
+│       ├── bawue_sitzungen_scraper.py  # SitzungsScraper subclass (ICS calendar → Sitzung)
+│       ├── ics_parser.py               # Stateless ICS parsing + event filtering
 │       ├── parlis_client.py            # PARLIS HTTP logic (session, search, pagination)
 │       ├── parlis_parser.py            # HTML parsing + fundstelle regex parsing
 │       ├── enum_mapper.py              # PARLIS → PaZuFa enum mapping
 │       └── types.py                    # RawVorgang, RawFundstelle TypedDicts
 ├── tests/
 │   └── unit/
+│       ├── fixtures/
+│       │   └── sample_calendar.ics     # ICS fixture for deterministic tests
 │       ├── test_bawue_scraper.py       # _build_vorgang / _build_station tests
+│       ├── test_bawue_sitzungen_scraper.py # SitzungsScraper tests
+│       ├── test_ics_parser.py          # ICS parsing / filtering / grouping tests
 │       ├── test_parlis_client.py       # PARLIS HTTP client tests
 │       ├── test_parlis_parser.py       # HTML / fundstelle parsing tests
 │       └── test_enum_mapper.py         # Enum mapping + framework validation tests
@@ -289,16 +298,18 @@ pazufa-bawue-scraper/
 
 ## Architecture
 
-The scraper is a **plugin** for the pazufa-collector framework. It implements the `VorgangsScraper` base class, which
-the framework auto-discovers and orchestrates. The framework handles scheduling, Redis caching, API submission, document
-processing (PDF extraction + LLM summarization), and error tolerance. The BaWue scraper only contains PARLIS-specific
-logic: HTTP communication, HTML parsing, fundstelle regex extraction, and enum mapping.
+The scraper is a **plugin** for the pazufa-collector framework. It implements the `VorgangsScraper` and
+`SitzungsScraper` base classes, which the framework auto-discovers and orchestrates. The framework handles scheduling,
+Redis caching, API submission, document processing (PDF extraction + LLM summarization), and error tolerance. The BaWue
+scraper contains PARLIS-specific logic (HTTP communication, HTML parsing, fundstelle regex extraction, enum mapping) and
+ICS calendar parsing for session data.
 
 See [docs/architecture.md](docs/architecture.md) for the full architecture documentation.
 
-**Data source:**
+**Data sources:**
 
 - **PARLIS** — undocumented JSON/HTML API at `parlis.landtag-bw.de` (primary source for Vorgänge)
+- **ICS Calendar** — `landtag-bw.de` calendar feed (primary source for Sitzungen)
 
 **Framework-provided capabilities:**
 

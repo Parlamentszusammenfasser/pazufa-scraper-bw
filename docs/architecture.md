@@ -4,10 +4,10 @@
 
 The BaWue Scraper is a **scraper plugin** for the
 [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) framework within the Parlamentszusammenfasser (PaZuFa)
-ecosystem. It implements the `VorgangsScraper` base class, which the framework auto-discovers and orchestrates. The
-framework handles all cross-cutting concerns — scheduling, Redis caching, API submission, document processing, LLM
-summarization, and error tolerance. The BaWue scraper contains only the PARLIS-specific logic: HTTP communication, HTML
-parsing, fundstelle extraction, and enum mapping.
+ecosystem. It implements the `VorgangsScraper` and `SitzungsScraper` base classes, which the framework auto-discovers
+and orchestrates. The framework handles all cross-cutting concerns — scheduling, Redis caching, API submission, document
+processing, LLM summarization, and error tolerance. The BaWue scraper contains PARLIS-specific logic (HTTP
+communication, HTML parsing, fundstelle extraction, enum mapping) and ICS calendar parsing for session data.
 
 ```mermaid
 graph LR
@@ -25,6 +25,8 @@ graph LR
 
     subgraph "BaWue Scraper Plugin"
         BVS["BawueVorgaengeScraper<br/>(VorgangsScraper)"]
+        BSS["BawueSitzungenScraper<br/>(SitzungsScraper)"]
+        ICS["IcsParser"]
         PC["ParlisClient"]
         PP["ParlisParser"]
         EM["EnumMapper"]
@@ -40,10 +42,14 @@ graph LR
     PC --> PP --> BVS
     BVS --> EM
     Runner -->|" orchestrates "| BVS
+    Runner -->|" orchestrates "| BSS
     BVS -->|" Vorgang "| Cache
+    BSS -->|" Sitzung "| Cache
     Cache -->|" dedup "| APIClient
     APIClient -->|" PUT /api/v2/vorgang "| API
+    APIClient -->|" PUT /api/v2/kalender "| API
     PDFs --> DocPipeline
+    ICSFeed["ICS Calendar<br/>(landtag-bw.de)"] -->|" ics data "| ICS --> BSS
     API --> DB
     DB --> Web
 ```
@@ -65,6 +71,7 @@ graph LR
 |------------------|------------------------------------------------------|------------------|
 | `requests`       | PARLIS HTTP sessions (cookie-based, synchronous)     | BaWue scraper    |
 | `lxml`           | HTML parsing of PARLIS results                       | BaWue scraper    |
+| `icalendar`      | ICS calendar feed parsing for Sitzungen              | BaWue scraper    |
 | `aiohttp`        | Async HTTP sessions for framework                    | Framework        |
 | `httpx`          | Auto-generated PaZuFa API client                     | Framework        |
 | `openapi-client` | Auto-generated Pydantic models from OpenAPI spec     | Framework        |
@@ -76,7 +83,8 @@ dependencies.
 
 ## 3. Framework Integration
 
-The scraper integrates with the pazufa-collector framework through the `VorgangsScraper` base class:
+The scraper integrates with the pazufa-collector framework through the `VorgangsScraper` and `SitzungsScraper` base
+classes:
 
 ```mermaid
 classDiagram
@@ -89,6 +97,14 @@ classDiagram
         +cache: ScraperCache
     }
 
+    class SitzungsScraper {
+        <<abstract>>
+        +listing_urls: list[str]
+        +listing_page_extractor(url) list[Any]
+        +item_extractor(item) tuple
+        +send_result(item)
+    }
+
     class BawueVorgaengeScraper {
         -_parlis: ParlisClient
         -_raw_cache: dict[str, RawVorgang]
@@ -99,7 +115,16 @@ classDiagram
         -_build_station(fund, initiative) Station
     }
 
+    class BawueSitzungenScraper {
+        -_events_by_date: dict[str, list]
+        -_wahlperiode: int
+        +listing_page_extractor(url) list[str]
+        +item_extractor(date_key) tuple
+        +send_result(item) tuple
+    }
+
     VorgangsScraper <|-- BawueVorgaengeScraper
+    SitzungsScraper <|-- BawueSitzungenScraper
 
     class ParlisClient {
         +search(vorgangstyp, date_from, date_to) list[RawVorgang]
@@ -113,14 +138,22 @@ classDiagram
         +parse_fundstelle_text(text) dict
     }
 
+    class IcsParser {
+        +parse_ics_feed(ics_data) list[ParsedEvent]
+        +extract_gremium_name(summary) str
+        +group_events_by_date(events) dict
+    }
+
     BawueVorgaengeScraper --> ParlisClient
     ParlisClient --> ParlisParser
+    BawueSitzungenScraper --> IcsParser
 ```
 
 ### Auto-Discovery
 
 The framework scans the configured `scraper-dir` for Python files matching `*_scraper.py` and loads classes that inherit
-from `VorgangsScraper` or `SitzungsScraper`. The file `bawue_vorgaenge_scraper.py` is automatically discovered.
+from `VorgangsScraper` or `SitzungsScraper`. The files `bawue_vorgaenge_scraper.py` and `bawue_sitzungen_scraper.py` are
+automatically discovered.
 
 ### VorgangsScraper Contract
 
@@ -129,6 +162,14 @@ from `VorgangsScraper` or `SitzungsScraper`. The file `bawue_vorgaenge_scraper.p
 | `listing_page_extractor()` | Fetch a listing page and return item identifiers    | Searches PARLIS by Vorgangstyp, returns vorgang IDs     |
 | `item_extractor()`         | Convert a single item into a `Vorgang` model        | Looks up raw data from cache, builds framework `Vorgang` |
 | `send_result()`            | Submit the result (inherited, not overridden)        | Framework handles API submission automatically          |
+
+### SitzungsScraper Contract
+
+| Method                     | Purpose                                                 | BaWue implementation                                         |
+|----------------------------|---------------------------------------------------------|--------------------------------------------------------------|
+| `listing_page_extractor()` | Fetch a listing source and return item identifiers      | Fetches ICS feed, parses events, returns ISO date strings    |
+| `item_extractor()`         | Convert a single item into `(datetime, List[Sitzung])`  | Builds Sitzung models from cached ParsedEvents               |
+| `send_result()`            | Submit the result                                       | **Overridden** to use `Parlament.BW` (base hardcodes `BY`)  |
 
 ### Listing URL Pattern
 
@@ -201,7 +242,52 @@ The main scraper class. Subclass of `VorgangsScraper`.
 - Implement `item_extractor()`: convert raw PARLIS data into framework `Vorgang` models
 - Maintain `_raw_cache` to bridge listing/item extraction phases
 
-### 5.2 ParlisClient
+### 5.2 BawueSitzungenScraper
+
+The Sitzungen scraper. Subclass of `SitzungsScraper`.
+
+**Responsibilities:**
+- Load BaWue-specific configuration from `[bawue]` section (reuses `_load_bawue_config` pattern)
+- Implement `listing_page_extractor()`: fetch ICS calendar feed, parse and filter events, return ISO date strings
+- Implement `item_extractor()`: build `Sitzung` models from cached `ParsedEvent` objects
+- Override `send_result()`: use `Parlament.BW` instead of hardcoded `Parlament.BY`
+- Maintain `_events_by_date` dict to bridge listing/item extraction phases
+
+**Field mapping (Phase 1):**
+
+| Sitzung field | Source         | Notes                                        |
+|---------------|----------------|----------------------------------------------|
+| `termin`      | DTSTART        | Naive → Europe/Berlin → UTC                  |
+| `gremium`     | SUMMARY        | Parsed via `extract_gremium_name()`          |
+| `nummer`      | —              | `0` (not available in ICS, Phase 2 enriches) |
+| `tops`        | —              | `[]` (not available in ICS, Phase 2 enriches)|
+| `public`      | —              | `True`                                       |
+| `titel`       | SUMMARY        | Raw ICS SUMMARY value                        |
+| `api_id`      | UID            | `uuid5(NAMESPACE_URL, uid)` for determinism  |
+
+### 5.3 IcsParser
+
+Stateless functions for parsing ICS calendar feeds.
+
+**Responsibilities:**
+- Parse ICS bytes via the `icalendar` library
+- Filter events by SUMMARY prefix (include plenary, committee, Haushaltsberatungen; exclude factions, presidium, elections)
+- Extract gremium names from SUMMARY strings
+- Group parsed events by calendar date
+
+**Event filtering rules:**
+
+| SUMMARY prefix                                  | Included? | Gremium name            |
+|-------------------------------------------------|-----------|-------------------------|
+| `Plenarsitzung:`                                | Yes       | `"Plenum"`              |
+| `Fraktions- und Ausschusssitzungen: Ausschuesse`| Yes       | `"Ausschusssitzungen"` |
+| `Fraktions- und Ausschusssitzungen: FinA`       | Yes       | `"Finanzausschuss"`     |
+| `Haushaltsberatungen: ...`                      | Yes       | extract after `: `      |
+| `Fraktions- und Ausschusssitzungen: Fraktionen` | No        | faction-only            |
+| `Prasidium:`                                    | No        | internal                |
+| `Wahl:`                                         | No        | election event          |
+
+### 5.5 ParlisClient
 
 Encapsulates all PARLIS HTTP communication using synchronous `requests.Session`.
 
@@ -213,7 +299,7 @@ Encapsulates all PARLIS HTTP communication using synchronous `requests.Session`.
 - Automatic date subdivision when result sets are too large (monthly windows)
 - Respectful request delays between PARLIS calls
 
-### 5.3 ParlisParser
+### 5.6 ParlisParser
 
 Stateless functions for parsing PARLIS HTML responses.
 
@@ -223,7 +309,7 @@ Stateless functions for parsing PARLIS HTML responses.
 - Parse Fundstellen text into structured data (station type, date, Drucksache, committee, PDF URL)
 - Parse HTML comment blocks for additional raw field data
 
-### 5.4 EnumMapper
+### 5.7 EnumMapper
 
 Maps PARLIS terminology to PaZuFa enum values from the auto-generated OpenAPI models.
 
@@ -234,7 +320,7 @@ Maps PARLIS terminology to PaZuFa enum values from the auto-generated OpenAPI mo
 - Map document references to `Doktyp` enum
 - Fall back to `SONSTIG` for unmapped values
 
-### 5.5 Types
+### 5.8 Types
 
 TypedDict definitions for internal data exchange between ParlisClient, ParlisParser, and BawueVorgaengeScraper.
 
@@ -445,7 +531,7 @@ This project was migrated from a standalone hexagonal-architecture scraper
 | PDF extraction      | pdfplumber + pytesseract                | Framework pipeline (PyPDF + Kreuzberg + LLM)  |
 | Configuration       | pydantic-settings (.env)                | 4-tier (Defaults → TOML → env → CLI)          |
 | Orchestration       | Custom Orchestrator class               | Framework runner with auto-discovery           |
-| ICS calendar        | IcsAdapter (not implemented)            | SitzungsScraper (not yet implemented)          |
+| ICS calendar        | IcsAdapter (not implemented)            | BawueSitzungenScraper (Phase 1 complete)       |
 | Deployment          | Standalone Docker / AWS Lambda          | Framework-managed Docker container             |
 
 Components preserved as PARLIS-specific logic:
@@ -456,12 +542,13 @@ Components preserved as PARLIS-specific logic:
 
 ## 12. Future Work
 
-| Feature                     | Priority  | Description                                                          |
-|-----------------------------|-----------|----------------------------------------------------------------------|
-| **SitzungsScraper**         | Hoch      | ICS calendar parsing for Sitzung/Top data (framework provides base)  |
-| **Beteiligungsportal**      | Ergänzend | Vorparlamentarische Entwürfe und Stellungnahmen                      |
-| **Kabinettsberichte (STM)** | Optional  | Signalquelle für neue Regierungsentwürfe                             |
-| **Gesetzblatt BaWue**       | Ergänzend | Verkündungen (`postparl-gsblt` station)                              |
-| **PARLIS Detail-Seiten**    | Ergänzend | Additional data from individual Vorgang detail pages                 |
-| **asyncio.to_thread()**     | Technisch | Wrap sync PARLIS requests for proper async integration               |
-| ~~**Dokument-Autoren**~~    | Erledigt  | Autoren aus Fundstelle-Text extrahiert, Fallback auf Initiative      |
+| Feature                       | Priority  | Description                                                                     |
+|-------------------------------|-----------|---------------------------------------------------------------------------------|
+| ~~**SitzungsScraper Ph.1**~~  | Erledigt  | ICS calendar parsing, Sitzung models with `nummer=0`, `tops=[]`                 |
+| **SitzungsScraper Phase 2**   | Hoch      | Enrich with Tagesordnungen PDFs: session numbers from filenames, TOPs from PDFs |
+| **Beteiligungsportal**        | Ergänzend | Vorparlamentarische Entwürfe und Stellungnahmen                                 |
+| **Kabinettsberichte (STM)**   | Optional  | Signalquelle für neue Regierungsentwürfe                                        |
+| **Gesetzblatt BaWue**         | Ergänzend | Verkündungen (`postparl-gsblt` station)                                         |
+| **PARLIS Detail-Seiten**      | Ergänzend | Additional data from individual Vorgang detail pages                            |
+| **asyncio.to_thread()**       | Technisch | Wrap sync PARLIS requests for proper async integration                          |
+| ~~**Dokument-Autoren**~~      | Erledigt  | Autoren aus Fundstelle-Text extrahiert, Fallback auf Initiative                 |

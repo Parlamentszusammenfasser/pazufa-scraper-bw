@@ -26,3 +26,4 @@ openai-api-key = "SET_VIA_ENV"
 wahlperiode = 17
 parlis-request-delay-s = 1.0
 scrape-lookback-days = 7
+ics-url = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkalender.ics"
