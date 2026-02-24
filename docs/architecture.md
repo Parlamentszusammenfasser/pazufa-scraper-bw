@@ -238,7 +238,7 @@ Maps PARLIS terminology to PaZuFa enum values from the auto-generated OpenAPI mo
 
 TypedDict definitions for internal data exchange between ParlisClient, ParlisParser, and BawueVorgaengeScraper.
 
-- `RawFundstelle` — parsed Fundstelle with station_typ, datum, drucksache, plenarprotokoll, ausschuss, pdf_url
+- `RawFundstelle` — parsed Fundstelle with station_typ, datum, drucksache, plenarprotokoll, ausschuss, autor_text, pdf_url
 - `RawVorgang` — parsed Vorgang with titel, vorgangs_id, Vorgangstyp, Initiative, fundstellen_parsed
 
 ## 6. PARLIS Scraping Strategy
@@ -299,7 +299,7 @@ Each Vorgang record contains Fundstellen (references) that encode station data a
 ```
 
 Extractable fields via regex: station type, date, Drucksache number, Plenarprotokoll reference, committee name,
-page count, PDF URL.
+page count, PDF URL, author text (gap between station type and date).
 
 ### 6.5 Incremental Date Filtering
 
@@ -464,3 +464,4 @@ Components preserved as PARLIS-specific logic:
 | **Gesetzblatt BaWue**       | Ergänzend | Verkündungen (`postparl-gsblt` station)                              |
 | **PARLIS Detail-Seiten**    | Ergänzend | Additional data from individual Vorgang detail pages                 |
 | **asyncio.to_thread()**     | Technisch | Wrap sync PARLIS requests for proper async integration               |
+| ~~**Dokument-Autoren**~~    | Erledigt  | Autoren aus Fundstelle-Text extrahiert, Fallback auf Initiative      |

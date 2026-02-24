@@ -149,7 +149,9 @@ Jeder Vorgang durchläuft mehrere Stationen.
 **BaWue-Besonderheiten:**
 - `volltext` und `hash` werden initial leer übergeben — das Framework füllt diese über die Dokumentpipeline
 - `zp_modifiziert` und `zp_referenz` werden auf das Fundstellen-Datum gesetzt
-- `autoren` wird leer übergeben (noch nicht implementiert)
+- `autoren` wird aus dem Fundstelle-Text extrahiert (Lücke zwischen Stationstyp und Datum). Wenn kein Autor im
+  Fundstelle-Text vorhanden ist, wird auf das `Initiative`-Feld des Vorgangs zurückgefallen. Ausschuss- und
+  Plenarprotokoll-Fundstellen werden ausgenommen (deren Gap-Text enthält keine Autoren).
 
 ### Sitzung (Parlamentssitzung)
 

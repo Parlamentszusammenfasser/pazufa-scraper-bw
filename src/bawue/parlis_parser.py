@@ -34,6 +34,11 @@ def parse_fundstelle_text(text: str) -> dict:
     if ausschuss_match:
         result["ausschuss"] = ausschuss_match.group(1).strip()
 
+    if type_match and date_match:
+        gap_text = text[type_match.end() : date_match.start()].strip()
+        if gap_text and not gap_text.startswith(("Ausschuss", "Plenarprotokoll")):
+            result["autor_text"] = gap_text
+
     pages_match = re.search(r"\((\d+)\s+S\.\)", text)
     if pages_match:
         result["seiten"] = int(pages_match.group(1))

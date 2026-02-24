@@ -11,6 +11,7 @@ class RawFundstelle(TypedDict, total=False):
     drucksache: str | None
     plenarprotokoll: str | None
     station_typ: str
+    autor_text: str | None
     ausschuss: str | None
     seiten: int | None
     pdf_url: str | None

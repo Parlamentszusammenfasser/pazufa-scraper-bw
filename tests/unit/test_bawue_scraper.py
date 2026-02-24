@@ -9,7 +9,7 @@ from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.stationstyp import Stationstyp
 from openapi_client.models.vorgangstyp import Vorgangstyp
 
-from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
+from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, _parse_autoren
 
 
 def _make_raw_vorgang(
@@ -269,3 +269,102 @@ class TestDatetimeFallbackWarning:
             scraper._build_vorgang(raw)
 
         assert any("No date found for Fundstelle" in msg for msg in caplog.messages)
+
+
+class TestParseAutoren:
+    def test_single_author(self):
+        result = _parse_autoren("Fraktion GRÜNE")
+        assert len(result) == 1
+        assert result[0].organisation == "Fraktion GRÜNE"
+
+    def test_comma_separated(self):
+        result = _parse_autoren("Fraktion GRÜNE, Fraktion der CDU")
+        assert len(result) == 2
+        assert result[0].organisation == "Fraktion GRÜNE"
+        assert result[1].organisation == "Fraktion der CDU"
+
+    def test_empty_string(self):
+        assert _parse_autoren("") == []
+
+    def test_whitespace_only(self):
+        assert _parse_autoren("   ") == []
+
+
+class TestBuildStationAutoren:
+    def test_fundstelle_autor_text_used(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-500",
+            initiative="SPD",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "autor_text": "Fraktion GRÜNE",
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+        doc = vorgang.stationen[0].dokumente[0].actual_instance
+        assert len(doc.autoren) == 1
+        assert doc.autoren[0].organisation == "Fraktion GRÜNE"
+
+    def test_fallback_to_initiative(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-501",
+            initiative="SPD",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    04.02.2026 Drucksache 17/10266",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+        doc = vorgang.stationen[0].dokumente[0].actual_instance
+        assert len(doc.autoren) == 1
+        assert doc.autoren[0].organisation == "SPD"
+
+    def test_no_autor_text_no_initiative(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-502",
+            initiative="",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    04.02.2026 Drucksache 17/10266",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+        doc = vorgang.stationen[0].dokumente[0].actual_instance
+        assert doc.autoren == []
+
+    def test_multiple_autoren_from_fundstelle(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-503",
+            initiative="SPD",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE, Fraktion der CDU  04.02.2026 Drucksache 17/10266",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "autor_text": "Fraktion GRÜNE, Fraktion der CDU",
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+        doc = vorgang.stationen[0].dokumente[0].actual_instance
+        assert len(doc.autoren) == 2
+        assert doc.autoren[0].organisation == "Fraktion GRÜNE"
+        assert doc.autoren[1].organisation == "Fraktion der CDU"

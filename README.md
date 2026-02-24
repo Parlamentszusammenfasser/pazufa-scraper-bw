@@ -39,8 +39,8 @@ Ziel ist eine vollständige, maschinenlesbare Abbildung aller Gesetzgebungsvorg�
   — fehlt: `kurztitel`, `links`, `lobbyregister`
 - **Station**: `typ`, `zp_start`, `gremium`, `dokumente`
   — fehlt: `schlagworte`, `stellungnahmen`, `trojanergefahr`
-- **Dokument**: `link`, `drucksnr`, `typ`, `zp_modifiziert`, `zp_referenz`
-  — fehlt: `volltext`, `hash`, `autoren`, `zusammenfassung` (vom Framework-Dokumentpipeline zu befüllen)
+- **Dokument**: `link`, `drucksnr`, `typ`, `zp_modifiziert`, `zp_referenz`, `autoren`
+  — fehlt: `volltext`, `hash`, `zusammenfassung` (vom Framework-Dokumentpipeline zu befüllen)
 
 ### Datenfluss
 
@@ -134,7 +134,7 @@ flowchart TD
 | Fehlertoleranz            | Framework           | Einzelne Vorgang-Fehler stoppen die Pipeline nicht                         |
 | Scheduling                | Framework           | Konfigurierbar über `cycle-time-s` in config.toml                          |
 | PDF-Volltext-Extraktion   | Framework-Pipeline  | PyPDF + Kreuzberg/EasyOCR + LLM (via pazufa-collector)                     |
-| Dokumenten-Autoren        | Nicht implementiert | `autoren`-Feld wird leer übergeben                                         |
+| Dokumenten-Autoren        | Funktioniert        | Aus Fundstelle-Text extrahiert, Fallback auf Initiative                    |
 | Detail-Seiten (PARLIS)    | Nicht implementiert | Zusätzliche Daten über PARLIS-Detailseiten                                 |
 | Beteiligungsportal        | Nicht implementiert | Vorparlamentarische Entwürfe und Stellungnahmen                            |
 | Kabinettsbeschlüsse (STM) | Nicht implementiert | Signalquelle für neue Regierungsentwürfe                                   |
@@ -147,7 +147,7 @@ flowchart TD
 |---|---------------------------------|-----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 1 | `asyncio.to_thread()` Wrapping  | Hoch      | Die synchrone `requests.Session` blockiert den Event-Loop des Frameworks. `ParlisClient.search()` in `asyncio.to_thread()` wrappen — kleine Änderung, aber wichtig für korrektes Laufzeitverhalten wenn mehrere Scraper parallel laufen. |
 | 2 | SitzungsScraper (ICS-Kalender)  | Hoch      | Neuer `BawueSitzungenScraper` auf Basis der Framework-`SitzungsScraper`-Klasse. ICS-Feed von landtag-bw.de parsen und `Sitzung` + `Top`-Modelle erzeugen. Sitzungsdaten sind als "Primär" eingestuft.                                    |
-| 3 | Dokument-Autoren aus Initiative | Mittel    | Das `Initiative`-Feld aus PARLIS (z.B. "Fraktion GRÜNE, Fraktion der CDU") in `Autor`-Objekte parsen. Befüllt sowohl `Vorgang.initiatoren` als auch `Dokument.autoren` — aktuell beide leer.                                             |
+| 3 | ~~Dokument-Autoren~~ | ~~Mittel~~ | ~~Erledigt~~ — Autoren werden aus Fundstelle-Text extrahiert (Fallback auf Initiative). Befüllt `Dokument.autoren` und `Vorgang.initiatoren`.                                                                                           |
 | 4 | Beteiligungsportal (vorparlam.) | Ergänzend | HTML-Scraping des Beteiligungsportals BaWue für vorparlamentarische Entwürfe und Stellungnahmen. Deckt die Stationstypen `preparl-regent` und `preparl-regbsl` ab, die PARLIS nicht liefert.                                             |
 | 5 | Gesetzblatt BaWue (postparlam.) | Ergänzend | Verkündungen im Gesetzblatt erfassen (`postparl-gsblt`). Komplettiert den Gesetzgebungslebenszyklus nach der parlamentarischen Phase.                                                                                                    |
 

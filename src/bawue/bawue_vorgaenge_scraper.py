@@ -29,6 +29,13 @@ from bawue.types import RawFundstelle, RawVorgang
 
 logger = logging.getLogger(__name__)
 
+def _parse_autoren(text: str) -> list[Autor]:
+    """Parse a comma-separated author string into a list of Autor objects."""
+    if not text or not text.strip():
+        return []
+    return [Autor(organisation=part.strip()) for part in text.split(",") if part.strip()]
+
+
 DEFAULT_VORGANGSTYPEN: list[str] = list(VORGANGSTYP_MAP.keys())
 DEFAULT_WAHLPERIODE = 17
 DEFAULT_LOOKBACK_DAYS = 7
@@ -117,7 +124,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         api_id = uuid5(NAMESPACE_URL, vorgang_id)
         typ = map_vorgangstyp(vorgangstyp_str)
-        initiatoren = [Autor(organisation=initiative)] if initiative else []
+        initiatoren = _parse_autoren(initiative)
 
         stationen = []
         for fund in raw.get("fundstellen_parsed", []):
@@ -168,6 +175,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 is_vorparlamentarisch=(station_typ == Stationstyp.PREPARL_MINUS_REGENT),
             )
 
+            autor_text = fund.get("autor_text", "")
+            autoren = _parse_autoren(autor_text) if autor_text else _parse_autoren(initiative)
+
             dok = Dokument(
                 titel=station_typ_str or "Dokument",
                 volltext="",
@@ -176,7 +186,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 zp_modifiziert=zp_start,
                 zp_referenz=zp_start,
                 link=pdf_url,
-                autoren=[],
+                autoren=autoren,
                 drucksnr=fund.get("drucksache"),
             )
             dokumente.append(StationDokumenteInner(dok))

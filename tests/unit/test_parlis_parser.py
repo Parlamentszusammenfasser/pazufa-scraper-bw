@@ -73,6 +73,36 @@ class TestParseFundstelleText:
         assert result["raw"] == text
 
 
+class TestParseFundstelleAutor:
+    def test_single_author(self):
+        result = parse_fundstelle_text("Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)")
+        assert result["autor_text"] == "Fraktion GRÜNE"
+
+    def test_multiple_authors(self):
+        result = parse_fundstelle_text(
+            "Gesetzentwurf    Fraktion GRÜNE, Fraktion der CDU  04.02.2026 Drucksache 17/10266"
+        )
+        assert result["autor_text"] == "Fraktion GRÜNE, Fraktion der CDU"
+
+    def test_landesregierung(self):
+        result = parse_fundstelle_text("Gesetzentwurf    Landesregierung  01.03.2026 Drucksache 17/11000   (5 S.)")
+        assert result["autor_text"] == "Landesregierung"
+
+    def test_no_autor_for_ausschuss(self):
+        result = parse_fundstelle_text(
+            "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  02.02.2026 Drucksache 17/10210"
+        )
+        assert "autor_text" not in result
+
+    def test_no_autor_for_plenarprotokoll(self):
+        result = parse_fundstelle_text("Erste Beratung   Plenarprotokoll 17/141 05.02.2026")
+        assert "autor_text" not in result
+
+    def test_no_gap_text(self):
+        result = parse_fundstelle_text("Gesetzentwurf    04.02.2026 Drucksache 17/10266")
+        assert "autor_text" not in result
+
+
 class TestParseResults:
     def test_parses_single_record(self):
         results = parse_results(SAMPLE_HTML_RECORD)
