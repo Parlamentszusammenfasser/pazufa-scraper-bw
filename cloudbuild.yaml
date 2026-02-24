@@ -1,0 +1,25 @@
+steps:
+  # Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${_IMAGE}', '.']
+
+  # Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_IMAGE}']
+
+  # Update Cloud Run Job with new image
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'jobs'
+      - 'update'
+      - 'bawue-scraper'
+      - '--image=${_IMAGE}'
+      - '--region=europe-west3'
+
+substitutions:
+  _IMAGE: 'europe-west3-docker.pkg.dev/pazufa-bawue-scraper/pazufa/bawue-scraper:${SHORT_SHA}'
+
+images:
+  - '${_IMAGE}'

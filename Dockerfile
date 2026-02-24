@@ -45,9 +45,9 @@ COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY src/ src/
-COPY config.sample.toml .
+COPY config.sample.toml config.toml
 
 RUN chown -R app:app /app
 USER app
 
-ENTRYPOINT ["python", "-m", "collector", "--config-file", "config.toml"]
+ENTRYPOINT ["python", "-m", "collector", "--config-file", "config.toml", "--once"]
