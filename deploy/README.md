@@ -55,14 +55,14 @@ Cloud Build (on push to main)
 
 ## Secrets & Environment Variables
 
-| Variable | Source | Description |
-|----------|--------|-------------|
-| `LTZF_API_KEY` | Secret Manager | PaZuFa backend API key |
-| `OPENAI_API_KEY` | Secret Manager | OpenAI API key for summarization |
-| `LTZF_API_URL` | Env var | PaZuFa backend base URL |
-| `REDIS_HOST` | Env var | Memorystore Redis IP (set by setup script) |
-| `REDIS_PORT` | Env var | Redis port (6379) |
-| `COLLECTOR_UUID` | Env var | Unique collector identifier |
+| Variable         | Source         | Description                                |
+|------------------|----------------|--------------------------------------------|
+| `LTZF_API_KEY`   | Secret Manager | PaZuFa backend API key                     |
+| `OPENAI_API_KEY` | Secret Manager | OpenAI API key for summarization           |
+| `LTZF_API_URL`   | Env var        | PaZuFa backend base URL                    |
+| `REDIS_HOST`     | Env var        | Memorystore Redis IP (set by setup script) |
+| `REDIS_PORT`     | Env var        | Redis port (6379)                          |
+| `COLLECTOR_UUID` | Env var        | Unique collector identifier                |
 
 Secrets are injected via `--set-secrets` (mounted as env vars at runtime). To update a secret:
 
@@ -113,12 +113,12 @@ The job itself is **not** executed by Cloud Build — it only updates the image.
 
 ## Cost Estimate (monthly)
 
-| Resource | Estimate |
-|----------|----------|
-| Cloud Run Job (1x/day, ~15min, 4GB/2CPU) | ~$2–5 |
-| Memorystore Redis (1GB basic) | ~$35 |
-| Artifact Registry | < $1 |
-| Cloud Build | Free tier |
-| Secret Manager | < $1 |
-| Cloud Scheduler | Free tier |
-| **Total** | **~$40/month** |
+| Resource                                 | Estimate       |
+|------------------------------------------|----------------|
+| Cloud Run Job (1x/day, ~15min, 4GB/2CPU) | ~$2–5          |
+| Memorystore Redis (1GB basic)            | ~$35           |
+| Artifact Registry                        | < $1           |
+| Cloud Build                              | Free tier      |
+| Secret Manager                           | < $1           |
+| Cloud Scheduler                          | Free tier      |
+| **Total**                                | **~$40/month** |
