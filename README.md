@@ -225,16 +225,16 @@ python -m bawue.dry_run --lookback-days 30 --wahlperiode 17
 
 **CLI options:**
 
-| Option              | Default | Description                                         |
-|---------------------|---------|-----------------------------------------------------|
-| `--scraper`         | `all`   | Which scraper: `vorgaenge`, `beteiligung`, `sitzungen`, `all` |
-| `--vorgangstyp`     | *(all)* | Limit to one PARLIS Vorgangstyp (e.g. `"Kleine Anfrage"`)    |
-| `--lookback-days`   | 7       | Days to look back for PARLIS search                 |
-| `--wahlperiode`     | 17      | Wahlperiode number                                  |
-| `--limit`           | *(no limit)* | Max items per scraper (useful for quick checks) |
-| `--verbosity`       | 0       | Detail level: 0=summary, 1=type breakdown, 2=per-item detail |
-| `--json`            | off     | Output JSON instead of formatted text               |
-| `--ics-url`         | *(landtag-bw.de)* | Custom ICS calendar URL                  |
+| Option            | Default           | Description                                                   |
+|-------------------|-------------------|---------------------------------------------------------------|
+| `--scraper`       | `all`             | Which scraper: `vorgaenge`, `beteiligung`, `sitzungen`, `all` |
+| `--vorgangstyp`   | *(all)*           | Limit to one PARLIS Vorgangstyp (e.g. `"Kleine Anfrage"`)     |
+| `--lookback-days` | 7                 | Days to look back for PARLIS search                           |
+| `--wahlperiode`   | 17                | Wahlperiode number                                            |
+| `--limit`         | *(no limit)*      | Max items per scraper (useful for quick checks)               |
+| `--verbosity`     | 0                 | Detail level: 0=summary, 1=type breakdown, 2=per-item detail  |
+| `--json`          | off               | Output JSON instead of formatted text                         |
+| `--ics-url`       | *(landtag-bw.de)* | Custom ICS calendar URL                                       |
 
 No API keys, Redis, or backend connection required — the dry-run uses scraper components directly.
 
