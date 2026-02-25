@@ -16,13 +16,13 @@ Ziel ist eine vollständige, maschinenlesbare Abbildung aller Gesetzgebungsvorg�
 
 ### Dokumentenpriorisierung
 
-| Priorität  | Daten                                | Quelle                   |
-|------------|--------------------------------------|--------------------------|
-| **Primär** | Vorgänge + Stationen + Dokumentlinks | PARLIS JSON-API          |
-| **Primär** | Drucksachen-Volltext (PDFs)          | landtag-bw.de            |
+| Priorität  | Daten                                | Quelle                     |
+|------------|--------------------------------------|----------------------------|
+| **Primär** | Vorgänge + Stationen + Dokumentlinks | PARLIS JSON-API            |
+| **Primär** | Drucksachen-Volltext (PDFs)          | landtag-bw.de              |
 | **Primär** | Sitzungstermine (Plenar/Ausschuss)   | ICS-Kalender landtag-bw.de |
-| Ergänzend  | Vorparlamentarische Entwürfe         | Beteiligungsportal BaWue |
-| Optional   | Kabinettsbeschlüsse, Gesetzblatt     | STM / Gesetzblatt BaWue  |
+| Ergänzend  | Vorparlamentarische Entwürfe         | Beteiligungsportal BaWue   |
+| Optional   | Kabinettsbeschlüsse, Gesetzblatt     | STM / Gesetzblatt BaWue    |
 
 ### Identifikation
 
@@ -197,6 +197,47 @@ python -m collector --config-file config.sample.toml
 # - Repeats after cycle-time-s seconds
 ```
 
+### Dry-Run Report
+
+Run the scraper pipeline without posting to the API to diagnose what gets scraped, parsed, and what's missing:
+
+```bash
+source .venv/bin/activate
+
+# Run all scrapers with default settings (7-day lookback)
+python -m bawue.dry_run
+
+# Run only Vorgaenge for a specific type, limited to 3 items, with full detail
+python -m bawue.dry_run --scraper vorgaenge --vorgangstyp "Kleine Anfrage" --limit 3 --verbosity 2
+
+# Run only Beteiligung scraper
+python -m bawue.dry_run --scraper beteiligung
+
+# Run only Sitzungen scraper
+python -m bawue.dry_run --scraper sitzungen
+
+# Output as JSON
+python -m bawue.dry_run --json --limit 5
+
+# Custom lookback and wahlperiode
+python -m bawue.dry_run --lookback-days 30 --wahlperiode 17
+```
+
+**CLI options:**
+
+| Option              | Default | Description                                         |
+|---------------------|---------|-----------------------------------------------------|
+| `--scraper`         | `all`   | Which scraper: `vorgaenge`, `beteiligung`, `sitzungen`, `all` |
+| `--vorgangstyp`     | *(all)* | Limit to one PARLIS Vorgangstyp (e.g. `"Kleine Anfrage"`)    |
+| `--lookback-days`   | 7       | Days to look back for PARLIS search                 |
+| `--wahlperiode`     | 17      | Wahlperiode number                                  |
+| `--limit`           | *(no limit)* | Max items per scraper (useful for quick checks) |
+| `--verbosity`       | 0       | Detail level: 0=summary, 1=type breakdown, 2=per-item detail |
+| `--json`            | off     | Output JSON instead of formatted text               |
+| `--ics-url`         | *(landtag-bw.de)* | Custom ICS calendar URL                  |
+
+No API keys, Redis, or backend connection required — the dry-run uses scraper components directly.
+
 ## Configuration
 
 Configuration uses the pazufa-collector 4-tier system: Defaults → TOML (`config.toml`) → Environment variables → CLI.
@@ -280,7 +321,9 @@ pazufa-bawue-scraper/
 │       ├── parlis_client.py            # PARLIS HTTP logic (session, search, pagination)
 │       ├── parlis_parser.py            # HTML parsing + fundstelle regex parsing
 │       ├── enum_mapper.py              # PARLIS → PaZuFa enum mapping
-│       └── types.py                    # RawVorgang, RawFundstelle TypedDicts
+│       ├── types.py                    # RawVorgang, RawFundstelle TypedDicts
+│       ├── report.py                   # Dry-run analysis dataclasses + formatting
+│       └── dry_run.py                  # Dry-run CLI entry point (python -m bawue.dry_run)
 ├── tests/
 │   └── unit/
 │       ├── fixtures/
@@ -290,7 +333,9 @@ pazufa-bawue-scraper/
 │       ├── test_ics_parser.py          # ICS parsing / filtering / grouping tests
 │       ├── test_parlis_client.py       # PARLIS HTTP client tests
 │       ├── test_parlis_parser.py       # HTML / fundstelle parsing tests
-│       └── test_enum_mapper.py         # Enum mapping + framework validation tests
+│       ├── test_enum_mapper.py         # Enum mapping + framework validation tests
+│       ├── test_report.py             # Dry-run analysis + formatting tests
+│       └── test_dry_run.py            # Dry-run CLI + orchestration tests
 └── docs/
     ├── architecture.md                 # System overview, data flow, components
     └── anforderungen.md                # Datenmodelle, API, Enumerationen, Datenquellen
