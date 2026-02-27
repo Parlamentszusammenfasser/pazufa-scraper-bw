@@ -225,7 +225,7 @@ def main(argv: list[str] | None = None) -> None:
 
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)-5s %(name)s: %(message)s",
+        format="%(asctime)s %(levelname)-5s [%(threadName)s] %(name)s: %(message)s",
         stream=sys.stderr,
     )
 
