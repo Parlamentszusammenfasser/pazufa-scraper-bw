@@ -63,6 +63,18 @@ class TestFetchProcessList:
 
 class TestFetchProcessDetail:
     @responses.activate
+    def test_utf8_response_decoded_correctly(self, client):
+        """Serve UTF-8 bytes without charset; German umlauts must survive decoding."""
+        html_with_umlauts = "<html><body><h1>Bürgerschaftliches Engagement</h1><p>März 2025</p></body></html>"
+        html_bytes = html_with_umlauts.encode("utf-8")
+        responses.add(responses.GET, DETAIL_URL, body=html_bytes, status=200, content_type="text/html")
+
+        html = client.fetch_process_detail("/de/mitmachen/lp-17/entbuerokratisierung")
+
+        assert "März" in html
+        assert "Bürgerschaftliches" in html
+
+    @responses.activate
     def test_returns_html(self, client):
         responses.add(responses.GET, DETAIL_URL, body=SAMPLE_DETAIL_HTML, status=200)
 

@@ -20,6 +20,7 @@ class BeteiligungClient:
         self._request_delay_s = request_delay_s
         self._last_request_time: float = 0.0
         self._session = requests.Session()
+        self._session.hooks["response"].append(lambda r, *a, **kw: setattr(r, "encoding", "utf-8"))
         self._session.headers.update(
             {
                 "User-Agent": "PaZuFa-BaWue-Scraper/0.1",

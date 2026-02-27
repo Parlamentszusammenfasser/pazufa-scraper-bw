@@ -113,7 +113,36 @@ class TestSearchQueryConstruction:
         assert body["search"]["lines"]["l1"] == "18"
 
 
+SAMPLE_HTML_MARCH_DATE = """<html><body>
+<div class="efxRecordRepeater">
+  <a class="efxZoomShort-Vorgang">Anfrage über Frühjahrsplanung</a>
+  <dl>
+    <dt>Vorgangs-ID:</dt><dd>V-99999</dd>
+  </dl>
+  <a class="fundstellenLinks" href="https://example.com/doc.pdf">
+    Beschluss  18. März 2025 Drucksache 17/9999
+  </a>
+  <script>var url = "/parlis/vorgang/V-99999";</script>
+</div>
+</body></html>"""
+
+
 class TestResultParsing:
+    @responses.activate
+    def test_utf8_fundstelle_date_decoded_correctly(self, client):
+        """Serve UTF-8 bytes without charset; März must survive decoding."""
+        html_bytes = SAMPLE_HTML_MARCH_DATE.encode("utf-8")
+        responses.add(responses.GET, BASE_URL, body="<html></html>", status=200)
+        responses.add(responses.POST, BROWSE_URL, json={"report_id": "rpt-1", "item_count": 1}, status=200)
+        responses.add(responses.GET, REPORT_URL, body=html_bytes, status=200, content_type="text/html")
+
+        results = client.search("Gesetzgebung", date(2026, 1, 1), date(2026, 2, 1))
+
+        assert len(results) == 1
+        fundstellen = results[0].get("fundstellen_parsed", [])
+        assert len(fundstellen) == 1
+        assert fundstellen[0].get("datum") == "18.03.2025"
+
     @responses.activate
     def test_parses_vorgang_from_html(self, client):
         _mock_search(SAMPLE_HTML_RECORD)

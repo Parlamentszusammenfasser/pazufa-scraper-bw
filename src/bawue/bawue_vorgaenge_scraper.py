@@ -156,7 +156,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
             zp_start = datetime.strptime(datum_str, "%d.%m.%Y")
         else:
             zp_start = datetime.now()
-            logger.warning("No date found for Fundstelle '%s', using current time", fund.get("raw", ""))
+            logger.warning(
+                "No date found for Fundstelle '%s' (Drucksache: %s), using current time",
+                fund.get("raw", ""),
+                fund.get("drucksache", "unknown"),
+            )
 
         # Determine gremium
         ausschuss = fund.get("ausschuss", "")

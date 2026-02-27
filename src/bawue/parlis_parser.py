@@ -1,10 +1,30 @@
 """HTML parsing and Fundstelle regex extraction for PARLIS responses."""
 
 import re
+from datetime import datetime
 
 from lxml import html
 
 from bawue.types import RawVorgang
+
+_GERMAN_MONTHS = {
+    "Januar": "01",
+    "Februar": "02",
+    "März": "03",
+    "April": "04",
+    "Mai": "05",
+    "Juni": "06",
+    "Juli": "07",
+    "August": "08",
+    "September": "09",
+    "Oktober": "10",
+    "November": "11",
+    "Dezember": "12",
+}
+_GERMAN_DATE_RE = re.compile(
+    r"(\d{1,2})\.\s*(Januar|Februar|März|April|Mai|Juni|Juli|August|"
+    r"September|Oktober|November|Dezember)\s+(\d{4})"
+)
 
 
 def parse_fundstelle_text(text: str) -> dict:
@@ -14,6 +34,14 @@ def parse_fundstelle_text(text: str) -> dict:
     date_match = re.search(r"(\d{2}\.\d{2}\.\d{4})", text)
     if date_match:
         result["datum"] = date_match.group(1)
+
+    if "datum" not in result:
+        de_match = _GERMAN_DATE_RE.search(text)
+        if de_match:
+            day = de_match.group(1).zfill(2)
+            month = _GERMAN_MONTHS[de_match.group(2)]
+            year = de_match.group(3)
+            result["datum"] = f"{day}.{month}.{year}"
 
     ds_match = re.search(r"Drucksache\s+(\d+/\d+)", text)
     if ds_match:
@@ -76,6 +104,18 @@ def parse_results(html_content: str) -> list[RawVorgang]:
                 href = link.get("href", "")
                 parsed = parse_fundstelle_text(text)
                 parsed["pdf_url"] = href
+
+                if "datum" not in parsed:
+                    parent = link.getparent()
+                    time_els = parent.xpath('.//time[@datetime]') if parent is not None else []
+                    if time_els:
+                        iso_date = time_els[0].get("datetime")
+                        try:
+                            dt = datetime.strptime(iso_date, "%Y-%m-%d")
+                            parsed["datum"] = dt.strftime("%d.%m.%Y")
+                        except ValueError:
+                            pass
+
                 item["fundstellen_parsed"].append(parsed)
 
         scripts = record.xpath(".//script")

@@ -274,6 +274,7 @@ class TestDatetimeFallbackWarning:
                     "datum": "",
                     "station_typ": "Gesetzentwurf",
                     "pdf_url": "",
+                    "drucksache": "17/10266",
                 },
             ],
         )
@@ -282,6 +283,28 @@ class TestDatetimeFallbackWarning:
             scraper._build_vorgang(raw)
 
         assert any("No date found for Fundstelle" in msg for msg in caplog.messages)
+
+    def test_missing_date_logs_drucksache_number(self, scraper_build_vorgang, caplog):
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+
+        raw = _make_raw_vorgang(
+            "V-401",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Test",
+                    "datum": "",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                    "drucksache": "17/10266",
+                },
+            ],
+        )
+
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
+            scraper._build_vorgang(raw)
+
+        assert any("17/10266" in msg for msg in caplog.messages)
 
 
 class TestParseAutoren:

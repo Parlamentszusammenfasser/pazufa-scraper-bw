@@ -148,3 +148,77 @@ class TestParseResults:
     def test_empty_html_returns_empty_list(self):
         results = parse_results("<html><body></body></html>")
         assert results == []
+
+
+class TestParseFundstelleTextGermanDate:
+    def test_extracts_german_long_form_date(self):
+        text = "Gesetz  vom 16. Dezember 2025 Gesetzblatt für Baden-Württemberg 2025 Nr. 147     S. 1-3"
+        result = parse_fundstelle_text(text)
+        assert result["datum"] == "16.12.2025"
+
+    def test_extracts_single_digit_day(self):
+        text = "Gesetz  vom 4. Februar 2026 Gesetzblatt für Baden-Württemberg 2026 Nr. 12"
+        result = parse_fundstelle_text(text)
+        assert result["datum"] == "04.02.2026"
+
+    def test_dd_mm_yyyy_still_works(self):
+        result = parse_fundstelle_text("Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266")
+        assert result["datum"] == "04.02.2026"
+
+    def test_no_date_absent_datum_key(self):
+        result = parse_fundstelle_text("Gesetz ohne Datum Gesetzblatt für Baden-Württemberg")
+        assert "datum" not in result
+
+
+SAMPLE_HTML_TIME_ELEMENT = """<html><body>
+<div class="efxRecordRepeater">
+  <a class="efxZoomShort-Vorgang">Gesetz zur Änderung XY</a>
+  <dl>
+    <dt>Vorgangs-ID:</dt><dd>V-99999</dd>
+    <dt>Vorgangstyp:</dt><dd>Gesetzgebung</dd>
+    <dt>Initiative:</dt><dd>Landesregierung</dd>
+  </dl>
+  <span>
+    <time datetime="2026-02-09">9. Februar 2026</time>
+    <a class="fundstellenLinks" href="https://www.landtag-bw.de/resource/blob/99/law.pdf">
+      Gesetz  vom 9. Februar 2026 Gesetzblatt für Baden-Württemberg 2026 Nr. 10     S. 1-5
+    </a>
+  </span>
+  <script>var url = "/parlis/vorgang/V-99999";</script>
+</div>
+</body></html>"""
+
+SAMPLE_HTML_TIME_ELEMENT_WITH_EXISTING_DATE = """<html><body>
+<div class="efxRecordRepeater">
+  <a class="efxZoomShort-Vorgang">Gesetzentwurf XY</a>
+  <dl>
+    <dt>Vorgangs-ID:</dt><dd>V-88888</dd>
+    <dt>Vorgangstyp:</dt><dd>Gesetzgebung</dd>
+    <dt>Initiative:</dt><dd>CDU</dd>
+  </dl>
+  <span>
+    <time datetime="2026-03-15">15. März 2026</time>
+    <a class="fundstellenLinks" href="">
+      Gesetzentwurf    CDU  04.02.2026 Drucksache 17/10266
+    </a>
+  </span>
+  <script>var url = "/parlis/vorgang/V-88888";</script>
+</div>
+</body></html>"""
+
+
+class TestParseResultsTimeElement:
+    def test_extracts_date_from_time_element(self):
+        results = parse_results(SAMPLE_HTML_TIME_ELEMENT)
+        assert len(results) == 1
+        fundstellen = results[0]["fundstellen_parsed"]
+        assert len(fundstellen) == 1
+        assert fundstellen[0]["datum"] == "09.02.2026"
+
+    def test_time_element_does_not_override_existing_date(self):
+        results = parse_results(SAMPLE_HTML_TIME_ELEMENT_WITH_EXISTING_DATE)
+        assert len(results) == 1
+        fundstellen = results[0]["fundstellen_parsed"]
+        assert len(fundstellen) == 1
+        # Text-based date (04.02.2026) should win over time element (15.03.2026)
+        assert fundstellen[0]["datum"] == "04.02.2026"
