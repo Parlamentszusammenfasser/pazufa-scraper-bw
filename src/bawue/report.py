@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import textwrap
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -33,7 +32,6 @@ class VorgangReport:
     station_count: int
     missing_fields: list[str]
     fundstelle_count: int
-    drucksache_numbers: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -80,7 +78,6 @@ class DryRunSummary:
 
     duration_s: float = 0.0
     wahlperiode: int = 17
-    drucksache_numbers: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -107,14 +104,6 @@ def analyze_vorgang(raw: dict[str, Any], vorgang: Any) -> VorgangReport:
     missing = [f for f in VORGANG_FIELDS if not raw.get(f)]
     fundstellen = raw.get("fundstellen_parsed", [])
 
-    seen: set[str] = set()
-    drucksache_numbers: list[str] = []
-    for fs in fundstellen:
-        ds = fs.get("drucksache")
-        if ds and ds not in seen:
-            seen.add(ds)
-            drucksache_numbers.append(ds)
-
     return VorgangReport(
         vorgang_id=raw.get("vorgangs_id", "unknown"),
         titel=raw.get("titel", ""),
@@ -123,7 +112,6 @@ def analyze_vorgang(raw: dict[str, Any], vorgang: Any) -> VorgangReport:
         station_count=len(vorgang.stationen),
         missing_fields=missing,
         fundstelle_count=len(fundstellen),
-        drucksache_numbers=drucksache_numbers,
     )
 
 
@@ -193,9 +181,6 @@ def build_summary(
     # Sitzungen
     total_events = sum(sr.event_count for sr in sitzung_reports)
 
-    # Drucksachen — sorted union across all vorgaenge
-    all_ds = sorted({ds for vr in vorgang_reports for ds in vr.drucksache_numbers})
-
     return DryRunSummary(
         total_vorgaenge=len(vorgang_reports),
         by_parlis_type=by_type,
@@ -211,7 +196,6 @@ def build_summary(
         sitzung_reports=sitzung_reports,
         duration_s=duration_s,
         wahlperiode=wahlperiode,
-        drucksache_numbers=all_ds,
     )
 
 
@@ -245,8 +229,6 @@ def _fmt_vorgang_detail(vr: VorgangReport) -> str:
     lines.append(f"  Stations: {vr.station_count} | Fundstellen: {vr.fundstelle_count}")
     if vr.missing_fields:
         lines.append(f"  Missing: {', '.join(vr.missing_fields)}")
-    if vr.drucksache_numbers:
-        lines.append(f"  Drucksachen: {', '.join(vr.drucksache_numbers)}")
     return "\n".join(lines)
 
 
@@ -272,7 +254,6 @@ def _to_serializable(summary: DryRunSummary) -> dict:
         "sitzung_kept": summary.sitzung_kept,
         "duration_s": summary.duration_s,
         "wahlperiode": summary.wahlperiode,
-        "drucksache_numbers": summary.drucksache_numbers,
     }
 
 
@@ -300,13 +281,6 @@ def format_summary(summary: DryRunSummary, verbosity: int = 0, *, as_json: bool 
         for typ, count in sorted(summary.by_parlis_type.items(), key=lambda x: -x[1]):
             lines.append(f"  {typ + ':':30s} {count:>3}")
     lines.append("")
-
-    if summary.drucksache_numbers:
-        ds_list = ", ".join(summary.drucksache_numbers)
-        wrapped = textwrap.fill(ds_list, width=80, initial_indent="  ", subsequent_indent="  ")
-        lines.append(f"Drucksachen found ({len(summary.drucksache_numbers)}):")
-        lines.append(wrapped)
-        lines.append("")
 
     if summary.vorgang_field_completeness:
         lines.append(_fmt_completeness(summary.vorgang_field_completeness, "RawVorgang"))

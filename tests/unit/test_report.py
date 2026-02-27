@@ -82,43 +82,6 @@ def _vorgang_model(typ_str="GG_LAND_PARL", station_count=1):
 
 
 class TestAnalyzeVorgang:
-    def test_analyze_vorgang_extracts_drucksache_numbers(self):
-        raw = _raw_vorgang(
-            fundstellen=[
-                {"drucksache": "17/100", "datum": "01.01.2024"},
-                {"drucksache": "17/200", "datum": "02.01.2024"},
-            ]
-        )
-        vorgang = _vorgang_model()
-        report = analyze_vorgang(raw, vorgang)
-
-        assert report.drucksache_numbers == ["17/100", "17/200"]
-
-    def test_analyze_vorgang_deduplicates_drucksache_numbers(self):
-        raw = _raw_vorgang(
-            fundstellen=[
-                {"drucksache": "17/100", "datum": "01.01.2024"},
-                {"drucksache": "17/100", "datum": "02.01.2024"},
-                {"drucksache": "17/200", "datum": "03.01.2024"},
-            ]
-        )
-        vorgang = _vorgang_model()
-        report = analyze_vorgang(raw, vorgang)
-
-        assert report.drucksache_numbers == ["17/100", "17/200"]
-
-    def test_analyze_vorgang_skips_missing_drucksache(self):
-        raw = _raw_vorgang(
-            fundstellen=[
-                {"drucksache": "17/100", "datum": "01.01.2024"},
-                {"datum": "02.01.2024"},  # no drucksache
-            ]
-        )
-        vorgang = _vorgang_model()
-        report = analyze_vorgang(raw, vorgang)
-
-        assert report.drucksache_numbers == ["17/100"]
-
     def test_basic_fields(self):
         raw = _raw_vorgang()
         vorgang = _vorgang_model()
@@ -356,33 +319,6 @@ class TestBuildSummary:
         assert summary.duration_s == 42.0
         assert summary.wahlperiode == 17
 
-    def test_build_summary_collects_all_drucksache_numbers(self):
-        vorgang_reports = [
-            VorgangReport(
-                vorgang_id="V-001", titel="Test", raw_type="Gesetzgebung",
-                mapped_type="GG_LAND_PARL", station_count=1,
-                missing_fields=[], fundstelle_count=2,
-                drucksache_numbers=["17/100", "17/200"],
-            ),
-            VorgangReport(
-                vorgang_id="V-002", titel="Test2", raw_type="Gesetzgebung",
-                mapped_type="GG_LAND_PARL", station_count=1,
-                missing_fields=[], fundstelle_count=1,
-                drucksache_numbers=["17/200", "17/300"],
-            ),
-        ]
-
-        summary = build_summary(
-            vorgang_reports=vorgang_reports,
-            beteiligung_reports=[],
-            sitzung_reports=[],
-            raw_vorgaenge=[_raw_vorgang(), _raw_vorgang(vid="V-002")],
-            duration_s=1.0,
-            wahlperiode=17,
-        )
-
-        # deduplicated and sorted
-        assert summary.drucksache_numbers == ["17/100", "17/200", "17/300"]
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +351,6 @@ class TestFormatSummary:
             sitzung_reports=[],
             duration_s=45.2,
             wahlperiode=17,
-            drucksache_numbers=["17/100", "17/200", "17/300"],
         )
 
     def test_verbosity_0_includes_header_and_totals(self):
@@ -459,46 +394,17 @@ class TestFormatSummary:
         assert "Start:" not in text
         assert "Lookback:" not in text
 
-    def test_format_summary_lists_drucksachen(self):
+    def test_format_summary_drucksachen_not_in_output(self):
         text = format_summary(self._make_summary(), verbosity=0)
-
-        assert "Drucksachen found (3)" in text
-        assert "17/100" in text
-        assert "17/200" in text
-        assert "17/300" in text
-
-    def test_format_summary_empty_drucksachen_not_shown(self):
-        summary = self._make_summary()
-        summary.drucksache_numbers = []
-        text = format_summary(summary, verbosity=0)
 
         assert "Drucksachen found" not in text
 
-    def test_format_summary_verbosity2_shows_drucksachen_per_vorgang(self):
-        summary = self._make_summary()
-        summary.vorgang_reports = [
-            VorgangReport(
-                vorgang_id="V-12345",
-                titel="Test Gesetz",
-                raw_type="Gesetzgebung",
-                mapped_type="GG_LAND_PARL",
-                station_count=2,
-                missing_fields=[],
-                fundstelle_count=2,
-                drucksache_numbers=["17/100", "17/101"],
-            ),
-        ]
-        text = format_summary(summary, verbosity=2)
-
-        assert "Drucksachen: 17/100, 17/101" in text
-
-    def test_to_serializable_includes_drucksache_numbers(self):
+    def test_to_serializable_excludes_drucksache_numbers(self):
         summary = self._make_summary()
         text = format_summary(summary, verbosity=0, as_json=True)
         data = json.loads(text)
 
-        assert "drucksache_numbers" in data
-        assert data["drucksache_numbers"] == ["17/100", "17/200", "17/300"]
+        assert "drucksache_numbers" not in data
         assert "wahlperiode_start_date" not in data
         assert "lookback_days" not in data
 
@@ -514,7 +420,6 @@ class TestFormatSummary:
                 station_count=2,
                 missing_fields=["detail_url"],
                 fundstelle_count=2,
-                drucksache_numbers=[],
             ),
         ]
         text = format_summary(summary, verbosity=2)
