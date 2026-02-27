@@ -108,6 +108,10 @@ def parse_results(html_content: str) -> list[RawVorgang]:
                 if "datum" not in parsed:
                     parent = link.getparent()
                     time_els = parent.xpath('.//time[@datetime]') if parent is not None else []
+                    if not time_els and parent is not None:
+                        grandparent = parent.getparent()
+                        if grandparent is not None:
+                            time_els = grandparent.xpath('.//time[@datetime]')
                     if time_els:
                         iso_date = time_els[0].get("datetime")
                         try:

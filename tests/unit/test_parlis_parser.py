@@ -229,3 +229,30 @@ class TestParseResultsTimeElement:
         assert len(fundstellen) == 1
         # Text-based date (04.02.2026) should win over time element (15.03.2026)
         assert fundstellen[0]["datum"] == "04.02.2026"
+
+
+SAMPLE_HTML_TIME_ELEMENT_SIBLING_SPAN = """<html><body>
+<div class="efxRecordRepeater">
+  <a class="efxZoomShort-Vorgang">Kleine Anfrage XY</a>
+  <dl>
+    <dt>Vorgangs-ID:</dt><dd>V-11111</dd>
+    <dt>Vorgangstyp:</dt><dd>Kleine Anfrage</dd>
+    <dt>Initiative:</dt><dd>Daniel Born (SPD)</dd>
+  </dl>
+  <span>
+    <span><time datetime="2022-01-18">18.01.2022</time></span>
+    <span><a class="fundstellenLinks" href="">Kleine Anfrage    Daniel Born (SPD)  Drucksache 17/1440</a></span>
+  </span>
+  <script>var url = "/parlis/vorgang/V-11111";</script>
+</div>
+</body></html>"""
+
+
+class TestParseResultsTimeElementSiblingSpan:
+    def test_extracts_date_from_time_element_in_sibling_span(self):
+        """<time> in a sibling <span> of the <a>'s parent — date must still be found."""
+        results = parse_results(SAMPLE_HTML_TIME_ELEMENT_SIBLING_SPAN)
+        assert len(results) == 1
+        fundstellen = results[0]["fundstellen_parsed"]
+        assert len(fundstellen) == 1
+        assert fundstellen[0]["datum"] == "18.01.2022"

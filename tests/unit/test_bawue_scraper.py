@@ -9,7 +9,7 @@ from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.stationstyp import Stationstyp
 from openapi_client.models.vorgangstyp import Vorgangstyp
 
-from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, _parse_autoren
+from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, DEFAULT_WAHLPERIODE, _parse_autoren
 
 
 def _make_raw_vorgang(
@@ -355,12 +355,14 @@ class TestDatetimeFallbackWarning:
 class TestRunDurationLog:
     @pytest.mark.asyncio
     async def test_logs_completed_in_on_success(self, caplog):
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
         scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = DEFAULT_WAHLPERIODE
 
         with (
             patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
+            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode", new=MagicMock()),
             caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"),
         ):
             await scraper.run()
@@ -369,13 +371,15 @@ class TestRunDurationLog:
 
     @pytest.mark.asyncio
     async def test_logs_completed_in_on_failure(self, caplog):
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
         scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = DEFAULT_WAHLPERIODE
 
         mock_run = AsyncMock(side_effect=RuntimeError("boom"))
         with (
             patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=mock_run),
+            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode", new=MagicMock()),
             caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"),
             pytest.raises(RuntimeError),
         ):
