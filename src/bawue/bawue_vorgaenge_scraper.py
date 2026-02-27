@@ -28,6 +28,7 @@ from openapi_client.models import (
 from bawue.enum_mapper import VORGANGSTYP_MAP, map_dokumententyp, map_stationstyp, map_vorgangstyp
 from bawue.parlis_client import ParlisClient
 from bawue.types import RawFundstelle, RawVorgang
+from bawue.wahlperiode_check import check_for_newer_wahlperiode
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         return {}
 
     async def run(self) -> None:
+        check_for_newer_wahlperiode(self._wahlperiode)
         start = time.monotonic()
         try:
             await super().run()

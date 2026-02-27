@@ -31,6 +31,7 @@ from bawue.report import (
     build_summary,
     format_summary,
 )
+from bawue.wahlperiode_check import check_for_newer_wahlperiode
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +229,8 @@ def main(argv: list[str] | None = None) -> None:
         format="%(asctime)s %(levelname)-5s [%(threadName)s] %(name)s: %(message)s",
         stream=sys.stderr,
     )
+
+    check_for_newer_wahlperiode(args.wahlperiode)
 
     start = time.monotonic()
 
