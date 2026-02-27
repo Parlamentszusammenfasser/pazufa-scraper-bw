@@ -2,7 +2,7 @@
 
 import calendar
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 import requests
 
@@ -118,6 +118,28 @@ class ParlisClient:
             current = date(current.year + 1, 1, 1) if current.month == 12 else date(current.year, current.month + 1, 1)
         return windows
 
+    def _subdivide(self, vorgangstyp: str, date_from: date, date_to: date) -> list[RawVorgang]:
+        """Recursively search a date window by halving it until results fit or single-day granularity is reached."""
+        if date_from == date_to:
+            results = self._search_single(vorgangstyp, date_from, date_to)
+            if results is None:
+                logger.warning("Single-day window %s still too large, skipping.", date_from)
+                return []
+            return results
+
+        delta = (date_to - date_from).days
+        mid = date_from + timedelta(days=delta // 2)
+        logger.warning("Window %s-%s too large, halving.", date_from, date_to)
+
+        all_results: list[RawVorgang] = []
+        for half_from, half_to in [(date_from, mid), (mid + timedelta(days=1), date_to)]:
+            results = self._search_single(vorgangstyp, half_from, half_to)
+            if results is None:
+                all_results.extend(self._subdivide(vorgangstyp, half_from, half_to))
+            else:
+                all_results.extend(results)
+        return all_results
+
     def _search_single(self, vorgangstyp: str, date_from: date | None, date_to: date | None) -> list[RawVorgang] | None:
         """Execute a single search against PARLIS.
 
@@ -199,12 +221,8 @@ class ParlisClient:
         for window_from, window_to in self._monthly_windows(date_from, date_to):
             window_results = self._search_single(vorgangstyp, window_from, window_to)
             if window_results is None:
-                logger.warning(
-                    "Monthly window %s-%s still too large, skipping.",
-                    window_from,
-                    window_to,
-                )
-                continue
-            all_results.extend(window_results)
+                all_results.extend(self._subdivide(vorgangstyp, window_from, window_to))
+            else:
+                all_results.extend(window_results)
 
         return all_results
