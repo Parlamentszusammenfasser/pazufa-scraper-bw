@@ -1,6 +1,7 @@
 """Tests for the PARLIS HTTP client."""
 
 from datetime import date
+from unittest.mock import patch
 
 import pytest
 import responses
@@ -254,6 +255,48 @@ class TestDateSubdivision:
         assert len(results) == 1
         post_calls = [c for c in responses.calls if c.request.method == "POST"]
         assert len(post_calls) == 1
+
+
+    def test_falls_back_to_wahlperiode_when_no_dates(self):
+        """When overflow occurs with no date range, fall back to Wahlperiode start → today."""
+        wp_start = date(2021, 4, 26)
+        client = ParlisClient(wahlperiode=17, request_delay_s=0.0, wahlperiode_start_date=wp_start)
+
+        raw_result = [{"titel": "Anfrage WP Start", "vorgangs_id": "V-WP1", "fundstellen_parsed": []}]
+
+        call_args: list[tuple] = []
+
+        def fake_search_single(vorgangstyp, date_from, date_to):
+            call_args.append((vorgangstyp, date_from, date_to))
+            if date_from is None and date_to is None:
+                return None  # overflow on unbounded search
+            # First monthly window returns one result, rest return empty
+            if date_from == wp_start:
+                return raw_result
+            return []
+
+        with patch.object(client, "_establish_session"), patch.object(
+            client, "_search_single", side_effect=fake_search_single
+        ):
+            results = client.search("Kleine Anfrage")
+
+        assert len(results) == 1
+        assert results[0]["vorgangs_id"] == "V-WP1"
+
+        # First call was unbounded
+        assert call_args[0] == ("Kleine Anfrage", None, None)
+        # Subsequent calls use monthly windows starting from wp_start
+        assert call_args[1][1] == wp_start
+        assert call_args[1][2] == date(2021, 4, 30)  # end of April 2021
+
+    def test_no_date_no_wahlperiode_start_returns_empty(self, client):
+        """Without wahlperiode_start_date, overflow on unbounded search returns empty list."""
+        with patch.object(client, "_establish_session"), patch.object(
+            client, "_search_single", return_value=None
+        ):
+            results = client.search("Kleine Anfrage")
+
+        assert results == []
 
 
 class TestMonthlyWindows:

@@ -3,8 +3,6 @@
 from datetime import date
 from unittest.mock import MagicMock, patch
 
-from datetime import date
-
 from bawue.dry_run import parse_args, run_beteiligung, run_sitzungen, run_vorgaenge
 
 WP17_START = date(2021, 4, 26)

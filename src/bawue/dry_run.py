@@ -11,11 +11,12 @@ import argparse
 import logging
 import sys
 import time
+from datetime import date
 
 import requests
 from icalendar import Calendar
 
-from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
+from bawue.bawue_vorgaenge_scraper import DEFAULT_WAHLPERIODE_START, BawueVorgaengeScraper
 from bawue.beteiligung_client import BeteiligungClient
 from bawue.beteiligung_parser import parse_process_detail
 from bawue.enum_mapper import VORGANGSTYP_MAP
@@ -54,6 +55,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--verbosity", type=int, choices=[0, 1, 2], default=0, help="Output detail level")
     parser.add_argument("--json", action="store_true", help="Output JSON instead of formatted text")
     parser.add_argument("--ics-url", type=str, default=DEFAULT_ICS_URL, help="ICS calendar URL")
+    parser.add_argument(
+        "--wahlperiode-start-date",
+        type=date.fromisoformat,
+        default=DEFAULT_WAHLPERIODE_START,
+        help="Start date of the Wahlperiode (default: 2021-04-26)",
+    )
     return parser.parse_args(argv)
 
 
@@ -67,6 +74,7 @@ def run_vorgaenge(
     wahlperiode: int = 17,
     vorgangstypen: list[str] | None = None,
     limit: int | None = None,
+    wahlperiode_start_date=None,
 ) -> tuple[list[VorgangReport], list[dict]]:
     """Search PARLIS for each Vorgangstyp and analyze results.
 
@@ -75,10 +83,14 @@ def run_vorgaenge(
     if vorgangstypen is None:
         vorgangstypen = list(VORGANGSTYP_MAP.keys())
 
-    date_from = None
-    date_to = None
+    date_from = wahlperiode_start_date
+    date_to = date.today() if wahlperiode_start_date is not None else None
 
-    client = ParlisClient(wahlperiode=wahlperiode, request_delay_s=1.0)
+    client = ParlisClient(
+        wahlperiode=wahlperiode,
+        request_delay_s=1.0,
+        wahlperiode_start_date=wahlperiode_start_date,
+    )
 
     # Use object.__new__ to access _build_vorgang without full scraper init
     scraper = object.__new__(BawueVorgaengeScraper)
@@ -204,6 +216,7 @@ def main(argv: list[str] | None = None) -> None:
             wahlperiode=args.wahlperiode,
             vorgangstypen=vorgangstypen,
             limit=args.limit,
+            wahlperiode_start_date=args.wahlperiode_start_date,
         )
 
     if run_b:

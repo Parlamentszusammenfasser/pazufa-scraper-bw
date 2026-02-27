@@ -21,9 +21,15 @@ CHUNKSIZE = 50
 class ParlisClient:
     """Handles HTTP communication with the PARLIS system."""
 
-    def __init__(self, wahlperiode: int = 17, request_delay_s: float = 1.0) -> None:
+    def __init__(
+        self,
+        wahlperiode: int = 17,
+        request_delay_s: float = 1.0,
+        wahlperiode_start_date: date | None = None,
+    ) -> None:
         self._wahlperiode = wahlperiode
         self._request_delay_s = request_delay_s
+        self._wahlperiode_start_date = wahlperiode_start_date
         self._session = requests.Session()
         self._session.hooks["response"].append(lambda r, *a, **kw: setattr(r, "encoding", "utf-8"))
         self._session.headers.update(
@@ -152,10 +158,18 @@ class ParlisClient:
         if results is not None:
             return results
 
-        # Subdivision requires concrete dates — skip if None
+        # Subdivision requires concrete dates
         if date_from is None or date_to is None:
-            logger.warning("Search too large but no date range to subdivide. Returning empty.")
-            return []
+            if self._wahlperiode_start_date is not None:
+                logger.warning(
+                    "No date range given; falling back to Wahlperiode range (%s to today).",
+                    self._wahlperiode_start_date,
+                )
+                date_from = self._wahlperiode_start_date
+                date_to = date.today()
+            else:
+                logger.warning("Search too large but no date range to subdivide. Returning empty.")
+                return []
 
         # Subdivide into monthly windows
         all_results: list[RawVorgang] = []

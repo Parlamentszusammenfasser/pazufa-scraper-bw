@@ -63,7 +63,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         super().__init__(config, uuid.UUID(config.collector_id), listing_urls, session)
 
-        self._parlis = ParlisClient(wahlperiode=self._wahlperiode, request_delay_s=parlis_delay)
+        self._parlis = ParlisClient(
+            wahlperiode=self._wahlperiode,
+            request_delay_s=parlis_delay,
+            wahlperiode_start_date=self._wahlperiode_start_date,
+        )
 
         # Local cache: vorgang_id → RawVorgang dict. Populated by listing_page_extractor,
         # consumed by item_extractor. Needed because the framework deduplicates items via a set
