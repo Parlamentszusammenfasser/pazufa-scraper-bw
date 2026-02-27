@@ -69,6 +69,9 @@ flowchart LR
         PP["ParlisParser"]
         EM["EnumMapper"]
         BVS["BawueVorgaengeScraper"]
+        BBS["BawueBeteiligungScraper"]
+        BC["BeteiligungClient"]
+        BP["BeteiligungParser"]
     end
 
     subgraph PaZuFa-Backend
@@ -77,15 +80,15 @@ flowchart LR
 
     PARLIS --> PC --> PP --> BVS
     PDF --> FW_DOC
-    BETEIL -. "nicht implementiert" .-> BVS
+    BETEIL --> BC --> BP --> BBS
     STM -. "nicht implementiert" .-> BVS
     BVS --> EM
     FW_SCHED --> BVS
+    FW_SCHED --> BBS
     BVS --> FW_CACHE
     BVS --> FW_API --> API
     BVS --> FW_DOC
 
-    style BETEIL stroke-dasharray: 5 5
     style STM stroke-dasharray: 5 5
 ```
 
@@ -138,7 +141,7 @@ flowchart TD
 | PDF-Volltext-Extraktion    | Framework-Pipeline  | PyPDF + Kreuzberg/EasyOCR + LLM (via pazufa-collector)                     |
 | Dokumenten-Autoren         | Funktioniert        | Aus Fundstelle-Text extrahiert, Fallback auf Initiative                    |
 | Detail-Seiten (PARLIS)     | Nicht implementiert | Zusätzliche Daten über PARLIS-Detailseiten                                 |
-| Beteiligungsportal         | Nicht implementiert | Vorparlamentarische Entwürfe und Stellungnahmen                            |
+| Beteiligungsportal         | Funktioniert        | Vorparlamentarische Entwürfe aus Beteiligungsportal (preparl-regent Station) |
 | Kabinettsbeschlüsse (STM)  | Nicht implementiert | Signalquelle für neue Regierungsentwürfe                                   |
 | Gesetzblatt-Verkündungen   | Nicht implementiert | Postparlamentarische Phase                                                 |
 | Sitzungskalender (Phase 1) | Funktioniert        | ICS-Feed-Parsing, Sitzung-Modelle mit `nummer=0`, `tops=[]`                |
@@ -150,7 +153,7 @@ flowchart TD
 |---|------------------------------------|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 1 | ~~SitzungsScraper (ICS-Kalender)~~ | ~~Hoch~~  | ~~Phase 1 implementiert~~ — `BawueSitzungenScraper` parst ICS-Feed, erzeugt `Sitzung`-Modelle mit `nummer=0`, `tops=[]`.                                                                     |
 | 2 | SitzungsScraper Phase 2 (TOPs)     | Hoch      | Anreicherung: Tagesordnungen-PDFs von landtag-bw.de scrapen, Sitzungsnummern aus Dateinamen extrahieren, TOPs aus PDFs parsen.                                                               |
-| 3 | Beteiligungsportal (vorparlam.)    | Ergänzend | HTML-Scraping des Beteiligungsportals BaWue für vorparlamentarische Entwürfe und Stellungnahmen. Deckt die Stationstypen `preparl-regent` und `preparl-regbsl` ab, die PARLIS nicht liefert. |
+| 3 | ~~Beteiligungsportal (vorparlam.)~~ | ~~Ergänzend~~ | ~~HTML-Scraping des Beteiligungsportals BaWue für vorparlamentarische Entwürfe und Stellungnahmen.~~ `BawueBeteiligungScraper` implementiert — preparl-regent Station mit Entwurf PDFs. |
 | 4 | Gesetzblatt BaWue (postparlam.)    | Ergänzend | Verkündungen im Gesetzblatt erfassen (`postparl-gsblt`). Komplettiert den Gesetzgebungslebenszyklus nach der parlamentarischen Phase.                                                        |
 
 ## Prerequisites
@@ -189,7 +192,7 @@ The scraper is run via the pazufa-collector framework runner:
 python -m collector --config-file config.sample.toml
 
 # The framework automatically:
-# - Discovers BawueVorgaengeScraper and BawueSitzungenScraper in src/bawue/
+# - Discovers BawueVorgaengeScraper, BawueBeteiligungScraper and BawueSitzungenScraper in src/bawue/
 # - Runs listing_page_extractor for each Vorgangstyp / ICS feed URL
 # - Runs item_extractor for each found Vorgang / date key
 # - Caches results in Redis (if configured)
@@ -257,12 +260,19 @@ Configuration uses the pazufa-collector 4-tier system: Defaults → TOML (`confi
 
 ### BaWue-specific configuration (config.toml `[bawue]` section)
 
-| Key                      | Default                    | Description                                |
-|--------------------------|----------------------------|--------------------------------------------|
-| `wahlperiode`            | 17                         | Current Wahlperiode                        |
-| `parlis-request-delay-s` | 1.0                        | Delay between PARLIS requests in seconds   |
-| `scrape-lookback-days`   | 7                          | Number of days to look back when scraping  |
-| `ics-url`                | *(landtag-bw.de ICS feed)* | URL of the ICS calendar feed for Sitzungen |
+| Key                      | Default                    | Description                                              |
+|--------------------------|----------------------------|----------------------------------------------------------|
+| `wahlperiode`            | 17                         | Current Wahlperiode                                      |
+| `parlis-request-delay-s` | 1.0                        | Delay between PARLIS requests in seconds                 |
+| `wahlperiode-start-date` | `"2021-04-26"`             | Start date of current Wahlperiode (sets search range)    |
+| `ics-url`                | *(landtag-bw.de ICS feed)* | URL of the ICS calendar feed for Sitzungen               |
+
+### Beteiligungsportal configuration (config.toml `[beteiligung]` section)
+
+| Key                | Default | Description                                           |
+|--------------------|---------|-------------------------------------------------------|
+| `wahlperiode`      | 17      | Wahlperiode for LP index URL                          |
+| `request-delay-s`  | 2.0     | Delay between Beteiligungsportal requests in seconds  |
 
 ## Development
 
@@ -316,17 +326,22 @@ pazufa-bawue-scraper/
 ├── src/
 │   └── bawue/
 │       ├── bawue_vorgaenge_scraper.py  # VorgangsScraper subclass (framework auto-discovery)
+│       ├── bawue_beteiligung_scraper.py # VorgangsScraper for Beteiligungsportal (preparl-regent)
 │       ├── bawue_sitzungen_scraper.py  # SitzungsScraper subclass (ICS calendar → Sitzung)
+│       ├── beteiligung_client.py       # Beteiligungsportal HTTP client
+│       ├── beteiligung_parser.py       # Beteiligungsportal HTML parsing (TYPO3)
 │       ├── ics_parser.py               # Stateless ICS parsing + event filtering
 │       ├── parlis_client.py            # PARLIS HTTP logic (session, search, pagination)
 │       ├── parlis_parser.py            # HTML parsing + fundstelle regex parsing
 │       ├── enum_mapper.py              # PARLIS → PaZuFa enum mapping
+│       ├── rate_limiter.py             # Adaptive rate limiting (AIMD-inspired)
 │       ├── types.py                    # RawVorgang, RawFundstelle TypedDicts
 │       ├── report.py                   # Dry-run analysis dataclasses + formatting
 │       └── dry_run.py                  # Dry-run CLI entry point (python -m bawue.dry_run)
 ├── tests/
 │   └── unit/
 │       ├── fixtures/
+│       │   ├── beteiligung/            # Beteiligungsportal HTML fixtures (index + detail pages)
 │       │   └── sample_calendar.ics     # ICS fixture for deterministic tests
 │       ├── test_bawue_scraper.py       # _build_vorgang / _build_station tests
 │       ├── test_bawue_sitzungen_scraper.py # SitzungsScraper tests

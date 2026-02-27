@@ -423,12 +423,17 @@ Defaults → TOML (`config.toml`) → Umgebungsvariablen → CLI-Argumente.
 
 ### BaWue-spezifische Konfiguration
 
-| Sektion    | Schlüssel                | Standard | Beschreibung                              |
-|------------|--------------------------|----------|-------------------------------------------|
-| `[bawue]`  | `wahlperiode`            | 17       | Aktuelle Wahlperiode                      |
-| `[bawue]`  | `parlis-request-delay-s` | 1.0      | Verzögerung zwischen PARLIS-Anfragen (s)  |
-| `[bawue]`  | `scrape-lookback-days`   | 7        | Anzahl Tage Rückblick beim Scraping       |
-| `[bawue]`  | `ics-url`                | *(landtag-bw.de)* | URL des ICS-Kalender-Feeds für Sitzungen |
+| Sektion    | Schlüssel                | Standard          | Beschreibung                                             |
+|------------|--------------------------|-------------------|----------------------------------------------------------|
+| `[bawue]`  | `wahlperiode`            | 17                | Aktuelle Wahlperiode                                     |
+| `[bawue]`  | `parlis-request-delay-s` | 1.0               | Verzögerung zwischen PARLIS-Anfragen (s)                 |
+| `[bawue]`  | `wahlperiode-start-date` | `"2021-04-26"`    | Startdatum der aktuellen Wahlperiode (setzt Suchbereich) |
+| `[bawue]`  | `ics-url`                | *(landtag-bw.de)* | URL des ICS-Kalender-Feeds für Sitzungen                 |
+
+| Sektion         | Schlüssel           | Standard | Beschreibung                                        |
+|-----------------|---------------------|----------|-----------------------------------------------------|
+| `[beteiligung]` | `wahlperiode`       | 17       | Wahlperiode für Beteiligungsportal LP-Index         |
+| `[beteiligung]` | `request-delay-s`   | 2.0      | Verzögerung zwischen Anfragen (s)                   |
 
 ## Referenz: pazufa-collector Framework
 

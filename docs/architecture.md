@@ -165,6 +165,7 @@ classDiagram
         -_establish_session()
         -_search_single()
         -_monthly_windows()
+        -_subdivide()
     }
 
     class ParlisParser {
@@ -421,7 +422,15 @@ Maps PARLIS terminology to PaZuFa enum values from the auto-generated OpenAPI mo
 - Map document references to `Doktyp` enum
 - Fall back to `SONSTIG` for unmapped values
 
-### 5.10 Types
+### 5.10 AdaptiveRateLimiter (rate_limiter.py)
+
+Provides AIMD-inspired adaptive request pacing for ParlisClient and BeteiligungClient.
+
+- **Success:** delay shrinks 10% toward minimum
+- **HTTP 429:** pause 30× current delay, then resume at 50% of current delay
+- **wait():** sleeps only the remaining time since the last request (no double-waiting)
+
+### 5.11 Types
 
 TypedDict definitions for internal data exchange between ParlisClient, ParlisParser, and BawueVorgaengeScraper.
 
@@ -491,12 +500,13 @@ page count, PDF URL, author text (gap between station type and date).
 ### 6.5 Incremental Date Filtering
 
 Large Vorgangstypen (e.g. "Kleine Anfrage" with 4000+ hits) cause the API to return `status: "running"` without a
-`report_id`. Strategy:
+`report_id`. 5-step strategy:
 
 1. Try full search for a Vorgangstyp
-2. If no `report_id` returned but `hits > 0` — the result set is too large
-3. Subdivide into monthly windows
-4. Repeat until each window returns a usable `report_id`
+2. If no `report_id` (status=running) → subdivide into monthly windows
+3. For each monthly window, try search
+4. If monthly window still too large → `_subdivide()` recursively halves it (binary search)
+5. If single-day window still too large → skip with warning
 
 ## 7. Enum Mapping
 
@@ -617,7 +627,7 @@ All configuration is via `config.toml` with environment variable overrides:
 | **Rate limiting by Landtag**          | IP blocked                                   | Configurable delays, descriptive User-Agent                                         |
 | **Fundstelle text format changes**    | Station parsing breaks                       | Regex-based parsing with fallback, unit tests with known samples                    |
 | **verfassungsaendernd not available** | Required field cannot be determined          | Default to `false` (PARLIS does not expose this field)                              |
-| **Sync/async coexistence**            | PARLIS uses sync requests in async framework | `requests.Session` runs in framework's event loop; may need `asyncio.to_thread()`   |
+| **Sync/async coexistence**            | PARLIS uses sync requests in async framework | `asyncio.to_thread()` wraps sync calls in both vorgaenge and beteiligung scrapers    |
 
 ## 11. Migration from Standalone Scraper
 
@@ -653,5 +663,5 @@ Components preserved as PARLIS-specific logic:
 | **Kabinettsberichte (STM)**   | Optional  | Signalquelle für neue Regierungsentwürfe                                        |
 | **Gesetzblatt BaWue**         | Ergänzend | Verkündungen (`postparl-gsblt` station)                                         |
 | **PARLIS Detail-Seiten**      | Ergänzend | Additional data from individual Vorgang detail pages                            |
-| **asyncio.to_thread()**       | Technisch | Wrap sync PARLIS requests for proper async integration                          |
+| ~~**asyncio.to_thread()**~~   | Erledigt  | Already used in both vorgaenge and beteiligung scrapers for sync-in-async calls |
 | ~~**Dokument-Autoren**~~      | Erledigt  | Autoren aus Fundstelle-Text extrahiert, Fallback auf Initiative                 |
