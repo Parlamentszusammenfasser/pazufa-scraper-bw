@@ -261,6 +261,51 @@ class TestItemExtractor:
         assert result is None
 
 
+class TestPlaceholderDate:
+    def test_zero_day_month_falls_back_to_year_start(self, scraper_build_vorgang):
+        """PARLIS uses 00.00.YYYY as a placeholder when only the year is known."""
+        raw = _make_raw_vorgang(
+            "V-600",
+            fundstellen=[
+                {
+                    "raw": "Antrag    Fraktion GRÜNE  00.00.2028 Drucksache 17/99999",
+                    "datum": "00.00.2028",
+                    "drucksache": "17/99999",
+                    "station_typ": "Antrag",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        station = vorgang.stationen[0]
+        assert station.zp_start.year == 2028
+        assert station.zp_start.month == 1
+        assert station.zp_start.day == 1
+
+    def test_zero_day_month_logs_warning(self, scraper_build_vorgang, caplog):
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+
+        raw = _make_raw_vorgang(
+            "V-601",
+            fundstellen=[
+                {
+                    "raw": "Antrag    Fraktion GRÜNE  00.00.2028 Drucksache 17/99999",
+                    "datum": "00.00.2028",
+                    "drucksache": "17/99999",
+                    "station_typ": "Antrag",
+                    "pdf_url": "",
+                },
+            ],
+        )
+
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
+            scraper._build_vorgang(raw)
+
+        assert any("00.00.2028" in msg for msg in caplog.messages)
+
+
 class TestDatetimeFallbackWarning:
     def test_missing_date_logs_warning(self, scraper_build_vorgang, caplog):
         scraper = object.__new__(BawueVorgaengeScraper)

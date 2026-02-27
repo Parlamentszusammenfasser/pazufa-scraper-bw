@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 import uuid
 from datetime import date, datetime
 from uuid import NAMESPACE_URL, uuid5
@@ -157,7 +158,27 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # Parse date
         datum_str = fund.get("datum", "")
         if datum_str:
-            zp_start = datetime.strptime(datum_str, "%d.%m.%Y")
+            try:
+                zp_start = datetime.strptime(datum_str, "%d.%m.%Y")
+            except ValueError:
+                year_match = re.search(r"\d{4}", datum_str)
+                if year_match:
+                    zp_start = datetime(int(year_match.group()), 1, 1)
+                    logger.warning(
+                        "Invalid date '%s' for Fundstelle '%s' (Drucksache: %s), using %s-01-01",
+                        datum_str,
+                        fund.get("raw", ""),
+                        fund.get("drucksache", "unknown"),
+                        year_match.group(),
+                    )
+                else:
+                    zp_start = datetime.now()
+                    logger.warning(
+                        "Unparseable date '%s' for Fundstelle '%s' (Drucksache: %s), using current time",
+                        datum_str,
+                        fund.get("raw", ""),
+                        fund.get("drucksache", "unknown"),
+                    )
         else:
             zp_start = datetime.now()
             logger.warning(
