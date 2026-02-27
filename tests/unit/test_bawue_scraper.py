@@ -176,11 +176,11 @@ class TestBuildVorgang:
         assert vorgang.stationen[0].gremium.parlament.value == "BW"
 
 
-def _make_scraper_with_mock_parlis(search_return=None):
+def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(2021, 4, 26)):
     """Create a minimal BawueVorgaengeScraper without full init, with a mock ParlisClient."""
     scraper = object.__new__(BawueVorgaengeScraper)
     scraper._wahlperiode = 17
-    scraper._lookback_days = 7
+    scraper._wahlperiode_start_date = wahlperiode_start
     scraper._raw_cache = {}
     scraper._parlis = MagicMock()
     scraper._parlis.search.return_value = search_return or []
@@ -202,6 +202,19 @@ class TestListingPageExtractor:
         assert args[1] == "Gesetzgebung"
         assert isinstance(args[2], date)
         assert isinstance(args[3], date)
+
+    @pytest.mark.asyncio
+    async def test_uses_wahlperiode_start_date_not_lookback(self):
+        start = date(2021, 4, 26)
+        scraper = _make_scraper_with_mock_parlis(search_return=[], wahlperiode_start=start)
+
+        with patch("bawue.bawue_vorgaenge_scraper.asyncio.to_thread") as mock_to_thread:
+            mock_to_thread.return_value = []
+            await scraper.listing_page_extractor("Gesetzgebung")
+
+        args = mock_to_thread.call_args[0]
+        date_from = args[2]
+        assert date_from == start, f"Expected wahlperiode start {start}, got {date_from}"
 
     @pytest.mark.asyncio
     async def test_populates_raw_cache(self):

@@ -11,7 +11,6 @@ import argparse
 import logging
 import sys
 import time
-from datetime import date, timedelta
 
 import requests
 from icalendar import Calendar
@@ -50,7 +49,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Which scraper to run (default: all)",
     )
     parser.add_argument("--vorgangstyp", type=str, default=None, help="Limit to one PARLIS Vorgangstyp")
-    parser.add_argument("--lookback-days", type=int, default=7, help="Days to look back (default: 7)")
     parser.add_argument("--wahlperiode", type=int, default=17, help="Wahlperiode (default: 17)")
     parser.add_argument("--limit", type=int, default=None, help="Max items per scraper")
     parser.add_argument("--verbosity", type=int, choices=[0, 1, 2], default=0, help="Output detail level")
@@ -67,7 +65,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def run_vorgaenge(
     *,
     wahlperiode: int = 17,
-    lookback_days: int = 7,
     vorgangstypen: list[str] | None = None,
     limit: int | None = None,
 ) -> tuple[list[VorgangReport], list[dict]]:
@@ -78,8 +75,8 @@ def run_vorgaenge(
     if vorgangstypen is None:
         vorgangstypen = list(VORGANGSTYP_MAP.keys())
 
-    date_to = date.today()
-    date_from = date_to - timedelta(days=lookback_days)
+    date_from = None
+    date_to = None
 
     client = ParlisClient(wahlperiode=wahlperiode, request_delay_s=1.0)
 
@@ -205,7 +202,6 @@ def main(argv: list[str] | None = None) -> None:
         vorgangstypen = [args.vorgangstyp] if args.vorgangstyp else None
         vorgang_reports, raw_vorgaenge = run_vorgaenge(
             wahlperiode=args.wahlperiode,
-            lookback_days=args.lookback_days,
             vorgangstypen=vorgangstypen,
             limit=args.limit,
         )
@@ -229,7 +225,6 @@ def main(argv: list[str] | None = None) -> None:
         sitzung_reports=sitzung_reports,
         raw_vorgaenge=raw_vorgaenge,
         duration_s=duration,
-        lookback_days=args.lookback_days,
         wahlperiode=args.wahlperiode,
     )
 

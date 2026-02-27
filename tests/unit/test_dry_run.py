@@ -3,7 +3,11 @@
 from datetime import date
 from unittest.mock import MagicMock, patch
 
+from datetime import date
+
 from bawue.dry_run import parse_args, run_beteiligung, run_sitzungen, run_vorgaenge
+
+WP17_START = date(2021, 4, 26)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -37,11 +41,15 @@ class TestParseArgs:
     def test_defaults(self):
         args = parse_args([])
         assert args.scraper == "all"
-        assert args.lookback_days == 7
+        assert args.wahlperiode_start_date == date(2021, 4, 26)
         assert args.wahlperiode == 17
         assert args.limit is None
         assert args.verbosity == 0
         assert args.json is False
+
+    def test_wahlperiode_start_date_flag(self):
+        args = parse_args(["--wahlperiode-start-date", "2022-01-01"])
+        assert args.wahlperiode_start_date == date(2022, 1, 1)
 
     def test_scraper_flag(self):
         args = parse_args(["--scraper", "vorgaenge"])
@@ -77,7 +85,7 @@ class TestRunVorgaenge:
 
         reports, raw_list = run_vorgaenge(
             wahlperiode=17,
-            lookback_days=7,
+            wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung"],
             limit=None,
         )
@@ -85,7 +93,7 @@ class TestRunVorgaenge:
         mock_client.search.assert_called_once()
         args = mock_client.search.call_args[0]
         assert args[0] == "Gesetzgebung"
-        assert isinstance(args[1], date)
+        assert args[1] == WP17_START, f"Expected date_from={WP17_START}, got {args[1]}"
         assert isinstance(args[2], date)
 
     @patch("bawue.dry_run.ParlisClient")
@@ -95,7 +103,7 @@ class TestRunVorgaenge:
 
         reports, raw_list = run_vorgaenge(
             wahlperiode=17,
-            lookback_days=7,
+            wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung"],
             limit=None,
         )
@@ -115,7 +123,7 @@ class TestRunVorgaenge:
 
         reports, raw_list = run_vorgaenge(
             wahlperiode=17,
-            lookback_days=7,
+            wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung"],
             limit=2,
         )
@@ -133,7 +141,7 @@ class TestRunVorgaenge:
 
         reports, raw_list = run_vorgaenge(
             wahlperiode=17,
-            lookback_days=7,
+            wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung", "Kleine Anfrage"],
             limit=None,
         )
@@ -148,7 +156,7 @@ class TestRunVorgaenge:
 
         reports, raw_list = run_vorgaenge(
             wahlperiode=17,
-            lookback_days=7,
+            wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung"],
             limit=None,
         )

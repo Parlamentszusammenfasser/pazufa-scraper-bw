@@ -77,6 +77,25 @@ class TestSearchQueryConstruction:
         assert body["search"]["serverrecordname"] == "vorgang"
 
     @responses.activate
+    def test_search_without_dates_sends_empty_strings(self, client):
+        responses.add(responses.GET, BASE_URL, body="<html></html>", status=200)
+        responses.add(
+            responses.POST,
+            BROWSE_URL,
+            json={"report_id": "rpt-123", "item_count": 0},
+            status=200,
+        )
+
+        client.search("Gesetzgebung")
+
+        post_call = responses.calls[1]
+        import json
+
+        body = json.loads(post_call.request.body)
+        assert body["search"]["lines"]["l2"] == ""
+        assert body["search"]["lines"]["l3"] == ""
+
+    @responses.activate
     def test_search_uses_configured_wahlperiode(self):
         client = ParlisClient(wahlperiode=18, request_delay_s=0.0)
         responses.add(responses.GET, BASE_URL, body="<html></html>", status=200)

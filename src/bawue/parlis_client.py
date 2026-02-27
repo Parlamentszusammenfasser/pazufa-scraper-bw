@@ -39,7 +39,7 @@ class ParlisClient:
         resp.raise_for_status()
         logger.info("Session established.")
 
-    def _build_query(self, vorgangstyp: str, date_from: date, date_to: date) -> dict:
+    def _build_query(self, vorgangstyp: str, date_from: date | None, date_to: date | None) -> dict:
         return {
             "action": "SearchAndDisplay",
             "report": {
@@ -52,8 +52,8 @@ class ParlisClient:
             "search": {
                 "lines": {
                     "l1": str(self._wahlperiode),
-                    "l2": date_from.strftime("%d.%m.%Y"),
-                    "l3": date_to.strftime("%d.%m.%Y"),
+                    "l2": date_from.strftime("%d.%m.%Y") if date_from else "",
+                    "l3": date_to.strftime("%d.%m.%Y") if date_to else "",
                     "l4": vorgangstyp,
                 },
                 "serverrecordname": "vorgang",
@@ -85,7 +85,7 @@ class ParlisClient:
             current = date(current.year + 1, 1, 1) if current.month == 12 else date(current.year, current.month + 1, 1)
         return windows
 
-    def _search_single(self, vorgangstyp: str, date_from: date, date_to: date) -> list[RawVorgang] | None:
+    def _search_single(self, vorgangstyp: str, date_from: date | None, date_to: date | None) -> list[RawVorgang] | None:
         """Execute a single search against PARLIS.
 
         Returns:
@@ -96,8 +96,8 @@ class ParlisClient:
             "Searching PARLIS: WP=%s, type=%s, dates=%s-%s",
             self._wahlperiode,
             vorgangstyp,
-            date_from,
-            date_to,
+            date_from or "any",
+            date_to or "any",
         )
 
         resp = self._session.post(
@@ -137,16 +137,24 @@ class ParlisClient:
 
         return all_results
 
-    def search(self, vorgangstyp: str, date_from: date, date_to: date) -> list[RawVorgang]:
+    def search(
+        self, vorgangstyp: str, date_from: date | None = None, date_to: date | None = None
+    ) -> list[RawVorgang]:
         """Search PARLIS for Vorgänge matching the given criteria.
 
         If PARLIS indicates the result set is too large (status=running), automatically
-        subdivides the date range into monthly windows and retries.
+        subdivides the date range into monthly windows and retries. Subdivision requires
+        concrete dates — if both are None, returns empty list on overflow.
         """
         self._establish_session()
         results = self._search_single(vorgangstyp, date_from, date_to)
         if results is not None:
             return results
+
+        # Subdivision requires concrete dates — skip if None
+        if date_from is None or date_to is None:
+            logger.warning("Search too large but no date range to subdivide. Returning empty.")
+            return []
 
         # Subdivide into monthly windows
         all_results: list[RawVorgang] = []

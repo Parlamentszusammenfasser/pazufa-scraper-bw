@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
@@ -38,7 +38,7 @@ def _parse_autoren(text: str) -> list[Autor]:
 
 DEFAULT_VORGANGSTYPEN: list[str] = list(VORGANGSTYP_MAP.keys())
 DEFAULT_WAHLPERIODE = 17
-DEFAULT_LOOKBACK_DAYS = 7
+DEFAULT_WAHLPERIODE_START = date(2021, 4, 26)  # WP 17 BW: Landtag constituted
 DEFAULT_PARLIS_DELAY = 1.0
 
 
@@ -54,7 +54,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # Load BaWue-specific config from TOML
         bawue_config = self._load_bawue_config(config)
         self._wahlperiode = bawue_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
-        self._lookback_days = bawue_config.get("scrape-lookback-days", DEFAULT_LOOKBACK_DAYS)
+        wp_start = bawue_config.get("wahlperiode-start-date", DEFAULT_WAHLPERIODE_START)
+        self._wahlperiode_start_date = date.fromisoformat(wp_start) if isinstance(wp_start, str) else wp_start
         parlis_delay = bawue_config.get("parlis-request-delay-s", DEFAULT_PARLIS_DELAY)
 
         # The listing_urls are Vorgangstyp strings — the framework passes them to listing_page_extractor
@@ -87,8 +88,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         The framework calls this for each entry in self.listing_urls.
         We use the Vorgangstyp string as the "listing URL".
         """
+        date_from = self._wahlperiode_start_date
         date_to = date.today()
-        date_from = date_to - timedelta(days=self._lookback_days)
 
         # PARLIS uses synchronous requests — offload to a thread to avoid blocking the event loop
         raw_vorgaenge = await asyncio.to_thread(self._parlis.search, vorgangstyp, date_from, date_to)
