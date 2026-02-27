@@ -1,6 +1,7 @@
 """Tests for the Beteiligungsportal HTTP client."""
 
 import time
+from unittest.mock import patch
 
 import pytest
 import responses
@@ -122,3 +123,18 @@ class TestRequestDelay:
         elapsed = time.monotonic() - start
 
         assert elapsed >= 0.1
+
+
+class TestRateLimiting:
+    @responses.activate
+    def test_get_retries_on_429(self, client):
+        """A 429 response triggers a retry and eventually succeeds."""
+        responses.add(responses.GET, LP17_URL, status=429)
+        responses.add(responses.GET, LP17_URL, body=SAMPLE_INDEX_HTML, status=200)
+
+        with patch("bawue.rate_limiter.time") as mock_time:
+            mock_time.monotonic.return_value = 0.0
+            processes = client.fetch_process_list()
+
+        assert len(processes) == 1
+        assert len(responses.calls) == 2

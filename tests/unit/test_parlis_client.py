@@ -299,6 +299,39 @@ class TestDateSubdivision:
         assert results == []
 
 
+class TestRateLimiting:
+    @responses.activate
+    def test_post_retries_on_429(self, client):
+        """A 429 on the search POST triggers a retry and eventually succeeds."""
+        responses.add(responses.GET, BASE_URL, body="<html></html>", status=200)
+        responses.add(responses.POST, BROWSE_URL, status=429)
+        responses.add(responses.POST, BROWSE_URL, json={"report_id": "", "item_count": 0}, status=200)
+
+        with patch("bawue.rate_limiter.time") as mock_time:
+            mock_time.monotonic.return_value = 0.0
+            results = client.search("Gesetzgebung")
+
+        assert results == []
+        post_calls = [c for c in responses.calls if c.request.method == "POST"]
+        assert len(post_calls) == 2
+
+    @responses.activate
+    def test_get_retries_on_429(self, client):
+        """A 429 on a report page GET triggers a retry and eventually succeeds."""
+        responses.add(responses.GET, BASE_URL, body="<html></html>", status=200)
+        responses.add(responses.POST, BROWSE_URL, json={"report_id": "rpt-1", "item_count": 1}, status=200)
+        responses.add(responses.GET, REPORT_URL, status=429)
+        responses.add(responses.GET, REPORT_URL, body=SAMPLE_HTML_RECORD, status=200)
+
+        with patch("bawue.rate_limiter.time") as mock_time:
+            mock_time.monotonic.return_value = 0.0
+            results = client.search("Gesetzgebung", date(2026, 1, 1), date(2026, 2, 1))
+
+        assert len(results) == 1
+        report_calls = [c for c in responses.calls if REPORT_URL in c.request.url]
+        assert len(report_calls) == 2
+
+
 class TestMonthlyWindows:
     def test_single_month(self):
         windows = ParlisClient._monthly_windows(date(2026, 1, 1), date(2026, 1, 31))

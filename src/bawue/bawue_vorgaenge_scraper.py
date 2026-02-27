@@ -161,7 +161,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             try:
                 zp_start = datetime.strptime(datum_str, "%d.%m.%Y")
             except ValueError:
-                year_match = re.search(r"\d{4}", datum_str)
+                year_match = re.search(r"(20\d{2})", datum_str)
                 if year_match:
                     zp_start = datetime(int(year_match.group()), 1, 1)
                     logger.warning(

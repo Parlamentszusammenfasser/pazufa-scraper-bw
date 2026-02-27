@@ -31,7 +31,7 @@ def parse_fundstelle_text(text: str) -> dict:
     """Parse a Fundstelle text entry into structured station data."""
     result: dict = {"raw": text}
 
-    date_match = re.search(r"(\d{2}\.\d{2}\.\d{4})", text)
+    date_match = re.search(r"(\d{2}\.\d{2}\.20\d{2})", text)
     if date_match:
         result["datum"] = date_match.group(1)
 

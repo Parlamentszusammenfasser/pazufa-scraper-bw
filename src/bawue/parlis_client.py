@@ -2,12 +2,12 @@
 
 import calendar
 import logging
-import time
 from datetime import date
 
 import requests
 
 from bawue.parlis_parser import parse_results
+from bawue.rate_limiter import AdaptiveRateLimiter
 from bawue.types import RawVorgang
 
 logger = logging.getLogger(__name__)
@@ -28,8 +28,11 @@ class ParlisClient:
         wahlperiode_start_date: date | None = None,
     ) -> None:
         self._wahlperiode = wahlperiode
-        self._request_delay_s = request_delay_s
         self._wahlperiode_start_date = wahlperiode_start_date
+        self._rate_limiter = AdaptiveRateLimiter(
+            initial_delay=request_delay_s,
+            min_delay=min(0.1, request_delay_s),
+        )
         self._session = requests.Session()
         self._session.hooks["response"].append(lambda r, *a, **kw: setattr(r, "encoding", "utf-8"))
         self._session.headers.update(
@@ -38,6 +41,30 @@ class ParlisClient:
                 "Accept-Language": "de-DE,de;q=0.9",
             }
         )
+
+    def _get(self, url: str, **kw) -> requests.Response:
+        """Rate-limited GET with automatic 429 retry."""
+        while True:
+            self._rate_limiter.wait()
+            resp = self._session.get(url, **kw)
+            if resp.status_code == 429:
+                self._rate_limiter.on_rate_limit(logger)
+                continue
+            resp.raise_for_status()
+            self._rate_limiter.on_success()
+            return resp
+
+    def _post(self, url: str, **kw) -> requests.Response:
+        """Rate-limited POST with automatic 429 retry."""
+        while True:
+            self._rate_limiter.wait()
+            resp = self._session.post(url, **kw)
+            if resp.status_code == 429:
+                self._rate_limiter.on_rate_limit(logger)
+                continue
+            resp.raise_for_status()
+            self._rate_limiter.on_success()
+            return resp
 
     def _establish_session(self) -> None:
         """Load the PARLIS main page to establish session cookies."""
@@ -74,8 +101,7 @@ class ParlisClient:
             "start": start,
             "chunksize": CHUNKSIZE,
         }
-        resp = self._session.get(REPORT_URL, params=params, timeout=30)
-        resp.raise_for_status()
+        resp = self._get(REPORT_URL, params=params, timeout=30)
         return resp.text
 
     @staticmethod
@@ -107,13 +133,12 @@ class ParlisClient:
             date_to or "any",
         )
 
-        resp = self._session.post(
+        resp = self._post(
             BROWSE_URL,
             json=query,
             headers={"Content-Type": "application/json", "Referer": BASE_URL},
             timeout=30,
         )
-        resp.raise_for_status()
 
         data = resp.json()
         report_id = data.get("report_id", "")
@@ -135,8 +160,6 @@ class ParlisClient:
 
         all_results: list[RawVorgang] = []
         for start in range(0, item_count, CHUNKSIZE):
-            if start > 0:
-                time.sleep(self._request_delay_s)
             html_content = self._fetch_page(report_id, start)
             page_results = parse_results(html_content)
             all_results.extend(page_results)
@@ -174,7 +197,6 @@ class ParlisClient:
         # Subdivide into monthly windows
         all_results: list[RawVorgang] = []
         for window_from, window_to in self._monthly_windows(date_from, date_to):
-            time.sleep(self._request_delay_s)
             window_results = self._search_single(vorgangstyp, window_from, window_to)
             if window_results is None:
                 logger.warning(

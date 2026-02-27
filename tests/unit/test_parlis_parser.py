@@ -150,6 +150,13 @@ class TestParseResults:
         assert results == []
 
 
+class TestParseFundstellePageNumberNotConfusedForYear:
+    def test_page_number_not_confused_for_year(self):
+        text = "vom 00.00.3640   Plenarprotokoll 17/60 09.03.2023  S. 3640-3644"
+        result = parse_fundstelle_text(text)
+        assert result["datum"] == "09.03.2023"
+
+
 class TestParseFundstelleTextGermanDate:
     def test_extracts_german_long_form_date(self):
         text = "Gesetz  vom 16. Dezember 2025 Gesetzblatt für Baden-Württemberg 2025 Nr. 147     S. 1-3"
