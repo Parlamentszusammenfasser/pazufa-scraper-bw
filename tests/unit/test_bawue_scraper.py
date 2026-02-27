@@ -352,6 +352,38 @@ class TestDatetimeFallbackWarning:
         assert any("17/10266" in msg for msg in caplog.messages)
 
 
+class TestRunDurationLog:
+    @pytest.mark.asyncio
+    async def test_logs_completed_in_on_success(self, caplog):
+        from unittest.mock import AsyncMock
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"),
+        ):
+            await scraper.run()
+
+        assert any("Completed in" in msg for msg in caplog.messages)
+
+    @pytest.mark.asyncio
+    async def test_logs_completed_in_on_failure(self, caplog):
+        from unittest.mock import AsyncMock
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+
+        mock_run = AsyncMock(side_effect=RuntimeError("boom"))
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=mock_run),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"),
+            pytest.raises(RuntimeError),
+        ):
+            await scraper.run()
+
+        assert any("Completed in" in msg for msg in caplog.messages)
+
+
 class TestParseAutoren:
     def test_single_author(self):
         result = _parse_autoren("Fraktion GRÜNE")

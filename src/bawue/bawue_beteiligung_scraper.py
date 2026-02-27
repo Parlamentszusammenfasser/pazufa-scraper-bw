@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 import uuid
 from datetime import datetime
 from uuid import NAMESPACE_URL, uuid5
@@ -66,6 +67,14 @@ class BawueBeteiligungScraper(VorgangsScraper):
             except Exception:
                 logger.warning("Could not load [beteiligung] section from config file: %s", config_file, exc_info=True)
         return {}
+
+    async def run(self) -> None:
+        start = time.monotonic()
+        try:
+            await super().run()
+        finally:
+            duration = time.monotonic() - start
+            logger.info("Completed in %.1fs", duration)
 
     async def listing_page_extractor(self, lp_key: str) -> list[str]:
         """Fetch the process list and return slugs for each process."""

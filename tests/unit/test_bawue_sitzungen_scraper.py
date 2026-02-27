@@ -1,6 +1,7 @@
 """Tests for the BawueSitzungenScraper."""
 
 import datetime
+import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -213,3 +214,31 @@ class TestSendResult:
             kwargs = call_kwargs.kwargs if hasattr(call_kwargs, "kwargs") else {}
             all_args = {**args, **kwargs}
             assert all_args["parlament"] == Parlament.BW
+
+
+class TestRunDurationLog:
+    @pytest.mark.asyncio
+    async def test_logs_completed_in_on_success(self, caplog):
+        scraper = _make_scraper()
+
+        with (
+            patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_sitzungen_scraper"),
+        ):
+            await scraper.run()
+
+        assert any("Completed in" in msg for msg in caplog.messages)
+
+    @pytest.mark.asyncio
+    async def test_logs_completed_in_on_failure(self, caplog):
+        scraper = _make_scraper()
+
+        mock_run = AsyncMock(side_effect=RuntimeError("boom"))
+        with (
+            patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=mock_run),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_sitzungen_scraper"),
+            pytest.raises(RuntimeError),
+        ):
+            await scraper.run()
+
+        assert any("Completed in" in msg for msg in caplog.messages)

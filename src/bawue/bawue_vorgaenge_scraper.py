@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+import time
 import uuid
 from datetime import date, datetime
 from uuid import NAMESPACE_URL, uuid5
@@ -86,6 +87,14 @@ class BawueVorgaengeScraper(VorgangsScraper):
             except Exception:
                 logger.warning("Could not load [bawue] section from config file: %s", config_file, exc_info=True)
         return {}
+
+    async def run(self) -> None:
+        start = time.monotonic()
+        try:
+            await super().run()
+        finally:
+            duration = time.monotonic() - start
+            logger.info("Completed in %.1fs", duration)
 
     async def listing_page_extractor(self, vorgangstyp: str) -> list[str]:
         """Search PARLIS for a given Vorgangstyp and return vorgang IDs.

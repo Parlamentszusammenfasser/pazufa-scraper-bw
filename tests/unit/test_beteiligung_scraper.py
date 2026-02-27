@@ -1,7 +1,8 @@
 """Tests for the BawueBeteiligungScraper."""
 
+import logging
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import NAMESPACE_URL, uuid5
 
 import pytest
@@ -207,3 +208,31 @@ class TestItemExtractor:
         result = await scraper.item_extractor("missing-slug")
 
         assert result is None
+
+
+class TestRunDurationLog:
+    @pytest.mark.asyncio
+    async def test_logs_completed_in_on_success(self, caplog):
+        scraper = _make_scraper()
+
+        with (
+            patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_beteiligung_scraper"),
+        ):
+            await scraper.run()
+
+        assert any("Completed in" in msg for msg in caplog.messages)
+
+    @pytest.mark.asyncio
+    async def test_logs_completed_in_on_failure(self, caplog):
+        scraper = _make_scraper()
+
+        mock_run = AsyncMock(side_effect=RuntimeError("boom"))
+        with (
+            patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=mock_run),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_beteiligung_scraper"),
+            pytest.raises(RuntimeError),
+        ):
+            await scraper.run()
+
+        assert any("Completed in" in msg for msg in caplog.messages)

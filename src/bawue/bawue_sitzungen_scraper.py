@@ -2,6 +2,7 @@
 
 import datetime
 import logging
+import time
 import uuid
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
@@ -51,6 +52,14 @@ class BawueSitzungenScraper(SitzungsScraper):
             except Exception:
                 logger.warning("Could not load [bawue] section from config file: %s", config_file, exc_info=True)
         return {}
+
+    async def run(self) -> None:
+        start = time.monotonic()
+        try:
+            await super().run()
+        finally:
+            duration = time.monotonic() - start
+            logger.info("Completed in %.1fs", duration)
 
     async def listing_page_extractor(self, url: str) -> list[str]:
         """Fetch the ICS feed and return ISO date strings as listing keys."""
