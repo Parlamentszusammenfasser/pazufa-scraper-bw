@@ -11,6 +11,7 @@ import argparse
 import logging
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
 import requests
@@ -61,6 +62,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_WAHLPERIODE_START,
         help="Start date of the Wahlperiode (default: 2021-04-26)",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=3,
+        choices=range(1, 9),
+        metavar="{1..8}",
+        help="Number of parallel workers for Vorgangstyp scraping (default: 3)",
+    )
     return parser.parse_args(argv)
 
 
@@ -69,14 +78,41 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 
 
+def _search_one_type(
+    vt: str,
+    wahlperiode: int,
+    date_from,
+    date_to,
+    wahlperiode_start_date,
+) -> tuple[str, list[dict]]:
+    """Search PARLIS for a single Vorgangstyp using its own client instance.
+
+    Each call creates a fresh ParlisClient (own requests.Session) so workers
+    can run concurrently without sharing session state.
+    """
+    client = ParlisClient(
+        wahlperiode=wahlperiode,
+        request_delay_s=1.0,
+        wahlperiode_start_date=wahlperiode_start_date,
+    )
+    logger.info("Searching PARLIS for '%s' (%s to %s)...", vt, date_from, date_to)
+    raw_vorgaenge = client.search(vt, date_from, date_to)
+    logger.info("  '%s' -> %d results", vt, len(raw_vorgaenge))
+    return vt, raw_vorgaenge
+
+
 def run_vorgaenge(
     *,
     wahlperiode: int = 17,
     vorgangstypen: list[str] | None = None,
     limit: int | None = None,
     wahlperiode_start_date=None,
+    max_workers: int = 3,
 ) -> tuple[list[VorgangReport], list[dict]]:
     """Search PARLIS for each Vorgangstyp and analyze results.
+
+    Vorgangstypen are searched in parallel using a ThreadPoolExecutor.
+    Each worker gets its own ParlisClient instance (separate requests.Session).
 
     Returns (vorgang_reports, raw_vorgaenge_list).
     """
@@ -86,34 +122,31 @@ def run_vorgaenge(
     date_from = wahlperiode_start_date
     date_to = date.today() if wahlperiode_start_date is not None else None
 
-    client = ParlisClient(
-        wahlperiode=wahlperiode,
-        request_delay_s=1.0,
-        wahlperiode_start_date=wahlperiode_start_date,
-    )
-
     # Use object.__new__ to access _build_vorgang without full scraper init
     scraper = object.__new__(BawueVorgaengeScraper)
     scraper._wahlperiode = wahlperiode
 
+    # Collect all raw results per type in parallel, then apply limit in deterministic order
+    all_raw_by_type: dict[str, list[dict]] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_search_one_type, vt, wahlperiode, date_from, date_to, wahlperiode_start_date): vt
+            for vt in vorgangstypen
+        }
+        for future in as_completed(futures):
+            vt, raw_vorgaenge = future.result()
+            all_raw_by_type[vt] = raw_vorgaenge
+
     all_reports: list[VorgangReport] = []
     all_raw: list[dict] = []
 
-    for vt in vorgangstypen:
-        logger.info("Searching PARLIS for '%s' (%s to %s)...", vt, date_from, date_to)
-        raw_vorgaenge = client.search(vt, date_from, date_to)
-        logger.info("  -> %d results", len(raw_vorgaenge))
-
-        for raw in raw_vorgaenge:
+    for vt in vorgangstypen:  # deterministic order
+        for raw in all_raw_by_type.get(vt, []):
             if limit is not None and len(all_reports) >= limit:
-                break
+                return all_reports, all_raw
             vorgang = scraper._build_vorgang(raw)
-            report = analyze_vorgang(raw, vorgang)
-            all_reports.append(report)
+            all_reports.append(analyze_vorgang(raw, vorgang))
             all_raw.append(raw)
-
-        if limit is not None and len(all_reports) >= limit:
-            break
 
     return all_reports, all_raw
 
@@ -217,6 +250,7 @@ def main(argv: list[str] | None = None) -> None:
             vorgangstypen=vorgangstypen,
             limit=args.limit,
             wahlperiode_start_date=args.wahlperiode_start_date,
+            max_workers=args.workers,
         )
 
     if run_b:

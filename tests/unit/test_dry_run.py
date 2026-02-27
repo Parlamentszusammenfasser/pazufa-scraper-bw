@@ -44,6 +44,11 @@ class TestParseArgs:
         assert args.limit is None
         assert args.verbosity == 0
         assert args.json is False
+        assert args.workers == 3
+
+    def test_workers_flag(self):
+        args = parse_args(["--workers", "5"])
+        assert args.workers == 5
 
     def test_wahlperiode_start_date_flag(self):
         args = parse_args(["--wahlperiode-start-date", "2022-01-01"])
@@ -86,6 +91,7 @@ class TestRunVorgaenge:
             wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung"],
             limit=None,
+            max_workers=1,
         )
 
         mock_client.search.assert_called_once()
@@ -104,6 +110,7 @@ class TestRunVorgaenge:
             wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung"],
             limit=None,
+            max_workers=1,
         )
 
         assert len(reports) == 1
@@ -124,6 +131,7 @@ class TestRunVorgaenge:
             wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung"],
             limit=2,
+            max_workers=1,
         )
 
         assert len(reports) == 2
@@ -142,6 +150,7 @@ class TestRunVorgaenge:
             wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung", "Kleine Anfrage"],
             limit=None,
+            max_workers=1,
         )
 
         assert len(reports) == 2
@@ -157,10 +166,42 @@ class TestRunVorgaenge:
             wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung"],
             limit=None,
+            max_workers=1,
         )
 
         assert reports == []
         assert raw_list == []
+
+    @patch("bawue.dry_run.ParlisClient")
+    def test_parallel_workers(self, MockParlisClient):
+        """With max_workers=2, both types are searched and results are combined."""
+        instances = []
+
+        def make_client(*args, **kwargs):
+            mock_client = MagicMock()
+            instances.append(mock_client)
+            vt_map = {
+                "Gesetzgebung": [_raw_vorgang("V-001", "Gesetzgebung")],
+                "Kleine Anfrage": [_raw_vorgang("V-002", "Kleine Anfrage")],
+            }
+            mock_client.search.side_effect = lambda vt, *a, **kw: vt_map.get(vt, [])
+            return mock_client
+
+        MockParlisClient.side_effect = make_client
+
+        reports, raw_list = run_vorgaenge(
+            wahlperiode=17,
+            wahlperiode_start_date=WP17_START,
+            vorgangstypen=["Gesetzgebung", "Kleine Anfrage"],
+            limit=None,
+            max_workers=2,
+        )
+
+        assert len(reports) == 2
+        assert len(raw_list) == 2
+        assert {r.vorgang_id for r in reports} == {"V-001", "V-002"}
+        # Each worker gets its own ParlisClient instance
+        assert MockParlisClient.call_count == 2
 
 
 # ---------------------------------------------------------------------------
