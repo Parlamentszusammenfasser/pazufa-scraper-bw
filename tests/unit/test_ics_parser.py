@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from bawue.ics_parser import extract_gremium_name, group_events_by_date, parse_ics_feed
+from bawue.ics_parser import extract_gremium_name, extract_session_number, group_events_by_date, parse_ics_feed
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -13,6 +13,25 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 @pytest.fixture()
 def ics_bytes() -> bytes:
     return (FIXTURES_DIR / "sample_calendar.ics").read_bytes()
+
+
+class TestExtractSessionNumber:
+    """Test session number extraction from SUMMARY strings."""
+
+    def test_plenarsitzung_extracts_number(self):
+        assert extract_session_number("Plenarsitzung: 142. Sitzung") == 142
+
+    def test_plenarsitzung_large_number(self):
+        assert extract_session_number("Plenarsitzung: 143. Sitzung") == 143
+
+    def test_ausschuss_returns_zero(self):
+        assert extract_session_number("Fraktions- und Ausschusssitzungen: Ausschuesse") == 0
+
+    def test_fina_returns_zero(self):
+        assert extract_session_number("Fraktions- und Ausschusssitzungen: FinA") == 0
+
+    def test_haushaltsberatungen_returns_zero(self):
+        assert extract_session_number("Haushaltsberatungen: Finanzausschuss") == 0
 
 
 class TestExtractGremiumName:
@@ -58,8 +77,15 @@ class TestParseIcsFeed:
         evt = plenar[0]
         assert evt.summary == "Plenarsitzung: 142. Sitzung"
         assert evt.gremium_name == "Plenum"
+        assert evt.nummer == 142
         assert evt.dtstart == datetime(2026, 2, 25, 11, 0)
         assert evt.dtend == datetime(2026, 2, 25, 18, 0)
+
+    def test_ausschuss_event_nummer_is_zero(self, ics_bytes):
+        events = parse_ics_feed(ics_bytes)
+        ausschuss = [e for e in events if e.gremium_name == "Ausschusssitzungen"]
+        assert len(ausschuss) >= 1
+        assert ausschuss[0].nummer == 0
 
     def test_excludes_fraktionen(self, ics_bytes):
         events = parse_ics_feed(ics_bytes)

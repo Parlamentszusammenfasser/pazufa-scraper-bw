@@ -176,6 +176,7 @@ classDiagram
     class IcsParser {
         +parse_ics_feed(ics_data) list[ParsedEvent]
         +extract_gremium_name(summary) str
+        +extract_session_number(summary) int
         +group_events_by_date(events) dict
     }
 
@@ -298,17 +299,17 @@ The Sitzungen scraper. Subclass of `SitzungsScraper`.
 - Override `send_result()`: use `Parlament.BW` instead of hardcoded `Parlament.BY`
 - Maintain `_events_by_date` dict to bridge listing/item extraction phases
 
-**Field mapping (Phase 1):**
+**Field mapping:**
 
-| Sitzung field | Source         | Notes                                        |
-|---------------|----------------|----------------------------------------------|
-| `termin`      | DTSTART        | Naive → Europe/Berlin → UTC                  |
-| `gremium`     | SUMMARY        | Parsed via `extract_gremium_name()`          |
-| `nummer`      | —              | `0` (not available in ICS, Phase 2 enriches) |
-| `tops`        | —              | `[]` (not available in ICS, Phase 2 enriches)|
-| `public`      | —              | `True`                                       |
-| `titel`       | SUMMARY        | Raw ICS SUMMARY value                        |
-| `api_id`      | UID            | `uuid5(NAMESPACE_URL, uid)` for determinism  |
+| Sitzung field | Source  | Notes                                                |
+|---------------|---------|------------------------------------------------------|
+| `termin`      | DTSTART | Naive → Europe/Berlin → UTC                          |
+| `gremium`     | SUMMARY | Parsed via `extract_gremium_name()`                  |
+| `nummer`      | SUMMARY | `extract_session_number()` regex; `0` for committees |
+| `tops`        | —       | `[]` (not available in ICS, Phase 2 enriches)        |
+| `public`      | —       | `True`                                               |
+| `titel`       | SUMMARY | Raw ICS SUMMARY value                                |
+| `api_id`      | UID     | `uuid5(NAMESPACE_URL, uid)` for determinism          |
 
 ### 5.3 BawueBeteiligungScraper
 
@@ -659,7 +660,8 @@ Components preserved as PARLIS-specific logic:
 | Feature                       | Priority  | Description                                                                     |
 |-------------------------------|-----------|---------------------------------------------------------------------------------|
 | ~~**SitzungsScraper Ph.1**~~  | Erledigt  | ICS calendar parsing, Sitzung models with `nummer=0`, `tops=[]`                 |
-| **SitzungsScraper Phase 2**   | Hoch      | Enrich with Tagesordnungen PDFs: session numbers from filenames, TOPs from PDFs |
+| ~~**SitzungsScraper Ph.2**~~  | Erledigt  | `nummer` extracted from ICS SUMMARY via regex for Plenarsitzungen               |
+| **SitzungsScraper Phase 3**   | Niedrig   | TOPs from Tagesordnungen PDFs (requires HTML scraping for blob URLs)            |
 | ~~**Beteiligungsportal**~~    | Erledigt  | `BawueBeteiligungScraper` — preparl-regent station with Entwurf PDFs            |
 | **Kabinettsberichte (STM)**   | Optional  | Signalquelle für neue Regierungsentwürfe                                        |
 | **Gesetzblatt BaWue**         | Ergänzend | Verkündungen (`postparl-gsblt` station)                                         |

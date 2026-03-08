@@ -103,7 +103,7 @@ class BawueSitzungenScraper(SitzungsScraper):
                 titel=event.summary,
                 termin=termin_utc,
                 gremium=gremium,
-                nummer=0,
+                nummer=event.nummer,
                 public=True,
                 tops=[],
             )

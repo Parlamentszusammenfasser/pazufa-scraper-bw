@@ -165,9 +165,10 @@ Jeder Vorgang durchläuft mehrere Stationen.
 | `tops`    | list[Top]  | Tagesordnungspunkte |
 | `public`  | boolean    | Öffentliche Sitzung |
 
-> **Phase 1 implementiert:** `BawueSitzungenScraper` parst den ICS-Kalender-Feed von landtag-bw.de und erzeugt
-> `Sitzung`-Modelle mit `nummer=0` und `tops=[]`. Phase 2 wird diese Felder durch Scraping der Tagesordnungen-PDFs
-> anreichern.
+> **Phase 1+2 implementiert:** `BawueSitzungenScraper` parst den ICS-Kalender-Feed von landtag-bw.de und erzeugt
+> `Sitzung`-Modelle. `nummer` wird für Plenarsitzungen direkt aus dem SUMMARY-Feld extrahiert
+> (z.B. `"Plenarsitzung: 142. Sitzung"` → `nummer=142`); Ausschusssitzungen behalten `nummer=0`.
+> `tops=[]` bleibt Platzhalter — TOPs via PDF-Scraping ist noch nicht implementiert.
 
 ### Gremium (Ausschuss/Plenum)
 

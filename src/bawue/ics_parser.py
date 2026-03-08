@@ -1,5 +1,6 @@
 """Stateless ICS calendar parsing and event filtering for BaWue Sitzungen."""
 
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -16,6 +17,13 @@ class ParsedEvent:
     dtstart: datetime
     dtend: datetime
     gremium_name: str
+    nummer: int = 0
+
+
+def extract_session_number(summary: str) -> int:
+    """Extract session number from ICS SUMMARY. Returns 0 if not present."""
+    match = re.search(r"(\d+)\.\s*Sitzung", summary)
+    return int(match.group(1)) if match else 0
 
 
 def extract_gremium_name(summary: str) -> str | None:
@@ -72,6 +80,7 @@ def parse_ics_feed(ics_data: bytes) -> list[ParsedEvent]:
                 dtstart=dtstart,
                 dtend=dtend,
                 gremium_name=gremium_name,
+                nummer=extract_session_number(summary),
             )
         )
 

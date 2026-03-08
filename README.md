@@ -128,33 +128,33 @@ flowchart TD
 
 ### Umsetzungsstand
 
-| Feature                    | Status              | Anmerkungen                                                                |
-|----------------------------|---------------------|----------------------------------------------------------------------------|
-| PARLIS-Suche (Vorgänge)    | Funktioniert        | Automatische Unterteilung bei zu großen Ergebnismengen                     |
-| Vorgang-Extraktion         | Funktioniert        | Titel, Typ, Initiative, Vorgangs-ID                                        |
-| Station-Extraktion         | Funktioniert        | Aus Fundstellen-Parsing (Datum, Typ, Gremium, Dokumentlinks)               |
-| Enum-Mapping               | Funktioniert        | PARLIS-Begriffe → PaZuFa-Enumerationen (Vorgangs-/Stations-/Dokumententyp) |
-| Caching                    | Framework (Redis)   | Automatische Deduplizierung über pazufa-collector ScraperCache             |
-| API-Einlieferung           | Framework           | Automatisch via pazufa-collector API-Client (httpx)                        |
-| Fehlertoleranz             | Framework           | Einzelne Vorgang-Fehler stoppen die Pipeline nicht                         |
-| Scheduling                 | Framework           | Konfigurierbar über `cycle-time-s` in config.toml                          |
-| PDF-Volltext-Extraktion    | Framework-Pipeline  | PyPDF + Kreuzberg/EasyOCR + LLM (via pazufa-collector)                     |
-| Dokumenten-Autoren         | Funktioniert        | Aus Fundstelle-Text extrahiert, Fallback auf Initiative                    |
-| Detail-Seiten (PARLIS)     | Nicht implementiert | Zusätzliche Daten über PARLIS-Detailseiten                                 |
+| Feature                    | Status              | Anmerkungen                                                                  |
+|----------------------------|---------------------|------------------------------------------------------------------------------|
+| PARLIS-Suche (Vorgänge)    | Funktioniert        | Automatische Unterteilung bei zu großen Ergebnismengen                       |
+| Vorgang-Extraktion         | Funktioniert        | Titel, Typ, Initiative, Vorgangs-ID                                          |
+| Station-Extraktion         | Funktioniert        | Aus Fundstellen-Parsing (Datum, Typ, Gremium, Dokumentlinks)                 |
+| Enum-Mapping               | Funktioniert        | PARLIS-Begriffe → PaZuFa-Enumerationen (Vorgangs-/Stations-/Dokumententyp)   |
+| Caching                    | Framework (Redis)   | Automatische Deduplizierung über pazufa-collector ScraperCache               |
+| API-Einlieferung           | Framework           | Automatisch via pazufa-collector API-Client (httpx)                          |
+| Fehlertoleranz             | Framework           | Einzelne Vorgang-Fehler stoppen die Pipeline nicht                           |
+| Scheduling                 | Framework           | Konfigurierbar über `cycle-time-s` in config.toml                            |
+| PDF-Volltext-Extraktion    | Framework-Pipeline  | PyPDF + Kreuzberg/EasyOCR + LLM (via pazufa-collector)                       |
+| Dokumenten-Autoren         | Funktioniert        | Aus Fundstelle-Text extrahiert, Fallback auf Initiative                      |
+| Detail-Seiten (PARLIS)     | Nicht implementiert | Zusätzliche Daten über PARLIS-Detailseiten                                   |
 | Beteiligungsportal         | Funktioniert        | Vorparlamentarische Entwürfe aus Beteiligungsportal (preparl-regent Station) |
-| Kabinettsbeschlüsse (STM)  | Nicht implementiert | Signalquelle für neue Regierungsentwürfe                                   |
-| Gesetzblatt-Verkündungen   | Nicht implementiert | Postparlamentarische Phase                                                 |
-| Sitzungskalender (Phase 1) | Funktioniert        | ICS-Feed-Parsing, Sitzung-Modelle mit `nummer=0`, `tops=[]`                |
-| Sitzungskalender (Phase 2) | Nicht implementiert | Anreicherung mit Tagesordnungen-PDFs für Sitzungsnummern und TOPs          |
+| Kabinettsbeschlüsse (STM)  | Nicht implementiert | Signalquelle für neue Regierungsentwürfe                                     |
+| Gesetzblatt-Verkündungen   | Nicht implementiert | Postparlamentarische Phase                                                   |
+| Sitzungskalender (Phase 1) | Funktioniert        | ICS-Feed-Parsing, Sitzung-Modelle mit `nummer=0`, `tops=[]`                  |
+| Sitzungskalender (Phase 2) | Nicht implementiert | Anreicherung mit Tagesordnungen-PDFs für Sitzungsnummern und TOPs            |
 
 ### Next Steps
 
-| # | Feature                            | Priorität | Beschreibung                                                                                                                                                                                 |
-|---|------------------------------------|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 1 | ~~SitzungsScraper (ICS-Kalender)~~ | ~~Hoch~~  | ~~Phase 1 implementiert~~ — `BawueSitzungenScraper` parst ICS-Feed, erzeugt `Sitzung`-Modelle mit `nummer=0`, `tops=[]`.                                                                     |
-| 2 | SitzungsScraper Phase 2 (TOPs)     | Hoch      | Anreicherung: Tagesordnungen-PDFs von landtag-bw.de scrapen, Sitzungsnummern aus Dateinamen extrahieren, TOPs aus PDFs parsen.                                                               |
+| # | Feature                             | Priorität     | Beschreibung                                                                                                                                                                            |
+|---|-------------------------------------|---------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1 | ~~SitzungsScraper (ICS-Kalender)~~  | ~~Hoch~~      | ~~Phase 1 implementiert~~ — `BawueSitzungenScraper` parst ICS-Feed, erzeugt `Sitzung`-Modelle mit `nummer=0`, `tops=[]`.                                                                |
+| 2 | SitzungsScraper Phase 2 (TOPs)      | Hoch          | Anreicherung: Tagesordnungen-PDFs von landtag-bw.de scrapen, Sitzungsnummern aus Dateinamen extrahieren, TOPs aus PDFs parsen.                                                          |
 | 3 | ~~Beteiligungsportal (vorparlam.)~~ | ~~Ergänzend~~ | ~~HTML-Scraping des Beteiligungsportals BaWue für vorparlamentarische Entwürfe und Stellungnahmen.~~ `BawueBeteiligungScraper` implementiert — preparl-regent Station mit Entwurf PDFs. |
-| 4 | Gesetzblatt BaWue (postparlam.)    | Ergänzend | Verkündungen im Gesetzblatt erfassen (`postparl-gsblt`). Komplettiert den Gesetzgebungslebenszyklus nach der parlamentarischen Phase.                                                        |
+| 4 | Gesetzblatt BaWue (postparlam.)     | Ergänzend     | Verkündungen im Gesetzblatt erfassen (`postparl-gsblt`). Komplettiert den Gesetzgebungslebenszyklus nach der parlamentarischen Phase.                                                   |
 
 ## Prerequisites
 
@@ -181,31 +181,6 @@ poetry install
 
 # Configure
 # Edit config.sample.toml with your API credentials and settings
-```
-
-## Running locally against the mock server
-
-The collector requires a running Redis instance at startup. A `docker-compose.yml` is provided for local development:
-
-```bash
-# 1. Start Redis
-docker-compose up -d
-
-# 2. Start the mock PaZuFa backend (in a separate terminal)
-source .venv/bin/activate
-python mock_pazufa_server.py          # listens on :8080 by default
-
-# 3. Run the collector against the mock server
-python -m collector --config-file config.toml
-```
-
-The `config.toml` already points `ltzf-api-url` to `http://127.0.0.1:8080` and `redis-host`/`redis-port` are
-commented out (framework defaults to `localhost:6379`).
-
-To stop Redis when done:
-
-```bash
-docker-compose down
 ```
 
 ## Usage
@@ -271,6 +246,12 @@ No API keys, Redis, or backend connection required — the dry-run uses scraper 
 For end-to-end testing with a real scraper run (including actual API submission), a mock PaZuFa backend
 is included. It accepts all collector write-API calls, prints every request in detail, and decodes
 `X-API-Key` JWT tokens for inspection — no real backend required.
+
+**0. Start Redis (required at startup):**
+
+```bash
+docker-compose up -d
+```
 
 **1. Start the mock server:**
 

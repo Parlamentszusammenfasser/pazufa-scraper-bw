@@ -9,7 +9,7 @@ from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.stationstyp import Stationstyp
 from openapi_client.models.vorgangstyp import Vorgangstyp
 
-from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, DEFAULT_WAHLPERIODE, _parse_autoren
+from bawue.bawue_vorgaenge_scraper import DEFAULT_WAHLPERIODE, BawueVorgaengeScraper, _parse_autoren
 
 
 def _make_raw_vorgang(

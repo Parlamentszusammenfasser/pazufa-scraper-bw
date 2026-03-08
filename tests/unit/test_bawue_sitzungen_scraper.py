@@ -96,7 +96,7 @@ class TestItemExtractor:
         assert sitzung.gremium.name == "Plenum"
         assert sitzung.gremium.parlament.value == "BW"
         assert sitzung.gremium.wahlperiode == 17
-        assert sitzung.nummer == 0
+        assert sitzung.nummer == 142
         assert sitzung.public is True
         assert sitzung.tops == []
         assert sitzung.titel == "Plenarsitzung: 142. Sitzung"
