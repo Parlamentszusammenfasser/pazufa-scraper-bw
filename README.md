@@ -450,6 +450,8 @@ See [docs/architecture.md](docs/architecture.md) for the full architecture docum
 
 ### PaZuFa Documentation
 
+- [PaZuFa Docs (Nextcloud)](https://wolke7.pazufa.de)
+- [PaZuFa Wiki](https://wiki.pazufa.de/)
 - [Parlamentszusammenfasser docs](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/README.md)
 - [OpenAPI-Spezifikation](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/specs/openapi.yml)
 - [Authentication](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/authentication.md)
