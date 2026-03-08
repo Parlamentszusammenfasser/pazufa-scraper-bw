@@ -160,7 +160,7 @@ flowchart TD
 
 - Python 3.12+
 - [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) (framework dependency, cloned alongside)
-- Redis (optional, for production caching; framework degrades gracefully without it)
+- Redis (required at runtime; the framework connects on startup and exits if unavailable — use `docker-compose up -d` for local dev)
 - Tesseract OCR with German language pack (for PDF extraction via framework pipeline)
 
 ## Setup
@@ -181,6 +181,31 @@ poetry install
 
 # Configure
 # Edit config.sample.toml with your API credentials and settings
+```
+
+## Running locally against the mock server
+
+The collector requires a running Redis instance at startup. A `docker-compose.yml` is provided for local development:
+
+```bash
+# 1. Start Redis
+docker-compose up -d
+
+# 2. Start the mock PaZuFa backend (in a separate terminal)
+source .venv/bin/activate
+python mock_pazufa_server.py          # listens on :8080 by default
+
+# 3. Run the collector against the mock server
+python -m collector --config-file config.toml
+```
+
+The `config.toml` already points `ltzf-api-url` to `http://127.0.0.1:8080` and `redis-host`/`redis-port` are
+commented out (framework defaults to `localhost:6379`).
+
+To stop Redis when done:
+
+```bash
+docker-compose down
 ```
 
 ## Usage
