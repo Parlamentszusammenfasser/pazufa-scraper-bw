@@ -612,9 +612,10 @@ All configuration is via `config.toml` with environment variable overrides:
 |---------------------------|--------------------------|------------------------------------------|
 | `[backend] ltzf-api-key`  | `LTZF_API_KEY`           | API key (scope: collector)               |
 | `[backend] ltzf-api-url`  | `LTZF_API_URL`           | PaZuFa backend URL                       |
-| `[main] collector-uuid`   | `COLLECTOR_UUID`         | Unique collector instance ID             |
+| `[main] collector-uuid`   | `COLLECTOR_ID`           | Unique collector instance ID             |
 | `[cache] redis-host`      | `REDIS_HOST`             | Redis host                               |
-| `[llm] openai-api-key`    | `OPENAI_API_KEY`         | LLM API key (optional)                   |
+| `[llm] provider-key`      | `LLM_PROVIDER_KEY`       | LLM API key                              |
+| `[llm] model`             | `LLM_MODEL`              | LLM model (default: gpt-5-nano)          |
 
 ## 10. Risks & Mitigation
 

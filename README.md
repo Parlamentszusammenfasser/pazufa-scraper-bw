@@ -241,6 +241,61 @@ python -m bawue.dry_run --lookback-days 30 --wahlperiode 17
 
 No API keys, Redis, or backend connection required — the dry-run uses scraper components directly.
 
+### Running against the Mock Backend
+
+For end-to-end testing with a real scraper run (including actual API submission), a mock PaZuFa backend
+is included. It accepts all collector write-API calls, prints every request in detail, and decodes
+`X-API-Key` JWT tokens for inspection — no real backend required.
+
+**1. Start the mock server:**
+
+```bash
+source .venv/bin/activate
+python mock_pazufa_server.py --port 8080
+```
+
+The server prints startup info and then logs every incoming request:
+
+```
+PaZuFa Mock Server
+  Listening on http://127.0.0.1:8080
+  Endpoints:
+    PUT /api/v2/vorgang
+    PUT /api/v2/kalender/{parlament}/{datum}
+    GET /health
+```
+
+**2. Point the scraper at the mock server** — copy `config.sample.toml` to `config.toml` and set:
+
+```toml
+[backend]
+ltzf-api-url = "http://127.0.0.1:8080"
+ltzf-api-key  = "any-key-or-paste-a-real-jwt-here"
+```
+
+**3. Run the scraper:**
+
+```bash
+source .venv/bin/activate
+python -m collector --config-file config.toml
+```
+
+Every `PUT /api/v2/vorgang` and `PUT /api/v2/kalender/BW/{date}` call will be logged to the mock
+server's terminal with:
+
+- Full headers and path parameters
+- JWT decode of `X-API-Key` (header, payload claims, expiry check, `collector` scope check) — or plain
+  key display if not a JWT
+- Pretty-printed JSON body (first 60 lines)
+- HTTP 201 response for all valid requests; 401 if `X-API-Key` is missing
+
+**Mock server options:**
+
+| Option   | Default     | Description       |
+|----------|-------------|-------------------|
+| `--port` | `8080`      | Port to listen on |
+| `--host` | `127.0.0.1` | Interface to bind |
+
 ## Configuration
 
 Configuration uses the pazufa-collector 4-tier system: Defaults → TOML (`config.toml`) → Environment variables → CLI.

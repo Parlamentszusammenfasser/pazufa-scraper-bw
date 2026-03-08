@@ -10,7 +10,7 @@ Cloud Scheduler (daily 03:00 CET)
         → PARLIS (parlis.landtag-bw.de)   [scraping]
         → Memorystore Redis               [caching]
         → PaZuFa Backend API              [submission]
-        → OpenAI API                      [LLM summarization]
+        → LLM API                         [LLM summarization]
 
 Cloud Build (on push to main)
     → Artifact Registry → Cloud Run Job (image update)
@@ -20,7 +20,7 @@ Cloud Build (on push to main)
 
 - [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (`gcloud` CLI)
 - A GCP billing account
-- API keys for PaZuFa backend (`LTZF_API_KEY`) and OpenAI (`OPENAI_API_KEY`)
+- API keys for PaZuFa backend (`LTZF_API_KEY`) and LLM provider (`LLM_PROVIDER_KEY`)
 
 ## Initial Setup
 
@@ -29,9 +29,9 @@ Cloud Build (on push to main)
    ```bash
    export BILLING_ACCOUNT="012345-6789AB-CDEF01"
    export LTZF_API_KEY="your-pazufa-api-key"
-   export OPENAI_API_KEY="sk-..."
+   export LLM_PROVIDER_KEY="sk-..."
    export LTZF_API_URL="https://api.pazufa.example.com"
-   export COLLECTOR_UUID="550e8400-e29b-41d4-a716-446655440000"
+   export COLLECTOR_ID="550e8400-e29b-41d4-a716-446655440000"
    ```
 
 2. Run the bootstrap script:
@@ -57,12 +57,12 @@ Cloud Build (on push to main)
 
 | Variable         | Source         | Description                                |
 |------------------|----------------|--------------------------------------------|
-| `LTZF_API_KEY`   | Secret Manager | PaZuFa backend API key                     |
-| `OPENAI_API_KEY` | Secret Manager | OpenAI API key for summarization           |
-| `LTZF_API_URL`   | Env var        | PaZuFa backend base URL                    |
-| `REDIS_HOST`     | Env var        | Memorystore Redis IP (set by setup script) |
-| `REDIS_PORT`     | Env var        | Redis port (6379)                          |
-| `COLLECTOR_UUID` | Env var        | Unique collector identifier                |
+| `LTZF_API_KEY`      | Secret Manager | PaZuFa backend API key                     |
+| `LLM_PROVIDER_KEY`  | Secret Manager | LLM API key for summarization              |
+| `LTZF_API_URL`      | Env var        | PaZuFa backend base URL                    |
+| `REDIS_HOST`        | Env var        | Memorystore Redis IP (set by setup script) |
+| `REDIS_PORT`        | Env var        | Redis port (6379)                          |
+| `COLLECTOR_ID`      | Env var        | Unique collector identifier                |
 
 Secrets are injected via `--set-secrets` (mounted as env vars at runtime). To update a secret:
 

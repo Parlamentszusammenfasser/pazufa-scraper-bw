@@ -24,16 +24,16 @@ REDIS_INSTANCE="pazufa-cache"
 # -- Placeholders: fill these in before running --
 BILLING_ACCOUNT="${BILLING_ACCOUNT:-}"           # e.g. "012345-6789AB-CDEF01"
 LTZF_API_KEY="${LTZF_API_KEY:-}"                 # PaZuFa backend API key
-OPENAI_API_KEY="${OPENAI_API_KEY:-}"             # OpenAI API key for LLM summarization
+LLM_PROVIDER_KEY="${LLM_PROVIDER_KEY:-}"          # LLM API key for summarization
 LTZF_API_URL="${LTZF_API_URL:-}"                 # e.g. "https://api.pazufa.example.com"
-COLLECTOR_UUID="${COLLECTOR_UUID:-}"             # e.g. "550e8400-e29b-41d4-a716-446655440000"
+COLLECTOR_ID="${COLLECTOR_ID:-}"                 # e.g. "550e8400-e29b-41d4-a716-446655440000"
 
 # -- Validation --
 missing=()
 [[ -z "$LTZF_API_KEY" ]] && missing+=("LTZF_API_KEY")
-[[ -z "$OPENAI_API_KEY" ]] && missing+=("OPENAI_API_KEY")
+[[ -z "$LLM_PROVIDER_KEY" ]] && missing+=("LLM_PROVIDER_KEY")
 [[ -z "$LTZF_API_URL" ]] && missing+=("LTZF_API_URL")
-[[ -z "$COLLECTOR_UUID" ]] && missing+=("COLLECTOR_UUID")
+[[ -z "$COLLECTOR_ID" ]] && missing+=("COLLECTOR_ID")
 
 if [[ ${#missing[@]} -gt 0 ]]; then
   echo "ERROR: The following environment variables must be set:"
@@ -76,8 +76,8 @@ gcloud artifacts repositories create "$REPO_NAME" \
 echo "==> Creating secrets in Secret Manager"
 echo -n "$LTZF_API_KEY" | gcloud secrets create LTZF_API_KEY --data-file=- || \
   echo -n "$LTZF_API_KEY" | gcloud secrets versions add LTZF_API_KEY --data-file=-
-echo -n "$OPENAI_API_KEY" | gcloud secrets create OPENAI_API_KEY --data-file=- || \
-  echo -n "$OPENAI_API_KEY" | gcloud secrets versions add OPENAI_API_KEY --data-file=-
+echo -n "$LLM_PROVIDER_KEY" | gcloud secrets create LLM_PROVIDER_KEY --data-file=- || \
+  echo -n "$LLM_PROVIDER_KEY" | gcloud secrets versions add LLM_PROVIDER_KEY --data-file=-
 
 echo "==> Creating VPC connector for Memorystore access"
 gcloud compute networks vpc-access connectors create pazufa-connector \
@@ -105,8 +105,8 @@ gcloud run jobs create "$JOB_NAME" \
   --cpu=2 \
   --task-timeout=3600s \
   --max-retries=1 \
-  --set-secrets="LTZF_API_KEY=LTZF_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest" \
-  --set-env-vars="LTZF_API_URL=${LTZF_API_URL},REDIS_HOST=${REDIS_HOST},REDIS_PORT=6379,COLLECTOR_UUID=${COLLECTOR_UUID}" \
+  --set-secrets="LTZF_API_KEY=LTZF_API_KEY:latest,LLM_PROVIDER_KEY=LLM_PROVIDER_KEY:latest" \
+  --set-env-vars="LTZF_API_URL=${LTZF_API_URL},REDIS_HOST=${REDIS_HOST},REDIS_PORT=6379,COLLECTOR_ID=${COLLECTOR_ID}" \
   --vpc-connector=pazufa-connector
 
 echo "==> Creating Cloud Scheduler trigger (daily at 03:00 CET)"
