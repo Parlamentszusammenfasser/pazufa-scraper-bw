@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pazufa-bawue-scraper"
-version = "0.1.0"
+version = "0.1.0b1"
 description = "Baden-Württemberg PARLIS scraper for the PaZuFa collector framework"
 authors = ["schneefisch"]
 readme = "README.md"
@@ -14,6 +14,7 @@ lxml = ">=5.3"
 requests = "^2.32"
 toml = ">=0.10"
 icalendar = ">=6.0"
+certifi = ">=2024.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3"

@@ -2,6 +2,7 @@
 
 import datetime
 import logging
+import ssl
 import time
 import uuid
 from typing import Any
@@ -9,6 +10,7 @@ from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
 import aiohttp
+import certifi
 import openapi_client
 import openapi_client.api
 import openapi_client.api.collector_schnittstellen_api
@@ -63,7 +65,8 @@ class BawueSitzungenScraper(SitzungsScraper):
 
     async def listing_page_extractor(self, url: str) -> list[str]:
         """Fetch the ICS feed and return ISO date strings as listing keys."""
-        async with self.session.get(url) as response:
+        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        async with self.session.get(url, ssl=ssl_ctx) as response:
             ics_data = await response.read()
 
         events = parse_ics_feed(ics_data)
