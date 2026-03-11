@@ -485,3 +485,56 @@ class TestBuildStationAutoren:
         assert len(doc.autoren) == 2
         assert doc.autoren[0].organisation == "Fraktion GRÜNE"
         assert doc.autoren[1].organisation == "Fraktion der CDU"
+
+
+class TestStellungnahmenAsChildren:
+    def test_stellungnahme_attaches_to_preceding_station(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-700",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 13,
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Stellungnahme    Fraktion GRÜNE  10.02.2026 Drucksache 17/10300",
+                    "datum": "10.02.2026",
+                    "drucksache": "17/10300",
+                    "station_typ": "Stellungnahme",
+                    "pdf_url": "https://example.com/stellungnahme.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].stellungnahmen is not None
+        assert len(vorgang.stationen[0].stellungnahmen) == 1
+        assert vorgang.stationen[0].stellungnahmen[0].actual_instance.typ == Doktyp.STELLUNGNAHME
+
+    def test_stellungnahme_without_preceding_station_discarded_with_warning(self, scraper_build_vorgang, caplog):
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+
+        raw = _make_raw_vorgang(
+            "V-701",
+            fundstellen=[
+                {
+                    "raw": "Stellungnahme    Fraktion GRÜNE  10.02.2026 Drucksache 17/10300",
+                    "datum": "10.02.2026",
+                    "drucksache": "17/10300",
+                    "station_typ": "Stellungnahme",
+                    "pdf_url": "https://example.com/stellungnahme.pdf",
+                },
+            ],
+        )
+
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
+            vorgang = scraper._build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 0
+        assert any("Stellungnahme" in msg and "V-701" in msg for msg in caplog.messages)

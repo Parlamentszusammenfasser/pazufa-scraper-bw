@@ -24,6 +24,7 @@ from openapi_client.models import (
     VgIdentTyp,
     Vorgang,
 )
+from openapi_client.models.doktyp import Doktyp
 
 from bawue.enum_mapper import VORGANGSTYP_MAP, map_dokumententyp, map_stationstyp, map_vorgangstyp
 from bawue.parlis_client import ParlisClient
@@ -133,7 +134,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
         return self._build_vorgang(raw)
 
     def _build_vorgang(self, raw: RawVorgang) -> Vorgang:
-        """Convert a raw PARLIS dict into a framework Vorgang model."""
+        """Convert a raw PARLIS dict into a framework Vorgang model.
+
+        Each PARLIS Vorgang contains a list of Fundstellen (references to printed documents
+        or plenary sessions). These are converted to Stationen (legislative process steps).
+        Stellungnahmen (position statements) are not independent steps — they attach as
+        children of the preceding station, matching the BY scraper convention.
+        """
         vorgang_id = raw.get("vorgangs_id", "unknown")
         titel = raw.get("titel", "")
         initiative = raw.get("Initiative", "")
@@ -143,11 +150,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         typ = map_vorgangstyp(vorgangstyp_str)
         initiatoren = _parse_autoren(initiative)
 
-        stationen = []
-        for fund in raw.get("fundstellen_parsed", []):
-            station = self._build_station(fund, initiative)
-            stationen.append(station)
-
+        stationen = self._collect_stationen(raw.get("fundstellen_parsed", []), initiative, vorgang_id)
         ids = [VgIdent(id=vorgang_id, typ=VgIdentTyp.VORGNR)] if vorgang_id != "unknown" else None
 
         return Vorgang(
@@ -161,76 +164,63 @@ class BawueVorgaengeScraper(VorgangsScraper):
             ids=ids,
         )
 
+    def _collect_stationen(
+        self, fundstellen: list[RawFundstelle], initiative: str, vorgang_id: str
+    ) -> list[Station]:
+        """Build stations from parsed Fundstellen, nesting Stellungnahmen as children.
+
+        PARLIS lists Stellungnahmen as separate Fundstellen, but they belong to the
+        preceding legislative step (e.g. a committee report). If a Stellungnahme appears
+        before any station, it is discarded with a warning.
+        """
+        stationen: list[Station] = []
+        for fund in fundstellen:
+            station = self._build_station(fund, initiative)
+
+            if self._is_stellungnahme(station):
+                self._attach_stellungnahme(stationen, station.dokumente, vorgang_id)
+                continue
+
+            stationen.append(station)
+        return stationen
+
+    @staticmethod
+    def _is_stellungnahme(station: Station) -> bool:
+        """Check if all documents in a station are Stellungnahmen (position statements)."""
+        return bool(station.dokumente) and all(
+            d.actual_instance.typ == Doktyp.STELLUNGNAHME for d in station.dokumente
+        )
+
+    @staticmethod
+    def _attach_stellungnahme(
+        stationen: list[Station],
+        dokumente: list[StationDokumenteInner],
+        vorgang_id: str,
+    ) -> None:
+        """Attach Stellungnahme documents to the most recent station."""
+        if stationen:
+            if stationen[-1].stellungnahmen is None:
+                stationen[-1].stellungnahmen = []
+            stationen[-1].stellungnahmen.extend(dokumente)
+        else:
+            logger.warning(
+                "Discarding Stellungnahme without preceding station for Vorgang %s",
+                vorgang_id,
+            )
+
     def _build_station(self, fund: RawFundstelle, initiative: str) -> Station:
-        """Convert a parsed Fundstelle dict into a framework Station."""
+        """Convert a parsed Fundstelle dict into a framework Station.
+
+        A Fundstelle is a reference line from the PARLIS search results, e.g.:
+        "Gesetzentwurf  Fraktion GRÜNE  04.02.2026 Drucksache 17/10266  (13 S.)"
+        It is pre-parsed into a dict by parlis_parser with fields like datum, drucksache,
+        station_typ, pdf_url, ausschuss, plenarprotokoll, etc.
+        """
         station_typ_str = fund.get("station_typ", "")
         station_typ = map_stationstyp(station_typ_str, initiator=initiative)
-
-        # Parse date
-        datum_str = fund.get("datum", "")
-        if datum_str:
-            try:
-                zp_start = datetime.strptime(datum_str, "%d.%m.%Y")
-            except ValueError:
-                year_match = re.search(r"(20\d{2})", datum_str)
-                if year_match:
-                    zp_start = datetime(int(year_match.group()), 1, 1)
-                    logger.warning(
-                        "Invalid date '%s' for Fundstelle '%s' (Drucksache: %s), using %s-01-01",
-                        datum_str,
-                        fund.get("raw", ""),
-                        fund.get("drucksache", "unknown"),
-                        year_match.group(),
-                    )
-                else:
-                    zp_start = datetime.now()
-                    logger.warning(
-                        "Unparseable date '%s' for Fundstelle '%s' (Drucksache: %s), using current time",
-                        datum_str,
-                        fund.get("raw", ""),
-                        fund.get("drucksache", "unknown"),
-                    )
-        else:
-            zp_start = datetime.now()
-            logger.warning(
-                "No date found for Fundstelle '%s' (Drucksache: %s), using current time",
-                fund.get("raw", ""),
-                fund.get("drucksache", "unknown"),
-            )
-
-        # Determine gremium
-        ausschuss = fund.get("ausschuss", "")
-        if ausschuss:
-            gremium = Gremium(parlament=Parlament.BW, name=ausschuss, wahlperiode=self._wahlperiode)
-        elif fund.get("plenarprotokoll"):
-            gremium = Gremium(parlament=Parlament.BW, name="Plenum", wahlperiode=self._wahlperiode)
-        else:
-            gremium = Gremium(parlament=Parlament.BW, name="Landtag", wahlperiode=self._wahlperiode)
-
-        # Build documents
-        dokumente: list[StationDokumenteInner] = []
-        pdf_url = fund.get("pdf_url", "")
-        if pdf_url:
-            doc_typ = map_dokumententyp(
-                station_typ_str,
-                is_vorparlamentarisch=(station_typ == Stationstyp.PREPARL_MINUS_REGENT),
-            )
-
-            autor_text = fund.get("autor_text", "")
-            autoren = _parse_autoren(autor_text) if autor_text else _parse_autoren(initiative)
-
-            dok = Dokument(
-                titel=station_typ_str or "Dokument",
-                volltext="",
-                hash="",
-                typ=doc_typ,
-                zp_modifiziert=zp_start,
-                zp_referenz=zp_start,
-                link=pdf_url,
-                autoren=autoren,
-                drucksnr=fund.get("drucksache"),
-            )
-            dokumente.append(StationDokumenteInner(dok))
+        zp_start = _parse_fundstelle_date(fund)
+        gremium = self._determine_gremium(fund)
+        dokumente = self._build_dokumente(fund, station_typ_str, station_typ, initiative, zp_start)
 
         return Station(
             typ=station_typ,
@@ -238,3 +228,108 @@ class BawueVorgaengeScraper(VorgangsScraper):
             zp_start=zp_start,
             gremium=gremium,
         )
+
+    def _determine_gremium(self, fund: RawFundstelle) -> Gremium:
+        """Determine which parliamentary body handled this Fundstelle.
+
+        Priority: named committee (Ausschuss) > plenary session > generic "Landtag" fallback.
+        """
+        ausschuss = fund.get("ausschuss", "")
+        if ausschuss:
+            name = ausschuss
+        elif fund.get("plenarprotokoll"):
+            name = "Plenum"
+        else:
+            name = "Landtag"
+        return Gremium(parlament=Parlament.BW, name=name, wahlperiode=self._wahlperiode)
+
+    @staticmethod
+    def _build_dokumente(
+        fund: RawFundstelle,
+        station_typ_str: str,
+        station_typ: Stationstyp,
+        initiative: str,
+        zp_start: datetime,
+    ) -> list[StationDokumenteInner]:
+        """Build the document list for a station (0 or 1 documents).
+
+        A document is only created when the Fundstelle includes a PDF link.
+        Authors are taken from the Fundstelle's autor_text if available,
+        otherwise fall back to the Vorgang-level initiative (who initiated the process).
+        """
+        pdf_url = fund.get("pdf_url", "")
+        if not pdf_url:
+            return []
+
+        doc_typ = map_dokumententyp(
+            station_typ_str,
+            is_vorparlamentarisch=(station_typ == Stationstyp.PREPARL_MINUS_REGENT),
+        )
+
+        autor_text = fund.get("autor_text", "")
+        autoren = _parse_autoren(autor_text) if autor_text else _parse_autoren(initiative)
+
+        dok = Dokument(
+            titel=station_typ_str or "Dokument",
+            volltext="",
+            hash="",
+            typ=doc_typ,
+            zp_modifiziert=zp_start,
+            zp_referenz=zp_start,
+            link=pdf_url,
+            autoren=autoren,
+            drucksnr=fund.get("drucksache"),
+        )
+        return [StationDokumenteInner(dok)]
+
+
+# -- Date parsing helpers ----------------------------------------------------------
+
+# Matches a 4-digit year starting with "20" (e.g. 2024, 2028).
+# Used as fallback when PARLIS dates are malformed, like "00.00.2028"
+# (placeholder format when only the year is known).
+_YEAR_PATTERN = re.compile(r"(20\d{2})")
+
+
+def _parse_fundstelle_date(fund: RawFundstelle) -> datetime:
+    """Parse the date from a Fundstelle, with graceful fallbacks.
+
+    PARLIS dates are typically DD.MM.YYYY, but can be malformed:
+    - "00.00.2028" → placeholder when only the year is known → falls back to Jan 1
+    - completely missing → falls back to current time
+    """
+    datum_str = fund.get("datum", "")
+    if not datum_str:
+        logger.warning(
+            "No date found for Fundstelle '%s' (Drucksache: %s), using current time",
+            fund.get("raw", ""),
+            fund.get("drucksache", "unknown"),
+        )
+        return datetime.now()
+
+    try:
+        return datetime.strptime(datum_str, "%d.%m.%Y")
+    except ValueError:
+        return _fallback_date_from_year(datum_str, fund)
+
+
+def _fallback_date_from_year(datum_str: str, fund: RawFundstelle) -> datetime:
+    """Extract a year from a malformed date string, or fall back to now."""
+    year_match = _YEAR_PATTERN.search(datum_str)
+    if year_match:
+        logger.warning(
+            "Invalid date '%s' for Fundstelle '%s' (Drucksache: %s), using %s-01-01",
+            datum_str,
+            fund.get("raw", ""),
+            fund.get("drucksache", "unknown"),
+            year_match.group(),
+        )
+        return datetime(int(year_match.group()), 1, 1)
+
+    logger.warning(
+        "Unparseable date '%s' for Fundstelle '%s' (Drucksache: %s), using current time",
+        datum_str,
+        fund.get("raw", ""),
+        fund.get("drucksache", "unknown"),
+    )
+    return datetime.now()
