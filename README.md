@@ -146,32 +146,32 @@ flowchart TD
 
 **Feldstatus-Matrix (Pflichtfelder):**
 
-| Modell      | Feld               | Status     | Anmerkung                                                    |
-|-------------|--------------------|------------|--------------------------------------------------------------|
-| Vorgang     | `api_id`           | ✅ Voll    | `uuid5(NAMESPACE_URL, vorgangs_id)`                          |
-| Vorgang     | `titel`            | ✅ Voll    | Aus PARLIS / Beteiligungsportal                              |
-| Vorgang     | `typ`              | ✅ Voll    | Enum-gemappt                                                 |
-| Vorgang     | `wahlperiode`      | ✅ Voll    | Fest WP 17                                                   |
-| Vorgang     | `verfassungsaendernd` | ⚠️ Partiell | Immer `False` (PARLIS gibt nichts her)                   |
-| Vorgang     | `initiatoren`      | ✅ Voll    | Aus Initiative-Feld                                          |
-| Vorgang     | `stationen`        | ✅ Voll    | Aus Fundstellen-Parsing                                      |
-| Station     | `typ`              | ✅ Voll    | Kontextbewusstes Enum-Mapping                                |
-| Station     | `dokumente`        | ✅ Voll    | PDF-Links aus Fundstelle                                     |
-| Station     | `zp_start`         | ✅ Voll    | Aus Fundstelle-Datum (mit Fallbacks)                         |
-| Station     | `gremium`          | ✅ Voll    | Aus Ausschuss / Plenarprotokoll                              |
-| Dokument    | `titel`            | ✅ Voll    | Stationstyp als Fallback                                     |
-| Dokument    | `volltext`         | ⚠️ Framework | Framework-Pipeline (PyPDF + OCR + LLM)                   |
-| Dokument    | `hash`             | ⚠️ Framework | Framework berechnet                                        |
-| Dokument    | `typ`              | ✅ Voll    | Enum-gemappt                                                 |
-| Dokument    | `zp_modifiziert`   | ✅ Voll    | Fundstelle-Datum                                             |
-| Dokument    | `zp_referenz`      | ✅ Voll    | Fundstelle-Datum                                             |
-| Dokument    | `link`             | ✅ Voll    | PDF-URL aus Fundstelle                                       |
-| Dokument    | `autoren`          | ✅ Voll    | Aus Fundstelle-Text, Fallback auf Initiative                 |
-| Sitzung     | `termin`           | ✅ Voll    | ICS DTSTART (Berlin TZ → UTC)                                |
-| Sitzung     | `gremium`          | ✅ Voll    | Aus ICS SUMMARY                                              |
-| Sitzung     | `nummer`           | ⚠️ Partiell | Regex für Plenum; Ausschüsse = `0`                         |
-| Sitzung     | `tops`             | ❌ Fehlt   | Immer `[]` (Phase 2: Tagesordnungen-PDFs)                    |
-| Sitzung     | `public`           | ✅ Voll    | Immer `True`                                                 |
+| Modell   | Feld                  | Status       | Anmerkung                                    |
+|----------|-----------------------|--------------|----------------------------------------------|
+| Vorgang  | `api_id`              | ✅ Voll       | `uuid5(NAMESPACE_URL, vorgangs_id)`          |
+| Vorgang  | `titel`               | ✅ Voll       | Aus PARLIS / Beteiligungsportal              |
+| Vorgang  | `typ`                 | ✅ Voll       | Enum-gemappt                                 |
+| Vorgang  | `wahlperiode`         | ✅ Voll       | Fest WP 17                                   |
+| Vorgang  | `verfassungsaendernd` | ⚠️ Partiell  | Immer `False` (PARLIS gibt nichts her)       |
+| Vorgang  | `initiatoren`         | ✅ Voll       | Aus Initiative-Feld                          |
+| Vorgang  | `stationen`           | ✅ Voll       | Aus Fundstellen-Parsing                      |
+| Station  | `typ`                 | ✅ Voll       | Kontextbewusstes Enum-Mapping                |
+| Station  | `dokumente`           | ✅ Voll       | PDF-Links aus Fundstelle                     |
+| Station  | `zp_start`            | ✅ Voll       | Aus Fundstelle-Datum (mit Fallbacks)         |
+| Station  | `gremium`             | ✅ Voll       | Aus Ausschuss / Plenarprotokoll              |
+| Dokument | `titel`               | ✅ Voll       | Stationstyp als Fallback                     |
+| Dokument | `volltext`            | ⚠️ Framework | Framework-Pipeline (PyPDF + OCR + LLM)       |
+| Dokument | `hash`                | ⚠️ Framework | Framework berechnet                          |
+| Dokument | `typ`                 | ✅ Voll       | Enum-gemappt                                 |
+| Dokument | `zp_modifiziert`      | ✅ Voll       | Fundstelle-Datum                             |
+| Dokument | `zp_referenz`         | ✅ Voll       | Fundstelle-Datum                             |
+| Dokument | `link`                | ✅ Voll       | PDF-URL aus Fundstelle                       |
+| Dokument | `autoren`             | ✅ Voll       | Aus Fundstelle-Text, Fallback auf Initiative |
+| Sitzung  | `termin`              | ✅ Voll       | ICS DTSTART (Berlin TZ → UTC)                |
+| Sitzung  | `gremium`             | ✅ Voll       | Aus ICS SUMMARY                              |
+| Sitzung  | `nummer`              | ⚠️ Partiell  | Regex für Plenum; Ausschüsse = `0`           |
+| Sitzung  | `tops`                | ❌ Fehlt      | Immer `[]` (Phase 2: Tagesordnungen-PDFs)    |
+| Sitzung  | `public`              | ✅ Voll       | Immer `True`                                 |
 
 #### Feature-Status
 
@@ -202,86 +202,6 @@ flowchart TD
 | 2 | SitzungsScraper Phase 2 (TOPs)      | Hoch          | Anreicherung: Tagesordnungen-PDFs von landtag-bw.de scrapen, Sitzungsnummern aus Dateinamen extrahieren, TOPs aus PDFs parsen.                                                          |
 | 3 | ~~Beteiligungsportal (vorparlam.)~~ | ~~Ergänzend~~ | ~~HTML-Scraping des Beteiligungsportals BaWue für vorparlamentarische Entwürfe und Stellungnahmen.~~ `BawueBeteiligungScraper` implementiert — preparl-regent Station mit Entwurf PDFs. |
 | 4 | Gesetzblatt BaWue (postparlam.)     | Ergänzend     | Verkündungen im Gesetzblatt erfassen (`postparl-gsblt`). Komplettiert den Gesetzgebungslebenszyklus nach der parlamentarischen Phase.                                                   |
-
-## ToDo: Alignment mit dem BY-Scraper
-
-Diese Aufgaben gleichen das Datenmodell des BaWue-Scrapers an den `BYLTScraper` (pazufa-collector Framework) an.
-
-### 1. Stellungnahmen als Kinder der vorherigen Station
-
-**Warum:** Im BY-Scraper werden Stellungnahmen nicht als eigenständige Stationen angelegt, sondern als Kind-Dokumente
-der direkt vorausgehenden Station (`station.stellungnahmen[]`). Das bildet die inhaltliche Hierarchie korrekt ab:
-eine Stellungnahme bezieht sich auf einen konkreten Gesetzentwurf oder Antrag, nicht auf eine unabhängige Verfahrensphase.
-
-**Aktueller Zustand (BaWue):** Enthält eine PARLIS-Fundstelle das Schlüsselwort `"Stellungnahme"`, entsteht daraus
-eine eigenständige Station mit `Stationstyp.SONSTIG` und `Doktyp.STELLUNGNAHME`.
-
-**Gewünschtes Verhalten:** Fundstellen, deren Dokument-Typ `STELLUNGNAHME` ist, sollen keine eigene Station erzeugen.
-Stattdessen wird das Dokument an `stellungnahmen[]` der zuletzt erzeugten „echten" Station angehängt — analog zum
-BY-Scraper:
-
-```python
-# BY-Scraper (bylt_scraper.py, Zeile ~278)
-vg.stationen[-1].stellungnahmen.append(stln)
-```
-
-**Umsetzung (alle Änderungen in `bawue_vorgaenge_scraper.py`):**
-
-1. In `_build_vorgang`: nach der Schleife über `fundstellen_parsed` einen Post-Processing-Schritt einbauen.
-   Für jede erzeugte Station, deren einzige Dokumente `Doktyp.STELLUNGNAHME` haben:
-   - Dokument(e) an `stationen[-1].stellungnahmen` der letzten echten Station anhängen
-   - Die Stellungnahme-Station selbst verwerfen
-2. Sicherheitsbedingung prüfen: Tritt eine Stellungnahme als allererste Fundstelle auf (keine vorherige Station),
-   soll sie mit einer Warnung verworfen werden (analog `assert len(vg.stationen) > 0` in BY).
-3. Unit-Tests in `tests/unit/test_bawue_scraper.py` ergänzen:
-   - `RawVorgang` mit einer Gesetzentwurf-Fundstelle gefolgt von einer Stellungnahme-Fundstelle
-   → ergibt genau **eine** Station, deren `stellungnahmen` das Stellungnahme-Dokument enthält
-   - Randfall: Stellungnahme ohne vorherige Station → wird verworfen, Warnung geloggt
-
-> **Hinweis:** Zuerst prüfen, ob PARLIS BaWue überhaupt solche Fundstellen liefert:
-> ```bash
-> python -m bawue.dry_run --vorgangstyp "Gesetzgebung" --verbosity 2 | grep -i stellungnahme
-> ```
-
----
-
-### 2. Station-Merging für gleichtypige aufeinanderfolgende Stationen
-
-**Warum:** Im BY-Scraper werden aufeinanderfolgende Stationen gleichen Typs zusammengefasst (z.B. mehrere
-Plenarprotokoll-Einträge zur gleichen Lesung landen in einer Station mit mehreren Dokumenten). Das reduziert
-redundante Stationen und entspricht der parlamentarischen Realität, in der mehrere Dokumente zu einem Verfahrensschritt
-gehören können.
-
-**Aktueller Zustand (BaWue):** Jede PARLIS-Fundstelle erzeugt eine eigenständige Station — auch wenn zwei
-aufeinanderfolgende Fundstellen inhaltlich zur selben parlamentarischen Phase gehören.
-
-**Gewünschtes Verhalten:**
-
-- Aufeinanderfolgende Stationen mit gleichem `typ` **und** gleichem `gremium.name` werden zu einer Station
-  zusammengefasst: Dokumente werden in die bestehende Station gemergt.
-  Entspricht BY:
-  ```python
-  # BY-Scraper (bylt_scraper.py, Zeile ~304)
-  if len(vg.stationen) > 0 and vg.stationen[-1].typ == typ:
-      vg.stationen[-1].dokumente.append(models.StationDokumenteInner(dok.output))
-      continue
-  ```
-- Für `parl-ausschber`-Stationen: analog zu `find_matching_committee_station` in BY — rückwärts durch die
-  bisherigen Stationen suchen bis zur letzten Plenar-Station; existiert bereits eine Ausschuss-Station mit
-  gleichem `gremium.name`, wird das neue Dokument dort eingehängt statt eine neue Station zu erzeugen.
-
-**Umsetzung (alle Änderungen in `bawue_vorgaenge_scraper.py`):**
-
-1. In `_build_vorgang`: Stationen nicht mehr blind an `stationen` anhängen, sondern erst prüfen:
-   - Letzter Eintrag hat denselben `typ` und dasselbe `gremium.name` → Dokumente mergen, keine neue Station
-   - Bei `parl-ausschber`: zusätzlich rückwärts suchen (Hilfsfunktion analog BY, z.B. `_find_matching_ausschuss`)
-2. Unit-Tests in `tests/unit/test_bawue_scraper.py` ergänzen:
-   - Zwei aufeinanderfolgende Fundstellen gleichen Typs (z.B. `"Erste Beratung"`) gleichen Gremiums
-     → eine Station mit zwei Dokumenten
-   - Zwei Ausschuss-Fundstellen desselben Ausschusses, getrennt durch eine Plenar-Station
-     → **zwei** separate Ausschuss-Stationen (Plenum als Trennmarke)
-   - Zwei Ausschuss-Fundstellen desselben Ausschusses **ohne** Plenum dazwischen
-     → eine Ausschuss-Station mit zwei Dokumenten
 
 ---
 

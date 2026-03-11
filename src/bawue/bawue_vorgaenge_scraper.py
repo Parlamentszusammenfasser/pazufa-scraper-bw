@@ -181,8 +181,36 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 self._attach_stellungnahme(stationen, station.dokumente, vorgang_id)
                 continue
 
+            if station.dokumente and self._try_merge_station(stationen, station):
+                continue
+
             stationen.append(station)
         return stationen
+
+    @staticmethod
+    def _try_merge_station(stationen: list[Station], station: Station) -> bool:
+        """Try to merge a station into an existing one. Returns True if merged."""
+        if station.typ == Stationstyp.PARL_MINUS_AUSSCHBER:
+            match = BawueVorgaengeScraper._find_matching_ausschuss(stationen, station.gremium.name)
+        elif stationen and stationen[-1].typ == station.typ and stationen[-1].gremium.name == station.gremium.name:
+            match = stationen[-1]
+        else:
+            match = None
+
+        if match is not None:
+            match.dokumente.extend(station.dokumente)
+            return True
+        return False
+
+    @staticmethod
+    def _find_matching_ausschuss(stationen: list[Station], gremium_name: str) -> Station | None:
+        """Search backwards for a committee station with the same gremium, stopping at plenary."""
+        for s in reversed(stationen):
+            if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN:
+                return None
+            if s.typ == Stationstyp.PARL_MINUS_AUSSCHBER and s.gremium.name == gremium_name:
+                return s
+        return None
 
     @staticmethod
     def _is_stellungnahme(station: Station) -> bool:

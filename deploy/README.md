@@ -1,124 +1,94 @@
-# Deployment — GCP Cloud Run Jobs
+# Deployment — Raspberry Pi
 
-The scraper runs as a **Cloud Run Job** in `europe-west3` (Frankfurt), triggered daily by Cloud Scheduler.
+An alternative to GCP: run the scraper at home on a Raspberry Pi using Docker + cron. No cloud services, no billing.
 
 ## Architecture
 
 ```
-Cloud Scheduler (daily 03:00 CET)
-    → Cloud Run Job (bawue-scraper)
-        → PARLIS (parlis.landtag-bw.de)   [scraping]
-        → Memorystore Redis               [caching]
-        → PaZuFa Backend API              [submission]
-        → LLM API                         [LLM summarization]
-
-Cloud Build (on push to main)
-    → Artifact Registry → Cloud Run Job (image update)
+cron (host, daily 03:00)
+    → docker compose run scraper
+        → Redis (Docker, persistent volume)
+        → PaZuFa Backend API  [submission]
+        → LLM API             [summarization]
 ```
 
 ## Prerequisites
 
-- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (`gcloud` CLI)
-- A GCP billing account
-- API keys for PaZuFa backend (`LTZF_API_KEY`) and LLM provider (`LLM_PROVIDER_KEY`)
+- Raspberry Pi with Docker installed (ARM64 / armv7)
+- Docker Compose plugin (ships with modern Docker installs)
 
-## Initial Setup
-
-1. Export the required environment variables:
-
-   ```bash
-   export BILLING_ACCOUNT="012345-6789AB-CDEF01"
-   export LTZF_API_KEY="your-pazufa-api-key"
-   export LLM_PROVIDER_KEY="sk-..."
-   export LTZF_API_URL="https://api.pazufa.example.com"
-   export COLLECTOR_ID="550e8400-e29b-41d4-a716-446655440000"
-   ```
-
-2. Run the bootstrap script:
-
-   ```bash
-   chmod +x deploy/setup.sh
-   ./deploy/setup.sh
-   ```
-
-   This creates the GCP project, enables APIs, sets up Artifact Registry, Secret Manager, Memorystore Redis, a VPC connector, builds and deploys the initial image, creates the Cloud Run Job, and configures the daily schedule.
-
-3. Set up the Cloud Build trigger (GitHub → Cloud Build):
-
-   ```bash
-   gcloud builds triggers create github \
-     --repo-name=pazufa-bawue-scraper \
-     --repo-owner=schneefisch \
-     --branch-pattern="^main$" \
-     --build-config=cloudbuild.yaml
-   ```
-
-## Secrets & Environment Variables
-
-| Variable         | Source         | Description                                |
-|------------------|----------------|--------------------------------------------|
-| `LTZF_API_KEY`      | Secret Manager | PaZuFa backend API key                     |
-| `LLM_PROVIDER_KEY`  | Secret Manager | LLM API key for summarization              |
-| `LTZF_API_URL`      | Env var        | PaZuFa backend base URL                    |
-| `REDIS_HOST`        | Env var        | Memorystore Redis IP (set by setup script) |
-| `REDIS_PORT`        | Env var        | Redis port (6379)                          |
-| `COLLECTOR_ID`      | Env var        | Unique collector identifier                |
-
-Secrets are injected via `--set-secrets` (mounted as env vars at runtime). To update a secret:
-
+Install Docker on the Pi:
 ```bash
-echo -n "new-value" | gcloud secrets versions add LTZF_API_KEY --data-file=-
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER  # then log out and back in
 ```
+
+## Setup
+
+1. Clone the repository on the Pi and navigate to the deploy directory:
+
+   ```bash
+   git clone https://github.com/schneefisch/pazufa-bawue-scraper.git
+   cd pazufa-bawue-scraper/deploy/raspberry-pi
+   ```
+
+2. Run the setup script:
+
+   ```bash
+   chmod +x setup.sh
+   ./setup.sh
+   ```
+
+   This will:
+   - Copy `.env.example` → `.env` (if `.env` doesn't exist)
+   - Build the Docker image
+   - Start Redis as a background service
+   - Add a daily 03:00 crontab entry
+
+3. Edit `.env` with your API keys:
+
+   ```bash
+   nano .env
+   ```
+
+   | Variable           | Description                          |
+   |--------------------|--------------------------------------|
+   | `LTZF_API_KEY`     | PaZuFa backend API key               |
+   | `LLM_PROVIDER_KEY` | LLM API key for summarization        |
+   | `LTZF_API_URL`     | PaZuFa backend base URL              |
+   | `COLLECTOR_ID`     | Unique collector identifier (UUID)   |
 
 ## Operations
 
-### Manually trigger a run
+### Trigger a run manually
 
 ```bash
-gcloud run jobs execute bawue-scraper --region=europe-west3
+cd deploy/raspberry-pi
+docker compose run --rm scraper
 ```
 
-### View recent executions
+### View logs from the last run
 
 ```bash
-gcloud run jobs executions list --job=bawue-scraper --region=europe-west3
+cd deploy/raspberry-pi
+docker compose logs scraper
 ```
 
-### View logs
+### Check Redis is running
 
 ```bash
-gcloud logging read \
-  "resource.type=cloud_run_job AND resource.labels.job_name=bawue-scraper" \
-  --limit=50
+cd deploy/raspberry-pi
+docker compose ps
 ```
 
-### Update job configuration
+### Rebuild after a code update
 
 ```bash
-gcloud run jobs update bawue-scraper \
-  --region=europe-west3 \
-  --memory=4Gi \
-  --set-env-vars="KEY=VALUE"
+cd deploy/raspberry-pi
+git pull
+docker compose build scraper
 ```
 
-## CI/CD
+## Cost
 
-On every push to `main`, Cloud Build:
-
-1. Builds the Docker image
-2. Pushes it to Artifact Registry (tagged with the short commit SHA)
-3. Updates the Cloud Run Job to use the new image
-
-The job itself is **not** executed by Cloud Build — it only updates the image. The next scheduled trigger (or a manual execution) will use the new image.
-
-## Cost Estimate (monthly)
-
-| Resource                                 | Estimate       |
-|------------------------------------------|----------------|
-| Cloud Run Job (1x/day, ~15min, 4GB/2CPU) | ~$2–5          |
-| Memorystore Redis (1GB basic)            | ~$35           |
-| Artifact Registry                        | < $1           |
-| Cloud Build                              | Free tier      |
-| Secret Manager                           | < $1           |
-| Cloud Scheduler                          | Free tier      |
-| **Total**                                | **~$40/month** |
+$0/month (beyond electricity — ~2–5W idle for a Pi 4/5).

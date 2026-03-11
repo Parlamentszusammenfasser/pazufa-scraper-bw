@@ -487,6 +487,194 @@ class TestBuildStationAutoren:
         assert doc.autoren[1].organisation == "Fraktion der CDU"
 
 
+class TestStationMerging:
+    """Tests for merging consecutive same-type stations."""
+
+    def test_consecutive_same_type_same_gremium_merged(self, scraper_build_vorgang):
+        """Two 'Erste Beratung' fundstellen with Plenum gremium → 1 station with 2 documents."""
+        raw = _make_raw_vorgang(
+            "V-800",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp141.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/142 06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/142",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp142.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert len(vorgang.stationen[0].dokumente) == 2
+
+    def test_consecutive_same_type_different_gremium_not_merged(self, scraper_build_vorgang):
+        """Two AUSSCHBER fundstellen with different committee names → 2 stations."""
+        raw = _make_raw_vorgang(
+            "V-801",
+            fundstellen=[
+                {
+                    "raw": "Beschlussempfehlung   Ausschuss für Wirtschaft  01.02.2026 Drucksache 17/10210",
+                    "datum": "01.02.2026",
+                    "drucksache": "17/10210",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/report1.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung   Ausschuss für Umwelt  02.02.2026 Drucksache 17/10211",
+                    "datum": "02.02.2026",
+                    "drucksache": "17/10211",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Umwelt",
+                    "pdf_url": "https://example.com/report2.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 2
+
+    def test_ausschuss_merge_backwards_no_plenum_between(self, scraper_build_vorgang):
+        """Two Ausschuss fundstellen (same committee) separated by a non-plenary station → merged."""
+        raw = _make_raw_vorgang(
+            "V-802",
+            fundstellen=[
+                {
+                    "raw": "Beschlussempfehlung   Ausschuss für Wirtschaft  01.02.2026 Drucksache 17/10210",
+                    "datum": "01.02.2026",
+                    "drucksache": "17/10210",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/report1.pdf",
+                },
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  02.02.2026 Drucksache 17/10266",
+                    "datum": "02.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung   Ausschuss für Wirtschaft  03.02.2026 Drucksache 17/10212",
+                    "datum": "03.02.2026",
+                    "drucksache": "17/10212",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/report2.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        ausschuss_stationen = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_AUSSCHBER]
+        assert len(ausschuss_stationen) == 1
+        assert len(ausschuss_stationen[0].dokumente) == 2
+
+    def test_ausschuss_no_merge_across_plenum(self, scraper_build_vorgang):
+        """Two Ausschuss fundstellen (same committee) separated by plenary → 2 separate stations."""
+        raw = _make_raw_vorgang(
+            "V-803",
+            fundstellen=[
+                {
+                    "raw": "Beschlussempfehlung   Ausschuss für Wirtschaft  01.02.2026 Drucksache 17/10210",
+                    "datum": "01.02.2026",
+                    "drucksache": "17/10210",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/report1.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 02.02.2026",
+                    "datum": "02.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung   Ausschuss für Wirtschaft  03.02.2026 Drucksache 17/10212",
+                    "datum": "03.02.2026",
+                    "drucksache": "17/10212",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/report2.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        ausschuss_stationen = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_AUSSCHBER]
+        assert len(ausschuss_stationen) == 2
+
+    def test_stellungnahme_still_attaches_after_merge(self, scraper_build_vorgang):
+        """Merged station followed by Stellungnahme → Stellungnahme attaches to the merged station."""
+        raw = _make_raw_vorgang(
+            "V-804",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp141.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/142 06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/142",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp142.pdf",
+                },
+                {
+                    "raw": "Stellungnahme    Fraktion GRÜNE  10.02.2026 Drucksache 17/10300",
+                    "datum": "10.02.2026",
+                    "drucksache": "17/10300",
+                    "station_typ": "Stellungnahme",
+                    "pdf_url": "https://example.com/stellungnahme.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert len(vorgang.stationen[0].dokumente) == 2
+        assert vorgang.stationen[0].stellungnahmen is not None
+        assert len(vorgang.stationen[0].stellungnahmen) == 1
+
+    def test_no_merge_when_no_documents(self, scraper_build_vorgang):
+        """Station without documents (no pdf_url) is not merged but kept as separate station."""
+        raw = _make_raw_vorgang(
+            "V-805",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp141.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/142 06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/142",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 2
+
+
 class TestStellungnahmenAsChildren:
     def test_stellungnahme_attaches_to_preceding_station(self, scraper_build_vorgang):
         raw = _make_raw_vorgang(

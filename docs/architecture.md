@@ -80,16 +80,16 @@ graph LR
 
 **Language: Python 3.12+** — matches the pazufa-collector framework.
 
-| Dependency       | Purpose                                              | Owned by         |
-|------------------|------------------------------------------------------|------------------|
-| `requests`       | PARLIS + Beteiligungsportal HTTP sessions (synchronous) | BaWue scraper    |
-| `lxml`           | HTML parsing of PARLIS and Beteiligungsportal pages  | BaWue scraper    |
-| `icalendar`      | ICS calendar feed parsing for Sitzungen              | BaWue scraper    |
-| `aiohttp`        | Async HTTP sessions for framework                    | Framework        |
-| `httpx`          | Auto-generated PaZuFa API client                     | Framework        |
-| `openapi-client` | Auto-generated Pydantic models from OpenAPI spec     | Framework        |
-| `redis`          | Caching of processed Vorgänge/Dokumente              | Framework        |
-| `litellm`        | LLM integration for document summarization           | Framework        |
+| Dependency       | Purpose                                                 | Owned by      |
+|------------------|---------------------------------------------------------|---------------|
+| `requests`       | PARLIS + Beteiligungsportal HTTP sessions (synchronous) | BaWue scraper |
+| `lxml`           | HTML parsing of PARLIS and Beteiligungsportal pages     | BaWue scraper |
+| `icalendar`      | ICS calendar feed parsing for Sitzungen                 | BaWue scraper |
+| `aiohttp`        | Async HTTP sessions for framework                       | Framework     |
+| `httpx`          | Auto-generated PaZuFa API client                        | Framework     |
+| `openapi-client` | Auto-generated Pydantic models from OpenAPI spec        | Framework     |
+| `redis`          | Caching of processed Vorgänge/Dokumente                 | Framework     |
+| `litellm`        | LLM integration for document summarization              | Framework     |
 
 **Build & packaging:** Poetry with `pyproject.toml`. Dependencies on `collector` and `openapi-client` as local path
 dependencies.
@@ -195,27 +195,27 @@ from `VorgangsScraper` or `SitzungsScraper`. The files `bawue_vorgaenge_scraper.
 
 ### VorgangsScraper Contract
 
-| Method                     | Purpose                                             | BaWue implementation                                    |
-|----------------------------|-----------------------------------------------------|---------------------------------------------------------|
-| `listing_page_extractor()` | Fetch a listing page and return item identifiers    | Searches PARLIS by Vorgangstyp, returns vorgang IDs     |
-| `item_extractor()`         | Convert a single item into a `Vorgang` model        | Looks up raw data from cache, builds framework `Vorgang` |
-| `send_result()`            | Submit the result (inherited, not overridden)        | Framework handles API submission automatically          |
+| Method                     | Purpose                                          | BaWue implementation                                     |
+|----------------------------|--------------------------------------------------|----------------------------------------------------------|
+| `listing_page_extractor()` | Fetch a listing page and return item identifiers | Searches PARLIS by Vorgangstyp, returns vorgang IDs      |
+| `item_extractor()`         | Convert a single item into a `Vorgang` model     | Looks up raw data from cache, builds framework `Vorgang` |
+| `send_result()`            | Submit the result (inherited, not overridden)    | Framework handles API submission automatically           |
 
 ### SitzungsScraper Contract
 
-| Method                     | Purpose                                                 | BaWue implementation                                         |
-|----------------------------|---------------------------------------------------------|--------------------------------------------------------------|
-| `listing_page_extractor()` | Fetch a listing source and return item identifiers      | Fetches ICS feed, parses events, returns ISO date strings    |
-| `item_extractor()`         | Convert a single item into `(datetime, List[Sitzung])`  | Builds Sitzung models from cached ParsedEvents               |
-| `send_result()`            | Submit the result                                       | **Overridden** to use `Parlament.BW` (base hardcodes `BY`)  |
+| Method                     | Purpose                                                | BaWue implementation                                       |
+|----------------------------|--------------------------------------------------------|------------------------------------------------------------|
+| `listing_page_extractor()` | Fetch a listing source and return item identifiers     | Fetches ICS feed, parses events, returns ISO date strings  |
+| `item_extractor()`         | Convert a single item into `(datetime, List[Sitzung])` | Builds Sitzung models from cached ParsedEvents             |
+| `send_result()`            | Submit the result                                      | **Overridden** to use `Parlament.BW` (base hardcodes `BY`) |
 
 ### VorgangsScraper Contract (Beteiligungsportal)
 
-| Method                     | Purpose                                             | Beteiligung implementation                                     |
-|----------------------------|-----------------------------------------------------|----------------------------------------------------------------|
-| `listing_page_extractor()` | Fetch a listing page and return item identifiers    | Fetches LP index, returns process slugs                        |
-| `item_extractor()`         | Convert a single item into a `Vorgang` model        | Fetches detail page, builds `Vorgang` with `preparl-regent`   |
-| `send_result()`            | Submit the result (inherited, not overridden)        | Framework handles API submission automatically                 |
+| Method                     | Purpose                                          | Beteiligung implementation                                  |
+|----------------------------|--------------------------------------------------|-------------------------------------------------------------|
+| `listing_page_extractor()` | Fetch a listing page and return item identifiers | Fetches LP index, returns process slugs                     |
+| `item_extractor()`         | Convert a single item into a `Vorgang` model     | Fetches detail page, builds `Vorgang` with `preparl-regent` |
+| `send_result()`            | Submit the result (inherited, not overridden)    | Framework handles API submission automatically              |
 
 ### Listing URL Pattern
 
@@ -227,15 +227,15 @@ cached raw data.
 
 ### Framework-Provided Capabilities
 
-| Capability            | What the framework does                                             | Replaces from old project          |
-|-----------------------|---------------------------------------------------------------------|------------------------------------|
-| Scheduling            | Repeats scraping cycles at configurable intervals                   | `__main__.py` CLI loop             |
-| Redis caching         | 2-week TTL, multi-level (vorgang, dokument, HTML)                   | File-based CacheManager            |
-| API client            | Auto-generated httpx client with retry logic                        | Hand-written LtzfClient            |
-| Models                | Auto-generated Pydantic models from OpenAPI spec                    | Hand-written domain models         |
-| Document processing   | PyPDF + Kreuzberg/EasyOCR + LLM pipeline                           | pdfplumber + pytesseract           |
-| Error tolerance       | Per-item error handling, doesn't stop on single failures            | Custom try/except in Orchestrator  |
-| Config                | 4-tier: Defaults → TOML → env vars → CLI                           | pydantic-settings from env/.env    |
+| Capability          | What the framework does                                  | Replaces from old project         |
+|---------------------|----------------------------------------------------------|-----------------------------------|
+| Scheduling          | Repeats scraping cycles at configurable intervals        | `__main__.py` CLI loop            |
+| Redis caching       | 2-week TTL, multi-level (vorgang, dokument, HTML)        | File-based CacheManager           |
+| API client          | Auto-generated httpx client with retry logic             | Hand-written LtzfClient           |
+| Models              | Auto-generated Pydantic models from OpenAPI spec         | Hand-written domain models        |
+| Document processing | PyPDF + Kreuzberg/EasyOCR + LLM pipeline                 | pdfplumber + pytesseract          |
+| Error tolerance     | Per-item error handling, doesn't stop on single failures | Custom try/except in Orchestrator |
+| Config              | 4-tier: Defaults → TOML → env vars → CLI                 | pydantic-settings from env/.env   |
 
 ## 4. Data Flow
 
@@ -326,23 +326,23 @@ The Beteiligungsportal scraper. Subclass of `VorgangsScraper`, auto-discovered a
 
 **Vorgang construction:**
 
-| Vorgang field    | Source                                          |
-|------------------|-------------------------------------------------|
-| `api_id`         | `uuid5(NAMESPACE_URL, "beteiligung-{slug}")`    |
-| `titel`          | Detail page heading (dossier-header h1)         |
-| `kurztitel`      | URL slug (for backend merging with PARLIS data) |
-| `typ`            | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`         |
-| `initiatoren`    | `[Autor(organisation=ministry)]`                |
-| `ids`            | `[VgIdent(beteiligung_url)]`                    |
+| Vorgang field | Source                                          |
+|---------------|-------------------------------------------------|
+| `api_id`      | `uuid5(NAMESPACE_URL, "beteiligung-{slug}")`    |
+| `titel`       | Detail page heading (dossier-header h1)         |
+| `kurztitel`   | URL slug (for backend merging with PARLIS data) |
+| `typ`         | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`          |
+| `initiatoren` | `[Autor(organisation=ministry)]`                |
+| `ids`         | `[VgIdent(beteiligung_url)]`                    |
 
 **Station mapping:**
 
-| Station field | Value                             |
-|---------------|-----------------------------------|
-| `typ`         | `Stationstyp.PREPARL_MINUS_REGENT`|
-| `gremium`     | `Parlament.BW, "Landesregierung"` |
+| Station field | Value                                     |
+|---------------|-------------------------------------------|
+| `typ`         | `Stationstyp.PREPARL_MINUS_REGENT`        |
+| `gremium`     | `Parlament.BW, "Landesregierung"`         |
 | `dokumente`   | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF` |
-| `zp_start`    | Comment deadline date             |
+| `zp_start`    | Comment deadline date                     |
 
 ### 5.4 BeteiligungClient
 
@@ -380,15 +380,15 @@ Stateless functions for parsing ICS calendar feeds.
 
 **Event filtering rules:**
 
-| SUMMARY prefix                                  | Included? | Gremium name            |
-|-------------------------------------------------|-----------|-------------------------|
-| `Plenarsitzung:`                                | Yes       | `"Plenum"`              |
-| `Fraktions- und Ausschusssitzungen: Ausschuesse`| Yes       | `"Ausschusssitzungen"` |
-| `Fraktions- und Ausschusssitzungen: FinA`       | Yes       | `"Finanzausschuss"`     |
-| `Haushaltsberatungen: ...`                      | Yes       | extract after `: `      |
-| `Fraktions- und Ausschusssitzungen: Fraktionen` | No        | faction-only            |
-| `Prasidium:`                                    | No        | internal                |
-| `Wahl:`                                         | No        | election event          |
+| SUMMARY prefix                                   | Included? | Gremium name           |
+|--------------------------------------------------|-----------|------------------------|
+| `Plenarsitzung:`                                 | Yes       | `"Plenum"`             |
+| `Fraktions- und Ausschusssitzungen: Ausschuesse` | Yes       | `"Ausschusssitzungen"` |
+| `Fraktions- und Ausschusssitzungen: FinA`        | Yes       | `"Finanzausschuss"`    |
+| `Haushaltsberatungen: ...`                       | Yes       | extract after `: `     |
+| `Fraktions- und Ausschusssitzungen: Fraktionen`  | No        | faction-only           |
+| `Prasidium:`                                     | No        | internal               |
+| `Wahl:`                                          | No        | election event         |
 
 ### 5.7 ParlisClient
 
@@ -546,7 +546,7 @@ Large Vorgangstypen (e.g. "Kleine Anfrage" with 4000+ hits) cause the API to ret
 
 ### Dokumententyp mapping
 
-| Document context                      | PaZuFa `Doktyp`  |
+| Document context                      | PaZuFa `Doktyp`   |
 |---------------------------------------|-------------------|
 | Gesetzentwurf (vorparlamentarisch)    | `preparl-entwurf` |
 | Gesetzentwurf (parlamentarisch)       | `entwurf`         |
@@ -563,15 +563,15 @@ Large Vorgangstypen (e.g. "Kleine Anfrage" with 4000+ hits) cause the API to ret
 
 Error handling is primarily managed by the pazufa-collector framework:
 
-| Concern                | Handled by      | Behavior                                                    |
-|------------------------|-----------------|-------------------------------------------------------------|
-| Per-item failures      | Framework       | Logs error, continues with next Vorgang                     |
-| API submission retries | Framework       | Automatic retry with backoff                                |
-| Cache failures         | Framework       | Graceful degradation (continues without caching)            |
-| PARLIS session expiry  | ParlisClient    | Re-establishes session before each search cycle             |
-| Large result sets      | ParlisClient    | Automatic date subdivision into monthly windows             |
-| PARLIS HTTP errors     | ParlisClient    | `raise_for_status()`, propagated to framework error handler |
-| Beteiligungsportal HTTP errors | BeteiligungClient | `raise_for_status()`, propagated to framework error handler |
+| Concern                         | Handled by        | Behavior                                                    |
+|---------------------------------|-------------------|-------------------------------------------------------------|
+| Per-item failures               | Framework         | Logs error, continues with next Vorgang                     |
+| API submission retries          | Framework         | Automatic retry with backoff                                |
+| Cache failures                  | Framework         | Graceful degradation (continues without caching)            |
+| PARLIS session expiry           | ParlisClient      | Re-establishes session before each search cycle             |
+| Large result sets               | ParlisClient      | Automatic date subdivision into monthly windows             |
+| PARLIS HTTP errors              | ParlisClient      | `raise_for_status()`, propagated to framework error handler |
+| Beteiligungsportal HTTP errors  | BeteiligungClient | `raise_for_status()`, propagated to framework error handler |
 | Beteiligungsportal HTML changes | BeteiligungParser | Unit tests with HTML fixtures detect regressions            |
 
 ## 9. Deployment
@@ -597,11 +597,11 @@ docker build -t bawue-scraper .
 
 ### Infrastructure
 
-| Component     | Purpose                             | Required |
-|---------------|-------------------------------------|----------|
-| Docker        | Container runtime                   | Yes      |
-| Redis         | Caching (ScraperCache)              | Optional |
-| PaZuFa Backend| API target for data submission      | Yes      |
+| Component      | Purpose                        | Required |
+|----------------|--------------------------------|----------|
+| Docker         | Container runtime              | Yes      |
+| Redis          | Caching (ScraperCache)         | Optional |
+| PaZuFa Backend | API target for data submission | Yes      |
 
 Redis is optional — the framework degrades gracefully without it (no caching, all items reprocessed each cycle).
 
@@ -620,34 +620,34 @@ All configuration is via `config.toml` with environment variable overrides:
 
 ## 10. Risks & Mitigation
 
-| Risk                                  | Impact                                       | Mitigation                                                                          |
-|---------------------------------------|----------------------------------------------|-------------------------------------------------------------------------------------|
-| **PARLIS API changes**                | Scraper breaks entirely                      | Comprehensive error logging, health-check alerts, quick-fix turnaround              |
-| **PARLIS session instability**        | Intermittent failures                        | Session re-establishment before each search cycle                                   |
-| **Large result sets**                 | API returns `status: "running"` without data | Automatic monthly window subdivision in ParlisClient                                |
-| **Enum ambiguity**                    | Incorrect mapping of PARLIS types            | Conservative mapping — `sonstig` as fallback, all unmapped values logged            |
-| **Rate limiting by Landtag**          | IP blocked                                   | Configurable delays, descriptive User-Agent                                         |
-| **Fundstelle text format changes**    | Station parsing breaks                       | Regex-based parsing with fallback, unit tests with known samples                    |
-| **verfassungsaendernd not available** | Required field cannot be determined          | Default to `false` (PARLIS does not expose this field)                              |
-| **Sync/async coexistence**            | PARLIS uses sync requests in async framework | `asyncio.to_thread()` wraps sync calls in both vorgaenge and beteiligung scrapers    |
+| Risk                                  | Impact                                       | Mitigation                                                                        |
+|---------------------------------------|----------------------------------------------|-----------------------------------------------------------------------------------|
+| **PARLIS API changes**                | Scraper breaks entirely                      | Comprehensive error logging, health-check alerts, quick-fix turnaround            |
+| **PARLIS session instability**        | Intermittent failures                        | Session re-establishment before each search cycle                                 |
+| **Large result sets**                 | API returns `status: "running"` without data | Automatic monthly window subdivision in ParlisClient                              |
+| **Enum ambiguity**                    | Incorrect mapping of PARLIS types            | Conservative mapping — `sonstig` as fallback, all unmapped values logged          |
+| **Rate limiting by Landtag**          | IP blocked                                   | Configurable delays, descriptive User-Agent                                       |
+| **Fundstelle text format changes**    | Station parsing breaks                       | Regex-based parsing with fallback, unit tests with known samples                  |
+| **verfassungsaendernd not available** | Required field cannot be determined          | Default to `false` (PARLIS does not expose this field)                            |
+| **Sync/async coexistence**            | PARLIS uses sync requests in async framework | `asyncio.to_thread()` wraps sync calls in both vorgaenge and beteiligung scrapers |
 
 ## 11. Migration from Standalone Scraper
 
 This project was migrated from a standalone hexagonal-architecture scraper
 (`landtagszusammenfasser_bawue_scraper`) to the pazufa-collector framework. Key changes:
 
-| Aspect              | Before (standalone)                     | After (framework plugin)                     |
-|---------------------|-----------------------------------------|----------------------------------------------|
-| Architecture        | Hexagonal (ports & adapters)            | Framework plugin (VorgangsScraper subclass)   |
-| Models              | Hand-written Pydantic models            | Auto-generated from OpenAPI spec              |
-| Enums               | Hand-written StrEnum classes            | Auto-generated (MINUS naming: `GG_MINUS_LAND_MINUS_PARL`) |
-| API client          | Hand-written LtzfClient                 | Auto-generated httpx client                   |
-| Caching             | File-based JSON cache                   | Redis ScraperCache (2-week TTL)               |
-| PDF extraction      | pdfplumber + pytesseract                | Framework pipeline (PyPDF + Kreuzberg + LLM)  |
-| Configuration       | pydantic-settings (.env)                | 4-tier (Defaults → TOML → env → CLI)          |
-| Orchestration       | Custom Orchestrator class               | Framework runner with auto-discovery           |
-| ICS calendar        | IcsAdapter (not implemented)            | BawueSitzungenScraper (Phase 1 complete)       |
-| Deployment          | Standalone Docker / AWS Lambda          | Framework-managed Docker container             |
+| Aspect         | Before (standalone)            | After (framework plugin)                                  |
+|----------------|--------------------------------|-----------------------------------------------------------|
+| Architecture   | Hexagonal (ports & adapters)   | Framework plugin (VorgangsScraper subclass)               |
+| Models         | Hand-written Pydantic models   | Auto-generated from OpenAPI spec                          |
+| Enums          | Hand-written StrEnum classes   | Auto-generated (MINUS naming: `GG_MINUS_LAND_MINUS_PARL`) |
+| API client     | Hand-written LtzfClient        | Auto-generated httpx client                               |
+| Caching        | File-based JSON cache          | Redis ScraperCache (2-week TTL)                           |
+| PDF extraction | pdfplumber + pytesseract       | Framework pipeline (PyPDF + Kreuzberg + LLM)              |
+| Configuration  | pydantic-settings (.env)       | 4-tier (Defaults → TOML → env → CLI)                      |
+| Orchestration  | Custom Orchestrator class      | Framework runner with auto-discovery                      |
+| ICS calendar   | IcsAdapter (not implemented)   | BawueSitzungenScraper (Phase 1 complete)                  |
+| Deployment     | Standalone Docker / AWS Lambda | Framework-managed Docker container                        |
 
 Components preserved as PARLIS-specific logic:
 - `ParlisClient` — session management, search, pagination, date subdivision
