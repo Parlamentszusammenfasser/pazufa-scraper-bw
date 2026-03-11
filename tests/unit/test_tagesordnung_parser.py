@@ -24,7 +24,7 @@ class TestParseTops:
     def test_parse_tops_extracts_titel(self):
         tops = parse_tops(SAMPLE_TEXT)
         expected_top1 = (
-            "Aktuelle Debatte – Starke Frauen, starke Wirtschaft – "
+            "Aktuelle Debatte \u2013 Starke Frauen, starke Wirtschaft \u2013 "
             "Selbstbestimmung statt sozialer Kälte beantragt von der Fraktion GRÜNE"
         )
         assert tops[0].titel == expected_top1
