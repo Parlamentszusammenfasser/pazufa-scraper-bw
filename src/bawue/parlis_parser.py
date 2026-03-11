@@ -31,11 +31,13 @@ def parse_fundstelle_text(text: str) -> dict:
     """Parse a Fundstelle text entry into structured station data."""
     result: dict = {"raw": text}
 
+    # DD.MM.YYYY date format used in most Fundstelle entries (years 2000+)
     date_match = re.search(r"(\d{2}\.\d{2}\.20\d{2})", text)
     if date_match:
         result["datum"] = date_match.group(1)
 
     if "datum" not in result:
+        # Fallback: written-out German month names, e.g. "3. März 2024"
         de_match = _GERMAN_DATE_RE.search(text)
         if de_match:
             day = de_match.group(1).zfill(2)
@@ -43,35 +45,112 @@ def parse_fundstelle_text(text: str) -> dict:
             year = de_match.group(3)
             result["datum"] = f"{day}.{month}.{year}"
 
+    # Drucksache number: "Drucksache 17/1234"
     ds_match = re.search(r"Drucksache\s+(\d+/\d+)", text)
     if ds_match:
         result["drucksache"] = ds_match.group(1)
 
+    # Plenarprotokoll number: "Plenarprotokoll 17/42"
     pp_match = re.search(r"Plenarprotokoll\s+(\d+/\d+)", text)
     if pp_match:
         result["plenarprotokoll"] = pp_match.group(1)
 
+    # Station type: leading word(s) before a double-space or single-tab separator.
+    # \t is listed separately because \s{2,} requires two chars and would miss a lone tab.
     type_match = re.match(r"^([\w\s\-äöüÄÖÜß]+?)(?:\s{2,}|\t)", text)
     if type_match:
         result["station_typ"] = type_match.group(1).strip()
 
+    # Committee name: "Ausschuss für ..." up to a date or "Drucksache" keyword
     ausschuss_match = re.search(
-        r"(Ausschuss\s+(?:für|fuer)\s+[^0-9]+?)(?:\s+\d{2}\.\d{2}\.|\s+Drucksache)",
+        r"(Ausschuss\s+für\s+\D+?)(?:\s+\d{2}\.\d{2}\.|\s+Drucksache)",
         text,
     )
     if ausschuss_match:
         result["ausschuss"] = ausschuss_match.group(1).strip()
 
+    # Author text: anything between the station type and the date that is not a
+    # known keyword (committees and protocols have their own fields above)
     if type_match and date_match:
         gap_text = text[type_match.end() : date_match.start()].strip()
         if gap_text and not gap_text.startswith(("Ausschuss", "Plenarprotokoll")):
             result["autor_text"] = gap_text
 
+    # Page count: "(42 S.)" → 42
     pages_match = re.search(r"\((\d+)\s+S\.\)", text)
     if pages_match:
         result["seiten"] = int(pages_match.group(1))
 
     return result
+
+
+def _find_date_in_parent_time_elements(link) -> str | None:
+    """Walk up to parent and grandparent to find a <time datetime="…"> element.
+
+    PARLIS sometimes places the date in a sibling <time> element rather than
+    inside the link text itself.  Returns a DD.MM.YYYY string or None.
+    """
+    parent = link.getparent()
+    grandparent = parent.getparent() if parent is not None else None
+    for ancestor in (parent, grandparent):
+        if ancestor is None:
+            continue
+        time_els = ancestor.xpath('.//time[@datetime]')
+        if time_els:
+            iso_date = time_els[0].get("datetime")
+            try:
+                return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%d.%m.%Y")
+            except ValueError:
+                return None
+    return None
+
+
+def _extract_fundstellen(record) -> list[dict]:
+    """Parse all Fundstelle links within a record element."""
+    fund_links = record.xpath('.//a[@class="fundstellenLinks"]')
+    fundstellen = []
+    for link in fund_links:
+        parsed = parse_fundstelle_text(link.text_content().strip())
+        parsed["pdf_url"] = link.get("href", "")
+
+        # Date may not appear in the link text — try nearby <time> elements
+        if "datum" not in parsed:
+            date = _find_date_in_parent_time_elements(link)
+            if date:
+                parsed["datum"] = date
+
+        fundstellen.append(parsed)
+    return fundstellen
+
+
+def _extract_from_scripts(record) -> tuple[str | None, str | None]:
+    """Extract vorgangs_id and detail_url from inline <script> blocks.
+
+    PARLIS embeds the Vorgang ID in JavaScript as both:
+      - "link-V-1234"  (used as a fallback when the <dl> metadata is missing)
+      - '"/parlis/vorgang/V-1234"'  (used to build the canonical detail URL)
+    """
+    vorgangs_id = None
+    detail_url = None
+    for script in record.xpath(".//script"):
+        script_text = script.text_content()
+
+        # Pattern: link-V-<digits>  — JS anchor ID referencing the Vorgang
+        if vorgangs_id is None:
+            vid_match = re.search(r"link-(V-\d+)", script_text)
+            if vid_match:
+                vorgangs_id = vid_match.group(1)
+
+        # Pattern: "/parlis/vorgang/V-<digits>"  — path used in the detail link
+        if detail_url is None:
+            url_match = re.search(r'"/parlis/vorgang/(V-\d+)"', script_text)
+            if url_match:
+                detail_url = f"https://parlis.landtag-bw.de/parlis/vorgang/{url_match.group(1)}"
+
+        if vorgangs_id and detail_url:
+            break
+
+    return vorgangs_id, detail_url
 
 
 def parse_results(html_content: str) -> list[RawVorgang]:
@@ -87,8 +166,8 @@ def parse_results(html_content: str) -> list[RawVorgang]:
         if title_links:
             item["titel"] = title_links[0].text_content().strip()
 
-        dts = record.xpath(".//dl/dt")
-        for dt in dts:
+        # Extract <dl> metadata key/value pairs (e.g. Vorgangstyp, Status, …)
+        for dt in record.xpath(".//dl/dt"):
             label = dt.text_content().strip().rstrip(":")
             if label == "Vorgangs-ID":
                 label = "vorgangs_id"
@@ -96,46 +175,16 @@ def parse_results(html_content: str) -> list[RawVorgang]:
             if dd is not None:
                 item[label] = dd.text_content().strip()
 
-        fund_links = record.xpath('.//a[@class="fundstellenLinks"]')
-        if fund_links:
-            item["fundstellen_parsed"] = []
-            for link in fund_links:
-                text = link.text_content().strip()
-                href = link.get("href", "")
-                parsed = parse_fundstelle_text(text)
-                parsed["pdf_url"] = href
+        fundstellen = _extract_fundstellen(record)
+        if fundstellen:
+            item["fundstellen_parsed"] = fundstellen
 
-                if "datum" not in parsed:
-                    parent = link.getparent()
-                    time_els = parent.xpath('.//time[@datetime]') if parent is not None else []
-                    if not time_els and parent is not None:
-                        grandparent = parent.getparent()
-                        if grandparent is not None:
-                            time_els = grandparent.xpath('.//time[@datetime]')
-                    if time_els:
-                        iso_date = time_els[0].get("datetime")
-                        try:
-                            dt = datetime.strptime(iso_date, "%Y-%m-%d")
-                            parsed["datum"] = dt.strftime("%d.%m.%Y")
-                        except ValueError:
-                            pass
-
-                item["fundstellen_parsed"].append(parsed)
-
-        scripts = record.xpath(".//script")
-        for script in scripts:
-            script_text = script.text_content()
-            vid_match = re.search(r"link-(V-\d+)", script_text)
-            if vid_match and "vorgangs_id" not in item:
-                item["vorgangs_id"] = vid_match.group(1)
-
-        url_match = None
-        for script in scripts:
-            url_match = re.search(r'"/parlis/vorgang/(V-\d+)"', script.text_content())
-            if url_match:
-                break
-        if url_match:
-            item["detail_url"] = f"https://parlis.landtag-bw.de/parlis/vorgang/{url_match.group(1)}"
+        script_id, detail_url = _extract_from_scripts(record)
+        # Only use the script-derived ID when the <dl> didn't already provide one
+        if script_id and "vorgangs_id" not in item:
+            item["vorgangs_id"] = script_id
+        if detail_url:
+            item["detail_url"] = detail_url
 
         if item:
             results.append(item)

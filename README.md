@@ -128,6 +128,53 @@ flowchart TD
 
 ### Umsetzungsstand
 
+#### Vollständigkeit (Stand: März 2026)
+
+| Kategorie                    | Schätzung | Anmerkungen                                                                |
+|------------------------------|-----------|----------------------------------------------------------------------------|
+| **Pflichtfunktionalität**    | **~80 %** | Kernfelder vollständig; `tops=[]` und `nummer=0` für Ausschüsse fehlen     |
+| **Optionale Funktionalität** | **~22 %** | Primär-IDs und Basisdaten vorhanden; Metadaten & Zusatzquellen fehlen      |
+
+**Pflichtfunktionalität – Lücken:**
+- `tops` in `Sitzung` immer `[]` (Phase 2, Tagesordnungen-PDFs nicht geparst)
+- `nummer` in `Sitzung` für Ausschusssitzungen fest `0` (kein Regex-Match im ICS-Feed)
+- `verfassungsaendernd` immer `False` (PARLIS gibt dieses Merkmal nicht aus)
+
+**Optionale Funktionalität – Lücken:**
+- Fehlende Felder: `kurztitel` (Vorgang/Dokument), `links` (Vorgang), `lobbyregister`, `schlagworte` (Station/Dokument), `stellungnahmen`, `trojanergefahr`, `vorwort`, `zp_modifiziert` (Station), `gremium_federf`
+- Fehlende Datenquellen: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse STM
+
+**Feldstatus-Matrix (Pflichtfelder):**
+
+| Modell      | Feld               | Status     | Anmerkung                                                    |
+|-------------|--------------------|------------|--------------------------------------------------------------|
+| Vorgang     | `api_id`           | ✅ Voll    | `uuid5(NAMESPACE_URL, vorgangs_id)`                          |
+| Vorgang     | `titel`            | ✅ Voll    | Aus PARLIS / Beteiligungsportal                              |
+| Vorgang     | `typ`              | ✅ Voll    | Enum-gemappt                                                 |
+| Vorgang     | `wahlperiode`      | ✅ Voll    | Fest WP 17                                                   |
+| Vorgang     | `verfassungsaendernd` | ⚠️ Partiell | Immer `False` (PARLIS gibt nichts her)                   |
+| Vorgang     | `initiatoren`      | ✅ Voll    | Aus Initiative-Feld                                          |
+| Vorgang     | `stationen`        | ✅ Voll    | Aus Fundstellen-Parsing                                      |
+| Station     | `typ`              | ✅ Voll    | Kontextbewusstes Enum-Mapping                                |
+| Station     | `dokumente`        | ✅ Voll    | PDF-Links aus Fundstelle                                     |
+| Station     | `zp_start`         | ✅ Voll    | Aus Fundstelle-Datum (mit Fallbacks)                         |
+| Station     | `gremium`          | ✅ Voll    | Aus Ausschuss / Plenarprotokoll                              |
+| Dokument    | `titel`            | ✅ Voll    | Stationstyp als Fallback                                     |
+| Dokument    | `volltext`         | ⚠️ Framework | Framework-Pipeline (PyPDF + OCR + LLM)                   |
+| Dokument    | `hash`             | ⚠️ Framework | Framework berechnet                                        |
+| Dokument    | `typ`              | ✅ Voll    | Enum-gemappt                                                 |
+| Dokument    | `zp_modifiziert`   | ✅ Voll    | Fundstelle-Datum                                             |
+| Dokument    | `zp_referenz`      | ✅ Voll    | Fundstelle-Datum                                             |
+| Dokument    | `link`             | ✅ Voll    | PDF-URL aus Fundstelle                                       |
+| Dokument    | `autoren`          | ✅ Voll    | Aus Fundstelle-Text, Fallback auf Initiative                 |
+| Sitzung     | `termin`           | ✅ Voll    | ICS DTSTART (Berlin TZ → UTC)                                |
+| Sitzung     | `gremium`          | ✅ Voll    | Aus ICS SUMMARY                                              |
+| Sitzung     | `nummer`           | ⚠️ Partiell | Regex für Plenum; Ausschüsse = `0`                         |
+| Sitzung     | `tops`             | ❌ Fehlt   | Immer `[]` (Phase 2: Tagesordnungen-PDFs)                    |
+| Sitzung     | `public`           | ✅ Voll    | Immer `True`                                                 |
+
+#### Feature-Status
+
 | Feature                    | Status              | Anmerkungen                                                                  |
 |----------------------------|---------------------|------------------------------------------------------------------------------|
 | PARLIS-Suche (Vorgänge)    | Funktioniert        | Automatische Unterteilung bei zu großen Ergebnismengen                       |
@@ -140,11 +187,11 @@ flowchart TD
 | Scheduling                 | Framework           | Konfigurierbar über `cycle-time-s` in config.toml                            |
 | PDF-Volltext-Extraktion    | Framework-Pipeline  | PyPDF + Kreuzberg/EasyOCR + LLM (via pazufa-collector)                       |
 | Dokumenten-Autoren         | Funktioniert        | Aus Fundstelle-Text extrahiert, Fallback auf Initiative                      |
-| Detail-Seiten (PARLIS)     | Nicht implementiert | Zusätzliche Daten über PARLIS-Detailseiten                                   |
 | Beteiligungsportal         | Funktioniert        | Vorparlamentarische Entwürfe aus Beteiligungsportal (preparl-regent Station) |
-| Kabinettsbeschlüsse (STM)  | Nicht implementiert | Signalquelle für neue Regierungsentwürfe                                     |
-| Gesetzblatt-Verkündungen   | Nicht implementiert | Postparlamentarische Phase                                                   |
 | Sitzungskalender (Phase 1) | Funktioniert        | ICS-Feed-Parsing, Sitzung-Modelle mit `nummer=0`, `tops=[]`                  |
+| Detail-Seiten (PARLIS)     | Nicht implementiert | Zusätzliche Metadaten über PARLIS-Detailseiten                               |
+| Kabinettsbeschlüsse (STM)  | Nicht implementiert | Signalquelle für neue Regierungsentwürfe                                     |
+| Gesetzblatt-Verkündungen   | Nicht implementiert | Postparlamentarische Phase (`postparl-gsblt` Station)                        |
 | Sitzungskalender (Phase 2) | Nicht implementiert | Anreicherung mit Tagesordnungen-PDFs für Sitzungsnummern und TOPs            |
 
 ### Next Steps
