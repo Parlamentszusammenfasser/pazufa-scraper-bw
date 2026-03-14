@@ -12,7 +12,7 @@ from openapi_client.models.parlament import Parlament
 from openapi_client.models.stationstyp import Stationstyp
 from openapi_client.models.vorgangstyp import Vorgangstyp
 
-from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
+from bawue.bawue_beteiligung_scraper import DEFAULT_WAHLPERIODE, BawueBeteiligungScraper
 from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
@@ -345,3 +345,50 @@ class TestRunDurationLog:
             await scraper.run()
 
         assert any("Completed in" in msg for msg in caplog.messages)
+
+
+class TestInit:
+    def test_init_reads_wahlperiode_from_config(self, tmp_path):
+        config_file = tmp_path / "config.toml"
+        config_file.write_text("[beteiligung]\nwahlperiode = 16\n")
+
+        mock_config = MagicMock()
+        mock_config.config_file = str(config_file)
+        mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
+
+        with (
+            patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.__init__", return_value=None),
+            patch("bawue.bawue_beteiligung_scraper.BeteiligungClient"),
+        ):
+            scraper = BawueBeteiligungScraper(mock_config, MagicMock())
+
+        assert scraper._wahlperiode == 16
+
+    def test_init_uses_default_wahlperiode(self):
+        mock_config = MagicMock()
+        mock_config.config_file = None
+        mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
+
+        with (
+            patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.__init__", return_value=None),
+            patch("bawue.bawue_beteiligung_scraper.BeteiligungClient"),
+        ):
+            scraper = BawueBeteiligungScraper(mock_config, MagicMock())
+
+        assert scraper._wahlperiode == DEFAULT_WAHLPERIODE
+
+    def test_load_config_returns_empty_on_no_file(self):
+        mock_config = MagicMock()
+        mock_config.config_file = None
+
+        assert BawueBeteiligungScraper._load_config(mock_config) == {}
+
+    def test_load_config_returns_empty_on_bad_file(self, tmp_path, caplog):
+        mock_config = MagicMock()
+        mock_config.config_file = str(tmp_path / "nonexistent.toml")
+
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_beteiligung_scraper"):
+            result = BawueBeteiligungScraper._load_config(mock_config)
+
+        assert result == {}
+        assert any("Could not load" in msg for msg in caplog.messages)

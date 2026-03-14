@@ -5,9 +5,11 @@ import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import openapi_client
 import pytest
+import pytest_asyncio
 
-from bawue.bawue_sitzungen_scraper import BawueSitzungenScraper
+from bawue.bawue_sitzungen_scraper import DEFAULT_ICS_URL, BawueSitzungenScraper
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 ICS_BYTES = (FIXTURES_DIR / "sample_calendar.ics").read_bytes()
@@ -28,6 +30,20 @@ def _make_scraper() -> BawueSitzungenScraper:
     scraper._published_dates = 0
     scraper._failed_dates = 0
     scraper._published_sitzungen = 0
+    return scraper
+
+
+@pytest_asyncio.fixture
+async def ics_scraper_with_events():
+    """Return a scraper with ICS events already loaded via listing_page_extractor."""
+    scraper = _make_scraper()
+    mock_response = AsyncMock()
+    mock_response.read = AsyncMock(return_value=ICS_BYTES)
+    mock_response.status = 200
+    mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_response.__aexit__ = AsyncMock(return_value=False)
+    scraper.session.get = MagicMock(return_value=mock_response)
+    await scraper.listing_page_extractor(ICS_URL)
     return scraper
 
 
@@ -79,19 +95,8 @@ class TestItemExtractor:
     """Test that item_extractor converts stored events into (datetime, List[Sitzung])."""
 
     @pytest.mark.asyncio
-    async def test_returns_datetime_and_sitzungen(self):
-        scraper = _make_scraper()
-
-        # Simulate events stored by listing_page_extractor
-        mock_response = AsyncMock()
-        mock_response.read = AsyncMock(return_value=ICS_BYTES)
-        mock_response.status = 200
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-        scraper.session.get = MagicMock(return_value=mock_response)
-        await scraper.listing_page_extractor(ICS_URL)
-
-        result = await scraper.item_extractor("2026-02-25")
+    async def test_returns_datetime_and_sitzungen(self, ics_scraper_with_events):
+        result = await ics_scraper_with_events.item_extractor("2026-02-25")
 
         termin, sitzungen = result
         assert isinstance(termin, datetime.datetime)
@@ -107,41 +112,26 @@ class TestItemExtractor:
         assert sitzung.titel == "Plenarsitzung: 142. Sitzung"
 
     @pytest.mark.asyncio
-    async def test_deterministic_api_id(self):
+    async def test_deterministic_api_id(self, ics_scraper_with_events):
         """Same UID should produce the same api_id across runs."""
-        scraper = _make_scraper()
+        result1 = await ics_scraper_with_events.item_extractor("2026-02-25")
 
+        # Re-populate for second extraction
         mock_response = AsyncMock()
         mock_response.read = AsyncMock(return_value=ICS_BYTES)
         mock_response.status = 200
         mock_response.__aenter__ = AsyncMock(return_value=mock_response)
         mock_response.__aexit__ = AsyncMock(return_value=False)
-        scraper.session.get = MagicMock(return_value=mock_response)
-        await scraper.listing_page_extractor(ICS_URL)
+        ics_scraper_with_events.session.get = MagicMock(return_value=mock_response)
+        await ics_scraper_with_events.listing_page_extractor(ICS_URL)
 
-        result1 = await scraper.item_extractor("2026-02-25")
-
-        # Re-populate for second extraction
-        scraper.session.get = MagicMock(return_value=mock_response)
-        await scraper.listing_page_extractor(ICS_URL)
-
-        result2 = await scraper.item_extractor("2026-02-25")
+        result2 = await ics_scraper_with_events.item_extractor("2026-02-25")
 
         assert result1[1][0].api_id == result2[1][0].api_id
 
     @pytest.mark.asyncio
-    async def test_multiple_sitzungen_per_date(self):
-        scraper = _make_scraper()
-
-        mock_response = AsyncMock()
-        mock_response.read = AsyncMock(return_value=ICS_BYTES)
-        mock_response.status = 200
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-        scraper.session.get = MagicMock(return_value=mock_response)
-        await scraper.listing_page_extractor(ICS_URL)
-
-        result = await scraper.item_extractor("2026-02-24")
+    async def test_multiple_sitzungen_per_date(self, ics_scraper_with_events):
+        result = await ics_scraper_with_events.item_extractor("2026-02-24")
 
         _termin, sitzungen = result
         assert len(sitzungen) == 2
@@ -150,38 +140,54 @@ class TestItemExtractor:
         assert "Finanzausschuss" in gremium_names
 
     @pytest.mark.asyncio
-    async def test_termin_is_utc(self):
-        """Termin should be timezone-aware (UTC)."""
-        scraper = _make_scraper()
-
-        mock_response = AsyncMock()
-        mock_response.read = AsyncMock(return_value=ICS_BYTES)
-        mock_response.status = 200
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-        scraper.session.get = MagicMock(return_value=mock_response)
-        await scraper.listing_page_extractor(ICS_URL)
-
-        result = await scraper.item_extractor("2026-02-25")
-        termin = result[0]
+    async def test_datetimes_are_utc(self, ics_scraper_with_events):
+        """Tuple termin and individual Sitzung termins must both be timezone-aware (UTC)."""
+        result = await ics_scraper_with_events.item_extractor("2026-02-25")
+        termin, sitzungen = result
         assert termin.tzinfo is not None
+        assert sitzungen[0].termin.tzinfo is not None
 
-    @pytest.mark.asyncio
-    async def test_sitzung_termin_is_utc(self):
-        """Individual Sitzung termin should be UTC."""
-        scraper = _make_scraper()
 
-        mock_response = AsyncMock()
-        mock_response.read = AsyncMock(return_value=ICS_BYTES)
-        mock_response.status = 200
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-        scraper.session.get = MagicMock(return_value=mock_response)
-        await scraper.listing_page_extractor(ICS_URL)
+class TestInit:
+    def test_init_reads_ics_url_from_config(self, tmp_path):
+        config_file = tmp_path / "config.toml"
+        config_file.write_text('[bawue]\nics-url = "https://custom.example.com/cal.ics"\n')
 
-        result = await scraper.item_extractor("2026-02-25")
-        sitzung = result[1][0]
-        assert sitzung.termin.tzinfo is not None
+        mock_config = MagicMock()
+        mock_config.config_file = str(config_file)
+        mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
+
+        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.__init__", return_value=None) as mock_super:
+            BawueSitzungenScraper(mock_config, MagicMock())
+
+        # super().__init__(config, collector_id, [ics_url], session) → args[2] is listing_urls
+        assert mock_super.call_args.args[2] == ["https://custom.example.com/cal.ics"]
+
+    def test_init_uses_default_ics_url(self):
+        mock_config = MagicMock()
+        mock_config.config_file = None
+        mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
+
+        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.__init__", return_value=None) as mock_super:
+            BawueSitzungenScraper(mock_config, MagicMock())
+
+        assert mock_super.call_args.args[2] == [DEFAULT_ICS_URL]
+
+    def test_load_bawue_config_returns_empty_on_no_file(self):
+        mock_config = MagicMock()
+        mock_config.config_file = None
+
+        assert BawueSitzungenScraper._load_bawue_config(mock_config) == {}
+
+    def test_load_bawue_config_returns_empty_on_bad_file(self, tmp_path, caplog):
+        mock_config = MagicMock()
+        mock_config.config_file = str(tmp_path / "nonexistent.toml")
+
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_sitzungen_scraper"):
+            result = BawueSitzungenScraper._load_bawue_config(mock_config)
+
+        assert result == {}
+        assert any("Could not load" in msg for msg in caplog.messages)
 
 
 class TestSendResult:
@@ -219,6 +225,86 @@ class TestSendResult:
             kwargs = call_kwargs.kwargs if hasattr(call_kwargs, "kwargs") else {}
             all_args = {**args, **kwargs}
             assert all_args["parlament"] == Parlament.BW
+
+
+    @pytest.mark.asyncio
+    async def test_send_result_422_returns_none_and_logs(self, caplog):
+        scraper = _make_scraper()
+        scraper.config = MagicMock()
+        scraper.log_item = MagicMock()
+
+        exc = openapi_client.ApiException(status=422, reason="Unprocessable Entity")
+        mock_api_instance = MagicMock()
+        mock_api_instance.kal_date_put = MagicMock(side_effect=exc)
+
+        with (
+            patch("bawue.bawue_sitzungen_scraper.openapi_client.ApiClient") as mock_client_cls,
+            patch(
+                "bawue.bawue_sitzungen_scraper.openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi",
+                return_value=mock_api_instance,
+            ),
+            caplog.at_level(logging.ERROR, logger="bawue.bawue_sitzungen_scraper"),
+        ):
+            mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client_cls.return_value)
+            mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+            item = (datetime.datetime(2026, 2, 25, 10, 0, tzinfo=datetime.UTC), [])
+            result = await scraper.send_result(item)
+
+        assert result is None
+        assert any("422" in msg or "Unprocessable" in msg for msg in caplog.messages)
+
+    @pytest.mark.asyncio
+    async def test_send_result_401_logs_critical(self, caplog):
+        scraper = _make_scraper()
+        scraper.config = MagicMock()
+        scraper.log_item = MagicMock()
+
+        exc = openapi_client.ApiException(status=401, reason="Unauthorized")
+        mock_api_instance = MagicMock()
+        mock_api_instance.kal_date_put = MagicMock(side_effect=exc)
+
+        with (
+            patch("bawue.bawue_sitzungen_scraper.openapi_client.ApiClient") as mock_client_cls,
+            patch(
+                "bawue.bawue_sitzungen_scraper.openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi",
+                return_value=mock_api_instance,
+            ),
+            caplog.at_level(logging.CRITICAL, logger="bawue.bawue_sitzungen_scraper"),
+        ):
+            mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client_cls.return_value)
+            mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+            item = (datetime.datetime(2026, 2, 25, 10, 0, tzinfo=datetime.UTC), [])
+            result = await scraper.send_result(item)
+
+        assert result is None
+        assert any("Authentication failed" in msg for msg in caplog.messages)
+
+    @pytest.mark.asyncio
+    async def test_send_result_unexpected_exception_returns_none(self, caplog):
+        scraper = _make_scraper()
+        scraper.config = MagicMock()
+
+        mock_api_instance = MagicMock()
+        mock_api_instance.kal_date_put = MagicMock(side_effect=Exception("boom"))
+
+        with (
+            patch("bawue.bawue_sitzungen_scraper.openapi_client.ApiClient") as mock_client_cls,
+            patch(
+                "bawue.bawue_sitzungen_scraper.openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi",
+                return_value=mock_api_instance,
+            ),
+            caplog.at_level(logging.ERROR, logger="bawue.bawue_sitzungen_scraper"),
+        ):
+            mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client_cls.return_value)
+            mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+            item = (datetime.datetime(2026, 2, 25, 10, 0, tzinfo=datetime.UTC), [])
+            result = await scraper.send_result(item)
+
+        assert result is None
+        assert any("Unexpected error" in msg for msg in caplog.messages)
 
 
 class TestRunSummary:

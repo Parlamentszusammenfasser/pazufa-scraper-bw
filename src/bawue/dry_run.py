@@ -247,7 +247,6 @@ def main(argv: list[str] | None = None) -> None:
     raw_vorgaenge: list[dict] = []
     beteiligung_reports: list = []
     sitzung_reports: list = []
-    sitzung_total_all = 0
     sitzung_total_filtered = 0
 
     # Determine which scrapers to run
@@ -272,7 +271,7 @@ def main(argv: list[str] | None = None) -> None:
         )
 
     if run_s:
-        sitzung_reports, sitzung_total_all, sitzung_total_filtered = run_sitzungen(
+        sitzung_reports, _sitzung_total_all, sitzung_total_filtered = run_sitzungen(
             ics_url=args.ics_url,
         )
 

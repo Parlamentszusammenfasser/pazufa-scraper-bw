@@ -1,9 +1,9 @@
 """Tests for the dry-run CLI orchestration module."""
 
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
-from bawue.dry_run import parse_args, run_beteiligung, run_sitzungen, run_vorgaenge
+from bawue.dry_run import main, parse_args, run_beteiligung, run_sitzungen, run_vorgaenge
 
 WP17_START = date(2021, 4, 26)
 
@@ -86,7 +86,7 @@ class TestRunVorgaenge:
         mock_client = MockParlisClient.return_value
         mock_client.search.return_value = [_raw_vorgang()]
 
-        reports, raw_list = run_vorgaenge(
+        _reports, _raw_list = run_vorgaenge(
             wahlperiode=17,
             wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung"],
@@ -145,7 +145,7 @@ class TestRunVorgaenge:
             [_raw_vorgang("V-002", "Kleine Anfrage")],
         ]
 
-        reports, raw_list = run_vorgaenge(
+        reports, _raw_list = run_vorgaenge(
             wahlperiode=17,
             wahlperiode_start_date=WP17_START,
             vorgangstypen=["Gesetzgebung", "Kleine Anfrage"],
@@ -307,3 +307,102 @@ class TestRunSitzungen:
         assert reports == []
         assert total_all == 0
         assert total_filtered == 0
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+
+class TestMain:
+    def _mock_summary(self):
+        s = MagicMock()
+        s.total_sitzung_events = 0
+        return s
+
+    def test_main_runs_all_scrapers_by_default(self):
+        with (
+            patch("bawue.dry_run.run_vorgaenge", return_value=([], [])) as mock_rv,
+            patch("bawue.dry_run.run_beteiligung", return_value=[]) as mock_rb,
+            patch("bawue.dry_run.run_sitzungen", return_value=([], 0, 0)) as mock_rs,
+            patch("bawue.dry_run.check_for_newer_wahlperiode"),
+            patch("bawue.dry_run.build_summary", return_value=self._mock_summary()),
+            patch("bawue.dry_run.format_summary", return_value="ok"),
+        ):
+            main([])
+
+        mock_rv.assert_called_once()
+        mock_rb.assert_called_once()
+        mock_rs.assert_called_once()
+
+    def test_main_runs_only_vorgaenge_scraper(self):
+        with (
+            patch("bawue.dry_run.run_vorgaenge", return_value=([], [])) as mock_rv,
+            patch("bawue.dry_run.run_beteiligung", return_value=[]) as mock_rb,
+            patch("bawue.dry_run.run_sitzungen", return_value=([], 0, 0)) as mock_rs,
+            patch("bawue.dry_run.check_for_newer_wahlperiode"),
+            patch("bawue.dry_run.build_summary", return_value=self._mock_summary()),
+            patch("bawue.dry_run.format_summary", return_value="ok"),
+        ):
+            main(["--scraper", "vorgaenge"])
+
+        mock_rv.assert_called_once()
+        mock_rb.assert_not_called()
+        mock_rs.assert_not_called()
+
+    def test_main_runs_only_beteiligung_scraper(self):
+        with (
+            patch("bawue.dry_run.run_vorgaenge", return_value=([], [])) as mock_rv,
+            patch("bawue.dry_run.run_beteiligung", return_value=[]) as mock_rb,
+            patch("bawue.dry_run.run_sitzungen", return_value=([], 0, 0)) as mock_rs,
+            patch("bawue.dry_run.check_for_newer_wahlperiode"),
+            patch("bawue.dry_run.build_summary", return_value=self._mock_summary()),
+            patch("bawue.dry_run.format_summary", return_value="ok"),
+        ):
+            main(["--scraper", "beteiligung"])
+
+        mock_rv.assert_not_called()
+        mock_rb.assert_called_once()
+        mock_rs.assert_not_called()
+
+    def test_main_runs_only_sitzungen_scraper(self):
+        with (
+            patch("bawue.dry_run.run_vorgaenge", return_value=([], [])) as mock_rv,
+            patch("bawue.dry_run.run_beteiligung", return_value=[]) as mock_rb,
+            patch("bawue.dry_run.run_sitzungen", return_value=([], 0, 0)) as mock_rs,
+            patch("bawue.dry_run.check_for_newer_wahlperiode"),
+            patch("bawue.dry_run.build_summary", return_value=self._mock_summary()),
+            patch("bawue.dry_run.format_summary", return_value="ok"),
+        ):
+            main(["--scraper", "sitzungen"])
+
+        mock_rv.assert_not_called()
+        mock_rb.assert_not_called()
+        mock_rs.assert_called_once()
+
+    def test_main_lookback_days_overrides_start_date(self):
+        with (
+            patch("bawue.dry_run.run_vorgaenge", return_value=([], [])) as mock_rv,
+            patch("bawue.dry_run.run_beteiligung", return_value=[]),
+            patch("bawue.dry_run.run_sitzungen", return_value=([], 0, 0)),
+            patch("bawue.dry_run.check_for_newer_wahlperiode"),
+            patch("bawue.dry_run.build_summary", return_value=self._mock_summary()),
+            patch("bawue.dry_run.format_summary", return_value="ok"),
+        ):
+            main(["--lookback-days", "30"])
+
+        expected_start = date.today() - timedelta(days=30)
+        assert mock_rv.call_args.kwargs["wahlperiode_start_date"] == expected_start
+
+    def test_main_calls_check_for_newer_wahlperiode(self):
+        with (
+            patch("bawue.dry_run.run_vorgaenge", return_value=([], [])),
+            patch("bawue.dry_run.run_beteiligung", return_value=[]),
+            patch("bawue.dry_run.run_sitzungen", return_value=([], 0, 0)),
+            patch("bawue.dry_run.check_for_newer_wahlperiode") as mock_check,
+            patch("bawue.dry_run.build_summary", return_value=self._mock_summary()),
+            patch("bawue.dry_run.format_summary", return_value="ok"),
+        ):
+            main([])
+
+        mock_check.assert_called_once_with(17)
