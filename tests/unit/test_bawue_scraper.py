@@ -886,3 +886,185 @@ class TestStellungnahmenAsChildren:
 
         assert len(vorgang.stationen) == 0
         assert any("Stellungnahme" in msg and "V-701" in msg for msg in caplog.messages)
+
+
+class TestKleineAnfrageHierarchy:
+    """Tests for Kleine Anfrage + Stellungnahme pairing."""
+
+    def test_kleine_anfrage_station_type_is_parl_initiativ(self, scraper_build_vorgang):
+        """Kleine Anfrage should map to parl-initiativ, not sonstig."""
+        raw = _make_raw_vorgang(
+            "V-900",
+            vorgangstyp="Kleine Anfrage",
+            initiative="Dr. Schweickert (FDP/DVP)",
+            fundstellen=[
+                {
+                    "raw": "Kleine Anfrage   Dr. Schweickert (FDP/DVP)  15.01.2026 Drucksache 17/10143  (4 S.)",
+                    "datum": "15.01.2026",
+                    "drucksache": "17/10143",
+                    "station_typ": "Kleine Anfrage",
+                    "seiten": 4,
+                    "pdf_url": "https://example.com/anfrage.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_INITIATIV
+        assert vorgang.stationen[0].dokumente[0].actual_instance.typ == Doktyp.ANFRAGE
+
+    def test_kleine_anfrage_with_stellungnahme(self, scraper_build_vorgang):
+        """Stellungnahme attaches as child of Kleine Anfrage station."""
+        raw = _make_raw_vorgang(
+            "V-901",
+            vorgangstyp="Kleine Anfrage",
+            initiative="Dr. Schweickert (FDP/DVP)",
+            fundstellen=[
+                {
+                    "raw": "Kleine Anfrage   Dr. Schweickert (FDP/DVP)  15.01.2026 Drucksache 17/10143  (4 S.)",
+                    "datum": "15.01.2026",
+                    "drucksache": "17/10143",
+                    "station_typ": "Kleine Anfrage",
+                    "seiten": 4,
+                    "pdf_url": "https://example.com/anfrage.pdf",
+                },
+                {
+                    "raw": "Stellungnahme    Ministerium für Verkehr  19.02.2026 Drucksache 17/10240  (5 S.)",
+                    "datum": "19.02.2026",
+                    "drucksache": "17/10240",
+                    "station_typ": "Stellungnahme",
+                    "autor_text": "Ministerium für Verkehr",
+                    "seiten": 5,
+                    "pdf_url": "https://example.com/antwort.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_INITIATIV
+        assert vorgang.stationen[0].stellungnahmen is not None
+        assert len(vorgang.stationen[0].stellungnahmen) == 1
+        assert vorgang.stationen[0].stellungnahmen[0].actual_instance.typ == Doktyp.STELLUNGNAHME
+
+    def test_stellungnahme_without_pdf_still_attaches(self, scraper_build_vorgang):
+        """Stellungnahme without PDF URL should still attach as child (empty docs)."""
+        raw = _make_raw_vorgang(
+            "V-902",
+            vorgangstyp="Kleine Anfrage",
+            initiative="Dr. Schweickert (FDP/DVP)",
+            fundstellen=[
+                {
+                    "raw": "Kleine Anfrage   Dr. Schweickert (FDP/DVP)  15.01.2026 Drucksache 17/10143  (4 S.)",
+                    "datum": "15.01.2026",
+                    "drucksache": "17/10143",
+                    "station_typ": "Kleine Anfrage",
+                    "seiten": 4,
+                    "pdf_url": "https://example.com/anfrage.pdf",
+                },
+                {
+                    "raw": "Stellungnahme    Ministerium für Verkehr  19.02.2026 Drucksache 17/10240  (5 S.)",
+                    "datum": "19.02.2026",
+                    "drucksache": "17/10240",
+                    "station_typ": "Stellungnahme",
+                    "autor_text": "Ministerium für Verkehr",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        # Should be 1 station (Kleine Anfrage), not 2 (with an empty Stellungnahme station)
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_INITIATIV
+
+
+class TestDedupDrucks:
+    """Tests for per-station Drucksache deduplication."""
+
+    def test_duplicate_drucksache_removed(self, scraper_build_vorgang):
+        """Same Drucksache appearing twice in a station → deduplicated to 1."""
+        raw = _make_raw_vorgang(
+            "V-910",
+            fundstellen=[
+                {
+                    "raw": "Beschlussempfehlung   Ausschuss für Wirtschaft  01.02.2026 Drucksache 17/10210",
+                    "datum": "01.02.2026",
+                    "drucksache": "17/10210",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/report1.pdf",
+                },
+                {
+                    "raw": "Ausschussberatung   Ausschuss für Wirtschaft  05.02.2026 Drucksache 17/10210",
+                    "datum": "05.02.2026",
+                    "drucksache": "17/10210",
+                    "station_typ": "Ausschussberatung",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/report1.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        # Both fundstellen merge into 1 Ausschuss station; dedup removes the duplicate doc
+        ausschuss_stationen = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_AUSSCHBER]
+        assert len(ausschuss_stationen) == 1
+        assert len(ausschuss_stationen[0].dokumente) == 1
+
+    def test_different_drucksache_kept(self, scraper_build_vorgang):
+        """Different Drucksache numbers in same station → both kept."""
+        raw = _make_raw_vorgang(
+            "V-911",
+            fundstellen=[
+                {
+                    "raw": "Beschlussempfehlung   Ausschuss für Wirtschaft  01.02.2026 Drucksache 17/10210",
+                    "datum": "01.02.2026",
+                    "drucksache": "17/10210",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/report1.pdf",
+                },
+                {
+                    "raw": "Ausschussberatung   Ausschuss für Wirtschaft  05.02.2026 Drucksache 17/10211",
+                    "datum": "05.02.2026",
+                    "drucksache": "17/10211",
+                    "station_typ": "Ausschussberatung",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/report2.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        ausschuss_stationen = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_AUSSCHBER]
+        assert len(ausschuss_stationen) == 1
+        assert len(ausschuss_stationen[0].dokumente) == 2
+
+    def test_documents_without_drucksnr_always_kept(self, scraper_build_vorgang):
+        """Documents without drucksnr are never deduplicated."""
+        raw = _make_raw_vorgang(
+            "V-912",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp141.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp141b.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        # Both merged into 1 station; no drucksnr → both kept (no dedup key)
+        assert len(vorgang.stationen) == 1
+        assert len(vorgang.stationen[0].dokumente) == 2

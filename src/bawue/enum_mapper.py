@@ -54,6 +54,9 @@ VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
 STATIONSTYP_MAP: dict[str, Stationstyp] = {
     "Gesetzentwurf": Stationstyp.PARL_MINUS_INITIATIV,
     "Antrag": Stationstyp.PARL_MINUS_INITIATIV,
+    "Kleine Anfrage": Stationstyp.PARL_MINUS_INITIATIV,
+    "Große Anfrage": Stationstyp.PARL_MINUS_INITIATIV,
+    "Mündliche Anfrage": Stationstyp.PARL_MINUS_INITIATIV,
     "Erste Beratung": Stationstyp.PARL_MINUS_VOLLVLSGN,
     "Zweite Beratung": Stationstyp.PARL_MINUS_VOLLVLSGN,
     "Dritte Beratung": Stationstyp.PARL_MINUS_VOLLVLSGN,

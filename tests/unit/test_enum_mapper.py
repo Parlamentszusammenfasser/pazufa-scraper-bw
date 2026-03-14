@@ -82,6 +82,21 @@ class TestStationstypMapping:
                 None,
                 Stationstyp.PARL_MINUS_AUSSCHBER,
             ),
+            (
+                "Kleine Anfrage   Dr. Schweickert (FDP/DVP)  15.01.2026 Drucksache 17/10143",
+                None,
+                Stationstyp.PARL_MINUS_INITIATIV,
+            ),
+            (
+                "Große Anfrage   Fraktion der SPD  10.01.2026 Drucksache 17/10100",
+                None,
+                Stationstyp.PARL_MINUS_INITIATIV,
+            ),
+            (
+                "Mündliche Anfrage   Plenarprotokoll 17/141 05.02.2026",
+                None,
+                Stationstyp.PARL_MINUS_INITIATIV,
+            ),
             ("Zustimmung   Plenarprotokoll 17/143", None, Stationstyp.PARL_MINUS_AKZEPTANZ),
             ("Ablehnung   Plenarprotokoll 17/143", None, Stationstyp.PARL_MINUS_ABLEHNUNG),
             ("Ausfertigung   10.03.2026", None, Stationstyp.POSTPARL_MINUS_VESJA),

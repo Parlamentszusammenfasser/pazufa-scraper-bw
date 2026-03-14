@@ -194,8 +194,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
         stationen: list[Station] = []
         for fund in fundstellen:
             station = self._build_station(fund, initiative)
+            station_typ_str = fund.get("station_typ", "")
 
-            if self._is_stellungnahme(station):
+            if self._is_stellungnahme(station, station_typ_str):
                 self._attach_stellungnahme(stationen, station.dokumente, vorgang_id)
                 continue
 
@@ -203,6 +204,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 continue
 
             stationen.append(station)
+
+        for station in stationen:
+            station.dokumente = _dedup_drucks(station.dokumente)
         return stationen
 
     @staticmethod
@@ -230,12 +234,21 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 return s
         return None
 
+    _STELLUNGNAHME_STATION_TYPEN: frozenset[str] = frozenset({"stellungnahme", "antwort"})
+
     @staticmethod
-    def _is_stellungnahme(station: Station) -> bool:
-        """Check if all documents in a station are Stellungnahmen (position statements)."""
-        return bool(station.dokumente) and all(
+    def _is_stellungnahme(station: Station, station_typ_str: str = "") -> bool:
+        """Check if a station represents a Stellungnahme (position statement).
+
+        Detected by either:
+        - All documents having Doktyp.STELLUNGNAHME (standard case with PDF)
+        - The Fundstelle type being "Stellungnahme"/"Antwort" with no documents (no PDF URL)
+        """
+        if station.dokumente and all(
             d.actual_instance.typ == Doktyp.STELLUNGNAHME for d in station.dokumente
-        )
+        ):
+            return True
+        return not station.dokumente and station_typ_str.lower() in BawueVorgaengeScraper._STELLUNGNAHME_STATION_TYPEN
 
     @staticmethod
     def _attach_stellungnahme(
@@ -327,6 +340,24 @@ class BawueVorgaengeScraper(VorgangsScraper):
             drucksnr=fund.get("drucksache"),
         )
         return [StationDokumenteInner(dok)]
+
+
+def _dedup_drucks(doks: list[StationDokumenteInner]) -> list[StationDokumenteInner]:
+    """Remove duplicate documents with the same Drucksache number.
+
+    Documents without a drucksnr are always kept (no dedup key).
+    Ported from the BY scraper's dedup_drucks pattern.
+    """
+    unique: list[StationDokumenteInner] = []
+    seen_drucksnr: set[str] = set()
+    for d in doks:
+        drucksnr = d.actual_instance.drucksnr
+        if drucksnr:
+            if drucksnr in seen_drucksnr:
+                continue
+            seen_drucksnr.add(drucksnr)
+        unique.append(d)
+    return unique
 
 
 # -- Run summary ------------------------------------------------------------------
