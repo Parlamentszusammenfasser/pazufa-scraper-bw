@@ -1,5 +1,5 @@
 # ---- Builder stage ----
-FROM python:3.12.9-slim AS builder
+FROM python:3.14.3-slim AS builder
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -8,7 +8,7 @@ RUN apt-get update \
         poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir poetry==2.1.1
+RUN pip install --no-cache-dir poetry==2.3.2
 
 WORKDIR /app
 
@@ -26,22 +26,21 @@ RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --only main --no-root
 
 # ---- Runtime stage ----
-FROM python:3.12.9-slim
+FROM python:3.14.3-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tesseract-ocr \
         tesseract-ocr-deu \
         poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN groupadd --gid 1000 app \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 1000 app \
     && useradd --uid 1000 --gid app --create-home app
 
 WORKDIR /app
 
 # Copy installed Python packages from builder
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY src/ src/
