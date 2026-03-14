@@ -15,3 +15,8 @@ config.*.toml
 locallogs/
 .coverage
 vendor/
+
+## test artifacts
+MagicMock/
+__pycache__/
+
