@@ -10,17 +10,20 @@ services:
   scraper:
     build: .
     # Override entrypoint to drop --once so the framework loops via cycle-time-s
-    entrypoint: ["python", "-m", "collector", "--config-file", "config.toml"]
+    entrypoint: ["sh", "-c", "python -m collector --config-file config.toml 2>&1 | tee /app/locallogs/stdout.log"]
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       CYCLE_TIME_S: 300          # re-run every 5 minutes
+      PYTHONUNBUFFERED: "1"
       #LTZF_API_URL: ${LTZF_API_URL:?Set LTZF_API_URL in .env}
       #LTZF_API_KEY: ${LTZF_API_KEY:?Set LTZF_API_KEY in .env}
       #LLM_PROVIDER_KEY: ${LLM_PROVIDER_KEY:-}
     volumes:
       # Mount staging config over the baked-in config.toml
       - ./config.staging.toml:/app/config.toml:ro
+      # Persist locallogs (JSONL collector output + stdout.log) to host
+      - ./locallogs:/app/locallogs
     depends_on:
       - redis
     restart: unless-stopped
