@@ -12,7 +12,7 @@ import logging
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date
+from datetime import date, timedelta
 
 import requests
 from icalendar import Calendar
@@ -62,6 +62,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=date.fromisoformat,
         default=DEFAULT_WAHLPERIODE_START,
         help="Start date of the Wahlperiode (default: 2021-04-26)",
+    )
+    parser.add_argument(
+        "--lookback-days",
+        type=int,
+        default=None,
+        help="Only scrape the last N days (default: entire Wahlperiode)",
     )
     parser.add_argument(
         "--workers",
@@ -231,6 +237,9 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     check_for_newer_wahlperiode(args.wahlperiode)
+
+    if args.lookback_days is not None:
+        args.wahlperiode_start_date = date.today() - timedelta(days=args.lookback_days)
 
     start = time.monotonic()
 

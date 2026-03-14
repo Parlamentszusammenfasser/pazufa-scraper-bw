@@ -1,0 +1,19 @@
+# Secrets and configuration with credentials
+config.toml
+*.env
+.env*
+
+# Virtual environments
+.venv/
+
+# Vendored dependencies
+vendor/
+
+# Compiled bytecode
+__pycache__/
+*.pyc
+
+# IDE and tool caches
+.idea/
+.ruff_cache/
+.pytest_cache/
