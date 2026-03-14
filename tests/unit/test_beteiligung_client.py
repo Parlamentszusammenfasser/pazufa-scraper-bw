@@ -52,6 +52,26 @@ class TestFetchProcessList:
         assert processes[0].slug == "test-gesetz"
 
     @responses.activate
+    def test_filters_non_lp_processes_after_redirect(self, client):
+        """Only lp-17 processes are returned even if the index page shows other periods."""
+        mixed_html = """<html><body>
+    <article class="teaser tx-bw_textimageteaser_pi1">
+        <div class="teaser__headline"><h2>Test LP17</h2></div>
+        <a class="teaser__overlay-link" href="/de/mitmachen/lp-17/test-gesetz">Mehr</a>
+    </article>
+    <article class="teaser tx-bw_textimageteaser_pi1">
+        <div class="teaser__headline"><h2>Old LP16</h2></div>
+        <a class="teaser__overlay-link" href="/de/mitmachen/lp-16/old-gesetz">Mehr</a>
+    </article>
+    </body></html>"""
+        responses.add(responses.GET, LP17_URL, body=mixed_html, status=200)
+
+        processes = client.fetch_process_list()
+
+        assert len(processes) == 1
+        assert processes[0].slug == "test-gesetz"
+
+    @responses.activate
     def test_uses_correct_url_for_wahlperiode(self):
         client = BeteiligungClient(wahlperiode=18, request_delay_s=0.0)
         lp18_url = f"{BASE_URL}/de/mitmachen/lp-18"

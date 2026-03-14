@@ -146,3 +146,7 @@ class TestParseProcessDetail:
     def test_title_strips_soft_hyphens(self, rettungsdienstplanverordnung_html):
         detail = parse_process_detail(rettungsdienstplanverordnung_html, BASE_URL)
         assert "\xad" not in detail.title
+
+    def test_title_extracted_from_article_template(self, klima_register_html):
+        detail = parse_process_detail(klima_register_html, BASE_URL)
+        assert detail.title == "Klima-Maßnahmen-Register 2026"

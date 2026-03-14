@@ -47,7 +47,18 @@ class BeteiligungClient:
         url = f"{BASE_URL}/de/mitmachen/lp-{self._wahlperiode}"
         logger.info("Fetching Beteiligungsportal index: %s", url)
         resp = self._get(url, timeout=30)
-        return parse_process_list(resp.text)
+        all_processes = parse_process_list(resp.text)
+
+        lp_prefix = f"/de/mitmachen/lp-{self._wahlperiode}/"
+        processes = [p for p in all_processes if p.url.startswith(lp_prefix)]
+
+        if len(processes) < len(all_processes):
+            logger.warning(
+                "Filtered %d processes not matching lp-%d (index page may have redirected to broader listing)",
+                len(all_processes) - len(processes),
+                self._wahlperiode,
+            )
+        return processes
 
     def fetch_process_detail(self, process_path: str) -> str:
         """Fetch a single process detail page, return HTML."""
