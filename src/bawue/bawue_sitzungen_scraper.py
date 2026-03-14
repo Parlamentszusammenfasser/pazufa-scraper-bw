@@ -42,6 +42,11 @@ class BawueSitzungenScraper(SitzungsScraper):
         super().__init__(config, uuid.UUID(config.collector_id), [ics_url], session)
 
         self._events_by_date: dict[str, list] = {}
+        self._total_events: int = 0
+        self._total_dates: int = 0
+        self._published_dates: int = 0
+        self._failed_dates: int = 0
+        self._published_sitzungen: int = 0
 
     @staticmethod
     def _load_bawue_config(config: CollectorConfiguration) -> dict:
@@ -62,6 +67,9 @@ class BawueSitzungenScraper(SitzungsScraper):
         finally:
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
+            _print_sitzungen_summary(
+                self._total_dates, self._published_dates, self._failed_dates, self._published_sitzungen, duration
+            )
 
     async def listing_page_extractor(self, url: str) -> list[str]:
         """Fetch the ICS feed and return ISO date strings as listing keys."""
@@ -78,6 +86,8 @@ class BawueSitzungenScraper(SitzungsScraper):
             self._events_by_date[key] = evts
             date_keys.append(key)
 
+        self._total_events = len(events)
+        self._total_dates = len(date_keys)
         logger.info("Parsed %d events across %d dates from ICS feed", len(events), len(date_keys))
         return date_keys
 
@@ -139,6 +149,8 @@ class BawueSitzungenScraper(SitzungsScraper):
                     sitzung=item[1],
                 )
                 logger.info("API Response: %s", ret)
+                self._published_dates += 1
+                self._published_sitzungen += len(item[1])
                 return item
             except openapi_client.ApiException as e:
                 logger.error("API Exception: %s", e)
@@ -147,7 +159,27 @@ class BawueSitzungenScraper(SitzungsScraper):
                     self.log_item(item, True)
                 elif e.status == 401:
                     logger.critical("Authentication failed. Check your API key.")
+                self._failed_dates += 1
                 return None
             except Exception as e:
                 logger.error("Unexpected error sending item to API: %s", e)
+                self._failed_dates += 1
                 return None
+
+
+def _print_sitzungen_summary(
+    total_dates: int,
+    published_dates: int,
+    failed_dates: int,
+    published_sitzungen: int,
+    duration: float,
+) -> None:
+    lines = [
+        "=== BaWue Sitzungen Run Summary ===",
+        f"Duration: {duration:.1f}s",
+        f"Dates found:      {total_dates}",
+        f"Dates published:  {published_dates}",
+        f"Dates failed:     {failed_dates}",
+        f"Total sitzungen:  {published_sitzungen}",
+    ]
+    print("\n".join(lines))

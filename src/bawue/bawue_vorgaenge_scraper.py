@@ -78,6 +78,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # of hashable keys, but we need the full raw data for conversion.
         self._raw_cache: dict[str, RawVorgang] = {}
 
+        self._published: int = 0
+        self._failed: int = 0
+        self._skipped: int = 0
+        self._by_type: dict[str, int] = {}
+
     @staticmethod
     def _load_bawue_config(config: CollectorConfiguration) -> dict:
         """Load [bawue] section from the collector config file."""
@@ -98,6 +103,17 @@ class BawueVorgaengeScraper(VorgangsScraper):
         finally:
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
+            _print_vorgaenge_summary(
+                self._wahlperiode, self._by_type, self._published, self._skipped, self._failed, duration
+            )
+
+    async def send_result(self, item: Vorgang) -> Vorgang | None:
+        result = await super().send_result(item)
+        if result is not None:
+            self._published += 1
+        else:
+            self._failed += 1
+        return result
 
     async def listing_page_extractor(self, vorgangstyp: str) -> list[str]:
         """Search PARLIS for a given Vorgangstyp and return vorgang IDs.
@@ -119,6 +135,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 self._raw_cache[vid] = raw
                 vorgang_ids.append(vid)
 
+        self._by_type[vorgangstyp] = self._by_type.get(vorgangstyp, 0) + len(vorgang_ids)
         return vorgang_ids
 
     async def item_extractor(self, vorgang_id: str) -> Vorgang | None:
@@ -129,6 +146,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         raw = self._raw_cache.pop(vorgang_id, None)
         if raw is None:
             logger.error("No raw data found for vorgang_id %s", vorgang_id)
+            self._skipped += 1
             return None
 
         return self._build_vorgang(raw)
@@ -309,6 +327,34 @@ class BawueVorgaengeScraper(VorgangsScraper):
             drucksnr=fund.get("drucksache"),
         )
         return [StationDokumenteInner(dok)]
+
+
+# -- Run summary ------------------------------------------------------------------
+
+
+def _print_vorgaenge_summary(
+    wahlperiode: int,
+    by_type: dict[str, int],
+    published: int,
+    skipped: int,
+    failed: int,
+    duration: float,
+) -> None:
+    discovered = sum(by_type.values())
+    lines = [
+        "=== BaWue Vorgänge Run Summary ===",
+        f"Wahlperiode: {wahlperiode} | Duration: {duration:.1f}s",
+        f"Discovered:  {discovered}",
+        f"Published:   {published}",
+        f"Skipped:     {skipped}",
+        f"Failed:      {failed}",
+    ]
+    if by_type:
+        lines.append("")
+        lines.append("By type:")
+        for typ, count in by_type.items():
+            lines.append(f"  {typ}:  {count}")
+    print("\n".join(lines))
 
 
 # -- Date parsing helpers ----------------------------------------------------------

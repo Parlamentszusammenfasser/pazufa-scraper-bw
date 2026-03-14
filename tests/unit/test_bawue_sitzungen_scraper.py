@@ -23,6 +23,11 @@ def _make_scraper() -> BawueSitzungenScraper:
     scraper.listing_urls = [ICS_URL]
     scraper.session = MagicMock()
     scraper.scraper_id = "00000000-0000-0000-0000-000000000001"
+    scraper._total_events = 0
+    scraper._total_dates = 0
+    scraper._published_dates = 0
+    scraper._failed_dates = 0
+    scraper._published_sitzungen = 0
     return scraper
 
 
@@ -138,7 +143,7 @@ class TestItemExtractor:
 
         result = await scraper.item_extractor("2026-02-24")
 
-        termin, sitzungen = result
+        _termin, sitzungen = result
         assert len(sitzungen) == 2
         gremium_names = {s.gremium.name for s in sitzungen}
         assert "Ausschusssitzungen" in gremium_names
@@ -214,6 +219,69 @@ class TestSendResult:
             kwargs = call_kwargs.kwargs if hasattr(call_kwargs, "kwargs") else {}
             all_args = {**args, **kwargs}
             assert all_args["parlament"] == Parlament.BW
+
+
+class TestRunSummary:
+    @pytest.mark.asyncio
+    async def test_summary_printed_to_stdout(self, capsys):
+        scraper = _make_scraper()
+
+        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "=== BaWue Sitzungen Run Summary ===" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_summary_shows_published_dates(self, capsys):
+        scraper = _make_scraper()
+        scraper._total_dates = 5
+        scraper._published_dates = 3
+
+        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Dates published:" in captured.out
+        assert "3" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_summary_shows_failed_dates(self, capsys):
+        scraper = _make_scraper()
+        scraper._failed_dates = 2
+
+        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Dates failed:" in captured.out
+        assert "2" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_summary_shows_total_sitzungen(self, capsys):
+        scraper = _make_scraper()
+        scraper._published_sitzungen = 7
+
+        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Total sitzungen:" in captured.out
+        assert "7" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_summary_still_printed_on_run_failure(self, capsys):
+        scraper = _make_scraper()
+
+        mock_run = AsyncMock(side_effect=RuntimeError("boom"))
+        with (
+            patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=mock_run),
+            pytest.raises(RuntimeError),
+        ):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "=== BaWue Sitzungen Run Summary ===" in captured.out
 
 
 class TestRunDurationLog:

@@ -24,6 +24,9 @@ def _make_scraper():
     scraper._wahlperiode = 17
     scraper._raw_cache = {}
     scraper._client = MagicMock()
+    scraper._published = 0
+    scraper._failed = 0
+    scraper._skipped = 0
     return scraper
 
 
@@ -237,6 +240,83 @@ class TestItemExtractor:
         result = await scraper.item_extractor("missing-slug")
 
         assert result is None
+
+
+class TestRunSummary:
+    @pytest.mark.asyncio
+    async def test_summary_printed_to_stdout(self, capsys):
+        scraper = _make_scraper()
+
+        with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "=== BaWue Beteiligung Run Summary ===" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_summary_shows_published_count(self, capsys):
+        scraper = _make_scraper()
+        mock_vorgang = MagicMock()
+
+        with patch(
+            "bawue.bawue_beteiligung_scraper.VorgangsScraper.send_result", new=AsyncMock(return_value=mock_vorgang)
+        ):
+            await scraper.send_result(mock_vorgang)
+            await scraper.send_result(mock_vorgang)
+
+        with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Published:" in captured.out
+        assert scraper._published == 2
+
+    @pytest.mark.asyncio
+    async def test_summary_shows_skipped_count(self, capsys):
+        scraper = _make_scraper()
+        detail = _make_detail(pdf_links=[])
+        scraper._raw_cache["test-slug"] = _make_process(slug="test-slug")
+
+        with (
+            patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", return_value="<html></html>"),
+            patch("bawue.bawue_beteiligung_scraper.parse_process_detail", return_value=detail),
+        ):
+            await scraper.item_extractor("test-slug")
+
+        with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Skipped:" in captured.out
+        assert scraper._skipped == 1
+
+    @pytest.mark.asyncio
+    async def test_summary_shows_failed_count(self, capsys):
+        scraper = _make_scraper()
+
+        with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.send_result", new=AsyncMock(return_value=None)):
+            await scraper.send_result(MagicMock())
+
+        with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Failed:" in captured.out
+        assert scraper._failed == 1
+
+    @pytest.mark.asyncio
+    async def test_summary_still_printed_on_run_failure(self, capsys):
+        scraper = _make_scraper()
+
+        mock_run = AsyncMock(side_effect=RuntimeError("boom"))
+        with (
+            patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=mock_run),
+            pytest.raises(RuntimeError),
+        ):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "=== BaWue Beteiligung Run Summary ===" in captured.out
 
 
 class TestRunDurationLog:

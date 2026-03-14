@@ -2,7 +2,7 @@
 
 import logging
 from datetime import UTC, date, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from openapi_client.models.doktyp import Doktyp
@@ -184,6 +184,10 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     scraper._raw_cache = {}
     scraper._parlis = MagicMock()
     scraper._parlis.search.return_value = search_return or []
+    scraper._published = 0
+    scraper._failed = 0
+    scraper._skipped = 0
+    scraper._by_type = {}
     return scraper
 
 
@@ -417,6 +421,89 @@ class TestDatetimeFallbackWarning:
         assert any("17/10266" in msg for msg in caplog.messages)
 
 
+class TestRunSummary:
+    @pytest.mark.asyncio
+    async def test_summary_printed_to_stdout(self, capsys):
+        scraper = _make_scraper_with_mock_parlis()
+
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
+            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+        ):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "=== BaWue Vorgänge Run Summary ===" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_summary_shows_published_count(self, capsys):
+        scraper = _make_scraper_with_mock_parlis()
+        mock_vorgang = MagicMock()
+
+        with patch(
+            "bawue.bawue_vorgaenge_scraper.VorgangsScraper.send_result", new=AsyncMock(return_value=mock_vorgang)
+        ):
+            await scraper.send_result(mock_vorgang)
+            await scraper.send_result(mock_vorgang)
+
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
+            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+        ):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Published:" in captured.out
+        assert scraper._published == 2
+
+    @pytest.mark.asyncio
+    async def test_summary_shows_failed_count(self, capsys):
+        scraper = _make_scraper_with_mock_parlis()
+
+        with patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.send_result", new=AsyncMock(return_value=None)):
+            await scraper.send_result(MagicMock())
+
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
+            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+        ):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Failed:" in captured.out
+        assert scraper._failed == 1
+
+    @pytest.mark.asyncio
+    async def test_summary_shows_by_type(self, capsys):
+        scraper = _make_scraper_with_mock_parlis()
+        scraper._by_type = {"Kleine Anfrage": 3}
+
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
+            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+        ):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Kleine Anfrage" in captured.out
+        assert "3" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_summary_still_printed_on_run_failure(self, capsys):
+        scraper = _make_scraper_with_mock_parlis()
+
+        mock_run = AsyncMock(side_effect=RuntimeError("boom"))
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=mock_run),
+            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+            pytest.raises(RuntimeError),
+        ):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "=== BaWue Vorgänge Run Summary ===" in captured.out
+
+
 class TestRunDurationLog:
     @pytest.mark.asyncio
     async def test_logs_completed_in_on_success(self, caplog):
@@ -424,6 +511,10 @@ class TestRunDurationLog:
 
         scraper = object.__new__(BawueVorgaengeScraper)
         scraper._wahlperiode = DEFAULT_WAHLPERIODE
+        scraper._published = 0
+        scraper._failed = 0
+        scraper._skipped = 0
+        scraper._by_type = {}
 
         with (
             patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
@@ -440,6 +531,10 @@ class TestRunDurationLog:
 
         scraper = object.__new__(BawueVorgaengeScraper)
         scraper._wahlperiode = DEFAULT_WAHLPERIODE
+        scraper._published = 0
+        scraper._failed = 0
+        scraper._skipped = 0
+        scraper._by_type = {}
 
         mock_run = AsyncMock(side_effect=RuntimeError("boom"))
         with (

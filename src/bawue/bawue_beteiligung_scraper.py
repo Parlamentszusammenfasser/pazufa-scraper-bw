@@ -56,6 +56,10 @@ class BawueBeteiligungScraper(VorgangsScraper):
         self._client = BeteiligungClient(wahlperiode=self._wahlperiode, request_delay_s=delay)
         self._raw_cache: dict[str, RawBeteiligungProcess] = {}
 
+        self._published: int = 0
+        self._failed: int = 0
+        self._skipped: int = 0
+
     @staticmethod
     def _load_config(config: CollectorConfiguration) -> dict:
         """Load [beteiligung] section from the collector config file."""
@@ -75,6 +79,15 @@ class BawueBeteiligungScraper(VorgangsScraper):
         finally:
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
+            _print_beteiligung_summary(self._published, self._skipped, self._failed, duration)
+
+    async def send_result(self, item: Vorgang) -> Vorgang | None:
+        result = await super().send_result(item)
+        if result is not None:
+            self._published += 1
+        else:
+            self._failed += 1
+        return result
 
     async def listing_page_extractor(self, lp_key: str) -> list[str]:
         """Fetch the process list and return slugs for each process."""
@@ -107,6 +120,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         """
         if not detail.pdf_links:
             logger.info("Skipping '%s' — no Entwurf PDFs found", detail.title)
+            self._skipped += 1
             return None
 
         api_id = uuid5(NAMESPACE_URL, f"beteiligung-{slug}")
@@ -156,3 +170,16 @@ class BawueBeteiligungScraper(VorgangsScraper):
             stationen=[station],
             ids=ids,
         )
+
+
+def _print_beteiligung_summary(published: int, skipped: int, failed: int, duration: float) -> None:
+    discovered = published + skipped + failed
+    lines = [
+        "=== BaWue Beteiligung Run Summary ===",
+        f"Duration: {duration:.1f}s",
+        f"Discovered:  {discovered}",
+        f"Published:   {published}",
+        f"Skipped:     {skipped}  (no legislative PDFs)",
+        f"Failed:      {failed}",
+    ]
+    print("\n".join(lines))
