@@ -1,6 +1,7 @@
 """Tests for the BawueBeteiligungScraper."""
 
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import NAMESPACE_URL, uuid5
@@ -141,6 +142,34 @@ class TestBuildVorgang:
         assert vorgang.ids is not None
         assert len(vorgang.ids) == 1
         assert "beteiligungsportal" in vorgang.ids[0].id
+
+    def test_zp_start_is_timezone_aware(self):
+        """Naive datetimes cause API 422 'premature end of input' errors."""
+        scraper = _make_scraper()
+        detail = _make_detail(comment_deadline="13.11.2025")
+        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+
+        station = vorgang.stationen[0]
+        assert station.zp_start.tzinfo is not None
+        assert station.zp_start == datetime(2025, 11, 13, tzinfo=UTC)
+
+    def test_zp_start_without_deadline_is_timezone_aware(self):
+        """Fallback to now() must also be timezone-aware."""
+        scraper = _make_scraper()
+        detail = _make_detail(comment_deadline=None)
+        vorgang = scraper._build_vorgang("test-slug", detail)
+
+        station = vorgang.stationen[0]
+        assert station.zp_start.tzinfo is not None
+
+    def test_document_timestamps_are_timezone_aware(self):
+        scraper = _make_scraper()
+        detail = _make_detail(comment_deadline="13.11.2025")
+        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+
+        doc = vorgang.stationen[0].dokumente[0].actual_instance
+        assert doc.zp_modifiziert.tzinfo is not None
+        assert doc.zp_referenz.tzinfo is not None
 
     def test_no_pdfs_returns_none(self):
         scraper = _make_scraper()

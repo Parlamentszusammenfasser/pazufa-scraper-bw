@@ -1,7 +1,7 @@
 """Tests for the BawueVorgaengeScraper item_extractor logic."""
 
 import logging
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -282,6 +282,7 @@ class TestPlaceholderDate:
         assert station.zp_start.year == 2028
         assert station.zp_start.month == 1
         assert station.zp_start.day == 1
+        assert station.zp_start.tzinfo is not None, "zp_start must be timezone-aware to avoid API 422 errors"
 
     def test_zero_day_month_logs_warning(self, scraper_build_vorgang, caplog):
         scraper = object.__new__(BawueVorgaengeScraper)
@@ -304,6 +305,70 @@ class TestPlaceholderDate:
             scraper._build_vorgang(raw)
 
         assert any("00.00.2028" in msg for msg in caplog.messages)
+
+
+class TestDatetimesAreTimezoneAware:
+    """All zp_start/zp_modifiziert/zp_referenz datetimes must be timezone-aware.
+
+    The API rejects naive datetimes (serialized without +00:00 suffix) with a 422
+    'premature end of input' error on the zp_start field.
+    """
+
+    def test_normal_date_is_timezone_aware(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-700",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  15.06.2025 Drucksache 17/12345",
+                    "datum": "15.06.2025",
+                    "drucksache": "17/12345",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+        station = vorgang.stationen[0]
+
+        assert station.zp_start.tzinfo is not None
+        assert station.zp_start == datetime(2025, 6, 15, tzinfo=UTC)
+
+    def test_missing_date_fallback_is_timezone_aware(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-701",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Test",
+                    "datum": "",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                    "drucksache": "17/10266",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+        station = vorgang.stationen[0]
+
+        assert station.zp_start.tzinfo is not None
+
+    def test_placeholder_date_fallback_is_timezone_aware(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-702",
+            fundstellen=[
+                {
+                    "raw": "Antrag    Fraktion GRÜNE  00.00.2028 Drucksache 17/99999",
+                    "datum": "00.00.2028",
+                    "drucksache": "17/99999",
+                    "station_typ": "Antrag",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+        station = vorgang.stationen[0]
+
+        assert station.zp_start.tzinfo is not None
+        assert station.zp_start == datetime(2028, 1, 1, tzinfo=UTC)
 
 
 class TestDatetimeFallbackWarning:

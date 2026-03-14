@@ -5,7 +5,7 @@ import logging
 import re
 import time
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
@@ -333,10 +333,10 @@ def _parse_fundstelle_date(fund: RawFundstelle) -> datetime:
             fund.get("raw", ""),
             fund.get("drucksache", "unknown"),
         )
-        return datetime.now()
+        return datetime.now(UTC)
 
     try:
-        return datetime.strptime(datum_str, "%d.%m.%Y")
+        return datetime.strptime(datum_str, "%d.%m.%Y").replace(tzinfo=UTC)
     except ValueError:
         return _fallback_date_from_year(datum_str, fund)
 
@@ -352,7 +352,7 @@ def _fallback_date_from_year(datum_str: str, fund: RawFundstelle) -> datetime:
             fund.get("drucksache", "unknown"),
             year_match.group(),
         )
-        return datetime(int(year_match.group()), 1, 1)
+        return datetime(int(year_match.group()), 1, 1, tzinfo=UTC)
 
     logger.warning(
         "Unparseable date '%s' for Fundstelle '%s' (Drucksache: %s), using current time",
@@ -360,4 +360,4 @@ def _fallback_date_from_year(datum_str: str, fund: RawFundstelle) -> datetime:
         fund.get("raw", ""),
         fund.get("drucksache", "unknown"),
     )
-    return datetime.now()
+    return datetime.now(UTC)

@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
@@ -112,7 +112,11 @@ class BawueBeteiligungScraper(VorgangsScraper):
         api_id = uuid5(NAMESPACE_URL, f"beteiligung-{slug}")
 
         # Parse comment deadline as station timestamp
-        zp_start = datetime.strptime(detail.comment_deadline, "%d.%m.%Y") if detail.comment_deadline else datetime.now()
+        zp_start = (
+            datetime.strptime(detail.comment_deadline, "%d.%m.%Y").replace(tzinfo=UTC)
+            if detail.comment_deadline
+            else datetime.now(UTC)
+        )
 
         # Build documents
         dokumente: list[StationDokumenteInner] = []
