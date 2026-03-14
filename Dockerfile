@@ -16,8 +16,8 @@ COPY pyproject.toml poetry.lock ./
 COPY vendor/pazufa-collector/ vendor/pazufa-collector/
 
 # Rewrite local path dependencies from ../pazufa-collector to vendor/pazufa-collector
-RUN sed -i 's|path = "\.\./pazufa-collector"|path = "vendor/pazufa-collector"|' pyproject.toml \
-    && sed -i 's|path = "\.\./pazufa-collector/oapicode"|path = "vendor/pazufa-collector/oapicode"|' pyproject.toml \
+RUN sed -i 's|path = "\.\./pazufa-collector", develop = true|path = "vendor/pazufa-collector"|' pyproject.toml \
+    && sed -i 's|path = "\.\./pazufa-collector/oapicode", develop = true|path = "vendor/pazufa-collector/oapicode"|' pyproject.toml \
     && sed -i 's|url = "\.\./pazufa-collector"|url = "vendor/pazufa-collector"|' poetry.lock \
     && sed -i 's|url = "\.\./pazufa-collector/oapicode"|url = "vendor/pazufa-collector/oapicode"|' poetry.lock
 
@@ -45,6 +45,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY src/ src/
 COPY config.sample.toml config.toml
+ENV PYTHONPATH=/app/src
 
 RUN chown -R app:app /app
 USER app

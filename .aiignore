@@ -1,5 +1,6 @@
 # Secrets and configuration with credentials
 config.toml
+config.*.toml
 *.env
 .env*
 
