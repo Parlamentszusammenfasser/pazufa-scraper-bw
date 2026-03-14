@@ -207,7 +207,7 @@ flowchart TD
 
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.14+
 - [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) (framework dependency, cloned alongside)
 - Redis (required at runtime; the framework connects on startup and exits if unavailable — use `docker-compose up -d` for local dev)
 - Tesseract OCR with German language pack (for PDF extraction via framework pipeline)
@@ -222,11 +222,9 @@ git clone https://codeberg.org/PaZuFa/pazufa-collector.git
 # Enter the project and create virtual environment
 cd pazufa-bawue-scraper
 python3 -m venv .venv
-source .venv/bin/activate
 
-# Install with Poetry
-pip install poetry
-poetry install
+# Install all dependencies
+make install
 
 # Configure
 # Edit config.sample.toml with your API credentials and settings
@@ -237,8 +235,10 @@ poetry install
 The scraper is run via the pazufa-collector framework runner:
 
 ```bash
-# Run the collector framework (discovers and runs all scrapers in scraper-dir)
-python -m collector --config-file config.sample.toml
+make run
+
+# Or with a custom config file:
+.venv/bin/python -m collector --config-file config.sample.toml
 
 # The framework automatically:
 # - Discovers BawueVorgaengeScraper, BawueBeteiligungScraper and BawueSitzungenScraper in src/bawue/
@@ -254,25 +254,23 @@ python -m collector --config-file config.sample.toml
 Run the scraper pipeline without posting to the API to diagnose what gets scraped, parsed, and what's missing:
 
 ```bash
-source .venv/bin/activate
-
 # Run all scrapers with default settings (7-day lookback)
-python -m bawue.dry_run
+.venv/bin/python -m bawue.dry_run
 
 # Run only Vorgaenge for a specific type, limited to 3 items, with full detail
-python -m bawue.dry_run --scraper vorgaenge --vorgangstyp "Kleine Anfrage" --limit 3 --verbosity 2
+.venv/bin/python -m bawue.dry_run --scraper vorgaenge --vorgangstyp "Kleine Anfrage" --limit 3 --verbosity 2
 
 # Run only Beteiligung scraper
-python -m bawue.dry_run --scraper beteiligung
+.venv/bin/python -m bawue.dry_run --scraper beteiligung
 
 # Run only Sitzungen scraper
-python -m bawue.dry_run --scraper sitzungen
+.venv/bin/python -m bawue.dry_run --scraper sitzungen
 
 # Output as JSON
-python -m bawue.dry_run --json --limit 5
+.venv/bin/python -m bawue.dry_run --json --limit 5
 
 # Custom lookback and wahlperiode
-python -m bawue.dry_run --lookback-days 30 --wahlperiode 17
+.venv/bin/python -m bawue.dry_run --lookback-days 30 --wahlperiode 17
 ```
 
 **CLI options:**
@@ -305,8 +303,7 @@ docker-compose up -d
 **1. Start the mock server:**
 
 ```bash
-source .venv/bin/activate
-python mock_pazufa_server.py --port 8080
+.venv/bin/python mock_pazufa_server.py --port 8080
 ```
 
 The server prints startup info and then logs every incoming request:
@@ -331,8 +328,7 @@ ltzf-api-key  = "any-key-or-paste-a-real-jwt-here"
 **3. Run the scraper:**
 
 ```bash
-source .venv/bin/activate
-python -m collector --config-file config.toml
+make run
 ```
 
 Every `PUT /api/v2/vorgang` and `PUT /api/v2/kalender/BW/{date}` call will be logged to the mock
@@ -386,40 +382,26 @@ Configuration uses the pazufa-collector 4-tier system: Defaults → TOML (`confi
 
 ## Development
 
-### Running tests
+A `Makefile` is provided so you don't need to activate the venv manually. Run `make help` to list all targets.
 
 ```bash
-# Unit tests only (default, fast)
-source .venv/bin/activate
-pytest
-
-# With coverage
-pytest --cov=bawue
-
-# Include integration tests (requires running PaZuFa backend)
-pytest -m integration
-
-# All tests
-pytest -m ""
-```
-
-### Linting and formatting
-
-```bash
-ruff check src/ tests/        # lint
-ruff check --fix src/ tests/  # lint with auto-fix
-ruff format src/ tests/       # format
+make install          # Install dependencies via Poetry
+make test             # Unit tests (default, fast)
+make test-cov         # Tests with coverage
+make test-all         # All tests including integration
+make test-integration # Integration tests only (requires backend)
+make lint             # Lint
+make lint-fix         # Lint with auto-fix
+make format           # Format code
+make run              # Run the scraper
+make package          # Vendor collector + Docker build
+make clean            # Remove .venv, __pycache__, .pytest_cache
 ```
 
 ### Docker
 
 ```bash
-# Copy pazufa-collector into vendor/ for Docker build
-mkdir -p vendor
-cp -r ../pazufa-collector vendor/pazufa-collector
-
-# Build and run
-docker build -t bawue-scraper .
+make package          # vendors collector + builds image
 docker run bawue-scraper
 ```
 
