@@ -178,6 +178,8 @@ class TestBuildVorgang:
 
 def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(2021, 4, 26)):
     """Create a minimal BawueVorgaengeScraper without full init, with a mock ParlisClient."""
+    from bawue.rate_limiter import AdaptiveRateLimiter
+
     scraper = object.__new__(BawueVorgaengeScraper)
     scraper._wahlperiode = 17
     scraper._wahlperiode_start_date = wahlperiode_start
@@ -188,6 +190,13 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     scraper._failed = 0
     scraper._skipped = 0
     scraper._by_type = {}
+    scraper._upload_limiter = AdaptiveRateLimiter(
+        initial_delay=0.2, min_delay=0.05, backoff_multiplier=10.0, recovery_factor=0.5
+    )
+    mock_config = MagicMock()
+    mock_config.dry_run = False
+    scraper.config = mock_config
+    scraper.scraper_id = "test-scraper-id"
     return scraper
 
 
@@ -440,9 +449,11 @@ class TestRunSummary:
         scraper = _make_scraper_with_mock_parlis()
         mock_vorgang = MagicMock()
 
-        with patch(
-            "bawue.bawue_vorgaenge_scraper.VorgangsScraper.send_result", new=AsyncMock(return_value=mock_vorgang)
-        ):
+        with patch("bawue.bawue_vorgaenge_scraper.openapi_client") as mock_oapi:
+            mock_api_instance = MagicMock()
+            mock_oapi.ApiClient.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_oapi.ApiClient.return_value.__exit__ = MagicMock(return_value=False)
+            mock_oapi.api.collector_schnittstellen_api.CollectorSchnittstellenApi.return_value = mock_api_instance
             await scraper.send_result(mock_vorgang)
             await scraper.send_result(mock_vorgang)
 
@@ -458,9 +469,19 @@ class TestRunSummary:
 
     @pytest.mark.asyncio
     async def test_summary_shows_failed_count(self, capsys):
+        import openapi_client as real_oapi
+
         scraper = _make_scraper_with_mock_parlis()
 
-        with patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.send_result", new=AsyncMock(return_value=None)):
+        with patch("bawue.bawue_vorgaenge_scraper.openapi_client") as mock_oapi:
+            mock_oapi.ApiException = real_oapi.ApiException
+            mock_oapi.ApiClient.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_oapi.ApiClient.return_value.__exit__ = MagicMock(return_value=False)
+            mock_api_instance = MagicMock()
+            mock_api_instance.vorgang_put.side_effect = real_oapi.ApiException(
+                status=500, reason="Internal Server Error"
+            )
+            mock_oapi.api.collector_schnittstellen_api.CollectorSchnittstellenApi.return_value = mock_api_instance
             await scraper.send_result(MagicMock())
 
         with (

@@ -9,6 +9,9 @@ from datetime import UTC, date, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
+import openapi_client
+import openapi_client.api
+import openapi_client.api.collector_schnittstellen_api
 import toml
 from collector.config import CollectorConfiguration
 from collector.interface import VorgangsScraper
@@ -28,7 +31,9 @@ from openapi_client.models.doktyp import Doktyp
 
 from bawue.enum_mapper import VORGANGSTYP_MAP, map_dokumententyp, map_stationstyp, map_vorgangstyp
 from bawue.parlis_client import ParlisClient
+from bawue.rate_limiter import AdaptiveRateLimiter
 from bawue.types import RawFundstelle, RawVorgang
+from bawue.upload_throttle import with_upload_retry
 from bawue.wahlperiode_check import check_for_newer_wahlperiode
 
 logger = logging.getLogger(__name__)
@@ -78,6 +83,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # of hashable keys, but we need the full raw data for conversion.
         self._raw_cache: dict[str, RawVorgang] = {}
 
+        self._upload_limiter = AdaptiveRateLimiter(
+            initial_delay=0.2,
+            min_delay=0.05,
+            backoff_multiplier=10.0,
+            recovery_factor=0.5,
+        )
+
         self._published: int = 0
         self._failed: int = 0
         self._skipped: int = 0
@@ -108,12 +120,39 @@ class BawueVorgaengeScraper(VorgangsScraper):
             )
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
-        result = await super().send_result(item)
-        if result is not None:
+        logger.info("Sending Vorgang '%s' (id=%s) to API", item.titel, item.api_id)
+        self.log_item(item)
+
+        if self.config.dry_run:
+            logger.info("[DRY RUN] Would send Vorgang '%s' — skipping API call", item.titel)
             self._published += 1
-        else:
+            return item
+
+        try:
+            with openapi_client.ApiClient(self.config.oapiconfig) as api_client:
+                api_instance = openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi(
+                    api_client
+                )
+                with_upload_retry(
+                    lambda: api_instance.vorgang_put(str(self.scraper_id), item),
+                    self._upload_limiter,
+                    exception_type=openapi_client.ApiException,
+                )
+            self._published += 1
+            return item
+        except openapi_client.ApiException as e:
+            logger.error("API Exception: %s", e)
+            if e.status == 422:
+                logger.error("Unprocessable Entity for Vorgang '%s'", item.titel)
+                self.log_item(item, True)
+            elif e.status == 401:
+                logger.critical("Authentication failed. Check your API key.")
             self._failed += 1
-        return result
+            return None
+        except Exception as e:
+            logger.error("Unexpected error sending Vorgang to API: %s", e)
+            self._failed += 1
+            return None
 
     async def listing_page_extractor(self, vorgangstyp: str) -> list[str]:
         """Search PARLIS for a given Vorgangstyp and return vorgang IDs.

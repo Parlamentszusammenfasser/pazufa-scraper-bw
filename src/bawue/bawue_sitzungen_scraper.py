@@ -20,6 +20,8 @@ from collector.interface import SitzungsScraper
 from openapi_client.models import Gremium, Parlament, Sitzung
 
 from bawue.ics_parser import group_events_by_date, parse_ics_feed
+from bawue.rate_limiter import AdaptiveRateLimiter
+from bawue.upload_throttle import with_upload_retry
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,13 @@ class BawueSitzungenScraper(SitzungsScraper):
         ics_url = bawue_config.get("ics-url", DEFAULT_ICS_URL)
 
         super().__init__(config, uuid.UUID(config.collector_id), [ics_url], session)
+
+        self._upload_limiter = AdaptiveRateLimiter(
+            initial_delay=0.2,
+            min_delay=0.05,
+            backoff_multiplier=10.0,
+            recovery_factor=0.5,
+        )
 
         self._events_by_date: dict[str, list] = {}
         self._total_events: int = 0
@@ -142,11 +151,15 @@ class BawueSitzungenScraper(SitzungsScraper):
                 api_client
             )
             try:
-                ret = api_instance.kal_date_put(
-                    x_scraper_id=str(self.scraper_id),
-                    parlament=Parlament.BW,
-                    datum=item[0],
-                    sitzung=item[1],
+                ret = with_upload_retry(
+                    lambda: api_instance.kal_date_put(
+                        x_scraper_id=str(self.scraper_id),
+                        parlament=Parlament.BW,
+                        datum=item[0],
+                        sitzung=item[1],
+                    ),
+                    self._upload_limiter,
+                    exception_type=openapi_client.ApiException,
                 )
                 logger.info("API Response: %s", ret)
                 self._published_dates += 1

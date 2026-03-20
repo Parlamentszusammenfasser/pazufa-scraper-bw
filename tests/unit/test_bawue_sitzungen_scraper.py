@@ -19,12 +19,17 @@ ICS_URL = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkal
 
 def _make_scraper() -> BawueSitzungenScraper:
     """Create a BawueSitzungenScraper without calling __init__."""
+    from bawue.rate_limiter import AdaptiveRateLimiter
+
     scraper = object.__new__(BawueSitzungenScraper)
     scraper._wahlperiode = 17
     scraper._events_by_date = {}
     scraper.listing_urls = [ICS_URL]
     scraper.session = MagicMock()
     scraper.scraper_id = "00000000-0000-0000-0000-000000000001"
+    scraper._upload_limiter = AdaptiveRateLimiter(
+        initial_delay=0.2, min_delay=0.05, backoff_multiplier=10.0, recovery_factor=0.5
+    )
     scraper._total_events = 0
     scraper._total_dates = 0
     scraper._published_dates = 0
