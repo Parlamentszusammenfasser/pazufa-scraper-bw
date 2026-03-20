@@ -47,6 +47,32 @@ VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
 }
 
 # ---------------------------------------------------------------------------
+# Stationstyp-Referenz: Alle 16 Enum-Werte aus der OpenAPI-Spezifikation
+#
+# Vorparlamentarisch (preparl-*):
+#   PREPARL_MINUS_REGENT  — Regierungsentwurf (Gesetzentwurf der Landesregierung)
+#   PREPARL_MINUS_ECKPUP  — Eckpunktepapier (Vorentwurf mit Kernpunkten)
+#   PREPARL_MINUS_REGBSL  — Regierungsbeschluss (Kabinettsbeschluss)
+#   PREPARL_MINUS_VBEGDE  — Verbändebeteiligung / Begründung (Anhörung externer Verbände)
+#
+# Parlamentarisch (parl-*):
+#   PARL_MINUS_INITIATIV  — Parlamentarische Initiative (Gesetzentwurf, Antrag, Anfrage)
+#   PARL_MINUS_AUSSCHBER  — Ausschussberatung (Beratung in Fachausschüssen)
+#   PARL_MINUS_VOLLVLSGN  — Vollversammlung / Lesung (1./2./3. Lesung im Plenum)
+#   PARL_MINUS_AKZEPTANZ  — Akzeptanz (Verabschiedung / Annahme durch den Landtag)
+#   PARL_MINUS_ABLEHNUNG  — Ablehnung (Ablehnung durch den Landtag)
+#   PARL_MINUS_ZURUECKGZ  — Zurückgezogen (Vorgang vom Initiator zurückgezogen)
+#   PARL_MINUS_GGENTWURF  — Gegenentwurf (Alternativentwurf zu einem Gesetzentwurf)
+#
+# Nachparlamentarisch (postparl-*):
+#   POSTPARL_MINUS_VESJA  — Ausfertigung (Unterschrift durch den Ministerpräsidenten)
+#   POSTPARL_MINUS_VESNE  — Veto (Ausfertigung verweigert)
+#   POSTPARL_MINUS_GSBLT  — Gesetzblatt (Verkündung im Gesetzblatt)
+#   POSTPARL_MINUS_KRAFT  — Inkrafttreten (Gesetz tritt in Kraft)
+#
+# Sonstige:
+#   SONSTIG               — Nicht zuordenbare Stationen
+# ---------------------------------------------------------------------------
 # Stationstyp mapping: Fundstelle text pattern → PaZuFa Stationstyp
 # Ordered longest-first so "Beschlussempfehlung und Bericht" matches before
 # shorter patterns. "Gesetzentwurf" must come after "Erste/Zweite/Dritte Beratung".
