@@ -163,4 +163,5 @@ See [docs/anforderungen.md — Konfiguration](docs/anforderungen.md#konfiguratio
 - [parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser) — Main project
 - [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) — Collector framework
 - [pazufa-backend](https://codeberg.org/PaZuFa/pazufa-backend) — Backend service
+- [PaZuFa backend OpenAPI Spec](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/specs/openapi.yml)
 - [Landtag BaWue](https://www.landtag-bw.de/)

@@ -461,13 +461,16 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 |--------------------------------------------------|----------------------|
 | Gesetzentwurf (from Landesregierung)             | `preparl-regent`     |
 | Gesetzentwurf (from Fraktion/Abgeordnete)        | `parl-initiativ`     |
-| Antrag                                           | `parl-initiativ`     |
+| Antrag, Anträge                                  | `parl-initiativ`     |
 | Erste Beratung, Zweite Beratung, Dritte Beratung | `parl-vollvlsgn`     |
 | Beschlussempfehlung und Bericht                  | `parl-ausschber`     |
+| Bericht und Empfehlungen                         | `parl-ausschber`     |
 | Ausschussberatung                                | `parl-ausschber`     |
+| Gesetzesbeschluss, Beschluss des Landtags        | `parl-akzeptanz`     |
 | Zustimmung, Annahme                              | `parl-akzeptanz`     |
 | Ablehnung                                        | `parl-ablehnung`     |
 | Ausfertigung                                     | `postparl-vesja`     |
+| Gesetz, Bekanntmachung                           | `postparl-gsblt`     |
 | Gesetzblatt                                      | `postparl-gsblt`     |
 | Inkrafttreten                                    | `postparl-kraft`     |
 | *(unrecognized)*                                 | `sonstig`            |

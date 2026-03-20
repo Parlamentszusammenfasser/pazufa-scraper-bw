@@ -98,10 +98,40 @@ class TestStationstypMapping:
                 Stationstyp.PARL_MINUS_INITIATIV,
             ),
             ("Zustimmung   Plenarprotokoll 17/143", None, Stationstyp.PARL_MINUS_AKZEPTANZ),
+            (
+                "Gesetzesbeschluss des Landtags      05.02.2026 Drucksache 17/10267",
+                None,
+                Stationstyp.PARL_MINUS_AKZEPTANZ,
+            ),
+            (
+                "Beschluss des Landtags in Zweiter Beratung      06.02.2026 Drucksache 17/2271",
+                None,
+                Stationstyp.PARL_MINUS_AKZEPTANZ,
+            ),
             ("Ablehnung   Plenarprotokoll 17/143", None, Stationstyp.PARL_MINUS_ABLEHNUNG),
             ("Ausfertigung   10.03.2026", None, Stationstyp.POSTPARL_MINUS_VESJA),
+            (
+                "Gesetz  vom 10. Februar 2026 Gesetzblatt für Baden-Württemberg 2026 Nr. 22",
+                None,
+                Stationstyp.POSTPARL_MINUS_GSBLT,
+            ),
+            (
+                "Bekanntmachung der Neufassung      12.05.2021",
+                None,
+                Stationstyp.POSTPARL_MINUS_GSBLT,
+            ),
             ("Gesetzblatt   15.03.2026", None, Stationstyp.POSTPARL_MINUS_GSBLT),
             ("Inkrafttreten   01.04.2026", None, Stationstyp.POSTPARL_MINUS_KRAFT),
+            (
+                "Änderungsanträge    Fraktion der FDP/DVP  20.07.2021 Drucksache 17/569",
+                None,
+                Stationstyp.PARL_MINUS_INITIATIV,
+            ),
+            (
+                "Bericht und Empfehlungen    Petitionsausschuss  15.03.2026 Drucksache 17/1234",
+                None,
+                Stationstyp.PARL_MINUS_AUSSCHBER,
+            ),
         ],
     )
     def test_known_patterns(self, text, initiator, expected):
@@ -113,6 +143,18 @@ class TestStationstypMapping:
 
     def test_case_insensitive(self):
         assert map_stationstyp("erste beratung   Plenarprotokoll 17/141") == Stationstyp.PARL_MINUS_VOLLVLSGN
+
+    def test_longer_keys_take_precedence_over_gesetz(self):
+        """'Gesetzentwurf' and 'Gesetzesbeschluss' must match before shorter 'Gesetz'."""
+        assert map_stationstyp("Gesetzentwurf    Fraktion GRÜNE") == Stationstyp.PARL_MINUS_INITIATIV
+        assert map_stationstyp("Gesetzesbeschluss des Landtags      05.02.2026") == Stationstyp.PARL_MINUS_AKZEPTANZ
+        assert map_stationstyp("Gesetzblatt   15.03.2026") == Stationstyp.POSTPARL_MINUS_GSBLT
+        # Only bare "Gesetz" (enacted law) matches the short key
+        assert map_stationstyp("Gesetz  vom 10. Februar 2026") == Stationstyp.POSTPARL_MINUS_GSBLT
+
+    def test_antraege_plural_maps_to_initiativ(self):
+        """Plural 'Änderungsanträge' (with umlaut ä) must not fall through to SONSTIG."""
+        assert map_stationstyp("Änderungsanträge    Fraktion der FDP/DVP") == Stationstyp.PARL_MINUS_INITIATIV
 
 
 class TestDokumententypMapping:
