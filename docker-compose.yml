@@ -16,9 +16,9 @@ services:
       REDIS_PORT: 6379
       CYCLE_TIME_S: 300          # re-run every 5 minutes
       PYTHONUNBUFFERED: "1"
-      #LTZF_API_URL: ${LTZF_API_URL:?Set LTZF_API_URL in .env}
-      #LTZF_API_KEY: ${LTZF_API_KEY:?Set LTZF_API_KEY in .env}
-      #LLM_PROVIDER_KEY: ${LLM_PROVIDER_KEY:-}
+      LTZF_API_URL: ${LTZF_API_URL:?Set LTZF_API_URL in .env}
+      LTZF_API_KEY: ${LTZF_API_KEY:?Set LTZF_API_KEY in .env}
+      LLM_PROVIDER_KEY: ${LLM_PROVIDER_KEY:?SET LLM_PROVIDER_KEY in .env}
     volumes:
       # Mount staging config over the baked-in config.toml
       - ./config.staging.toml:/app/config.toml:ro

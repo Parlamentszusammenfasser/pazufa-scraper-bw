@@ -49,16 +49,16 @@ Runs the scraper pipeline without posting to the API — useful for local diagno
 .venv/bin/python -m bawue.dry_run --json --limit 5                             # JSON output
 ```
 
-| Option            | Default      | Description                                                   |
-|-------------------|--------------|---------------------------------------------------------------|
-| `--scraper`       | `all`        | `vorgaenge`, `beteiligung`, `sitzungen`, or `all`             |
-| `--vorgangstyp`   | *(all)*      | Limit to one PARLIS Vorgangstyp (e.g. `"Kleine Anfrage"`)    |
-| `--lookback-days` | 7            | Days to look back for PARLIS search                           |
-| `--wahlperiode`   | 17           | Wahlperiode number                                            |
-| `--limit`         | *(no limit)* | Max items per scraper                                         |
-| `--verbosity`     | 0            | 0=summary, 1=type breakdown, 2=per-item detail                |
-| `--json`          | off          | Output JSON instead of formatted text                         |
-| `--ics-url`       | *(default)*  | Custom ICS calendar URL                                       |
+| Option            | Default      | Description                                               |
+|-------------------|--------------|-----------------------------------------------------------|
+| `--scraper`       | `all`        | `vorgaenge`, `beteiligung`, `sitzungen`, or `all`         |
+| `--vorgangstyp`   | *(all)*      | Limit to one PARLIS Vorgangstyp (e.g. `"Kleine Anfrage"`) |
+| `--lookback-days` | 7            | Days to look back for PARLIS search                       |
+| `--wahlperiode`   | 17           | Wahlperiode number                                        |
+| `--limit`         | *(no limit)* | Max items per scraper                                     |
+| `--verbosity`     | 0            | 0=summary, 1=type breakdown, 2=per-item detail            |
+| `--json`          | off          | Output JSON instead of formatted text                     |
+| `--ics-url`       | *(default)*  | Custom ICS calendar URL                                   |
 
 ### Mock Backend
 
@@ -104,6 +104,34 @@ make clean            # Remove .venv, __pycache__, .pytest_cache
 
 Run `make help` to list all targets.
 
+## Running against Staging
+
+The `docker-compose.yml` runs the scraper with Redis and expects secrets in a `.env` file (git-ignored).
+
+**1. Create `.env` from the example:**
+```bash
+cp .env.example .env
+# Edit .env and fill in the real values
+```
+
+| Variable           | Description                                               |
+|--------------------|-----------------------------------------------------------|
+| `LTZF_API_URL`     | PaZuFa backend URL (e.g. `https://staging.api.pazufa.de`) |
+| `LTZF_API_KEY`     | PaZuFa API key (`ltzf_...`)                               |
+| `LLM_PROVIDER_KEY` | LLM provider API key (e.g. OpenAI `sk-...`)               |
+
+**2. Start the stack:**
+```bash
+docker-compose up -d
+```
+
+This mounts `config.staging.toml` as the config file and injects secrets from `.env` into the container. The scraper re-runs every 5 minutes (`CYCLE_TIME_S=300`). Logs are persisted to `./locallogs/`.
+
+**3. Watch logs:**
+```bash
+docker-compose logs -f scraper
+```
+
 ## Docker
 
 ```bash
@@ -123,11 +151,11 @@ See [docs/anforderungen.md — Konfiguration](docs/anforderungen.md#konfiguratio
 
 ## Documentation
 
-| Topic | File |
-|-------|------|
+| Topic                                                      | File                                           |
+|------------------------------------------------------------|------------------------------------------------|
 | Requirements, data models, API, enumerations, data sources | [docs/anforderungen.md](docs/anforderungen.md) |
-| Architecture, components, PARLIS strategy, enum mapping | [docs/architecture.md](docs/architecture.md) |
-| Implementation status, field matrix, roadmap | [docs/status.md](docs/status.md) |
+| Architecture, components, PARLIS strategy, enum mapping    | [docs/architecture.md](docs/architecture.md)   |
+| Implementation status, field matrix, roadmap               | [docs/status.md](docs/status.md)               |
 
 ## Links
 
