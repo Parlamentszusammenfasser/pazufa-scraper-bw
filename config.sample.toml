@@ -26,6 +26,12 @@ openai-api-key = "SET_VIA_ENV"
 wahlperiode = 17
 parlis-request-delay-s = 1.0
 wahlperiode-start-date = "2021-04-26"  # WP 17: Landtag constituted
+# Only scrape Vorgangstypen supported by the backend. Others map to SONSTIG and are rejected.
+# Available values: "Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag", "Antrag",
+#   "Kleine Anfrage", "Große Anfrage", "Anfrage", "Entschließungsantrag", "Dringlicher Antrag",
+#   "Dringliche Anfrage", "Änderungsantrag", "Unterrichtung", "Bericht", "Wahlvorschlag",
+#   "Sonstiges"
+enabled-vorgangstypen = ["Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag"]
 ics-url = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkalender.ics"
 
 # Beteiligungsportal-specific configuration

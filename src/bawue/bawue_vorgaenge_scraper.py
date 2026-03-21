@@ -29,7 +29,7 @@ from openapi_client.models import (
 )
 from openapi_client.models.doktyp import Doktyp
 
-from bawue.enum_mapper import VORGANGSTYP_MAP, map_dokumententyp, map_stationstyp, map_vorgangstyp
+from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
 from bawue.parlis_client import ParlisClient
 from bawue.rate_limiter import AdaptiveRateLimiter
 from bawue.types import RawFundstelle, RawVorgang
@@ -45,7 +45,11 @@ def _parse_autoren(text: str) -> list[Autor]:
     return [Autor(organisation=part.strip()) for part in text.split(",") if part.strip()]
 
 
-DEFAULT_VORGANGSTYPEN: list[str] = list(VORGANGSTYP_MAP.keys())
+DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [
+    "Gesetzgebung",
+    "Haushaltsgesetzgebung",
+    "Volksantrag",
+]
 DEFAULT_WAHLPERIODE = 17
 DEFAULT_WAHLPERIODE_START = date(2021, 4, 26)  # WP 17 BW: Landtag constituted
 DEFAULT_PARLIS_DELAY = 1.0
@@ -68,7 +72,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         parlis_delay = bawue_config.get("parlis-request-delay-s", DEFAULT_PARLIS_DELAY)
 
         # The listing_urls are Vorgangstyp strings — the framework passes them to listing_page_extractor
-        listing_urls = DEFAULT_VORGANGSTYPEN
+        listing_urls = bawue_config.get("enabled-vorgangstypen", DEFAULT_ENABLED_VORGANGSTYPEN)
+        self._enabled_vorgangstypen: frozenset[str] = frozenset(listing_urls)
 
         super().__init__(config, uuid.UUID(config.collector_id), listing_urls, session)
 
@@ -170,6 +175,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
         vorgang_ids = []
         for raw in raw_vorgaenge:
             vid = raw.get("vorgangs_id", "")
+            typ = raw.get("Vorgangstyp", "")
+            if typ not in self._enabled_vorgangstypen:
+                logger.debug("Skipping Vorgang %s with unsupported type '%s'", vid, typ)
+                self._skipped += 1
+                continue
             if vid:
                 self._raw_cache[vid] = raw
                 vorgang_ids.append(vid)

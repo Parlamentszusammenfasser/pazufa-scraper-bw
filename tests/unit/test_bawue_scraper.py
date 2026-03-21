@@ -9,7 +9,12 @@ from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.stationstyp import Stationstyp
 from openapi_client.models.vorgangstyp import Vorgangstyp
 
-from bawue.bawue_vorgaenge_scraper import DEFAULT_WAHLPERIODE, BawueVorgaengeScraper, _parse_autoren
+from bawue.bawue_vorgaenge_scraper import (
+    DEFAULT_ENABLED_VORGANGSTYPEN,
+    DEFAULT_WAHLPERIODE,
+    BawueVorgaengeScraper,
+    _parse_autoren,
+)
 
 
 def _make_raw_vorgang(
@@ -186,6 +191,7 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     scraper._raw_cache = {}
     scraper._parlis = MagicMock()
     scraper._parlis.search.return_value = search_return or []
+    scraper._enabled_vorgangstypen = frozenset(DEFAULT_ENABLED_VORGANGSTYPEN)
     scraper._published = 0
     scraper._failed = 0
     scraper._skipped = 0
@@ -1089,3 +1095,59 @@ class TestDedupDrucks:
         # Both merged into 1 station; no drucksnr → both kept (no dedup key)
         assert len(vorgang.stationen) == 1
         assert len(vorgang.stationen[0].dokumente) == 2
+
+
+class TestEnabledVorgangstypen:
+    def test_default_enabled_vorgangstypen_are_supported_types_only(self):
+        assert DEFAULT_ENABLED_VORGANGSTYPEN == [
+            "Gesetzgebung",
+            "Haushaltsgesetzgebung",
+            "Volksantrag",
+        ]
+
+    def test_load_bawue_config_reads_enabled_vorgangstypen(self, tmp_path):
+        config_file = tmp_path / "config.toml"
+        config_file.write_text(
+            '[bawue]\nenabled-vorgangstypen = ["Gesetzgebung", "Volksantrag"]\n'
+        )
+        mock_config = MagicMock()
+        mock_config.config_file = str(config_file)
+
+        result = BawueVorgaengeScraper._load_bawue_config(mock_config)
+
+        assert result["enabled-vorgangstypen"] == ["Gesetzgebung", "Volksantrag"]
+
+    def test_load_bawue_config_returns_empty_when_no_bawue_section(self, tmp_path):
+        config_file = tmp_path / "config.toml"
+        config_file.write_text("[main]\ncollector-uuid = 'test'\n")
+        mock_config = MagicMock()
+        mock_config.config_file = str(config_file)
+
+        result = BawueVorgaengeScraper._load_bawue_config(mock_config)
+
+        assert result.get("enabled-vorgangstypen", DEFAULT_ENABLED_VORGANGSTYPEN) == DEFAULT_ENABLED_VORGANGSTYPEN
+
+    @pytest.mark.asyncio
+    async def test_listing_page_extractor_drops_unsupported_vorgangstypen(self):
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode_start_date = date(2021, 4, 26)
+        scraper._enabled_vorgangstypen = frozenset(["Gesetzgebung"])
+        scraper._raw_cache = {}
+        scraper._by_type = {}
+        scraper._skipped = 0
+        scraper._parlis = MagicMock()
+        scraper._parlis.search.return_value = [
+            {"vorgangs_id": "V-001", "Vorgangstyp": "Gesetzgebung"},
+            {"vorgangs_id": "V-002", "Vorgangstyp": "Petition"},
+            {"vorgangs_id": "V-003", "Vorgangstyp": "Gesetzgebung"},
+            {"vorgangs_id": "V-004", "Vorgangstyp": "UnknownType"},
+        ]
+
+        result = await scraper.listing_page_extractor("Gesetzgebung")
+
+        assert result == ["V-001", "V-003"]
+        assert "V-001" in scraper._raw_cache
+        assert "V-003" in scraper._raw_cache
+        assert "V-002" not in scraper._raw_cache
+        assert "V-004" not in scraper._raw_cache
+        assert scraper._skipped == 2
