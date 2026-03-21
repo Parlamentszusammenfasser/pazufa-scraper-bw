@@ -263,7 +263,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
         """Try to merge a station into an existing one. Returns True if merged."""
         if station.typ == Stationstyp.PARL_MINUS_AUSSCHBER:
             match = BawueVorgaengeScraper._find_matching_ausschuss(stationen, station.gremium.name)
-        elif stationen and stationen[-1].typ == station.typ and stationen[-1].gremium.name == station.gremium.name:
+        elif (stationen
+              and stationen[-1].typ == station.typ
+              and stationen[-1].gremium.name == station.gremium.name
+              and station.typ != Stationstyp.PARL_MINUS_VOLLVLSGN):
             match = stationen[-1]
         else:
             match = None

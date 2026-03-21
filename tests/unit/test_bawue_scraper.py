@@ -698,29 +698,30 @@ class TestStationMerging:
     """Tests for merging consecutive same-type stations."""
 
     def test_consecutive_same_type_same_gremium_merged(self, scraper_build_vorgang):
-        """Two 'Erste Beratung' fundstellen with Plenum gremium → 1 station with 2 documents."""
+        """Two consecutive AKZEPTANZ fundstellen with same gremium → 1 station with 2 documents."""
         raw = _make_raw_vorgang(
             "V-800",
             fundstellen=[
                 {
-                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "raw": "Gesetzesbeschluss des Landtags      05.02.2026 Drucksache 17/10267",
                     "datum": "05.02.2026",
-                    "plenarprotokoll": "17/141",
-                    "station_typ": "Erste Beratung",
-                    "pdf_url": "https://example.com/pp141.pdf",
+                    "drucksache": "17/10267",
+                    "station_typ": "Gesetzesbeschluss",
+                    "pdf_url": "https://example.com/beschluss1.pdf",
                 },
                 {
-                    "raw": "Erste Beratung   Plenarprotokoll 17/142 06.02.2026",
+                    "raw": "Gesetzesbeschluss des Landtags      06.02.2026 Drucksache 17/10268",
                     "datum": "06.02.2026",
-                    "plenarprotokoll": "17/142",
-                    "station_typ": "Erste Beratung",
-                    "pdf_url": "https://example.com/pp142.pdf",
+                    "drucksache": "17/10268",
+                    "station_typ": "Gesetzesbeschluss",
+                    "pdf_url": "https://example.com/beschluss2.pdf",
                 },
             ],
         )
         vorgang = scraper_build_vorgang(raw)
 
         assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_AKZEPTANZ
         assert len(vorgang.stationen[0].dokumente) == 2
 
     def test_consecutive_same_type_different_gremium_not_merged(self, scraper_build_vorgang):
@@ -827,18 +828,18 @@ class TestStationMerging:
             "V-804",
             fundstellen=[
                 {
-                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "raw": "Gesetzesbeschluss des Landtags      05.02.2026 Drucksache 17/10267",
                     "datum": "05.02.2026",
-                    "plenarprotokoll": "17/141",
-                    "station_typ": "Erste Beratung",
-                    "pdf_url": "https://example.com/pp141.pdf",
+                    "drucksache": "17/10267",
+                    "station_typ": "Gesetzesbeschluss",
+                    "pdf_url": "https://example.com/beschluss1.pdf",
                 },
                 {
-                    "raw": "Erste Beratung   Plenarprotokoll 17/142 06.02.2026",
+                    "raw": "Gesetzesbeschluss des Landtags      06.02.2026 Drucksache 17/10268",
                     "datum": "06.02.2026",
-                    "plenarprotokoll": "17/142",
-                    "station_typ": "Erste Beratung",
-                    "pdf_url": "https://example.com/pp142.pdf",
+                    "drucksache": "17/10268",
+                    "station_typ": "Gesetzesbeschluss",
+                    "pdf_url": "https://example.com/beschluss2.pdf",
                 },
                 {
                     "raw": "Stellungnahme    Fraktion GRÜNE  10.02.2026 Drucksache 17/10300",
@@ -852,9 +853,64 @@ class TestStationMerging:
         vorgang = scraper_build_vorgang(raw)
 
         assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_AKZEPTANZ
         assert len(vorgang.stationen[0].dokumente) == 2
         assert vorgang.stationen[0].stellungnahmen is not None
         assert len(vorgang.stationen[0].stellungnahmen) == 1
+
+    def test_consecutive_vollvlsgn_not_merged_even_with_documents(self, scraper_build_vorgang):
+        """Two consecutive plenary readings (Erste + Zweite Beratung) with PDFs → 2 separate stations."""
+        raw = _make_raw_vorgang(
+            "V-810",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp141.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/145 12.02.2026",
+                    "datum": "12.02.2026",
+                    "plenarprotokoll": "17/145",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/pp145.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 2
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+        assert vorgang.stationen[1].typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+
+    def test_consecutive_vollvlsgn_ueberweisung_not_merged(self, scraper_build_vorgang):
+        """'Erste Beratung' + 'Überweisung' both PARL_VOLLVLSGN → 2 separate stations."""
+        raw = _make_raw_vorgang(
+            "V-811",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp141.pdf",
+                },
+                {
+                    "raw": "Überweisung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Überweisung",
+                    "pdf_url": "https://example.com/pp141b.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 2
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+        assert vorgang.stationen[1].typ == Stationstyp.PARL_MINUS_VOLLVLSGN
 
     def test_no_merge_when_no_documents(self, scraper_build_vorgang):
         """Station without documents (no pdf_url) is not merged but kept as separate station."""
@@ -1095,18 +1151,16 @@ class TestDedupDrucks:
             "V-912",
             fundstellen=[
                 {
-                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "raw": "Gesetzesbeschluss des Landtags      05.02.2026",
                     "datum": "05.02.2026",
-                    "plenarprotokoll": "17/141",
-                    "station_typ": "Erste Beratung",
-                    "pdf_url": "https://example.com/pp141.pdf",
+                    "station_typ": "Gesetzesbeschluss",
+                    "pdf_url": "https://example.com/beschluss1.pdf",
                 },
                 {
-                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "raw": "Gesetzesbeschluss des Landtags      05.02.2026",
                     "datum": "05.02.2026",
-                    "plenarprotokoll": "17/141",
-                    "station_typ": "Erste Beratung",
-                    "pdf_url": "https://example.com/pp141b.pdf",
+                    "station_typ": "Gesetzesbeschluss",
+                    "pdf_url": "https://example.com/beschluss2.pdf",
                 },
             ],
         )

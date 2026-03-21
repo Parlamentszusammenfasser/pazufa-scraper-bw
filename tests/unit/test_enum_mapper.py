@@ -166,6 +166,10 @@ class TestStationstypMapping:
         """Plural 'Änderungsanträge' (with umlaut ä) must not fall through to SONSTIG."""
         assert map_stationstyp("Änderungsanträge    Fraktion der FDP/DVP") == Stationstyp.PARL_MINUS_INITIATIV
 
+    def test_ueberweisung_maps_to_vollversammlung(self):
+        """Committee referral 'Überweisung' maps to PARL_VOLLVLSGN, not sonstig."""
+        assert map_stationstyp("Überweisung") == Stationstyp.PARL_MINUS_VOLLVLSGN
+
 
 class TestDokumententypMapping:
     @pytest.mark.parametrize(

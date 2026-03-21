@@ -85,6 +85,7 @@ STATIONSTYP_MAP: dict[str, Stationstyp] = {
     "Große Anfrage": Stationstyp.PARL_MINUS_INITIATIV,
     "Mündliche Anfrage": Stationstyp.PARL_MINUS_INITIATIV,
     "Volksantrag": Stationstyp.PARL_MINUS_INITIATIV,
+    "Überweisung": Stationstyp.PARL_MINUS_VOLLVLSGN,
     "Erste Beratung": Stationstyp.PARL_MINUS_VOLLVLSGN,
     "Zweite Beratung": Stationstyp.PARL_MINUS_VOLLVLSGN,
     "Dritte Beratung": Stationstyp.PARL_MINUS_VOLLVLSGN,
