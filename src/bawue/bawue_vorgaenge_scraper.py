@@ -373,6 +373,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
             station_typ_str,
             is_vorparlamentarisch=(station_typ == Stationstyp.PREPARL_MINUS_REGENT),
         )
+        if doc_typ == Doktyp.SONSTIG and fund.get("plenarprotokoll"):
+            doc_typ = Doktyp.REDEPROTOKOLL
 
         autor_text = fund.get("autor_text", "")
         autoren = _parse_autoren(autor_text) if autor_text else _parse_autoren(initiative)

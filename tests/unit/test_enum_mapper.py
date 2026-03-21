@@ -19,7 +19,7 @@ class TestVorgangstypMapping:
         [
             ("Gesetzgebung", Vorgangstyp.GG_MINUS_LAND_MINUS_PARL),
             ("Haushaltsgesetzgebung", Vorgangstyp.GG_MINUS_LAND_MINUS_PARL),
-            ("Volksantrag", Vorgangstyp.GG_MINUS_LAND_MINUS_PARL),
+            ("Volksantrag", Vorgangstyp.GG_MINUS_LAND_MINUS_VOLK),
             ("Antrag", Vorgangstyp.SONSTIG),
             ("Antrag der Landesregierung/eines Ministeriums", Vorgangstyp.SONSTIG),
             ("Antrag des Rechnungshofs", Vorgangstyp.SONSTIG),
@@ -132,6 +132,16 @@ class TestStationstypMapping:
                 None,
                 Stationstyp.PARL_MINUS_AUSSCHBER,
             ),
+            (
+                "Volksantrag    05.02.2023 Drucksache 17/4567",
+                None,
+                Stationstyp.PARL_MINUS_INITIATIV,
+            ),
+            (
+                "Beratung   Plenarprotokoll 17/99 12.03.2023",
+                None,
+                Stationstyp.PARL_MINUS_VOLLVLSGN,
+            ),
         ],
     )
     def test_known_patterns(self, text, initiator, expected):
@@ -198,7 +208,7 @@ class TestEnumValuesExistInFramework:
         assert bawue_values.issubset(framework_values)
 
     def test_all_vorgangstyp_values_valid(self):
-        bawue_values = {"gg-land-parl", "bw-einsatz", "sonstig"}
+        bawue_values = {"gg-land-parl", "gg-land-volk", "bw-einsatz", "sonstig"}
         framework_values = {m.value for m in Vorgangstyp}
         assert bawue_values.issubset(framework_values)
 

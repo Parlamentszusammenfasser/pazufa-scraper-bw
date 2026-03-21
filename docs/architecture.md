@@ -145,6 +145,7 @@ classDiagram
     class BawueVorgaengeScraper {
         -_parlis: ParlisClient
         -_raw_cache: dict[str, RawVorgang]
+        -_enabled_vorgangstypen: frozenset[str]
         -_wahlperiode: int
         +listing_page_extractor(vorgangstyp) list[str]
         +item_extractor(vorgang_id) Vorgang
@@ -220,13 +221,15 @@ All three scrapers follow the same two-phase pattern:
 
 | Scraper                    | `listing_urls` values        | `listing_page_extractor` returns | `item_extractor` returns       | `send_result` override |
 |----------------------------|------------------------------|----------------------------------|--------------------------------|------------------------|
-| `BawueVorgaengeScraper`    | 32 PARLIS Vorgangstyp strings | vorgang IDs                     | `Vorgang`                      | No                     |
+| `BawueVorgaengeScraper`    | enabled Vorgangstyp strings (3 by default, configurable) | vorgang IDs | `Vorgang`             | No                     |
 | `BawueBeteiligungScraper`  | LP index keys (`lp-17`)      | process slugs                    | `Vorgang\|None`                | No                     |
 | `BawueSitzungenScraper`    | ICS feed URL                 | ISO date strings                 | `(datetime, List[Sitzung])`    | Yes — use `Parlament.BW` |
 
-**PARLIS listing URL pattern:** PARLIS has no traditional listing URLs. `listing_urls` contains the 32 Vorgangstyp
-strings (e.g. `"Gesetzgebung"`, `"Kleine Anfrage"`). The framework calls `listing_page_extractor()` for each one,
-which searches PARLIS, stores raw results in `_raw_cache`, and returns vorgang IDs.
+**PARLIS listing URL pattern:** PARLIS has no traditional listing URLs. `listing_urls` contains the enabled Vorgangstyp
+strings. By default these are the 3 types with full PaZuFa model support: `"Gesetzgebung"`, `"Haushaltsgesetzgebung"`,
+and `"Volksantrag"` (configurable via `enabled-vorgangstypen` in `config.toml`). The framework calls
+`listing_page_extractor()` for each one, which searches PARLIS, stores raw results in `_raw_cache`, and returns vorgang
+IDs. Items whose `Vorgangstyp` field doesn't match the enabled set are dropped defensively even if PARLIS returns them.
 
 ### Framework-Provided Capabilities
 
@@ -285,6 +288,10 @@ sequenceDiagram
 
 Subclass of `VorgangsScraper`. Searches PARLIS by Vorgangstyp, converts raw HTML data into framework `Vorgang` models.
 Uses `_raw_cache` to bridge the listing/item phases. Configuration from `[bawue]` section.
+
+Only the Vorgangstypen listed under `enabled-vorgangstypen` in `config.toml` are scraped (default: `Gesetzgebung`,
+`Haushaltsgesetzgebung`, `Volksantrag`). These are the only types with full PaZuFa model support. Results with any
+other type are dropped defensively in `listing_page_extractor`, even if PARLIS returns them unexpectedly.
 
 ### BawueSitzungenScraper
 
@@ -445,7 +452,7 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 |-------------------------------------------|----------------|
 | Gesetzgebung                              | `gg-land-parl` |
 | Haushaltsgesetzgebung                     | `gg-land-parl` |
-| Volksantrag                               | `gg-land-parl` |
+| Volksantrag                               | `gg-land-volk` |
 | Antrag                                    | `sonstig`      |
 | Kleine Anfrage                            | `sonstig`      |
 | Große Anfrage                             | `sonstig`      |
@@ -453,7 +460,7 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | Aktuelle Debatte                          | `sonstig`      |
 | Regierungserklärung/Regierungsinformation | `sonstig`      |
 | Untersuchungsausschuss                    | `sonstig`      |
-| *(all others — 32 types total)*           | `sonstig`      |
+| *(all others — PARLIS has 29+ types)*     | `sonstig`      |
 
 ### Fundstelle → PaZuFa `Stationstyp`
 

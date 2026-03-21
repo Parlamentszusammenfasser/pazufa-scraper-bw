@@ -130,6 +130,26 @@ class TestBuildVorgang:
         assert station.gremium.name == "Plenum"
         assert station.dokumente == []
 
+    def test_plenarprotokoll_lesung_gets_redeprotokoll_doktyp(self, scraper_build_vorgang):
+        """Lesung stations with a Plenarprotokoll PDF should get Doktyp.REDEPROTOKOLL."""
+        raw = _make_raw_vorgang(
+            "V-021",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/12345/plenar.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        station = vorgang.stationen[0]
+        assert station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+        assert station.dokumente[0].actual_instance.typ == Doktyp.REDEPROTOKOLL
+
     def test_ausschuss_fundstelle_creates_committee_gremium(self, scraper_build_vorgang):
         raw = _make_raw_vorgang(
             "V-030",
