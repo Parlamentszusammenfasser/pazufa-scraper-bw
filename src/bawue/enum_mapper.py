@@ -121,6 +121,20 @@ DOKUMENTENTYP_MAP: dict[str, Doktyp] = {
     "Beschlussempfehlung": Doktyp.BESCHLUSSEMPF,
     "Plenarprotokoll": Doktyp.REDEPROTOKOLL,
     "Mitteilung": Doktyp.MITTEILUNG,
+    # Plenary readings → redeprotokoll
+    "Erste Beratung": Doktyp.REDEPROTOKOLL,
+    "Zweite Beratung": Doktyp.REDEPROTOKOLL,
+    "Dritte Beratung": Doktyp.REDEPROTOKOLL,
+    "Beratung": Doktyp.REDEPROTOKOLL,
+    # Legislative decision → mitteilung
+    "Gesetzesbeschluss": Doktyp.MITTEILUNG,
+    "Beschluss des Landtags": Doktyp.MITTEILUNG,
+    "Zustimmung": Doktyp.MITTEILUNG,
+    "Annahme": Doktyp.MITTEILUNG,
+    # Gesetzblatt publication → mitteilung
+    "Gesetzblatt": Doktyp.MITTEILUNG,
+    "Bekanntmachung": Doktyp.MITTEILUNG,
+    "Gesetz": Doktyp.MITTEILUNG,
 }
 
 _DOKUMENTENTYP_KEYS_SORTED = sorted(DOKUMENTENTYP_MAP.keys(), key=len, reverse=True)

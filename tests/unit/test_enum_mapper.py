@@ -178,6 +178,20 @@ class TestDokumententypMapping:
             ("Kleine Anfrage", False, Doktyp.ANFRAGE),
             ("Stellungnahme", False, Doktyp.STELLUNGNAHME),
             ("Beschlussempfehlung", False, Doktyp.BESCHLUSSEMPF),
+            # Plenary readings → redeprotokoll
+            ("Erste Beratung", False, Doktyp.REDEPROTOKOLL),
+            ("Zweite Beratung", False, Doktyp.REDEPROTOKOLL),
+            ("Dritte Beratung", False, Doktyp.REDEPROTOKOLL),
+            ("Beratung", False, Doktyp.REDEPROTOKOLL),
+            # Legislative decision → mitteilung
+            ("Gesetzesbeschluss", False, Doktyp.MITTEILUNG),
+            ("Beschluss des Landtags", False, Doktyp.MITTEILUNG),
+            ("Zustimmung", False, Doktyp.MITTEILUNG),
+            ("Annahme", False, Doktyp.MITTEILUNG),
+            # Gesetzblatt → mitteilung
+            ("Gesetzblatt", False, Doktyp.MITTEILUNG),
+            ("Bekanntmachung", False, Doktyp.MITTEILUNG),
+            ("Gesetz", False, Doktyp.MITTEILUNG),
         ],
     )
     def test_known_patterns(self, context, is_vorparl, expected):
@@ -186,6 +200,16 @@ class TestDokumententypMapping:
     def test_unknown_and_empty_default_to_sonstig(self):
         assert map_dokumententyp("unknown") == Doktyp.SONSTIG
         assert map_dokumententyp("") == Doktyp.SONSTIG
+
+    def test_longer_keys_take_precedence(self):
+        """Longest-first matching must prevent short keys from shadowing longer ones."""
+        # "Gesetzesbeschluss" (17 chars) matches before "Gesetz" (6 chars)
+        assert map_dokumententyp("Gesetzesbeschluss") == Doktyp.MITTEILUNG
+        # "Gesetzentwurf" (13 chars) still matches ENTWURF, not "Gesetz" → MITTEILUNG
+        assert map_dokumententyp("Gesetzentwurf") == Doktyp.ENTWURF
+        # "Beschluss des Landtags" and "Beschlussempfehlung" share no substring conflict
+        assert map_dokumententyp("Beschlussempfehlung") == Doktyp.BESCHLUSSEMPF
+        assert map_dokumententyp("Beschluss des Landtags") == Doktyp.MITTEILUNG
 
 
 class TestEnumValuesExistInFramework:
