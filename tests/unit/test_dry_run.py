@@ -3,7 +3,15 @@
 from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
-from bawue.dry_run import main, parse_args, run_beteiligung, run_sitzungen, run_vorgaenge
+from bawue.bawue_vorgaenge_scraper import DEFAULT_ENABLED_VORGANGSTYPEN
+from bawue.dry_run import (
+    _load_enabled_vorgangstypen,
+    main,
+    parse_args,
+    run_beteiligung,
+    run_sitzungen,
+    run_vorgaenge,
+)
 
 WP17_START = date(2021, 4, 26)
 
@@ -65,6 +73,14 @@ class TestParseArgs:
     def test_vorgangstyp(self):
         args = parse_args(["--vorgangstyp", "Kleine Anfrage"])
         assert args.vorgangstyp == "Kleine Anfrage"
+
+    def test_config_file_default(self):
+        args = parse_args([])
+        assert args.config_file == "config.toml"
+
+    def test_config_file_flag(self):
+        args = parse_args(["--config-file", "custom.toml"])
+        assert args.config_file == "custom.toml"
 
     def test_json_flag(self):
         args = parse_args(["--json"])
@@ -406,3 +422,86 @@ class TestMain:
             main([])
 
         mock_check.assert_called_once_with(17)
+
+    def test_main_loads_vorgangstypen_from_config(self):
+        """When no --vorgangstyp flag, main() loads enabled-vorgangstypen from config."""
+        config_types = ["Gesetzgebung", "Haushaltsgesetzgebung"]
+        with (
+            patch("bawue.dry_run.run_vorgaenge", return_value=([], [])) as mock_rv,
+            patch("bawue.dry_run.run_beteiligung", return_value=[]),
+            patch("bawue.dry_run.run_sitzungen", return_value=([], 0, 0)),
+            patch("bawue.dry_run.check_for_newer_wahlperiode"),
+            patch("bawue.dry_run.build_summary", return_value=self._mock_summary()),
+            patch("bawue.dry_run.format_summary", return_value="ok"),
+            patch("bawue.dry_run._load_enabled_vorgangstypen", return_value=config_types),
+        ):
+            main(["--scraper", "vorgaenge"])
+
+        assert mock_rv.call_args.kwargs["vorgangstypen"] == config_types
+
+    def test_main_vorgangstyp_flag_overrides_config(self):
+        """Explicit --vorgangstyp flag overrides config-based vorgangstypen."""
+        with (
+            patch("bawue.dry_run.run_vorgaenge", return_value=([], [])) as mock_rv,
+            patch("bawue.dry_run.run_beteiligung", return_value=[]),
+            patch("bawue.dry_run.run_sitzungen", return_value=([], 0, 0)),
+            patch("bawue.dry_run.check_for_newer_wahlperiode"),
+            patch("bawue.dry_run.build_summary", return_value=self._mock_summary()),
+            patch("bawue.dry_run.format_summary", return_value="ok"),
+            patch("bawue.dry_run._load_enabled_vorgangstypen") as mock_load,
+        ):
+            main(["--scraper", "vorgaenge", "--vorgangstyp", "Kleine Anfrage"])
+
+        assert mock_rv.call_args.kwargs["vorgangstypen"] == ["Kleine Anfrage"]
+        mock_load.assert_not_called()
+
+    def test_main_passes_config_file_to_loader(self):
+        """main() passes the --config-file value to _load_enabled_vorgangstypen."""
+        with (
+            patch("bawue.dry_run.run_vorgaenge", return_value=([], [])),
+            patch("bawue.dry_run.run_beteiligung", return_value=[]),
+            patch("bawue.dry_run.run_sitzungen", return_value=([], 0, 0)),
+            patch("bawue.dry_run.check_for_newer_wahlperiode"),
+            patch("bawue.dry_run.build_summary", return_value=self._mock_summary()),
+            patch("bawue.dry_run.format_summary", return_value="ok"),
+            patch("bawue.dry_run._load_enabled_vorgangstypen", return_value=["Gesetzgebung"]) as mock_load,
+        ):
+            main(["--scraper", "vorgaenge", "--config-file", "custom.toml"])
+
+        mock_load.assert_called_once_with("custom.toml")
+
+
+# ---------------------------------------------------------------------------
+# _load_enabled_vorgangstypen
+# ---------------------------------------------------------------------------
+
+
+class TestLoadEnabledVorgangstypen:
+    def test_loads_from_toml(self, tmp_path):
+        config = tmp_path / "config.toml"
+        config.write_text('[bawue]\nenabled-vorgangstypen = ["Gesetzgebung", "Volksantrag"]\n')
+
+        result = _load_enabled_vorgangstypen(str(config))
+
+        assert result == ["Gesetzgebung", "Volksantrag"]
+
+    def test_fallback_when_file_missing(self):
+        result = _load_enabled_vorgangstypen("/nonexistent/config.toml")
+
+        assert result == list(DEFAULT_ENABLED_VORGANGSTYPEN)
+
+    def test_fallback_when_key_missing(self, tmp_path):
+        config = tmp_path / "config.toml"
+        config.write_text("[bawue]\nwahlperiode = 17\n")
+
+        result = _load_enabled_vorgangstypen(str(config))
+
+        assert result == DEFAULT_ENABLED_VORGANGSTYPEN
+
+    def test_fallback_when_section_missing(self, tmp_path):
+        config = tmp_path / "config.toml"
+        config.write_text("[main]\ncollector-uuid = \"abc\"\n")
+
+        result = _load_enabled_vorgangstypen(str(config))
+
+        assert result == DEFAULT_ENABLED_VORGANGSTYPEN

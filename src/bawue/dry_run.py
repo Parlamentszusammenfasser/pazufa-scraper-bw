@@ -15,9 +15,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 
 import requests
+import toml
 from icalendar import Calendar
 
-from bawue.bawue_vorgaenge_scraper import DEFAULT_WAHLPERIODE_START, BawueVorgaengeScraper
+from bawue.bawue_vorgaenge_scraper import (
+    DEFAULT_ENABLED_VORGANGSTYPEN,
+    DEFAULT_WAHLPERIODE_START,
+    BawueVorgaengeScraper,
+)
 from bawue.beteiligung_client import BeteiligungClient
 from bawue.beteiligung_parser import parse_process_detail
 from bawue.enum_mapper import VORGANGSTYP_MAP
@@ -51,6 +56,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="all",
         help="Which scraper to run (default: all)",
     )
+    parser.add_argument("--config-file", type=str, default="config.toml", help="Path to config TOML file")
     parser.add_argument("--vorgangstyp", type=str, default=None, help="Limit to one PARLIS Vorgangstyp")
     parser.add_argument("--wahlperiode", type=int, default=17, help="Wahlperiode (default: 17)")
     parser.add_argument("--limit", type=int, default=None, help="Max items per scraper")
@@ -78,6 +84,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Number of parallel workers for Vorgangstyp scraping (default: 3)",
     )
     return parser.parse_args(argv)
+
+
+# ---------------------------------------------------------------------------
+# Config loading
+# ---------------------------------------------------------------------------
+
+
+def _load_enabled_vorgangstypen(config_file: str) -> list[str]:
+    """Load enabled-vorgangstypen from [bawue] config section."""
+    try:
+        loaded = toml.load(config_file)
+        return loaded.get("bawue", {}).get("enabled-vorgangstypen", DEFAULT_ENABLED_VORGANGSTYPEN)
+    except Exception:
+        logger.warning("Could not load config from %s, using defaults", config_file)
+        return list(DEFAULT_ENABLED_VORGANGSTYPEN)
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +276,7 @@ def main(argv: list[str] | None = None) -> None:
     run_s = args.scraper in ("all", "sitzungen")
 
     if run_v:
-        vorgangstypen = [args.vorgangstyp] if args.vorgangstyp else None
+        vorgangstypen = [args.vorgangstyp] if args.vorgangstyp else _load_enabled_vorgangstypen(args.config_file)
         vorgang_reports, raw_vorgaenge = run_vorgaenge(
             wahlperiode=args.wahlperiode,
             vorgangstypen=vorgangstypen,
