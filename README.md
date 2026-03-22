@@ -89,6 +89,96 @@ make run
 The mock server logs every request with headers, JWT decode of `X-API-Key`, and pretty-printed JSON body (first 60
 lines). Returns HTTP 201 for all valid requests; 401 if `X-API-Key` is missing.
 
+## Running against Local Backend
+
+For full end-to-end testing with a real backend and persistent data. Requires
+`pazufa-backend` cloned alongside this repo:
+
+```bash
+git clone https://codeberg.org/PaZuFa/pazufa-backend.git ../pazufa-backend
+```
+
+**1. Start the dev stack** (first run compiles Rust + generates OpenAPI code — takes several minutes):
+
+```bash
+docker-compose -f docker-compose.dev.yml up -d --build
+```
+
+**2. Wait for the backend to be ready:**
+
+```bash
+docker-compose -f docker-compose.dev.yml logs -f pazufa-backend
+# Ready when you see the backend accepting connections on port 80
+# Or poll: curl -s http://localhost:8080/ping
+```
+
+**3. Create a collector API key** using the keyadder key (`dev-keyadder-key`):
+
+```bash
+curl -s -X POST http://localhost:8080/api/v2/auth \
+  -H "X-API-Key: dev-keyadder-key" \
+  -H "Content-Type: application/json" \
+  -d '{"scope": "collector"}' | jq .
+```
+
+Copy the returned API key value.
+
+**4. Configure the scraper:**
+
+```bash
+# config.dev.toml is pre-configured for the local backend.
+# Just paste your collector key:
+sed -i '' 's/REPLACE_WITH_COLLECTOR_KEY/<your-key-here>/' config.dev.toml
+```
+
+**5. Run the scraper against the local backend:**
+
+```bash
+.venv/bin/python -m collector --config-file config.dev.toml --once
+```
+
+**6. Inspect submitted data via the backend API:**
+
+```bash
+# List submitted Vorgänge:
+curl -s "http://localhost:8080/api/v2/vorgang?parlament=BW" | jq '.[] | {id, titel}'
+
+# Check Kalender entries:
+curl -s "http://localhost:8080/api/v2/kalender?parlament=BW" | jq .
+
+# Backend status:
+curl -s http://localhost:8080/status | jq .
+```
+
+**7. (Optional) View results in the frontend:**
+
+Clone and run the PaZuFa website alongside the dev stack:
+
+```bash
+git clone https://codeberg.org/flovar/pazufa-website.git ../pazufa-website
+cd ../pazufa-website
+npm install
+echo "VITE_API_URL=http://localhost:8080" > .env.local
+npm run dev
+```
+
+Open http://localhost:5173/pazufa-website/ — the site connects directly to the local backend.
+
+**Tear down** (removes containers but keeps the PostgreSQL volume):
+
+```bash
+docker-compose -f docker-compose.dev.yml down
+# To also wipe the database:
+docker-compose -f docker-compose.dev.yml down -v
+```
+
+| Service        | URL                           | Notes                              |
+|----------------|-------------------------------|------------------------------------|
+| Backend API    | http://localhost:8080         | REST API + `/ping`, `/status`      |
+| PostgreSQL     | localhost:5432                | ltzf-user / ltzf-pass / ltzf       |
+| Redis          | localhost:6379                | Cache for the scraper framework    |
+| Keyadder key   | `dev-keyadder-key`            | Used to create collector API keys  |
+
 ## Development
 
 ```bash
