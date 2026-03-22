@@ -298,10 +298,21 @@ class BawueVorgaengeScraper(VorgangsScraper):
         station_typ, pdf_url, ausschuss, plenarprotokoll, etc.
         """
         station_typ_str = fund.get("station_typ", "")
-        station_typ = map_stationstyp(station_typ_str, initiator=initiative)
+
+        # Fallback: when the regex-based station_typ extraction fails (e.g. single-space
+        # separator in the Fundstelle text), use the full raw text for enum mapping.
+        # map_stationstyp does substring matching, so it can find the type in the raw text.
+        mapping_text = station_typ_str or fund.get("raw", "")
+        if not station_typ_str and fund.get("raw"):
+            logger.warning(
+                "Fundstelle station_typ not extracted by regex, using raw text fallback: '%s'",
+                fund.get("raw", "")[:80],
+            )
+
+        station_typ = map_stationstyp(mapping_text, initiator=initiative)
         zp_start = _parse_fundstelle_date(fund)
         gremium = self._determine_gremium(fund)
-        dokumente = self._build_dokumente(fund, station_typ_str, station_typ, initiative, zp_start)
+        dokumente = self._build_dokumente(fund, station_typ_str, mapping_text, station_typ, initiative, zp_start)
 
         return Station(
             typ=station_typ,
@@ -328,6 +339,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
     def _build_dokumente(
         fund: RawFundstelle,
         station_typ_str: str,
+        mapping_text: str,
         station_typ: Stationstyp,
         initiative: str,
         zp_start: datetime,
@@ -343,7 +355,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return []
 
         doc_typ = map_dokumententyp(
-            station_typ_str,
+            mapping_text,
             is_vorparlamentarisch=(station_typ == Stationstyp.PREPARL_MINUS_REGENT),
         )
         if doc_typ == Doktyp.SONSTIG and fund.get("plenarprotokoll"):

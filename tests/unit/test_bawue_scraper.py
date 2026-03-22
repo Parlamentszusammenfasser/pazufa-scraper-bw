@@ -242,6 +242,64 @@ class TestBuildVorgang:
 
         assert vorgang.stationen[0].gremium.parlament.value == "BW"
 
+    def test_fallback_to_raw_text_when_station_typ_missing(self, scraper_build_vorgang):
+        """When regex fails to extract station_typ, raw text is used for enum mapping."""
+        raw = _make_raw_vorgang(
+            "V-070",
+            fundstellen=[
+                {
+                    "raw": "Gesetzesbeschluss des Landtags 04.02.2026 Drucksache 17/10254",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10254",
+                    # station_typ intentionally missing (single-space regex failure)
+                    "pdf_url": "https://example.com/beschluss.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        station = vorgang.stationen[0]
+        assert station.typ == Stationstyp.PARL_MINUS_AKZEPTANZ
+        assert station.dokumente[0].actual_instance.typ == Doktyp.MITTEILUNG
+
+    def test_fallback_gesetz_maps_to_postparl(self, scraper_build_vorgang):
+        """Raw text fallback also works for Gesetzblatt entries."""
+        raw = _make_raw_vorgang(
+            "V-071",
+            fundstellen=[
+                {
+                    "raw": "Gesetz Gesetzblatt für Baden-Württemberg 2026 Nr. 20  S. 1  10.02.2026",
+                    "datum": "10.02.2026",
+                    # station_typ intentionally missing
+                    "pdf_url": "https://example.com/gesetz.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        station = vorgang.stationen[0]
+        assert station.typ == Stationstyp.POSTPARL_MINUS_GSBLT
+
+    def test_normal_station_typ_still_works(self, scraper_build_vorgang):
+        """Normal case: regex-extracted station_typ is used (no fallback)."""
+        raw = _make_raw_vorgang(
+            "V-072",
+            fundstellen=[
+                {
+                    "raw": "Gesetzesbeschluss des Landtags  04.02.2026 Drucksache 17/10254",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10254",
+                    "station_typ": "Gesetzesbeschluss des Landtags",
+                    "pdf_url": "https://example.com/beschluss.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        station = vorgang.stationen[0]
+        assert station.typ == Stationstyp.PARL_MINUS_AKZEPTANZ
+        assert station.dokumente[0].actual_instance.typ == Doktyp.MITTEILUNG
+
 
 def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(2021, 4, 26)):
     """Create a minimal BawueVorgaengeScraper without full init, with a mock ParlisClient."""

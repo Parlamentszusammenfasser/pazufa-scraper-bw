@@ -150,6 +150,33 @@ class TestParseResults:
         assert results == []
 
 
+class TestParseFundstelleSingleSpaceFallback:
+    """When PARLIS uses a single space as separator, station_typ is not extracted.
+
+    The raw text is still preserved, allowing downstream fallback logic
+    in _build_station to use it for enum mapping.
+    """
+
+    def test_single_space_gesetzesbeschluss_has_no_station_typ(self):
+        text = "Gesetzesbeschluss des Landtags 04.02.2026 Drucksache 17/10254"
+        result = parse_fundstelle_text(text)
+        assert "station_typ" not in result
+        assert result["raw"] == text
+        assert result["datum"] == "04.02.2026"
+        assert result["drucksache"] == "17/10254"
+
+    def test_single_space_gesetz_has_no_station_typ(self):
+        text = "Gesetz Gesetzblatt für Baden-Württemberg 2026 Nr. 20  S. 1  10.02.2026"
+        result = parse_fundstelle_text(text)
+        assert "station_typ" not in result
+        assert result["raw"] == text
+
+    def test_double_space_gesetzesbeschluss_has_station_typ(self):
+        text = "Gesetzesbeschluss des Landtags  04.02.2026 Drucksache 17/10254"
+        result = parse_fundstelle_text(text)
+        assert result["station_typ"] == "Gesetzesbeschluss des Landtags"
+
+
 class TestParseFundstellePageNumberNotConfusedForYear:
     def test_page_number_not_confused_for_year(self):
         text = "vom 00.00.3640   Plenarprotokoll 17/60 09.03.2023  S. 3640-3644"
