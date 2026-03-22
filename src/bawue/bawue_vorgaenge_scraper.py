@@ -213,6 +213,16 @@ class BawueVorgaengeScraper(VorgangsScraper):
         initiative = raw.get("Initiative", "")
         vorgangstyp_str = raw.get("Vorgangstyp", "")
 
+        # Fallback: PARLIS omits Initiative for some Vorgangstypen (e.g. Haushaltsgesetzgebung).
+        # In that case, infer from the first Fundstelle's autor_text.
+        if not initiative:
+            fundstellen = raw.get("fundstellen_parsed", [])
+            for fund in fundstellen:
+                autor_text = fund.get("autor_text", "")
+                if autor_text:
+                    initiative = autor_text
+                    break
+
         api_id = uuid5(NAMESPACE_URL, vorgang_id)
         typ = map_vorgangstyp(vorgangstyp_str)
         initiatoren = _parse_autoren(initiative)

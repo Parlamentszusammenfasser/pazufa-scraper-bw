@@ -178,8 +178,50 @@ class TestBuildVorgang:
 
         assert vorgang.stationen == []
 
-    def test_missing_initiative_produces_empty_initiatoren(self, scraper_build_vorgang):
-        raw = _make_raw_vorgang("V-050", initiative="", fundstellen=[])
+    def test_missing_initiative_falls_back_to_fundstelle_autor(self, scraper_build_vorgang):
+        """When PARLIS omits the Initiative field (e.g. Haushaltsgesetzgebung),
+        infer initiatoren from the first Fundstelle's autor_text."""
+        raw = _make_raw_vorgang(
+            "V-050",
+            initiative="",
+            vorgangstyp="Haushaltsgesetzgebung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  25.11.2025 Drucksache 17/9919   (16 S.)",
+                    "datum": "25.11.2025",
+                    "drucksache": "17/9919",
+                    "station_typ": "Gesetzentwurf",
+                    "autor_text": "Landesregierung",
+                    "seiten": 16,
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.initiatoren) == 1
+        assert vorgang.initiatoren[0].organisation == "Landesregierung"
+
+    def test_missing_initiative_no_fundstellen_produces_empty_initiatoren(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang("V-051", initiative="", fundstellen=[])
+        vorgang = scraper_build_vorgang(raw)
+
+        assert vorgang.initiatoren == []
+
+    def test_missing_initiative_fundstelle_without_autor_produces_empty(self, scraper_build_vorgang):
+        """When Initiative is missing AND Fundstellen have no autor_text, initiatoren stays empty."""
+        raw = _make_raw_vorgang(
+            "V-052",
+            initiative="",
+            fundstellen=[
+                {
+                    "raw": "Bekanntmachung  Gesetzblatt 2022 Nr. 37",
+                    "datum": "01.01.2022",
+                    "station_typ": "Bekanntmachung",
+                    "pdf_url": "",
+                },
+            ],
+        )
         vorgang = scraper_build_vorgang(raw)
 
         assert vorgang.initiatoren == []
