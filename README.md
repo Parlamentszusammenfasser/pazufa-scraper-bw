@@ -132,6 +132,11 @@ This mounts `config.staging.toml` as the config file and injects secrets from `.
 docker-compose logs -f scraper
 ```
 
+**4. Rebuild the docker image:**
+```bash
+docker-compose build scraper && docker-compose up -d scraper
+```
+
 ## Docker
 
 ```bash
