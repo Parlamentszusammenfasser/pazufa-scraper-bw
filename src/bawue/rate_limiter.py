@@ -52,3 +52,13 @@ class AdaptiveRateLimiter:
         logger.warning("Rate limited (429). Pausing for %.1fs before retry.", pause_duration)
         time.sleep(pause_duration)
         self._current_delay = pause_duration * self._recovery_factor
+
+
+def create_upload_limiter() -> AdaptiveRateLimiter:
+    """Create a rate limiter pre-configured for API uploads."""
+    return AdaptiveRateLimiter(
+        initial_delay=0.2,
+        min_delay=0.05,
+        backoff_multiplier=10.0,
+        recovery_factor=0.5,
+    )

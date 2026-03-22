@@ -8,10 +8,6 @@ from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
-import openapi_client
-import openapi_client.api
-import openapi_client.api.collector_schnittstellen_api
-import toml
 from collector.config import CollectorConfiguration
 from collector.interface import VorgangsScraper
 from openapi_client.models import (
@@ -35,8 +31,9 @@ from bawue.beteiligung_parser import (
     RawBeteiligungProcess,
     parse_process_detail,
 )
-from bawue.rate_limiter import AdaptiveRateLimiter
-from bawue.upload_throttle import with_upload_retry
+from bawue.config_loader import load_toml_section
+from bawue.rate_limiter import create_upload_limiter
+from bawue.upload_throttle import upload_vorgang
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +48,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
     """
 
     def __init__(self, config: CollectorConfiguration, session: aiohttp.ClientSession) -> None:
-        beteiligung_config = self._load_config(config)
+        beteiligung_config = load_toml_section(config, "beteiligung")
         self._wahlperiode = beteiligung_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
         delay = beteiligung_config.get("request-delay-s", DEFAULT_BETEILIGUNG_DELAY)
 
@@ -61,28 +58,11 @@ class BawueBeteiligungScraper(VorgangsScraper):
         self._client = BeteiligungClient(wahlperiode=self._wahlperiode, request_delay_s=delay)
         self._raw_cache: dict[str, RawBeteiligungProcess] = {}
 
-        self._upload_limiter = AdaptiveRateLimiter(
-            initial_delay=0.2,
-            min_delay=0.05,
-            backoff_multiplier=10.0,
-            recovery_factor=0.5,
-        )
+        self._upload_limiter = create_upload_limiter()
 
         self._published: int = 0
         self._failed: int = 0
         self._skipped: int = 0
-
-    @staticmethod
-    def _load_config(config: CollectorConfiguration) -> dict:
-        """Load [beteiligung] section from the collector config file."""
-        config_file = getattr(config, "config_file", None)
-        if config_file:
-            try:
-                loaded = toml.load(config_file)
-                return loaded.get("beteiligung", {})
-            except Exception:
-                logger.warning("Could not load [beteiligung] section from config file: %s", config_file, exc_info=True)
-        return {}
 
     async def run(self) -> None:
         start = time.monotonic()
@@ -94,39 +74,19 @@ class BawueBeteiligungScraper(VorgangsScraper):
             _print_beteiligung_summary(self._published, self._skipped, self._failed, duration)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
-        logger.info("Sending Vorgang '%s' (id=%s) to API", item.titel, item.api_id)
-        self.log_item(item)
-
-        if self.config.dry_run:
-            logger.info("[DRY RUN] Would send Vorgang '%s' — skipping API call", item.titel)
+        result = upload_vorgang(
+            self.config.oapiconfig,
+            self.scraper_id,
+            self._upload_limiter,
+            item,
+            dry_run=self.config.dry_run,
+            log_item=self.log_item,
+        )
+        if result is not None:
             self._published += 1
-            return item
-
-        try:
-            with openapi_client.ApiClient(self.config.oapiconfig) as api_client:
-                api_instance = openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi(
-                    api_client
-                )
-                with_upload_retry(
-                    lambda: api_instance.vorgang_put(str(self.scraper_id), item),
-                    self._upload_limiter,
-                    exception_type=openapi_client.ApiException,
-                )
-            self._published += 1
-            return item
-        except openapi_client.ApiException as e:
-            logger.error("API Exception: %s", e)
-            if e.status == 422:
-                logger.error("Unprocessable Entity for Vorgang '%s'", item.titel)
-                self.log_item(item, True)
-            elif e.status == 401:
-                logger.critical("Authentication failed. Check your API key.")
+        else:
             self._failed += 1
-            return None
-        except Exception as e:
-            logger.error("Unexpected error sending Vorgang to API: %s", e)
-            self._failed += 1
-            return None
+        return result
 
     async def listing_page_extractor(self, lp_key: str) -> list[str]:
         """Fetch the process list and return slugs for each process."""

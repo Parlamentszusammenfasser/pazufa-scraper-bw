@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from bawue.report import (
+from bawue.dry_run import (
     BeteiligungReport,
     DryRunSummary,
     FieldCompleteness,

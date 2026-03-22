@@ -178,18 +178,22 @@ class TestInit:
 
         assert mock_super.call_args.args[2] == [DEFAULT_ICS_URL]
 
-    def test_load_bawue_config_returns_empty_on_no_file(self):
+    def test_load_toml_section_returns_empty_on_no_file(self):
+        from bawue.config_loader import load_toml_section
+
         mock_config = MagicMock()
         mock_config.config_file = None
 
-        assert BawueSitzungenScraper._load_bawue_config(mock_config) == {}
+        assert load_toml_section(mock_config, "bawue") == {}
 
-    def test_load_bawue_config_returns_empty_on_bad_file(self, tmp_path, caplog):
+    def test_load_toml_section_returns_empty_on_bad_file(self, tmp_path, caplog):
+        from bawue.config_loader import load_toml_section
+
         mock_config = MagicMock()
         mock_config.config_file = str(tmp_path / "nonexistent.toml")
 
-        with caplog.at_level(logging.WARNING, logger="bawue.bawue_sitzungen_scraper"):
-            result = BawueSitzungenScraper._load_bawue_config(mock_config)
+        with caplog.at_level(logging.WARNING, logger="bawue.config_loader"):
+            result = load_toml_section(mock_config, "bawue")
 
         assert result == {}
         assert any("Could not load" in msg for msg in caplog.messages)

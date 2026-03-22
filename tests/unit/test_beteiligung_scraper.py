@@ -267,7 +267,7 @@ class TestRunSummary:
         scraper.config = mock_config
         scraper.scraper_id = "test-scraper-id"
 
-        with patch("bawue.bawue_beteiligung_scraper.openapi_client") as mock_oapi:
+        with patch("bawue.upload_throttle.openapi_client") as mock_oapi:
             mock_oapi.ApiClient.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_oapi.ApiClient.return_value.__exit__ = MagicMock(return_value=False)
             mock_oapi.api.collector_schnittstellen_api.CollectorSchnittstellenApi.return_value = MagicMock()
@@ -310,7 +310,7 @@ class TestRunSummary:
         scraper.config = mock_config
         scraper.scraper_id = "test-scraper-id"
 
-        with patch("bawue.bawue_beteiligung_scraper.openapi_client") as mock_oapi:
+        with patch("bawue.upload_throttle.openapi_client") as mock_oapi:
             mock_oapi.ApiException = real_oapi.ApiException
             mock_oapi.ApiClient.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_oapi.ApiClient.return_value.__exit__ = MagicMock(return_value=False)
@@ -403,18 +403,22 @@ class TestInit:
 
         assert scraper._wahlperiode == DEFAULT_WAHLPERIODE
 
-    def test_load_config_returns_empty_on_no_file(self):
+    def test_load_toml_section_returns_empty_on_no_file(self):
+        from bawue.config_loader import load_toml_section
+
         mock_config = MagicMock()
         mock_config.config_file = None
 
-        assert BawueBeteiligungScraper._load_config(mock_config) == {}
+        assert load_toml_section(mock_config, "beteiligung") == {}
 
-    def test_load_config_returns_empty_on_bad_file(self, tmp_path, caplog):
+    def test_load_toml_section_returns_empty_on_bad_file(self, tmp_path, caplog):
+        from bawue.config_loader import load_toml_section
+
         mock_config = MagicMock()
         mock_config.config_file = str(tmp_path / "nonexistent.toml")
 
-        with caplog.at_level(logging.WARNING, logger="bawue.bawue_beteiligung_scraper"):
-            result = BawueBeteiligungScraper._load_config(mock_config)
+        with caplog.at_level(logging.WARNING, logger="bawue.config_loader"):
+            result = load_toml_section(mock_config, "beteiligung")
 
         assert result == {}
         assert any("Could not load" in msg for msg in caplog.messages)

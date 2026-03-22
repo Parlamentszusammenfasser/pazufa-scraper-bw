@@ -517,7 +517,7 @@ class TestRunSummary:
         scraper = _make_scraper_with_mock_parlis()
         mock_vorgang = MagicMock()
 
-        with patch("bawue.bawue_vorgaenge_scraper.openapi_client") as mock_oapi:
+        with patch("bawue.upload_throttle.openapi_client") as mock_oapi:
             mock_api_instance = MagicMock()
             mock_oapi.ApiClient.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_oapi.ApiClient.return_value.__exit__ = MagicMock(return_value=False)
@@ -541,7 +541,7 @@ class TestRunSummary:
 
         scraper = _make_scraper_with_mock_parlis()
 
-        with patch("bawue.bawue_vorgaenge_scraper.openapi_client") as mock_oapi:
+        with patch("bawue.upload_throttle.openapi_client") as mock_oapi:
             mock_oapi.ApiException = real_oapi.ApiException
             mock_oapi.ApiClient.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_oapi.ApiClient.return_value.__exit__ = MagicMock(return_value=False)
@@ -1221,7 +1221,9 @@ class TestEnabledVorgangstypen:
             "Volksantrag",
         ]
 
-    def test_load_bawue_config_reads_enabled_vorgangstypen(self, tmp_path):
+    def test_load_toml_section_reads_enabled_vorgangstypen(self, tmp_path):
+        from bawue.config_loader import load_toml_section
+
         config_file = tmp_path / "config.toml"
         config_file.write_text(
             '[bawue]\nenabled-vorgangstypen = ["Gesetzgebung", "Volksantrag"]\n'
@@ -1229,17 +1231,19 @@ class TestEnabledVorgangstypen:
         mock_config = MagicMock()
         mock_config.config_file = str(config_file)
 
-        result = BawueVorgaengeScraper._load_bawue_config(mock_config)
+        result = load_toml_section(mock_config, "bawue")
 
         assert result["enabled-vorgangstypen"] == ["Gesetzgebung", "Volksantrag"]
 
-    def test_load_bawue_config_returns_empty_when_no_bawue_section(self, tmp_path):
+    def test_load_toml_section_returns_empty_when_no_bawue_section(self, tmp_path):
+        from bawue.config_loader import load_toml_section
+
         config_file = tmp_path / "config.toml"
         config_file.write_text("[main]\ncollector-uuid = 'test'\n")
         mock_config = MagicMock()
         mock_config.config_file = str(config_file)
 
-        result = BawueVorgaengeScraper._load_bawue_config(mock_config)
+        result = load_toml_section(mock_config, "bawue")
 
         assert result.get("enabled-vorgangstypen", DEFAULT_ENABLED_VORGANGSTYPEN) == DEFAULT_ENABLED_VORGANGSTYPEN
 

@@ -14,13 +14,13 @@ import certifi
 import openapi_client
 import openapi_client.api
 import openapi_client.api.collector_schnittstellen_api
-import toml
 from collector.config import CollectorConfiguration
 from collector.interface import SitzungsScraper
 from openapi_client.models import Gremium, Parlament, Sitzung
 
+from bawue.config_loader import load_toml_section
 from bawue.ics_parser import group_events_by_date, parse_ics_feed
-from bawue.rate_limiter import AdaptiveRateLimiter
+from bawue.rate_limiter import create_upload_limiter
 from bawue.upload_throttle import with_upload_retry
 
 logger = logging.getLogger(__name__)
@@ -37,18 +37,13 @@ class BawueSitzungenScraper(SitzungsScraper):
     """
 
     def __init__(self, config: CollectorConfiguration, session: aiohttp.ClientSession) -> None:
-        bawue_config = self._load_bawue_config(config)
+        bawue_config = load_toml_section(config, "bawue")
         self._wahlperiode = bawue_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
         ics_url = bawue_config.get("ics-url", DEFAULT_ICS_URL)
 
         super().__init__(config, uuid.UUID(config.collector_id), [ics_url], session)
 
-        self._upload_limiter = AdaptiveRateLimiter(
-            initial_delay=0.2,
-            min_delay=0.05,
-            backoff_multiplier=10.0,
-            recovery_factor=0.5,
-        )
+        self._upload_limiter = create_upload_limiter()
 
         self._events_by_date: dict[str, list] = {}
         self._total_events: int = 0
@@ -56,18 +51,6 @@ class BawueSitzungenScraper(SitzungsScraper):
         self._published_dates: int = 0
         self._failed_dates: int = 0
         self._published_sitzungen: int = 0
-
-    @staticmethod
-    def _load_bawue_config(config: CollectorConfiguration) -> dict:
-        """Load [bawue] section from the collector config file."""
-        config_file = getattr(config, "config_file", None)
-        if config_file:
-            try:
-                loaded = toml.load(config_file)
-                return loaded.get("bawue", {})
-            except Exception:
-                logger.warning("Could not load [bawue] section from config file: %s", config_file, exc_info=True)
-        return {}
 
     async def run(self) -> None:
         start = time.monotonic()

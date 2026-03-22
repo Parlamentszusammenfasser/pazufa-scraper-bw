@@ -2,6 +2,12 @@
 
 import logging
 from collections.abc import Callable
+from uuid import UUID
+
+import openapi_client
+import openapi_client.api
+import openapi_client.api.collector_schnittstellen_api
+from openapi_client.models import Vorgang
 
 from bawue.rate_limiter import AdaptiveRateLimiter
 
@@ -40,3 +46,50 @@ def with_upload_retry[T](
                 rate_limiter.on_rate_limit(logger)
                 continue
             raise
+
+
+def upload_vorgang(
+    oapiconfig: openapi_client.Configuration,
+    scraper_id: UUID,
+    upload_limiter: AdaptiveRateLimiter,
+    item: Vorgang,
+    *,
+    dry_run: bool = False,
+    log_item: Callable | None = None,
+) -> Vorgang | None:
+    """Upload a Vorgang to the PaZuFa API with retry and error handling.
+
+    Returns the item on success, None on failure.
+    Raises nothing — errors are logged and swallowed.
+    """
+    logger.info("Sending Vorgang '%s' (id=%s) to API", item.titel, item.api_id)
+    if log_item:
+        log_item(item)
+
+    if dry_run:
+        logger.info("[DRY RUN] Would send Vorgang '%s' — skipping API call", item.titel)
+        return item
+
+    try:
+        with openapi_client.ApiClient(oapiconfig) as api_client:
+            api_instance = openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi(
+                api_client
+            )
+            with_upload_retry(
+                lambda: api_instance.vorgang_put(str(scraper_id), item),
+                upload_limiter,
+                exception_type=openapi_client.ApiException,
+            )
+        return item
+    except openapi_client.ApiException as e:
+        logger.error("API Exception: %s", e)
+        if e.status == 422:
+            logger.error("Unprocessable Entity for Vorgang '%s'", item.titel)
+            if log_item:
+                log_item(item, True)
+        elif e.status == 401:
+            logger.critical("Authentication failed. Check your API key.")
+        return None
+    except Exception as e:
+        logger.error("Unexpected error sending Vorgang to API: %s", e)
+        return None
