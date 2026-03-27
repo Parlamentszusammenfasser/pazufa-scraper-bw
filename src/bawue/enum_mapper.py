@@ -94,6 +94,7 @@ STATIONSTYP_MAP: dict[str, Stationstyp] = {
     "Bericht und Empfehlungen": Stationstyp.PARL_MINUS_AUSSCHBER,
     "Ausschussberatung": Stationstyp.PARL_MINUS_AUSSCHBER,
     "Gesetzesbeschluss": Stationstyp.PARL_MINUS_AKZEPTANZ,
+    "Beschluss des Landtags in": Stationstyp.PARL_MINUS_VOLLVLSGN,
     "Beschluss des Landtags": Stationstyp.PARL_MINUS_AKZEPTANZ,
     "Zustimmung": Stationstyp.PARL_MINUS_AKZEPTANZ,
     "Annahme": Stationstyp.PARL_MINUS_AKZEPTANZ,
@@ -129,6 +130,7 @@ DOKUMENTENTYP_MAP: dict[str, Doktyp] = {
     "Beratung": Doktyp.REDEPROTOKOLL,
     # Legislative decision → mitteilung
     "Gesetzesbeschluss": Doktyp.MITTEILUNG,
+    "Beschluss des Landtags in": Doktyp.REDEPROTOKOLL,
     "Beschluss des Landtags": Doktyp.MITTEILUNG,
     "Zustimmung": Doktyp.MITTEILUNG,
     "Annahme": Doktyp.MITTEILUNG,

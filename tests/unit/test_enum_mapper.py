@@ -106,7 +106,12 @@ class TestStationstypMapping:
             (
                 "Beschluss des Landtags in Zweiter Beratung      06.02.2026 Drucksache 17/2271",
                 None,
-                Stationstyp.PARL_MINUS_AKZEPTANZ,
+                Stationstyp.PARL_MINUS_VOLLVLSGN,
+            ),
+            (
+                "Beschluss des Landtags in Dritter Beratung      22.12.2021 Drucksache 17/1234",
+                None,
+                Stationstyp.PARL_MINUS_VOLLVLSGN,
             ),
             ("Ablehnung   Plenarprotokoll 17/143", None, Stationstyp.PARL_MINUS_ABLEHNUNG),
             ("Ausfertigung   10.03.2026", None, Stationstyp.POSTPARL_MINUS_VESJA),
@@ -214,6 +219,8 @@ class TestDokumententypMapping:
         # "Beschluss des Landtags" and "Beschlussempfehlung" share no substring conflict
         assert map_dokumententyp("Beschlussempfehlung") == Doktyp.BESCHLUSSEMPF
         assert map_dokumententyp("Beschluss des Landtags") == Doktyp.MITTEILUNG
+        # Qualified "Beschluss des Landtags in ..." is a reading vote, not final decision
+        assert map_dokumententyp("Beschluss des Landtags in Zweiter Beratung") == Doktyp.REDEPROTOKOLL
 
 
 class TestEnumValuesExistInFramework:
