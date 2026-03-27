@@ -1598,3 +1598,85 @@ class TestAktuellerStandAblehnung:
         vorgang = scraper_build_vorgang(raw)
 
         assert len(vorgang.stationen) == 0
+
+
+class TestBeschlussDesLandtagsInBeratung:
+    """Regression: 'Beschluss des Landtags in Zweiter/Dritter Beratung' must map to
+    parl-vollvlsgn (reading vote), not parl-akzeptanz (acceptance).
+
+    When PARLIS places a double-space between 'Landtags' and 'in', the parser
+    truncates station_typ to 'Beschluss des Landtags'. The mapper must still
+    use the full raw text to detect the 'in' qualifier.
+    """
+
+    def test_beschluss_in_zweiter_beratung_with_truncated_station_typ(self, scraper_build_vorgang):
+        """station_typ truncated to 'Beschluss des Landtags' but raw has 'in Zweiter Beratung'."""
+        raw = _make_raw_vorgang("V-400", fundstellen=[
+            {
+                "raw": "Gesetzentwurf  Landesregierung  22.10.2024 Drucksache 17/8000  (50 S.)",
+                "datum": "22.10.2024",
+                "drucksache": "17/8000",
+                "station_typ": "Gesetzentwurf",
+                "seiten": 50,
+                "pdf_url": "https://example.com/entwurf.pdf",
+            },
+            {
+                "raw": "Beschluss des Landtags  in Zweiter Beratung  16.12.2022 Drucksache 17/3820",
+                "datum": "16.12.2022",
+                "drucksache": "17/3820",
+                "station_typ": "Beschluss des Landtags",
+                "pdf_url": "https://example.com/beschluss.pdf",
+            },
+        ])
+        vorgang = scraper_build_vorgang(raw)
+
+        beschluss_station = vorgang.stationen[1]
+        assert beschluss_station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+
+    def test_beschluss_in_dritter_beratung_with_truncated_station_typ(self, scraper_build_vorgang):
+        """station_typ truncated to 'Beschluss des Landtags' but raw has 'in Dritter Beratung'."""
+        raw = _make_raw_vorgang("V-401", fundstellen=[
+            {
+                "raw": "Gesetzentwurf  Landesregierung  22.10.2024 Drucksache 17/8000  (50 S.)",
+                "datum": "22.10.2024",
+                "drucksache": "17/8000",
+                "station_typ": "Gesetzentwurf",
+                "seiten": 50,
+                "pdf_url": "https://example.com/entwurf.pdf",
+            },
+            {
+                "raw": "Beschluss des Landtags  in Dritter Beratung  21.12.2022 Drucksache 17/3842",
+                "datum": "21.12.2022",
+                "drucksache": "17/3842",
+                "station_typ": "Beschluss des Landtags",
+                "pdf_url": "https://example.com/beschluss3.pdf",
+            },
+        ])
+        vorgang = scraper_build_vorgang(raw)
+
+        beschluss_station = vorgang.stationen[1]
+        assert beschluss_station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+
+    def test_plain_beschluss_des_landtags_still_maps_to_akzeptanz(self, scraper_build_vorgang):
+        """When raw text also says 'Beschluss des Landtags' (no 'in'), it IS akzeptanz."""
+        raw = _make_raw_vorgang("V-402", fundstellen=[
+            {
+                "raw": "Gesetzentwurf  Landesregierung  22.10.2024 Drucksache 17/8000  (50 S.)",
+                "datum": "22.10.2024",
+                "drucksache": "17/8000",
+                "station_typ": "Gesetzentwurf",
+                "seiten": 50,
+                "pdf_url": "https://example.com/entwurf.pdf",
+            },
+            {
+                "raw": "Beschluss des Landtags      16.12.2022 Drucksache 17/3820",
+                "datum": "16.12.2022",
+                "drucksache": "17/3820",
+                "station_typ": "Beschluss des Landtags",
+                "pdf_url": "https://example.com/beschluss.pdf",
+            },
+        ])
+        vorgang = scraper_build_vorgang(raw)
+
+        beschluss_station = vorgang.stationen[1]
+        assert beschluss_station.typ == Stationstyp.PARL_MINUS_AKZEPTANZ

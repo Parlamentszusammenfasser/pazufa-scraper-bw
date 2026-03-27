@@ -4,6 +4,8 @@ The dictionaries below are fully populated from the architecture document.
 The matching functions use case-insensitive substring matching against dictionary keys.
 """
 
+import re
+
 from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.stationstyp import Stationstyp
 from openapi_client.models.vorgangstyp import Vorgangstyp
@@ -148,13 +150,21 @@ def map_vorgangstyp(parlis_typ: str) -> Vorgangstyp:
     return VORGANGSTYP_MAP.get(parlis_typ, Vorgangstyp.SONSTIG)
 
 
+def _normalize_whitespace(text: str) -> str:
+    """Collapse runs of whitespace into single spaces for reliable substring matching."""
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def map_stationstyp(fundstelle_text: str, initiator: str | None = None) -> Stationstyp:
     """Map a Fundstelle text to the PaZuFa Stationstyp enum.
 
     Uses case-insensitive substring matching against known patterns, longest first.
+    Whitespace is normalized so that internal double-spaces (common in PARLIS
+    Fundstelle text) don't prevent matching of multi-word keys like
+    "Beschluss des Landtags in".
     If the station is a Gesetzentwurf from the Landesregierung, maps to PREPARL_REGENT.
     """
-    text_lower = fundstelle_text.lower()
+    text_lower = _normalize_whitespace(fundstelle_text).lower()
     for key in _STATIONSTYP_KEYS_SORTED:
         if key.lower() in text_lower:
             if key == "Gesetzentwurf" and initiator and "Landesregierung" in initiator:
@@ -165,7 +175,7 @@ def map_stationstyp(fundstelle_text: str, initiator: str | None = None) -> Stati
 
 def map_dokumententyp(context: str, is_vorparlamentarisch: bool = False) -> Doktyp:
     """Map a document context string to the PaZuFa Doktyp enum."""
-    context_lower = context.lower()
+    context_lower = _normalize_whitespace(context).lower()
     for key in _DOKUMENTENTYP_KEYS_SORTED:
         if key.lower() in context_lower:
             if key == "Gesetzentwurf" and is_vorparlamentarisch:

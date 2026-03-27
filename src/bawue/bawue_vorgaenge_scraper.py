@@ -394,18 +394,29 @@ class BawueVorgaengeScraper(VorgangsScraper):
         station_typ, pdf_url, ausschuss, plenarprotokoll, etc.
         """
         station_typ_str = fund.get("station_typ", "")
+        raw_text = fund.get("raw", "")
 
         # Fallback: when the regex-based station_typ extraction fails (e.g. single-space
         # separator in the Fundstelle text), use the full raw text for enum mapping.
         # map_stationstyp does substring matching, so it can find the type in the raw text.
-        mapping_text = station_typ_str or fund.get("raw", "")
-        if not station_typ_str and fund.get("raw"):
+        mapping_text = station_typ_str or raw_text
+        if not station_typ_str and raw_text:
             logger.warning(
                 "Fundstelle station_typ not extracted by regex, using raw text fallback: '%s'",
-                fund.get("raw", "")[:80],
+                raw_text[:80],
             )
 
         station_typ = map_stationstyp(mapping_text, initiator=initiative)
+
+        # Cross-check: the parser can truncate multi-word types at internal
+        # double-spaces (e.g. "Beschluss des Landtags  in Zweiter Beratung"
+        # → station_typ="Beschluss des Landtags", losing the "in" qualifier).
+        # If the full raw text maps to a different non-SONSTIG type, prefer it.
+        if station_typ_str and raw_text:
+            raw_typ = map_stationstyp(raw_text, initiator=initiative)
+            if raw_typ != station_typ and raw_typ != Stationstyp.SONSTIG:
+                station_typ = raw_typ
+
         zp_start = _parse_fundstelle_date(fund)
         gremium = self._determine_gremium(fund)
         dokumente = self._build_dokumente(fund, station_typ_str, mapping_text, station_typ, initiative, zp_start)
