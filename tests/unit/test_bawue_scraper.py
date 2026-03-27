@@ -1500,3 +1500,101 @@ class TestEntschliessungsantragHandling:
             for d in s.dokumente
         ]
         assert "17/1215" not in all_drucksnrs
+
+
+class TestAktuellerStandAblehnung:
+    """Tests for synthesizing a parl-ablehnung station from 'Aktueller Stand: Abgelehnt'."""
+
+    def test_abgelehnt_appends_ablehnung_station(self, scraper_build_vorgang):
+        """When Aktueller Stand is 'Abgelehnt', a parl-ablehnung station is appended."""
+        raw = _make_raw_vorgang(
+            "V-215352",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion der AfD  01.12.2021 Drucksache 17/1352",
+                    "datum": "01.12.2021",
+                    "drucksache": "17/1352",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/33 23.03.2022",
+                    "datum": "23.03.2022",
+                    "plenarprotokoll": "17/33",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        raw["Aktueller Stand"] = "Abgelehnt"
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 3
+        ablehnung = vorgang.stationen[-1]
+        assert ablehnung.typ == Stationstyp.PARL_MINUS_ABLEHNUNG
+        # Uses the date of the last station (Zweite Beratung)
+        assert ablehnung.zp_start == datetime(2022, 3, 23, tzinfo=UTC)
+
+    def test_no_ablehnung_when_aktueller_stand_missing(self, scraper_build_vorgang):
+        """No synthetic station when 'Aktueller Stand' is absent."""
+        raw = _make_raw_vorgang("V-001")
+        vorgang = scraper_build_vorgang(raw)
+
+        station_types = [s.typ for s in vorgang.stationen]
+        assert Stationstyp.PARL_MINUS_ABLEHNUNG not in station_types
+
+    def test_no_ablehnung_when_aktueller_stand_is_verkuendet(self, scraper_build_vorgang):
+        """No synthetic station when 'Aktueller Stand' is not 'Abgelehnt'."""
+        raw = _make_raw_vorgang("V-001")
+        raw["Aktueller Stand"] = "Verkündet"
+        vorgang = scraper_build_vorgang(raw)
+
+        station_types = [s.typ for s in vorgang.stationen]
+        assert Stationstyp.PARL_MINUS_ABLEHNUNG not in station_types
+
+    def test_ablehnung_not_duplicated_if_already_present(self, scraper_build_vorgang):
+        """If fundstellen already contain an Ablehnung, don't add another."""
+        raw = _make_raw_vorgang(
+            "V-100",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    CDU  01.01.2026 Drucksache 17/10000",
+                    "datum": "01.01.2026",
+                    "drucksache": "17/10000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+                {
+                    "raw": "Ablehnung   Plenarprotokoll 17/155 25.01.2026",
+                    "datum": "25.01.2026",
+                    "plenarprotokoll": "17/155",
+                    "station_typ": "Ablehnung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        raw["Aktueller Stand"] = "Abgelehnt"
+        vorgang = scraper_build_vorgang(raw)
+
+        ablehnung_count = sum(
+            1 for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_ABLEHNUNG
+        )
+        assert ablehnung_count == 1
+
+    def test_ablehnung_station_has_correct_gremium(self, scraper_build_vorgang):
+        """Synthetic ablehnung station should use Landtag as gremium."""
+        raw = _make_raw_vorgang("V-200")
+        raw["Aktueller Stand"] = "Abgelehnt"
+        vorgang = scraper_build_vorgang(raw)
+
+        ablehnung = vorgang.stationen[-1]
+        assert ablehnung.typ == Stationstyp.PARL_MINUS_ABLEHNUNG
+        assert ablehnung.gremium.name == "Landtag"
+
+    def test_ablehnung_skipped_with_empty_stationen(self, scraper_build_vorgang):
+        """When there are no fundstellen, don't synthesize a dateless ablehnung station."""
+        raw = _make_raw_vorgang("V-300", fundstellen=[])
+        raw["Aktueller Stand"] = "Abgelehnt"
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 0

@@ -188,6 +188,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
         initiatoren = _parse_autoren(initiative)
 
         stationen = self._collect_stationen(raw.get("fundstellen_parsed", []), initiative, vorgang_id)
+
+        # parse rejections
+        aktueller_stand = raw.get("Aktueller Stand", "")
+        if aktueller_stand == "Abgelehnt":
+            self._ensure_ablehnung_station(stationen, vorgang_id)
+
+        # parse vorgangs-id
         ids = [VgIdent(id=vorgang_id, typ=VgIdentTyp.VORGNR)] if vorgang_id != "unknown" else None
 
         return Vorgang(
@@ -257,6 +264,44 @@ class BawueVorgaengeScraper(VorgangsScraper):
         for station in stationen:
             station.dokumente = _dedup_drucks(station.dokumente)
         return stationen
+
+    def _ensure_ablehnung_station(
+        self, stationen: list[Station], vorgang_id: str
+    ) -> None:
+        """Append a synthetic parl-ablehnung station if none exists.
+
+        PARLIS lists acceptance outcomes (Zustimmung, Annahme, etc.) as separate
+        Fundstellen, but does not list rejection (Ablehnung). The rejection is only
+        recorded in the 'Aktueller Stand' metadata field. When that field says
+        'Abgelehnt', this method adds the missing station.
+        """
+        if any(s.typ == Stationstyp.PARL_MINUS_ABLEHNUNG for s in stationen):
+            return
+
+        if not stationen:
+            logger.warning(
+                "Cannot synthesize ablehnung station for Vorgang %s: no existing stations",
+                vorgang_id,
+            )
+            return
+
+        zp_start = stationen[-1].zp_start
+        stationen.append(
+            Station(
+                typ=Stationstyp.PARL_MINUS_ABLEHNUNG,
+                dokumente=[],
+                zp_start=zp_start,
+                gremium=Gremium(
+                    parlament=Parlament.BW,
+                    wahlperiode=self._wahlperiode,
+                    name="Landtag",
+                ),
+            )
+        )
+        logger.info(
+            "Synthesized parl-ablehnung station for Vorgang %s (Aktueller Stand: Abgelehnt)",
+            vorgang_id,
+        )
 
     @staticmethod
     def _attach_pending_aenderungsantraege(
