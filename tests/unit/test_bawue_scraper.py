@@ -1329,3 +1329,174 @@ class TestEnabledVorgangstypen:
         assert "V-002" not in scraper._raw_cache
         assert "V-004" not in scraper._raw_cache
         assert scraper._skipped == 2
+
+
+class TestAenderungsantragHandling:
+    """Änderungsanträge should be attached as documents to the parl-vollvlsgn station
+    where they were discussed, not created as separate stations."""
+
+    def test_aenderungsantrag_attaches_to_next_vollversammlung(self, scraper_build_vorgang):
+        """Änderungsantrag before a Beratung should attach its document to that Beratung station."""
+        raw = _make_raw_vorgang(
+            "V-800",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  26.10.2021 Drucksache 17/1000   (50 S.)",
+                    "datum": "26.10.2021",
+                    "drucksache": "17/1000",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 50,
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Änderungsanträge    Fraktion der SPD  14.12.2021 Drucksache 17/1210",
+                    "datum": "14.12.2021",
+                    "drucksache": "17/1210",
+                    "station_typ": "Änderungsanträge",
+                    "pdf_url": "https://example.com/aenderung.pdf",
+                    "autor_text": "Fraktion der SPD",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/23 16.12.2021",
+                    "datum": "16.12.2021",
+                    "plenarprotokoll": "17/23",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/plenar.pdf",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        # Änderungsantrag should NOT be its own station
+        station_types = [s.typ for s in vorgang.stationen]
+        assert Stationstyp.PARL_MINUS_INITIATIV not in station_types or \
+            station_types.count(Stationstyp.PARL_MINUS_INITIATIV) == 0, \
+            "Änderungsantrag should not create a parl-initiativ station"
+
+        # Should have exactly 2 stations: Gesetzentwurf + Zweite Beratung
+        assert len(vorgang.stationen) == 2
+
+        # The Zweite Beratung station should contain the Änderungsantrag document
+        beratung = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN)
+        drucksnrs = [d.actual_instance.drucksnr for d in beratung.dokumente]
+        assert "17/1210" in drucksnrs, "Änderungsantrag document should be attached to Beratung station"
+
+    def test_aenderungsantrag_singular_form(self, scraper_build_vorgang):
+        """Singular 'Änderungsantrag' should also be handled."""
+        raw = _make_raw_vorgang(
+            "V-801",
+            fundstellen=[
+                {
+                    "raw": "Änderungsantrag    Fraktion der SPD  14.12.2021 Drucksache 17/1210",
+                    "datum": "14.12.2021",
+                    "drucksache": "17/1210",
+                    "station_typ": "Änderungsantrag",
+                    "pdf_url": "https://example.com/aenderung.pdf",
+                    "autor_text": "Fraktion der SPD",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/23 16.12.2021",
+                    "datum": "16.12.2021",
+                    "plenarprotokoll": "17/23",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+
+    def test_aenderungsantrag_attaches_to_preceding_vollversammlung_if_no_next(self, scraper_build_vorgang):
+        """If no subsequent vollvlsgn exists, attach to the preceding one."""
+        raw = _make_raw_vorgang(
+            "V-802",
+            fundstellen=[
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/23 16.12.2021",
+                    "datum": "16.12.2021",
+                    "plenarprotokoll": "17/23",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Änderungsanträge    Fraktion der SPD  16.12.2021 Drucksache 17/1210",
+                    "datum": "16.12.2021",
+                    "drucksache": "17/1210",
+                    "station_typ": "Änderungsanträge",
+                    "pdf_url": "https://example.com/aenderung.pdf",
+                    "autor_text": "Fraktion der SPD",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+        drucksnrs = [d.actual_instance.drucksnr for d in vorgang.stationen[0].dokumente]
+        assert "17/1210" in drucksnrs
+
+    def test_aenderungsantrag_without_vollversammlung_logs_warning(self, scraper_build_vorgang, caplog):
+        """If no vollvlsgn station exists at all, discard with a warning."""
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+
+        raw = _make_raw_vorgang(
+            "V-803",
+            fundstellen=[
+                {
+                    "raw": "Änderungsanträge    Fraktion der SPD  14.12.2021 Drucksache 17/1210",
+                    "datum": "14.12.2021",
+                    "drucksache": "17/1210",
+                    "station_typ": "Änderungsanträge",
+                    "pdf_url": "https://example.com/aenderung.pdf",
+                    "autor_text": "Fraktion der SPD",
+                },
+            ],
+        )
+
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
+            vorgang = scraper._build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 0
+        assert any("Änderungsantr" in msg for msg in caplog.messages)
+
+
+class TestEntschliessungsantragHandling:
+    """Entschließungsanträge should be discarded entirely."""
+
+    def test_entschliessungsantrag_discarded(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-810",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 13,
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Entschließungsantrag    Fraktion der FDP/DVP  16.12.2021 Drucksache 17/1215",
+                    "datum": "16.12.2021",
+                    "drucksache": "17/1215",
+                    "station_typ": "Entschließungsantrag",
+                    "pdf_url": "https://example.com/entschliessung.pdf",
+                    "autor_text": "Fraktion der FDP/DVP",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_INITIATIV
+        # Entschließungsantrag document should NOT appear anywhere
+        all_drucksnrs = [
+            d.actual_instance.drucksnr
+            for s in vorgang.stationen
+            for d in s.dokumente
+        ]
+        assert "17/1215" not in all_drucksnrs

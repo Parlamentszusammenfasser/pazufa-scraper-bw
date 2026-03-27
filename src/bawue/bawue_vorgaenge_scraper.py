@@ -201,6 +201,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
             ids=ids,
         )
 
+    _AENDERUNGSANTRAG_TYPEN: frozenset[str] = frozenset({
+        "änderungsantrag", "änderungsanträge",
+    })
+    _ENTSCHLIESSUNGSANTRAG_TYPEN: frozenset[str] = frozenset({
+        "entschließungsantrag", "entschließungsanträge",
+    })
+
     def _collect_stationen(
         self, fundstellen: list[RawFundstelle], initiative: str, vorgang_id: str
     ) -> list[Station]:
@@ -209,11 +216,24 @@ class BawueVorgaengeScraper(VorgangsScraper):
         PARLIS lists Stellungnahmen as separate Fundstellen, but they belong to the
         preceding legislative step (e.g. a committee report). If a Stellungnahme appears
         before any station, it is discarded with a warning.
+
+        Änderungsanträge are attached as documents to the nearest parl-vollvlsgn station.
+        Entschließungsanträge are discarded entirely.
         """
         stationen: list[Station] = []
+        pending_aenderungsantraege: list[list[StationDokumenteInner]] = []
         for fund in fundstellen:
             station = self._build_station(fund, initiative)
             station_typ_str = fund.get("station_typ", "")
+            typ_lower = station_typ_str.lower()
+
+            if typ_lower in self._ENTSCHLIESSUNGSANTRAG_TYPEN:
+                continue
+
+            if typ_lower in self._AENDERUNGSANTRAG_TYPEN:
+                if station.dokumente:
+                    pending_aenderungsantraege.append(station.dokumente)
+                continue
 
             if self._is_stellungnahme(station, station_typ_str):
                 self._attach_stellungnahme(stationen, station.dokumente, vorgang_id)
@@ -224,9 +244,40 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
             stationen.append(station)
 
+            # Attach any buffered Änderungsanträge to this station if it's a vollvlsgn
+            if station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN and pending_aenderungsantraege:
+                for docs in pending_aenderungsantraege:
+                    station.dokumente.extend(docs)
+                pending_aenderungsantraege.clear()
+
+        # Remaining Änderungsanträge: attach to the last vollvlsgn or warn
+        if pending_aenderungsantraege:
+            self._attach_pending_aenderungsantraege(stationen, pending_aenderungsantraege, vorgang_id)
+
         for station in stationen:
             station.dokumente = _dedup_drucks(station.dokumente)
         return stationen
+
+    @staticmethod
+    def _attach_pending_aenderungsantraege(
+        stationen: list[Station],
+        pending: list[list[StationDokumenteInner]],
+        vorgang_id: str,
+    ) -> None:
+        """Attach remaining Änderungsantrag docs to the last vollvlsgn, or warn."""
+        target = None
+        for s in reversed(stationen):
+            if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN:
+                target = s
+                break
+        if target is not None:
+            for docs in pending:
+                target.dokumente.extend(docs)
+        else:
+            logger.warning(
+                "Discarding Änderungsanträge without vollvlsgn station for Vorgang %s",
+                vorgang_id,
+            )
 
     @staticmethod
     def _try_merge_station(stationen: list[Station], station: Station) -> bool:
