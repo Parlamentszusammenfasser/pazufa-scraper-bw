@@ -188,6 +188,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         stationen = self._collect_stationen(raw.get("fundstellen_parsed", []), initiative, vorgang_id)
 
+        self._ensure_initiativ_after_regent(stationen)
+
         # parse rejections
         aktueller_stand = raw.get("Aktueller Stand", "")
         if aktueller_stand == "Abgelehnt":
@@ -301,6 +303,50 @@ class BawueVorgaengeScraper(VorgangsScraper):
             "Synthesized parl-ablehnung station for Vorgang %s (Aktueller Stand: Abgelehnt)",
             vorgang_id,
         )
+
+    def _ensure_initiativ_after_regent(self, stationen: list[Station]) -> None:
+        """Insert a synthetic parl-initiativ station after preparl-regent if missing.
+
+        PARLIS uses a single Fundstelle "Gesetzentwurf" for government bills, which
+        the scraper maps to preparl-regent.  However, the backend track definition
+        requires a parl-initiativ station between the pre-parliamentary phase and
+        the first plenary reading (parl-vollvlsgn).  The parliamentary introduction
+        is implicit in PARLIS data — this method makes it explicit.
+        """
+        if not stationen:
+            return
+
+        # Find the last preparl-regent (there may be several pre-parliamentary stations)
+        regent_idx = None
+        for i, s in enumerate(stationen):
+            if s.typ == Stationstyp.PREPARL_MINUS_REGENT:
+                regent_idx = i
+
+        if regent_idx is None:
+            return
+
+        # Check if a parl-initiativ already follows
+        next_idx = regent_idx + 1
+        if next_idx < len(stationen) and stationen[next_idx].typ == Stationstyp.PARL_MINUS_INITIATIV:
+            return
+
+        # Determine the date: use the next station's date if available, else the regent's
+        if next_idx < len(stationen):
+            zp_start = stationen[next_idx].zp_start
+        else:
+            zp_start = stationen[regent_idx].zp_start
+
+        synthetic = Station(
+            typ=Stationstyp.PARL_MINUS_INITIATIV,
+            dokumente=stationen[regent_idx].dokumente.copy(),
+            zp_start=zp_start,
+            gremium=Gremium(
+                parlament=Parlament.BW,
+                wahlperiode=self._wahlperiode,
+                name="Landtag",
+            ),
+        )
+        stationen.insert(next_idx, synthetic)
 
     @staticmethod
     def _attach_pending_aenderungsantraege(

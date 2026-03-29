@@ -1368,14 +1368,13 @@ class TestAenderungsantragHandling:
         )
         vorgang = scraper_build_vorgang(raw)
 
-        # Änderungsantrag should NOT be its own station
+        # Should have 3 stations: preparl-regent + synthetic parl-initiativ + Zweite Beratung
         station_types = [s.typ for s in vorgang.stationen]
-        assert Stationstyp.PARL_MINUS_INITIATIV not in station_types or \
-            station_types.count(Stationstyp.PARL_MINUS_INITIATIV) == 0, \
-            "Änderungsantrag should not create a parl-initiativ station"
-
-        # Should have exactly 2 stations: Gesetzentwurf + Zweite Beratung
-        assert len(vorgang.stationen) == 2
+        assert station_types == [
+            Stationstyp.PREPARL_MINUS_REGENT,
+            Stationstyp.PARL_MINUS_INITIATIV,
+            Stationstyp.PARL_MINUS_VOLLVLSGN,
+        ]
 
         # The Zweite Beratung station should contain the Änderungsantrag document
         beratung = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN)
