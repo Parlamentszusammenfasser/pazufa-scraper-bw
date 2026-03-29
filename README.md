@@ -284,4 +284,5 @@ See [docs/anforderungen.md — Konfiguration](docs/anforderungen.md#konfiguratio
 - [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) — Collector framework
 - [pazufa-backend](https://codeberg.org/PaZuFa/pazufa-backend) — Backend service
 - [PaZuFa backend OpenAPI Spec](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/specs/openapi.yml)
+- [CI Pipeline](https://ci.codeberg.org/repos/16437) — Woodpecker CI build status
 - [Landtag BaWue](https://www.landtag-bw.de/)

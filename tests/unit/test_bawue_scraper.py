@@ -13,7 +13,9 @@ from bawue.bawue_vorgaenge_scraper import (
     DEFAULT_ENABLED_VORGANGSTYPEN,
     DEFAULT_WAHLPERIODE,
     BawueVorgaengeScraper,
+    _fallback_date_from_year,
     _parse_autoren,
+    _parse_fundstelle_date,
 )
 
 
@@ -506,7 +508,7 @@ class TestDatetimesAreTimezoneAware:
         assert station.zp_start.tzinfo is not None
         assert station.zp_start == datetime(2025, 6, 15, tzinfo=UTC)
 
-    def test_missing_date_fallback_is_timezone_aware(self, scraper_build_vorgang):
+    def test_missing_date_skips_station(self, scraper_build_vorgang):
         raw = _make_raw_vorgang(
             "V-701",
             fundstellen=[
@@ -520,9 +522,7 @@ class TestDatetimesAreTimezoneAware:
             ],
         )
         vorgang = scraper_build_vorgang(raw)
-        station = vorgang.stationen[0]
-
-        assert station.zp_start.tzinfo is not None
+        assert len(vorgang.stationen) == 0
 
     def test_placeholder_date_fallback_is_timezone_aware(self, scraper_build_vorgang):
         raw = _make_raw_vorgang(
@@ -545,7 +545,7 @@ class TestDatetimesAreTimezoneAware:
 
 
 class TestDatetimeFallbackWarning:
-    def test_missing_date_logs_warning(self, scraper_build_vorgang, caplog):
+    def test_missing_date_logs_error(self, scraper_build_vorgang, caplog):
         scraper = object.__new__(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
 
@@ -562,7 +562,7 @@ class TestDatetimeFallbackWarning:
             ],
         )
 
-        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
+        with caplog.at_level(logging.ERROR, logger="bawue.bawue_vorgaenge_scraper"):
             scraper._build_vorgang(raw)
 
         assert any("No date found for Fundstelle" in msg for msg in caplog.messages)
@@ -584,7 +584,7 @@ class TestDatetimeFallbackWarning:
             ],
         )
 
-        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
+        with caplog.at_level(logging.ERROR, logger="bawue.bawue_vorgaenge_scraper"):
             scraper._build_vorgang(raw)
 
         assert any("17/10266" in msg for msg in caplog.messages)
@@ -746,6 +746,27 @@ class TestParseAutoren:
 
     def test_whitespace_only(self):
         assert _parse_autoren("   ") == []
+
+    def test_ministry_name_with_internal_comma(self):
+        """Ministry names containing commas must not be split incorrectly."""
+        result = _parse_autoren(
+            "Ministerium für Umwelt, Klima und Energiewirtschaft, Ministerium für Landesentwicklung und Wohnen"
+        )
+        assert len(result) == 2
+        assert result[0].organisation == "Ministerium für Umwelt, Klima und Energiewirtschaft"
+        assert result[1].organisation == "Ministerium für Landesentwicklung und Wohnen"
+
+    def test_single_ministry_with_internal_comma(self):
+        result = _parse_autoren("Ministerium für Umwelt, Klima und Energiewirtschaft")
+        assert len(result) == 1
+        assert result[0].organisation == "Ministerium für Umwelt, Klima und Energiewirtschaft"
+
+    def test_mixed_fraktionen_and_ministry(self):
+        """Fraktionen and ministries in the same string."""
+        result = _parse_autoren("Fraktion GRÜNE, Ministerium der Justiz und für Migration")
+        assert len(result) == 2
+        assert result[0].organisation == "Fraktion GRÜNE"
+        assert result[1].organisation == "Ministerium der Justiz und für Migration"
 
 
 class TestBuildStationAutoren:
@@ -1714,3 +1735,126 @@ class TestBeschlussDesLandtagsInBeratung:
 
         beschluss_station = vorgang.stationen[1]
         assert beschluss_station.typ == Stationstyp.PARL_MINUS_AKZEPTANZ
+
+
+class TestParseFundstelleDateNone:
+    """_parse_fundstelle_date returns None for missing/unparseable dates (DoD: no bogus defaults)."""
+
+    def test_returns_none_for_empty_datum(self):
+        result = _parse_fundstelle_date({"datum": "", "raw": "test", "drucksache": "17/1"})
+        assert result is None
+
+    def test_returns_none_for_missing_datum_key(self):
+        result = _parse_fundstelle_date({"raw": "test", "drucksache": "17/1"})
+        assert result is None
+
+    def test_returns_none_for_unparseable_datum_no_year(self):
+        result = _parse_fundstelle_date({"datum": "xyz", "raw": "test", "drucksache": "17/1"})
+        assert result is None
+
+    def test_parses_valid_date(self):
+        result = _parse_fundstelle_date({"datum": "04.02.2026", "raw": "test", "drucksache": "17/1"})
+        assert result == datetime(2026, 2, 4, tzinfo=UTC)
+
+    def test_year_only_placeholder_returns_jan1(self):
+        result = _parse_fundstelle_date({"datum": "00.00.2028", "raw": "test", "drucksache": "17/1"})
+        assert result == datetime(2028, 1, 1, tzinfo=UTC)
+
+
+class TestFallbackDateFromYearNone:
+    """_fallback_date_from_year returns None when no year is extractable."""
+
+    def test_returns_none_for_no_year(self):
+        result = _fallback_date_from_year("xyz", {"raw": "test", "drucksache": "17/1"})
+        assert result is None
+
+    def test_extracts_year_when_present(self):
+        result = _fallback_date_from_year("00.00.2028", {"raw": "test", "drucksache": "17/1"})
+        assert result == datetime(2028, 1, 1, tzinfo=UTC)
+
+
+class TestStationSkippedForUnparseableDate:
+    """Stations with unfillable zp_start are omitted entirely (DoD requirement)."""
+
+    def test_station_skipped_when_date_empty(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-800",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Test",
+                    "datum": "",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                    "drucksache": "17/10266",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+        assert len(vorgang.stationen) == 0
+
+    def test_station_skipped_when_date_unparseable(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-801",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Test",
+                    "datum": "not-a-date",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                    "drucksache": "17/10266",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+        assert len(vorgang.stationen) == 0
+
+    def test_all_stations_skipped_logs_error(self, scraper_build_vorgang, caplog):
+        raw = _make_raw_vorgang(
+            "V-803",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Test",
+                    "datum": "",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                    "drucksache": "17/10266",
+                },
+                {
+                    "raw": "Beschlussempfehlung    Test",
+                    "datum": "garbage",
+                    "station_typ": "Beschlussempfehlung",
+                    "pdf_url": "",
+                    "drucksache": "17/10267",
+                },
+            ],
+        )
+        with caplog.at_level(logging.ERROR, logger="bawue.bawue_vorgaenge_scraper"):
+            vorgang = scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 0
+        assert any("ALL stations were skipped" in msg for msg in caplog.messages)
+        assert any("V-803" in msg for msg in caplog.messages)
+
+    def test_valid_station_kept_alongside_skipped(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-802",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Test  15.06.2025 Drucksache 17/12345",
+                    "datum": "15.06.2025",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                    "drucksache": "17/12345",
+                },
+                {
+                    "raw": "Beschlussempfehlung    Test",
+                    "datum": "",
+                    "station_typ": "Beschlussempfehlung",
+                    "pdf_url": "",
+                    "drucksache": "17/10266",
+                },
+            ],
+        )
+        vorgang = scraper_build_vorgang(raw)
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].zp_start == datetime(2025, 6, 15, tzinfo=UTC)

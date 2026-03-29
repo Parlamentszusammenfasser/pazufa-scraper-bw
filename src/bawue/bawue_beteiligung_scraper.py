@@ -124,11 +124,20 @@ class BawueBeteiligungScraper(VorgangsScraper):
         api_id = uuid5(NAMESPACE_URL, f"beteiligung-{slug}")
 
         # Parse comment deadline as station timestamp
-        zp_start = (
-            datetime.strptime(detail.comment_deadline, "%d.%m.%Y").replace(tzinfo=UTC)
-            if detail.comment_deadline
-            else datetime.now(UTC)
-        )
+        if not detail.comment_deadline:
+            logger.error("No comment_deadline for '%s', skipping Vorgang", slug)
+            self._skipped += 1
+            return None
+        try:
+            zp_start = datetime.strptime(detail.comment_deadline, "%d.%m.%Y").replace(tzinfo=UTC)
+        except ValueError:
+            logger.error(
+                "Unparseable comment_deadline '%s' for '%s', skipping Vorgang",
+                detail.comment_deadline,
+                slug,
+            )
+            self._skipped += 1
+            return None
 
         # Build documents
         dokumente: list[StationDokumenteInner] = []
