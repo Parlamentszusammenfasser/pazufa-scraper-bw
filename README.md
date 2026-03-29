@@ -92,10 +92,12 @@ lines). Returns HTTP 201 for all valid requests; 401 if `X-API-Key` is missing.
 ## Running against Local Backend
 
 For full end-to-end testing with a real backend and persistent data. Requires
-`pazufa-backend` cloned alongside this repo:
+`pazufa-backend` cloned alongside this repo (use the `dev-0.2.7` branch for
+compatibility with OpenAPI spec v0.2.3):
 
 ```bash
 git clone https://codeberg.org/PaZuFa/pazufa-backend.git ../pazufa-backend
+cd ../pazufa-backend && git checkout dev-0.2.7 && cd -
 ```
 
 **1. Start the dev stack** (first run compiles Rust + generates OpenAPI code — takes several minutes):
@@ -109,27 +111,39 @@ docker-compose -f docker-compose.dev.yml up -d --build
 ```bash
 docker-compose -f docker-compose.dev.yml logs -f pazufa-backend
 # Ready when you see the backend accepting connections on port 80
-# Or poll: curl -s http://localhost:8080/ping
+# Or poll: curl -s http://127.0.0.1:8090/ping
 ```
 
 **3. Create a collector API key** using the keyadder key (`dev-keyadder-key`):
 
 ```bash
-curl -s -X POST http://localhost:8080/api/v2/auth \
+curl -s -X POST http://127.0.0.1:8090/api/v2/auth \
   -H "X-API-Key: dev-keyadder-key" \
   -H "Content-Type: application/json" \
   -d '{"scope": "collector"}' | jq .
 ```
 
-Copy the returned API key value.
+Copy the returned API key value (starts with `ltzf_`).
 
 **4. Configure the scraper:**
 
+Update `config.dev.toml` with your collector key:
+
 ```bash
-# config.dev.toml is pre-configured for the local backend.
-# Just paste your collector key:
-sed -i '' 's/REPLACE_WITH_COLLECTOR_KEY/<your-key-here>/' config.dev.toml
+# Edit config.dev.toml and paste your key into the ltzf-api-key field
 ```
+
+> **Warning — `.env` overrides config files:** If you have a `.env` file (used
+> for staging deployments), `load_dotenv()` loads it into the process
+> environment, and environment variables take precedence over `config.dev.toml`.
+> To ensure the scraper targets the local backend, either:
+>
+> - **Export the local values** before running:
+>   ```bash
+>   export LTZF_API_URL=http://127.0.0.1:8090
+>   export LTZF_API_KEY=<your-local-collector-key>
+>   ```
+> - **Or rename/remove `.env`** while doing local development.
 
 **5. Run the scraper against the local backend:**
 
@@ -141,13 +155,13 @@ sed -i '' 's/REPLACE_WITH_COLLECTOR_KEY/<your-key-here>/' config.dev.toml
 
 ```bash
 # List submitted Vorgänge:
-curl -s "http://localhost:8080/api/v2/vorgang?parlament=BW" | jq '.[] | {id, titel}'
+curl -s "http://127.0.0.1:8090/api/v2/vorgang?parlament=BW" | jq '.[] | {id, titel}'
 
 # Check Kalender entries:
-curl -s "http://localhost:8080/api/v2/kalender?parlament=BW" | jq .
+curl -s "http://127.0.0.1:8090/api/v2/kalender?parlament=BW" | jq .
 
 # Backend status:
-curl -s http://localhost:8080/status | jq .
+curl -s http://127.0.0.1:8090/status | jq .
 ```
 
 **7. (Optional) View results in the frontend:**
@@ -158,7 +172,7 @@ Clone and run the PaZuFa website alongside the dev stack:
 git clone https://codeberg.org/flovar/pazufa-website.git ../pazufa-website
 cd ../pazufa-website
 npm install
-echo "VITE_API_URL=http://localhost:8080" > .env.local
+echo "VITE_API_URL=http://127.0.0.1:8090" > .env.local
 npm run dev
 ```
 
@@ -172,12 +186,20 @@ docker-compose -f docker-compose.dev.yml down
 docker-compose -f docker-compose.dev.yml down -v
 ```
 
-| Service        | URL                           | Notes                              |
-|----------------|-------------------------------|------------------------------------|
-| Backend API    | http://localhost:8080         | REST API + `/ping`, `/status`      |
-| PostgreSQL     | localhost:5432                | ltzf-user / ltzf-pass / ltzf       |
-| Redis          | localhost:6379                | Cache for the scraper framework    |
-| Keyadder key   | `dev-keyadder-key`            | Used to create collector API keys  |
+**Clean restart** (wipe all data and rebuild):
+
+```bash
+docker-compose -f docker-compose.dev.yml down -v
+docker-compose -f docker-compose.dev.yml up -d --build
+# Then re-create the collector API key (step 3)
+```
+
+| Service      | URL                   | Notes                             |
+|--------------|-----------------------|-----------------------------------|
+| Backend API  | http://127.0.0.1:8090 | REST API + `/ping`, `/status`     |
+| PostgreSQL   | localhost:5432        | ltzf-user / ltzf-pass / ltzf      |
+| Redis        | localhost:6379        | Cache for the scraper framework   |
+| Keyadder key | `dev-keyadder-key`    | Used to create collector API keys |
 
 ## Development
 

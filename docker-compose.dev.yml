@@ -34,12 +34,13 @@ services:
   pazufa-backend:
     build:
       context: ../pazufa-backend
-      dockerfile: Dockerfile.deploy
+      dockerfile: ../pazufa-bawue-scraper/Dockerfile.backend-dev
     ports:
-      - "8080:80"
+      - "8090:80"
     environment:
       DATABASE_URL: postgres://ltzf-user:ltzf-pass@postgres:5432/ltzf
       LTZF_KEYADDER_KEY: dev-keyadder-key
+      RUST_LOG: debug
     depends_on:
       postgres:
         condition: service_healthy

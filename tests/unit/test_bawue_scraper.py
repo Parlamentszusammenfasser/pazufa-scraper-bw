@@ -72,7 +72,7 @@ class TestBuildVorgang:
         assert len(vorgang.stationen) == 2
         assert vorgang.ids is not None
         assert vorgang.ids[0].id == "V-001"
-        assert vorgang.ids[0].typ.value == "vorgnr"
+        assert vorgang.ids[0].typ == "vorgnr"
 
     def test_deterministic_api_id(self, scraper_build_vorgang):
         raw = _make_raw_vorgang("V-001")

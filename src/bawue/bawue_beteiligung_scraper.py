@@ -20,7 +20,6 @@ from openapi_client.models import (
     StationDokumenteInner,
     Stationstyp,
     VgIdent,
-    VgIdentTyp,
     Vorgang,
     Vorgangstyp,
 )
@@ -156,7 +155,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         )
 
         beteiligung_url = f"{BASE_URL}/de/mitmachen/lp-{self._wahlperiode}/{slug}"
-        ids = [VgIdent(id=beteiligung_url, typ=VgIdentTyp.VORGNR)]
+        ids = [VgIdent(id=beteiligung_url, typ="vorgnr")]
 
         return Vorgang(
             api_id=str(api_id),

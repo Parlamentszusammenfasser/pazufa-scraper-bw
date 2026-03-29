@@ -1,0 +1,80 @@
+# Patched copy of pazufa-backend/Dockerfile.deploy (dev-0.2.7 branch)
+# Removes --chmod flag (requires BuildKit) for compatibility with older Docker.
+FROM rust:1.92-slim-bookworm AS builder
+
+ENV SPEC_PATH="https://codeberg.org/PaZuFa/parlamentszusammenfasser/raw/tag/v0.2.3/docs/specs/openapi.yml"
+ENV OPENAPI_GENERATOR_VERSION="7.20.0"
+
+WORKDIR /app
+
+RUN apt update \
+    &&  apt install -y --no-install-recommends git libssl-dev pkg-config libpq5 maven jq curl ripgrep\
+    &&  rm -rf /var/lib/apt/lists/* \
+    && curl "https://raw.githubusercontent.com/OpenAPITools/openapi-generator/master/bin/utils/openapi-generator-cli.sh" > ./openapi-generator-cli \
+    && chmod u+x ./openapi-generator-cli
+
+# caching the first-time-run generators
+RUN echo 'openapi: 3.0.0\ninfo:\n  title: "spec"\n  version: "0.1.0"\npaths:\n  /none:\n    get:\n      responses:\n        "200":\n          description: "success"' > openapi.yml \
+    && ./openapi-generator-cli generate -g rust-axum -i ./openapi.yml -o ./rs-test \
+    && rm -rf rs-test openapi.yml
+
+RUN curl $SPEC_PATH > ./openapi.yml \
+    && ./openapi-generator-cli generate -g rust-axum -i ./openapi.yml -o ./oapicode
+
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/nonexistent" \
+    --shell "/sbin/nologin" \
+    --no-create-home \
+    --uid 10001 \
+    "pazufa-backend"
+
+
+COPY Cargo.toml Cargo.lock ./
+
+RUN mkdir src && \
+    echo "fn main() {}" > src/main.rs && \
+    cargo build -r
+
+COPY build.rs ./
+COPY ./.git ./.git
+COPY ./.sqlx ./.sqlx
+COPY ./src ./src
+COPY ./migrations ./migrations
+COPY tracks.toml ./tracks.toml
+
+ENV SQLX_OFFLINE=true
+
+RUN touch src/main.rs && cargo build --release
+
+FROM busybox:latest AS runner
+
+LABEL maintainer="Benedikt Schäfer"
+LABEL description="Backend for the PaZuFa"
+LABEL version="0.2.7"
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+            CMD curl -f "http://localhost:80" || exit 1
+
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /etc/group /etc/group
+
+COPY --from=builder /usr/lib/*-linux-gnu/libssl.so.* /usr/lib/
+COPY --from=builder /usr/lib/*-linux-gnu/libcrypto.so.* /usr/lib/
+COPY --from=builder /usr/lib/*-linux-gnu/libpq.so.* /usr/lib/
+COPY --from=builder /usr/lib/*-linux-gnu/libgcc_s.so.* /usr/lib
+
+RUN mkdir -p /var/log/pazufa-backend && chmod 0766 /var/log/pazufa-backend && chown pazufa-backend /var/log/pazufa-backend
+
+RUN mkdir /app && chmod 0766 /app && chown pazufa-backend /app
+
+COPY --from=builder --chown=pazufa-backend:pazufa-backend /app/target/release/pazufa-backend /app/pazufa-backend
+RUN chmod 0100 /app/pazufa-backend
+
+WORKDIR /app
+
+USER pazufa-backend
+ENV RUST_LOG=warn,pazufa-backend=info
+
+ENTRYPOINT ["./pazufa-backend"]

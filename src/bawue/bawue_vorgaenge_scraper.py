@@ -20,7 +20,6 @@ from openapi_client.models import (
     StationDokumenteInner,
     Stationstyp,
     VgIdent,
-    VgIdentTyp,
     Vorgang,
 )
 from openapi_client.models.doktyp import Doktyp
@@ -195,7 +194,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             self._ensure_ablehnung_station(stationen, vorgang_id)
 
         # parse vorgangs-id
-        ids = [VgIdent(id=vorgang_id, typ=VgIdentTyp.VORGNR)] if vorgang_id != "unknown" else None
+        ids = [VgIdent(id=vorgang_id, typ="vorgnr")] if vorgang_id != "unknown" else None
 
         return Vorgang(
             api_id=str(api_id),
