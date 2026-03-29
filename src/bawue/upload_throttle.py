@@ -72,9 +72,7 @@ def upload_vorgang(
 
     try:
         with openapi_client.ApiClient(oapiconfig) as api_client:
-            api_instance = openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi(
-                api_client
-            )
+            api_instance = openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi(api_client)
             with_upload_retry(
                 lambda: api_instance.vorgang_put(str(scraper_id), item),
                 upload_limiter,

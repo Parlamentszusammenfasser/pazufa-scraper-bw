@@ -116,9 +116,7 @@ class BawueSitzungenScraper(SitzungsScraper):
 
         # The framework expects (datetime, List[Sitzung]) — use the date as a datetime at midnight UTC
         date_dt = datetime.date.fromisoformat(date_key)
-        result_datetime = datetime.datetime(
-            date_dt.year, date_dt.month, date_dt.day, tzinfo=datetime.UTC
-        )
+        result_datetime = datetime.datetime(date_dt.year, date_dt.month, date_dt.day, tzinfo=datetime.UTC)
 
         return (result_datetime, sitzungen)
 
@@ -130,9 +128,7 @@ class BawueSitzungenScraper(SitzungsScraper):
         self.log_item(item)
 
         with openapi_client.ApiClient(self.config.oapiconfig) as api_client:
-            api_instance = openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi(
-                api_client
-            )
+            api_instance = openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi(api_client)
             try:
                 ret = with_upload_retry(
                     lambda: api_instance.kal_date_put(

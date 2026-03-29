@@ -117,12 +117,23 @@ class DryRunSummary:
 # ---------------------------------------------------------------------------
 
 VORGANG_FIELDS = [
-    "titel", "vorgangs_id", "detail_url", "Vorgangstyp", "Initiative", "fundstellen_parsed",
+    "titel",
+    "vorgangs_id",
+    "detail_url",
+    "Vorgangstyp",
+    "Initiative",
+    "fundstellen_parsed",
 ]
 
 FUNDSTELLE_FIELDS = [
-    "datum", "drucksache", "plenarprotokoll", "station_typ", "autor_text", "ausschuss",
-    "seiten", "pdf_url",
+    "datum",
+    "drucksache",
+    "plenarprotokoll",
+    "station_typ",
+    "autor_text",
+    "ausschuss",
+    "seiten",
+    "pdf_url",
 ]
 
 
@@ -169,9 +180,7 @@ def analyze_sitzungen(events: list[Any], date_key: str) -> SitzungReport:
     )
 
 
-def compute_field_completeness(
-    records: list[dict[str, Any]], fields: list[str]
-) -> list[FieldCompleteness]:
+def compute_field_completeness(records: list[dict[str, Any]], fields: list[str]) -> list[FieldCompleteness]:
     """Compute per-field completeness across a list of dicts."""
     results = []
     total = len(records)

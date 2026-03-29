@@ -1317,9 +1317,7 @@ class TestEnabledVorgangstypen:
         from bawue.config_loader import load_toml_section
 
         config_file = tmp_path / "config.toml"
-        config_file.write_text(
-            '[bawue]\nenabled-vorgangstypen = ["Gesetzgebung", "Volksantrag"]\n'
-        )
+        config_file.write_text('[bawue]\nenabled-vorgangstypen = ["Gesetzgebung", "Volksantrag"]\n')
         mock_config = MagicMock()
         mock_config.config_file = str(config_file)
 
@@ -1527,11 +1525,7 @@ class TestEntschliessungsantragHandling:
         assert len(vorgang.stationen) == 1
         assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_INITIATIV
         # Entschließungsantrag document should NOT appear anywhere
-        all_drucksnrs = [
-            d.actual_instance.drucksnr
-            for s in vorgang.stationen
-            for d in s.dokumente
-        ]
+        all_drucksnrs = [d.actual_instance.drucksnr for s in vorgang.stationen for d in s.dokumente]
         assert "17/1215" not in all_drucksnrs
 
 
@@ -1609,9 +1603,7 @@ class TestAktuellerStandAblehnung:
         raw["Aktueller Stand"] = "Abgelehnt"
         vorgang = scraper_build_vorgang(raw)
 
-        ablehnung_count = sum(
-            1 for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_ABLEHNUNG
-        )
+        ablehnung_count = sum(1 for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_ABLEHNUNG)
         assert ablehnung_count == 1
 
     def test_ablehnung_station_has_correct_gremium(self, scraper_build_vorgang):
@@ -1644,23 +1636,26 @@ class TestBeschlussDesLandtagsInBeratung:
 
     def test_beschluss_in_zweiter_beratung_with_truncated_station_typ(self, scraper_build_vorgang):
         """station_typ truncated to 'Beschluss des Landtags' but raw has 'in Zweiter Beratung'."""
-        raw = _make_raw_vorgang("V-400", fundstellen=[
-            {
-                "raw": "Gesetzentwurf  Landesregierung  22.10.2024 Drucksache 17/8000  (50 S.)",
-                "datum": "22.10.2024",
-                "drucksache": "17/8000",
-                "station_typ": "Gesetzentwurf",
-                "seiten": 50,
-                "pdf_url": "https://example.com/entwurf.pdf",
-            },
-            {
-                "raw": "Beschluss des Landtags  in Zweiter Beratung  16.12.2022 Drucksache 17/3820",
-                "datum": "16.12.2022",
-                "drucksache": "17/3820",
-                "station_typ": "Beschluss des Landtags",
-                "pdf_url": "https://example.com/beschluss.pdf",
-            },
-        ])
+        raw = _make_raw_vorgang(
+            "V-400",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf  Landesregierung  22.10.2024 Drucksache 17/8000  (50 S.)",
+                    "datum": "22.10.2024",
+                    "drucksache": "17/8000",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 50,
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Beschluss des Landtags  in Zweiter Beratung  16.12.2022 Drucksache 17/3820",
+                    "datum": "16.12.2022",
+                    "drucksache": "17/3820",
+                    "station_typ": "Beschluss des Landtags",
+                    "pdf_url": "https://example.com/beschluss.pdf",
+                },
+            ],
+        )
         vorgang = scraper_build_vorgang(raw)
 
         beschluss_station = vorgang.stationen[1]
@@ -1668,23 +1663,26 @@ class TestBeschlussDesLandtagsInBeratung:
 
     def test_beschluss_in_dritter_beratung_with_truncated_station_typ(self, scraper_build_vorgang):
         """station_typ truncated to 'Beschluss des Landtags' but raw has 'in Dritter Beratung'."""
-        raw = _make_raw_vorgang("V-401", fundstellen=[
-            {
-                "raw": "Gesetzentwurf  Landesregierung  22.10.2024 Drucksache 17/8000  (50 S.)",
-                "datum": "22.10.2024",
-                "drucksache": "17/8000",
-                "station_typ": "Gesetzentwurf",
-                "seiten": 50,
-                "pdf_url": "https://example.com/entwurf.pdf",
-            },
-            {
-                "raw": "Beschluss des Landtags  in Dritter Beratung  21.12.2022 Drucksache 17/3842",
-                "datum": "21.12.2022",
-                "drucksache": "17/3842",
-                "station_typ": "Beschluss des Landtags",
-                "pdf_url": "https://example.com/beschluss3.pdf",
-            },
-        ])
+        raw = _make_raw_vorgang(
+            "V-401",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf  Landesregierung  22.10.2024 Drucksache 17/8000  (50 S.)",
+                    "datum": "22.10.2024",
+                    "drucksache": "17/8000",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 50,
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Beschluss des Landtags  in Dritter Beratung  21.12.2022 Drucksache 17/3842",
+                    "datum": "21.12.2022",
+                    "drucksache": "17/3842",
+                    "station_typ": "Beschluss des Landtags",
+                    "pdf_url": "https://example.com/beschluss3.pdf",
+                },
+            ],
+        )
         vorgang = scraper_build_vorgang(raw)
 
         beschluss_station = vorgang.stationen[1]
@@ -1692,23 +1690,26 @@ class TestBeschlussDesLandtagsInBeratung:
 
     def test_plain_beschluss_des_landtags_still_maps_to_akzeptanz(self, scraper_build_vorgang):
         """When raw text also says 'Beschluss des Landtags' (no 'in'), it IS akzeptanz."""
-        raw = _make_raw_vorgang("V-402", fundstellen=[
-            {
-                "raw": "Gesetzentwurf  Landesregierung  22.10.2024 Drucksache 17/8000  (50 S.)",
-                "datum": "22.10.2024",
-                "drucksache": "17/8000",
-                "station_typ": "Gesetzentwurf",
-                "seiten": 50,
-                "pdf_url": "https://example.com/entwurf.pdf",
-            },
-            {
-                "raw": "Beschluss des Landtags      16.12.2022 Drucksache 17/3820",
-                "datum": "16.12.2022",
-                "drucksache": "17/3820",
-                "station_typ": "Beschluss des Landtags",
-                "pdf_url": "https://example.com/beschluss.pdf",
-            },
-        ])
+        raw = _make_raw_vorgang(
+            "V-402",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf  Landesregierung  22.10.2024 Drucksache 17/8000  (50 S.)",
+                    "datum": "22.10.2024",
+                    "drucksache": "17/8000",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 50,
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Beschluss des Landtags      16.12.2022 Drucksache 17/3820",
+                    "datum": "16.12.2022",
+                    "drucksache": "17/3820",
+                    "station_typ": "Beschluss des Landtags",
+                    "pdf_url": "https://example.com/beschluss.pdf",
+                },
+            ],
+        )
         vorgang = scraper_build_vorgang(raw)
 
         beschluss_station = vorgang.stationen[1]

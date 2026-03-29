@@ -34,6 +34,7 @@ from bawue.wahlperiode_check import check_for_newer_wahlperiode
 
 logger = logging.getLogger(__name__)
 
+
 def _parse_autoren(text: str) -> list[Autor]:
     """Parse a comma-separated author string into a list of Autor objects."""
     if not text or not text.strip():
@@ -161,12 +162,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         # Skip non-legislative meta-entries (Bekanntmachungen, Berichtigungen, etc.)
         # that only have post-parliamentary stations and no parliamentary process.
-        if vorgang.stationen and all(
-            s.typ in self._POSTPARL_TYPEN for s in vorgang.stationen
-        ):
+        if vorgang.stationen and all(s.typ in self._POSTPARL_TYPEN for s in vorgang.stationen):
             logger.info(
-                "Skipping Vorgang %s ('%s'): only post-parliamentary stations, "
-                "not a full legislative process",
+                "Skipping Vorgang %s ('%s'): only post-parliamentary stations, not a full legislative process",
                 vorgang_id,
                 vorgang.titel[:60],
             )
@@ -225,23 +223,29 @@ class BawueVorgaengeScraper(VorgangsScraper):
             ids=ids,
         )
 
-    _POSTPARL_TYPEN: frozenset[Stationstyp] = frozenset({
-        Stationstyp.POSTPARL_MINUS_GSBLT,
-        Stationstyp.POSTPARL_MINUS_VESJA,
-        Stationstyp.POSTPARL_MINUS_VESNE,
-        Stationstyp.POSTPARL_MINUS_KRAFT,
-    })
+    _POSTPARL_TYPEN: frozenset[Stationstyp] = frozenset(
+        {
+            Stationstyp.POSTPARL_MINUS_GSBLT,
+            Stationstyp.POSTPARL_MINUS_VESJA,
+            Stationstyp.POSTPARL_MINUS_VESNE,
+            Stationstyp.POSTPARL_MINUS_KRAFT,
+        }
+    )
 
-    _AENDERUNGSANTRAG_TYPEN: frozenset[str] = frozenset({
-        "änderungsantrag", "änderungsanträge",
-    })
-    _ENTSCHLIESSUNGSANTRAG_TYPEN: frozenset[str] = frozenset({
-        "entschließungsantrag", "entschließungsanträge",
-    })
+    _AENDERUNGSANTRAG_TYPEN: frozenset[str] = frozenset(
+        {
+            "änderungsantrag",
+            "änderungsanträge",
+        }
+    )
+    _ENTSCHLIESSUNGSANTRAG_TYPEN: frozenset[str] = frozenset(
+        {
+            "entschließungsantrag",
+            "entschließungsanträge",
+        }
+    )
 
-    def _collect_stationen(
-        self, fundstellen: list[RawFundstelle], initiative: str, vorgang_id: str
-    ) -> list[Station]:
+    def _collect_stationen(self, fundstellen: list[RawFundstelle], initiative: str, vorgang_id: str) -> list[Station]:
         """Build stations from parsed Fundstellen, nesting Stellungnahmen as children.
 
         PARLIS lists Stellungnahmen as separate Fundstellen, but they belong to the
@@ -289,9 +293,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             station.dokumente = _dedup_drucks(station.dokumente)
         return stationen
 
-    def _ensure_ablehnung_station(
-        self, stationen: list[Station], vorgang_id: str
-    ) -> None:
+    def _ensure_ablehnung_station(self, stationen: list[Station], vorgang_id: str) -> None:
         """Append a synthetic parl-ablehnung station if none exists.
 
         PARLIS lists acceptance outcomes (Zustimmung, Annahme, etc.) as separate
@@ -394,10 +396,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
         """Try to merge a station into an existing one. Returns True if merged."""
         if station.typ == Stationstyp.PARL_MINUS_AUSSCHBER:
             match = BawueVorgaengeScraper._find_matching_ausschuss(stationen, station.gremium.name)
-        elif (stationen
-              and stationen[-1].typ == station.typ
-              and stationen[-1].gremium.name == station.gremium.name
-              and station.typ != Stationstyp.PARL_MINUS_VOLLVLSGN):
+        elif (
+            stationen
+            and stationen[-1].typ == station.typ
+            and stationen[-1].gremium.name == station.gremium.name
+            and station.typ != Stationstyp.PARL_MINUS_VOLLVLSGN
+        ):
             match = stationen[-1]
         else:
             match = None
@@ -427,9 +431,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         - All documents having Doktyp.STELLUNGNAHME (standard case with PDF)
         - The Fundstelle type being "Stellungnahme"/"Antwort" with no documents (no PDF URL)
         """
-        if station.dokumente and all(
-            d.actual_instance.typ == Doktyp.STELLUNGNAHME for d in station.dokumente
-        ):
+        if station.dokumente and all(d.actual_instance.typ == Doktyp.STELLUNGNAHME for d in station.dokumente):
             return True
         return not station.dokumente and station_typ_str.lower() in BawueVorgaengeScraper._STELLUNGNAHME_STATION_TYPEN
 

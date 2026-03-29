@@ -40,9 +40,7 @@ class TestRetryOn429:
 
     def test_succeeds_after_multiple_429s(self, limiter):
         """Multiple 429s followed by success should eventually return."""
-        api_call = MagicMock(
-            side_effect=[FakeApiException(429), FakeApiException(429), FakeApiException(429), "done"]
-        )
+        api_call = MagicMock(side_effect=[FakeApiException(429), FakeApiException(429), FakeApiException(429), "done"])
         with patch("bawue.rate_limiter.time.sleep"):
             result = with_upload_retry(api_call, limiter, max_retries=5, exception_type=FakeApiException)
         assert result == "done"

@@ -241,11 +241,15 @@ class TestRunBeteiligung:
             ),
         ]
         mock_client.fetch_process_detail.return_value = "<html></html>"
-        mock_parse_detail.return_value = type("D", (), {
-            "title": "Klimaschutzgesetz",
-            "ministry": "UM",
-            "pdf_links": [{"title": "E", "url": "http://x.pdf"}],
-        })()
+        mock_parse_detail.return_value = type(
+            "D",
+            (),
+            {
+                "title": "Klimaschutzgesetz",
+                "ministry": "UM",
+                "pdf_links": [{"title": "E", "url": "http://x.pdf"}],
+            },
+        )()
 
         reports = run_beteiligung(wahlperiode=17, limit=None)
 
@@ -264,9 +268,15 @@ class TestRunBeteiligung:
             RawBeteiligungProcess(title="B", url="/b", slug="b", status="open"),
         ]
         mock_client.fetch_process_detail.return_value = "<html></html>"
-        mock_parse_detail.return_value = type("D", (), {
-            "title": "A", "ministry": "M", "pdf_links": [],
-        })()
+        mock_parse_detail.return_value = type(
+            "D",
+            (),
+            {
+                "title": "A",
+                "ministry": "M",
+                "pdf_links": [],
+            },
+        )()
 
         reports = run_beteiligung(wahlperiode=17, limit=1)
 
@@ -500,7 +510,7 @@ class TestLoadEnabledVorgangstypen:
 
     def test_fallback_when_section_missing(self, tmp_path):
         config = tmp_path / "config.toml"
-        config.write_text("[main]\ncollector-uuid = \"abc\"\n")
+        config.write_text('[main]\ncollector-uuid = "abc"\n')
 
         result = _load_enabled_vorgangstypen(str(config))
 

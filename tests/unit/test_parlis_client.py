@@ -256,7 +256,6 @@ class TestDateSubdivision:
         post_calls = [c for c in responses.calls if c.request.method == "POST"]
         assert len(post_calls) == 1
 
-
     def test_falls_back_to_wahlperiode_when_no_dates(self):
         """When overflow occurs with no date range, fall back to Wahlperiode start → today."""
         wp_start = date(2021, 4, 26)
@@ -275,8 +274,9 @@ class TestDateSubdivision:
                 return raw_result
             return []
 
-        with patch.object(client, "_establish_session"), patch.object(
-            client, "_search_single", side_effect=fake_search_single
+        with (
+            patch.object(client, "_establish_session"),
+            patch.object(client, "_search_single", side_effect=fake_search_single),
         ):
             results = client.search("Kleine Anfrage")
 
@@ -291,9 +291,7 @@ class TestDateSubdivision:
 
     def test_no_date_no_wahlperiode_start_returns_empty(self, client):
         """Without wahlperiode_start_date, overflow on unbounded search returns empty list."""
-        with patch.object(client, "_establish_session"), patch.object(
-            client, "_search_single", return_value=None
-        ):
+        with patch.object(client, "_establish_session"), patch.object(client, "_search_single", return_value=None):
             results = client.search("Kleine Anfrage")
 
         assert results == []
@@ -335,6 +333,7 @@ class TestRateLimiting:
 class TestRecursiveHalving:
     def test_halves_monthly_window_when_still_too_large(self, client):
         """When a monthly window is too large, it is split into two halves and retried."""
+
         # Oct 1-31: delta=30, mid=Oct16 → halves: (Oct1,Oct16) and (Oct17,Oct31)
         def fake_search_single(vorgangstyp, date_from, date_to):
             if date_from == date(2022, 1, 1) and date_to == date(2022, 12, 31):
@@ -347,8 +346,9 @@ class TestRecursiveHalving:
                 return [{"titel": "V2", "vorgangs_id": "V-2", "fundstellen_parsed": []}]
             return []
 
-        with patch.object(client, "_establish_session"), patch.object(
-            client, "_search_single", side_effect=fake_search_single
+        with (
+            patch.object(client, "_establish_session"),
+            patch.object(client, "_search_single", side_effect=fake_search_single),
         ):
             results = client.search("Kleine Anfrage", date(2022, 1, 1), date(2022, 12, 31))
 
@@ -357,6 +357,7 @@ class TestRecursiveHalving:
 
     def test_halving_recurses_multiple_levels(self, client):
         """Halving recurses deeper when sub-windows are also too large."""
+
         # Oct 1-31: None
         # Oct 1-16: None (first half also too large)
         # Oct 1-8: [V1]   (second level first half fits)
@@ -375,8 +376,9 @@ class TestRecursiveHalving:
                 return [{"titel": "V3", "vorgangs_id": "V-3", "fundstellen_parsed": []}]
             return []
 
-        with patch.object(client, "_establish_session"), patch.object(
-            client, "_search_single", side_effect=fake_search_single
+        with (
+            patch.object(client, "_establish_session"),
+            patch.object(client, "_search_single", side_effect=fake_search_single),
         ):
             results = client.search("Kleine Anfrage", date(2022, 10, 1), date(2022, 10, 31))
 
@@ -385,11 +387,13 @@ class TestRecursiveHalving:
 
     def test_skips_single_day_when_still_too_large(self, client):
         """A single-day window that is still too large is skipped and returns empty."""
+
         def fake_search_single(vorgangstyp, date_from, date_to):
             return None  # always too large
 
-        with patch.object(client, "_establish_session"), patch.object(
-            client, "_search_single", side_effect=fake_search_single
+        with (
+            patch.object(client, "_establish_session"),
+            patch.object(client, "_search_single", side_effect=fake_search_single),
         ):
             results = client.search("Kleine Anfrage", date(2022, 10, 1), date(2022, 10, 1))
 

@@ -95,7 +95,7 @@ def _find_date_in_parent_time_elements(link) -> str | None:
     for ancestor in (parent, grandparent):
         if ancestor is None:
             continue
-        time_els = ancestor.xpath('.//time[@datetime]')
+        time_els = ancestor.xpath(".//time[@datetime]")
         if time_els:
             iso_date = time_els[0].get("datetime")
             try:

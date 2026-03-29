@@ -22,6 +22,7 @@ from bawue.dry_run import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _raw_vorgang(
     vid="V-001",
     titel="Test Gesetz",
@@ -155,11 +156,15 @@ class TestAnalyzeBeteiligung:
             slug="klimaschutzgesetz",
             status="closed",
         )
-        detail = type("Detail", (), {
-            "title": "Klimaschutzgesetz",
-            "ministry": "Umweltministerium",
-            "pdf_links": [{"title": "Entwurf", "url": "https://example.com/entwurf.pdf"}],
-        })()
+        detail = type(
+            "Detail",
+            (),
+            {
+                "title": "Klimaschutzgesetz",
+                "ministry": "Umweltministerium",
+                "pdf_links": [{"title": "Entwurf", "url": "https://example.com/entwurf.pdf"}],
+            },
+        )()
 
         report = analyze_beteiligung(process, detail)
 
@@ -173,14 +178,16 @@ class TestAnalyzeBeteiligung:
     def test_skipped_when_no_pdfs(self):
         from bawue.beteiligung_parser import RawBeteiligungProcess
 
-        process = RawBeteiligungProcess(
-            title="Info Only", url="/de/info", slug="info-only", status="open"
-        )
-        detail = type("Detail", (), {
-            "title": "Info Only",
-            "ministry": "Staatsministerium",
-            "pdf_links": [],
-        })()
+        process = RawBeteiligungProcess(title="Info Only", url="/de/info", slug="info-only", status="open")
+        detail = type(
+            "Detail",
+            (),
+            {
+                "title": "Info Only",
+                "ministry": "Staatsministerium",
+                "pdf_links": [],
+            },
+        )()
 
         report = analyze_beteiligung(process, detail)
 
@@ -201,13 +208,15 @@ class TestAnalyzeSitzungen:
 
         events = [
             ParsedEvent(
-                uid="1", summary="Plenarsitzung: Tag 1",
+                uid="1",
+                summary="Plenarsitzung: Tag 1",
                 dtstart=datetime(2026, 2, 20, 9, 0),
                 dtend=datetime(2026, 2, 20, 17, 0),
                 gremium_name="Plenum",
             ),
             ParsedEvent(
-                uid="2", summary="Fraktions- und Ausschusssitzungen: Ausschuesse",
+                uid="2",
+                summary="Fraktions- und Ausschusssitzungen: Ausschuesse",
                 dtstart=datetime(2026, 2, 20, 14, 0),
                 dtend=datetime(2026, 2, 20, 18, 0),
                 gremium_name="Ausschusssitzungen",
@@ -281,19 +290,29 @@ class TestBuildSummary:
     def test_builds_aggregate(self):
         vorgang_reports = [
             VorgangReport(
-                vorgang_id="V-001", titel="Test", raw_type="Gesetzgebung",
-                mapped_type="GG_LAND_PARL", station_count=2,
-                missing_fields=[], fundstelle_count=2,
+                vorgang_id="V-001",
+                titel="Test",
+                raw_type="Gesetzgebung",
+                mapped_type="GG_LAND_PARL",
+                station_count=2,
+                missing_fields=[],
+                fundstelle_count=2,
             ),
         ]
         beteiligung_reports = [
             BeteiligungReport(
-                slug="klima", title="Klimaschutz", ministry="UM",
-                pdf_count=1, skipped=False,
+                slug="klima",
+                title="Klimaschutz",
+                ministry="UM",
+                pdf_count=1,
+                skipped=False,
             ),
             BeteiligungReport(
-                slug="info", title="Info", ministry="SM",
-                pdf_count=0, skipped=True,
+                slug="info",
+                title="Info",
+                ministry="SM",
+                pdf_count=0,
+                skipped=True,
             ),
         ]
         sitzung_reports = [
@@ -318,7 +337,6 @@ class TestBuildSummary:
         assert summary.total_sitzung_events == 3
         assert summary.duration_s == 42.0
         assert summary.wahlperiode == 17
-
 
 
 # ---------------------------------------------------------------------------

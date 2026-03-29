@@ -235,7 +235,6 @@ class TestSendResult:
             all_args = {**args, **kwargs}
             assert all_args["parlament"] == Parlament.BW
 
-
     @pytest.mark.asyncio
     async def test_send_result_422_returns_none_and_logs(self, caplog):
         scraper = _make_scraper()

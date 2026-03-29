@@ -318,9 +318,7 @@ class TestRunSummary:
             mock_api_instance.vorgang_put.side_effect = real_oapi.ApiException(
                 status=500, reason="Internal Server Error"
             )
-            mock_oapi.api.collector_schnittstellen_api.CollectorSchnittstellenApi.return_value = (
-                mock_api_instance
-            )
+            mock_oapi.api.collector_schnittstellen_api.CollectorSchnittstellenApi.return_value = mock_api_instance
             await scraper.send_result(MagicMock())
 
         with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):

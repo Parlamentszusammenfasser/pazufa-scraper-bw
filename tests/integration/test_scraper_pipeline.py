@@ -242,11 +242,13 @@ class TestPipelineBehavior:
         gg = parlis_fixtures("gesetzgebung")
         ka = parlis_fixtures("kleine_anfrage")
         an = parlis_fixtures("antrag")
-        _mock_parlis_for_types({
-            "Gesetzgebung": (gg["search_json"], gg["results_html"]),
-            "Kleine Anfrage": (ka["search_json"], ka["results_html"]),
-            "Antrag": (an["search_json"], an["results_html"]),
-        })
+        _mock_parlis_for_types(
+            {
+                "Gesetzgebung": (gg["search_json"], gg["results_html"]),
+                "Kleine Anfrage": (ka["search_json"], ka["results_html"]),
+                "Antrag": (an["search_json"], an["results_html"]),
+            }
+        )
         s = await scraper(["Gesetzgebung", "Kleine Anfrage", "Antrag"])
         try:
             with patch("bawue.bawue_vorgaenge_scraper.date") as mock_date:

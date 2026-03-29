@@ -70,7 +70,7 @@ def parse_process_detail(html_content: str, base_url: str) -> RawBeteiligungDeta
     # Title: try dossier-header template first, then article template fallback
     title_els = tree.xpath('//header[contains(@class, "dossier-header")]//h1')
     if not title_els:
-        title_els = tree.xpath('//main//article//h1')
+        title_els = tree.xpath("//main//article//h1")
     title = title_els[0].text_content().strip().replace("\xad", "") if title_els else ""
 
     # Ministry from contact-box headline

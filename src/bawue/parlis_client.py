@@ -189,9 +189,7 @@ class ParlisClient:
 
         return all_results
 
-    def search(
-        self, vorgangstyp: str, date_from: date | None = None, date_to: date | None = None
-    ) -> list[RawVorgang]:
+    def search(self, vorgangstyp: str, date_from: date | None = None, date_to: date | None = None) -> list[RawVorgang]:
         """Search PARLIS for Vorgänge matching the given criteria.
 
         If PARLIS indicates the result set is too large (status=running), automatically

@@ -93,8 +93,7 @@ class TestParseProcessDetail:
         assert len(detail.pdf_links) == 1
         pdf = detail.pdf_links[0]
         expected_title = (
-            "Zweites Gesetz zum Abbau verzichtbarer Formerfordernisse"
-            " und zur Änderung weiterer Vorschriften (PDF)"
+            "Zweites Gesetz zum Abbau verzichtbarer Formerfordernisse und zur Änderung weiterer Vorschriften (PDF)"
         )
         assert pdf["title"] == expected_title
         assert pdf["url"].endswith(".pdf")
