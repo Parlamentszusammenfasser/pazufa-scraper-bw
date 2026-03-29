@@ -63,6 +63,17 @@ class BawueBeteiligungScraper(VorgangsScraper):
         self._failed: int = 0
         self._skipped: int = 0
 
+        # LLM document enrichment (optional, requires LLM_PROVIDER_KEY)
+        self._llm_enabled = bool(getattr(config, "llm_provider_key", None))
+        self._llm = None
+        if self._llm_enabled:
+            from collector_core import LLMConnector
+
+            self._llm = LLMConnector(
+                model=config.llm_model,
+                api_key=config.llm_provider_key,
+            )
+
     async def run(self) -> None:
         start = time.monotonic()
         try:
@@ -109,9 +120,9 @@ class BawueBeteiligungScraper(VorgangsScraper):
         html = await asyncio.to_thread(self._client.fetch_process_detail, process.url)
         detail = parse_process_detail(html, BASE_URL)
 
-        return self._build_vorgang(slug, detail)
+        return await self._build_vorgang(slug, detail)
 
-    def _build_vorgang(self, slug: str, detail: RawBeteiligungDetail) -> Vorgang | None:
+    async def _build_vorgang(self, slug: str, detail: RawBeteiligungDetail) -> Vorgang | None:
         """Convert parsed Beteiligungsportal data into a framework Vorgang model.
 
         Returns None if the detail page has no PDF links (non-legislative content).
@@ -152,6 +163,15 @@ class BawueBeteiligungScraper(VorgangsScraper):
                 link=pdf["url"],
                 autoren=[Autor(organisation=detail.ministry)],
             )
+
+            if self._llm_enabled and self._llm is not None:
+                try:
+                    from bawue.bawue_dok import enrich_dokument
+
+                    dok = await enrich_dokument(self.session, self._llm, dok)
+                except Exception:
+                    logger.warning("Document enrichment failed for %s", pdf["url"])
+
             dokumente.append(StationDokumenteInner(dok))
 
         gremium = Gremium(parlament=Parlament.BW, name="Landesregierung", wahlperiode=self._wahlperiode)

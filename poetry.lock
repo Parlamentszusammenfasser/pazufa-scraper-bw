@@ -528,6 +528,23 @@ type = "directory"
 url = "../pazufa-collector"
 
 [[package]]
+name = "collector-core"
+version = "0.1.0"
+description = "Core library for collecting parliamentary data"
+optional = false
+python-versions = ">=3.12,<4.0"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+litellm = "^1.81.13"
+
+[package.source]
+type = "directory"
+url = "../pazufa-collector-core"
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 description = "Cross-platform colored terminal text."
@@ -3549,4 +3566,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.14"
-content-hash = "7735a948e74f8f1596b5d0d91a90c7199d31b996d35bec5fcbc1e9836adbb8ce"
+content-hash = "18b100173899c844af7fb7c01e3171990fb896ce8eff95e3f44ce706cafb133b"

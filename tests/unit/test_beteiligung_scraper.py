@@ -32,6 +32,9 @@ def _make_scraper():
     scraper._published = 0
     scraper._failed = 0
     scraper._skipped = 0
+    scraper._llm_enabled = False
+    scraper._llm = None
+    scraper.session = MagicMock()
     return scraper
 
 
@@ -74,123 +77,139 @@ def _make_process(
 
 
 class TestBuildVorgang:
-    def test_builds_vorgang_with_preparl_regent_station(self):
+    @pytest.mark.asyncio
+    async def test_builds_vorgang_with_preparl_regent_station(self):
         scraper = _make_scraper()
         detail = _make_detail()
-        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
         assert vorgang is not None
         assert len(vorgang.stationen) == 1
         assert vorgang.stationen[0].typ == Stationstyp.PREPARL_MINUS_REGENT
 
-    def test_deterministic_api_id(self):
+    @pytest.mark.asyncio
+    async def test_deterministic_api_id(self):
         scraper = _make_scraper()
         detail = _make_detail()
-        v1 = scraper._build_vorgang("entbuerokratisierung", detail)
-        v2 = scraper._build_vorgang("entbuerokratisierung", detail)
+        v1 = await scraper._build_vorgang("entbuerokratisierung", detail)
+        v2 = await scraper._build_vorgang("entbuerokratisierung", detail)
         assert v1.api_id == v2.api_id
 
-    def test_different_slugs_produce_different_api_ids(self):
+    @pytest.mark.asyncio
+    async def test_different_slugs_produce_different_api_ids(self):
         scraper = _make_scraper()
-        v1 = scraper._build_vorgang("entbuerokratisierung", _make_detail(title="A"))
-        v2 = scraper._build_vorgang("rettungsdienstplanverordnung", _make_detail(title="B"))
+        v1 = await scraper._build_vorgang("entbuerokratisierung", _make_detail(title="A"))
+        v2 = await scraper._build_vorgang("rettungsdienstplanverordnung", _make_detail(title="B"))
         assert v1.api_id != v2.api_id
 
-    def test_api_id_uses_namespace_url(self):
+    @pytest.mark.asyncio
+    async def test_api_id_uses_namespace_url(self):
         scraper = _make_scraper()
         detail = _make_detail()
-        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
         expected = str(uuid5(NAMESPACE_URL, "beteiligung-entbuerokratisierung"))
         assert str(vorgang.api_id) == expected
 
-    def test_documents_have_preparl_entwurf_type(self):
+    @pytest.mark.asyncio
+    async def test_documents_have_preparl_entwurf_type(self):
         scraper = _make_scraper()
         detail = _make_detail()
-        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
         station = vorgang.stationen[0]
         assert len(station.dokumente) == 1
         doc = station.dokumente[0].actual_instance
         assert doc.typ == Doktyp.PREPARL_MINUS_ENTWURF
 
-    def test_ministry_as_initiator(self):
+    @pytest.mark.asyncio
+    async def test_ministry_as_initiator(self):
         scraper = _make_scraper()
         detail = _make_detail()
-        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
         assert len(vorgang.initiatoren) == 1
         assert vorgang.initiatoren[0].organisation == "Ministerium des Inneren, für Digitalisierung und Kommunen"
 
-    def test_gremium_is_landesregierung(self):
+    @pytest.mark.asyncio
+    async def test_gremium_is_landesregierung(self):
         scraper = _make_scraper()
         detail = _make_detail()
-        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
         gremium = vorgang.stationen[0].gremium
         assert gremium.parlament == Parlament.BW
         assert gremium.name == "Landesregierung"
         assert gremium.wahlperiode == 17
 
-    def test_vorgangstyp_is_gg_land_parl(self):
+    @pytest.mark.asyncio
+    async def test_vorgangstyp_is_gg_land_parl(self):
         scraper = _make_scraper()
         detail = _make_detail()
-        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
         assert vorgang.typ == Vorgangstyp.GG_MINUS_LAND_MINUS_PARL
 
-    def test_kurztitel_is_slug(self):
+    @pytest.mark.asyncio
+    async def test_kurztitel_is_slug(self):
         scraper = _make_scraper()
         detail = _make_detail()
-        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
         assert vorgang.kurztitel == "entbuerokratisierung"
 
-    def test_ids_contain_beteiligung_url(self):
+    @pytest.mark.asyncio
+    async def test_ids_contain_beteiligung_url(self):
         scraper = _make_scraper()
         detail = _make_detail()
-        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
         assert vorgang.ids is not None
         assert len(vorgang.ids) == 1
         assert "beteiligungsportal" in vorgang.ids[0].id
 
-    def test_zp_start_is_timezone_aware(self):
+    @pytest.mark.asyncio
+    async def test_zp_start_is_timezone_aware(self):
         """Naive datetimes cause API 422 'premature end of input' errors."""
         scraper = _make_scraper()
         detail = _make_detail(comment_deadline="13.11.2025")
-        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
         station = vorgang.stationen[0]
         assert station.zp_start.tzinfo is not None
         assert station.zp_start == datetime(2025, 11, 13, tzinfo=UTC)
 
-    def test_no_deadline_returns_none(self):
+    @pytest.mark.asyncio
+    async def test_no_deadline_returns_none(self):
         """Missing comment_deadline means station can't be built — skip entire Vorgang."""
         scraper = _make_scraper()
         detail = _make_detail(comment_deadline=None)
-        result = scraper._build_vorgang("test-slug", detail)
+        result = await scraper._build_vorgang("test-slug", detail)
         assert result is None
 
-    def test_unparseable_deadline_returns_none(self):
+    @pytest.mark.asyncio
+    async def test_unparseable_deadline_returns_none(self):
         """Unparseable comment_deadline means station can't be built — skip entire Vorgang."""
         scraper = _make_scraper()
         detail = _make_detail(comment_deadline="not-a-date")
-        result = scraper._build_vorgang("test-slug", detail)
+        result = await scraper._build_vorgang("test-slug", detail)
         assert result is None
 
-    def test_document_timestamps_are_timezone_aware(self):
+    @pytest.mark.asyncio
+    async def test_document_timestamps_are_timezone_aware(self):
         scraper = _make_scraper()
         detail = _make_detail(comment_deadline="13.11.2025")
-        vorgang = scraper._build_vorgang("entbuerokratisierung", detail)
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
         doc = vorgang.stationen[0].dokumente[0].actual_instance
         assert doc.zp_modifiziert.tzinfo is not None
         assert doc.zp_referenz.tzinfo is not None
 
-    def test_no_pdfs_returns_none(self):
+    @pytest.mark.asyncio
+    async def test_no_pdfs_returns_none(self):
         scraper = _make_scraper()
         detail = _make_detail(pdf_links=[])
-        result = scraper._build_vorgang("klima-register", detail)
+        result = await scraper._build_vorgang("klima-register", detail)
         assert result is None
 
-    def test_multiple_pdfs(self):
+    @pytest.mark.asyncio
+    async def test_multiple_pdfs(self):
         scraper = _make_scraper()
         detail = _make_detail(
             pdf_links=[
@@ -198,7 +217,7 @@ class TestBuildVorgang:
                 {"title": "Entwurf B (PDF)", "url": "https://example.com/b.pdf"},
             ]
         )
-        vorgang = scraper._build_vorgang("test-slug", detail)
+        vorgang = await scraper._build_vorgang("test-slug", detail)
         assert len(vorgang.stationen[0].dokumente) == 2
 
 
@@ -384,6 +403,7 @@ class TestInit:
         mock_config = MagicMock()
         mock_config.config_file = str(config_file)
         mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
+        mock_config.llm_provider_key = None
 
         with (
             patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.__init__", return_value=None),
@@ -397,6 +417,7 @@ class TestInit:
         mock_config = MagicMock()
         mock_config.config_file = None
         mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
+        mock_config.llm_provider_key = None
 
         with (
             patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.__init__", return_value=None),

@@ -219,6 +219,31 @@ Run `make help` to list all targets.
 **Always run `make lint` and `make format` after making changes** to ensure CI passes. The Woodpecker CI
 pipeline checks both linting and formatting on every push and pull request.
 
+### LLM Integration Tests
+
+The scraper optionally enriches documents with LLM-extracted metadata (summary, keywords, short title). The
+LLM integration tests download a real PDF from the Landtag BW website and call a real LLM API to verify the
+full enrichment pipeline end-to-end.
+
+**Requirements:**
+- An LLM provider API key (e.g. OpenAI)
+- Internet access (downloads PDFs from `landtag-bw.de`)
+
+**Run:**
+
+```bash
+LLM_PROVIDER_KEY=sk-... pytest -m integration tests/integration/test_llm_extraction.py
+```
+
+Optionally set `LLM_MODEL` to override the default model (`gpt-4o-mini`):
+
+```bash
+LLM_PROVIDER_KEY=sk-... LLM_MODEL=gpt-4o pytest -m integration tests/integration/test_llm_extraction.py
+```
+
+The tests are skipped automatically when `LLM_PROVIDER_KEY` is not set, so `make test-integration` and CI
+runs are unaffected.
+
 ## Running against Staging
 
 The `docker-compose.yml` runs the scraper with Redis and expects secrets in a `.env` file (git-ignored).
