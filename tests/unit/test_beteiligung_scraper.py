@@ -161,14 +161,19 @@ class TestBuildVorgang:
         assert station.zp_start.tzinfo is not None
         assert station.zp_start == datetime(2025, 11, 13, tzinfo=UTC)
 
-    def test_zp_start_without_deadline_is_timezone_aware(self):
-        """Fallback to now() must also be timezone-aware."""
+    def test_no_deadline_returns_none(self):
+        """Missing comment_deadline means station can't be built — skip entire Vorgang."""
         scraper = _make_scraper()
         detail = _make_detail(comment_deadline=None)
-        vorgang = scraper._build_vorgang("test-slug", detail)
+        result = scraper._build_vorgang("test-slug", detail)
+        assert result is None
 
-        station = vorgang.stationen[0]
-        assert station.zp_start.tzinfo is not None
+    def test_unparseable_deadline_returns_none(self):
+        """Unparseable comment_deadline means station can't be built — skip entire Vorgang."""
+        scraper = _make_scraper()
+        detail = _make_detail(comment_deadline="not-a-date")
+        result = scraper._build_vorgang("test-slug", detail)
+        assert result is None
 
     def test_document_timestamps_are_timezone_aware(self):
         scraper = _make_scraper()

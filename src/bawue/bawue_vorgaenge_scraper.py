@@ -200,7 +200,19 @@ class BawueVorgaengeScraper(VorgangsScraper):
         typ = map_vorgangstyp(vorgangstyp_str)
         initiatoren = _parse_autoren(initiative)
 
-        stationen = self._collect_stationen(raw.get("fundstellen_parsed", []), initiative, vorgang_id)
+        fundstellen_parsed = raw.get("fundstellen_parsed", [])
+        stationen = self._collect_stationen(fundstellen_parsed, initiative, vorgang_id)
+
+        if fundstellen_parsed and not stationen:
+            logger.error(
+                "Vorgang %s ('%s') has %d Fundstellen but ALL stations were skipped "
+                "(no parseable dates). Submitting with empty station list. "
+                "Fundstellen: %s",
+                vorgang_id,
+                titel[:80],
+                len(fundstellen_parsed),
+                [f.get("raw", "")[:100] for f in fundstellen_parsed],
+            )
 
         self._ensure_initiativ_after_regent(stationen)
 
@@ -259,6 +271,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         pending_aenderungsantraege: list[list[StationDokumenteInner]] = []
         for fund in fundstellen:
             station = self._build_station(fund, initiative)
+            if station is None:
+                continue
             station_typ_str = fund.get("station_typ", "")
             typ_lower = station_typ_str.lower()
 
@@ -452,7 +466,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 vorgang_id,
             )
 
-    def _build_station(self, fund: RawFundstelle, initiative: str) -> Station:
+    def _build_station(self, fund: RawFundstelle, initiative: str) -> Station | None:
         """Convert a parsed Fundstelle dict into a framework Station.
 
         A Fundstelle is a reference line from the PARLIS search results, e.g.:
@@ -485,6 +499,14 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 station_typ = raw_typ
 
         zp_start = _parse_fundstelle_date(fund)
+        if zp_start is None:
+            logger.error(
+                "Skipping station for Fundstelle '%s' (Drucksache: %s) — no parseable date",
+                fund.get("raw", ""),
+                fund.get("drucksache", "unknown"),
+            )
+            return None
+
         gremium = self._determine_gremium(fund)
         dokumente = self._build_dokumente(fund, station_typ_str, mapping_text, station_typ, initiative, zp_start)
 
@@ -606,21 +628,21 @@ def _print_vorgaenge_summary(
 _YEAR_PATTERN = re.compile(r"(20\d{2})")
 
 
-def _parse_fundstelle_date(fund: RawFundstelle) -> datetime:
-    """Parse the date from a Fundstelle, with graceful fallbacks.
+def _parse_fundstelle_date(fund: RawFundstelle) -> datetime | None:
+    """Parse the date from a Fundstelle, returning None if unfillable.
 
     PARLIS dates are typically DD.MM.YYYY, but can be malformed:
     - "00.00.2028" → placeholder when only the year is known → falls back to Jan 1
-    - completely missing → falls back to current time
+    - completely missing or unparseable → returns None (station must be skipped)
     """
     datum_str = fund.get("datum", "")
     if not datum_str:
-        logger.warning(
-            "No date found for Fundstelle '%s' (Drucksache: %s), using current time",
+        logger.error(
+            "No date found for Fundstelle '%s' (Drucksache: %s)",
             fund.get("raw", ""),
             fund.get("drucksache", "unknown"),
         )
-        return datetime.now(UTC)
+        return None
 
     try:
         return datetime.strptime(datum_str, "%d.%m.%Y").replace(tzinfo=UTC)
@@ -628,8 +650,8 @@ def _parse_fundstelle_date(fund: RawFundstelle) -> datetime:
         return _fallback_date_from_year(datum_str, fund)
 
 
-def _fallback_date_from_year(datum_str: str, fund: RawFundstelle) -> datetime:
-    """Extract a year from a malformed date string, or fall back to now."""
+def _fallback_date_from_year(datum_str: str, fund: RawFundstelle) -> datetime | None:
+    """Extract a year from a malformed date string, or return None if unfillable."""
     year_match = _YEAR_PATTERN.search(datum_str)
     if year_match:
         logger.warning(
@@ -641,10 +663,10 @@ def _fallback_date_from_year(datum_str: str, fund: RawFundstelle) -> datetime:
         )
         return datetime(int(year_match.group()), 1, 1, tzinfo=UTC)
 
-    logger.warning(
-        "Unparseable date '%s' for Fundstelle '%s' (Drucksache: %s), using current time",
+    logger.error(
+        "Unparseable date '%s' for Fundstelle '%s' (Drucksache: %s)",
         datum_str,
         fund.get("raw", ""),
         fund.get("drucksache", "unknown"),
     )
-    return datetime.now(UTC)
+    return None
