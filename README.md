@@ -232,13 +232,13 @@ full enrichment pipeline end-to-end.
 **Run:**
 
 ```bash
-LLM_PROVIDER_KEY=sk-... pytest -m integration tests/integration/test_llm_extraction.py
+LLM_PROVIDER_KEY=sk-... pytest -m integration tests/integration/test_llm_extraction.py -s
 ```
 
 Optionally set `LLM_MODEL` to override the default model (`gpt-4o-mini`):
 
 ```bash
-LLM_PROVIDER_KEY=sk-... LLM_MODEL=gpt-4o pytest -m integration tests/integration/test_llm_extraction.py
+LLM_PROVIDER_KEY=sk-... LLM_MODEL=gpt-4o pytest -m integration tests/integration/test_llm_extraction.py -s
 ```
 
 The tests are skipped automatically when `LLM_PROVIDER_KEY` is not set, so `make test-integration` and CI
