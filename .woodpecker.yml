@@ -14,11 +14,21 @@ steps:
       - pip install --quiet ruff
       - ruff format --check src/ tests/
 
+  - name: generate-openapi-client
+    image: eclipse-temurin:17-jre-alpine
+    commands:
+      - apk add --no-cache -q curl git
+      - git clone --depth 1 https://codeberg.org/PaZuFa/pazufa-collector.git ../pazufa-collector
+      - curl -sf -o ../pazufa-collector/openapi.yml "https://raw.githubusercontent.com/Chrystalkey/landtagszusammenfasser/9c20dd1913eac99bd14edcd9676e188305064f1a/docs/specs/openapi.yml"
+      - curl -sfL -o /tmp/openapi-generator-cli.jar "https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.15.0/openapi-generator-cli-7.15.0.jar"
+      - java -jar /tmp/openapi-generator-cli.jar generate -i ../pazufa-collector/openapi.yml -g python -o ../pazufa-collector/oapicode
+
   - name: pytest
     image: python:3.14-slim
+    environment:
+      DEBIAN_FRONTEND: noninteractive
     commands:
       - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
       - pip install --quiet poetry
-      - git clone --depth 1 https://codeberg.org/PaZuFa/pazufa-collector.git ../pazufa-collector
       - poetry install --no-interaction --no-ansi
       - poetry run pytest -m 'not integration'
