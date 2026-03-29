@@ -1,0 +1,24 @@
+when:
+  - event: [push, pull_request]
+
+steps:
+  - name: ruff-lint
+    image: python:3.14-slim
+    commands:
+      - pip install --quiet ruff
+      - ruff check src/ tests/
+
+  - name: ruff-format
+    image: python:3.14-slim
+    commands:
+      - pip install --quiet ruff
+      - ruff format --check src/ tests/
+
+  - name: pytest
+    image: python:3.14-slim
+    commands:
+      - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
+      - pip install --quiet poetry
+      - git clone --depth 1 https://codeberg.org/PaZuFa/pazufa-collector.git ../pazufa-collector
+      - poetry install --no-interaction --no-ansi
+      - poetry run pytest -m 'not integration'
