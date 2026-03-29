@@ -399,6 +399,40 @@ class TestItemExtractor:
 
         assert result is None
 
+    @pytest.mark.asyncio
+    async def test_skips_postparl_only_vorgang(self):
+        """Vorgänge with only post-parliamentary stations (e.g. Bekanntmachungen) are skipped."""
+        scraper = _make_scraper_with_mock_parlis()
+        scraper._raw_cache["V-900"] = _make_raw_vorgang(
+            "V-900",
+            titel="Bekanntmachung über das Inkrafttreten des Staatsvertrages",
+            initiative="Staatsministerium",
+            fundstellen=[
+                {
+                    "raw": "Bekanntmachung  Staatsministerium  12.05.2021 Gesetzblatt Nr. 15  S. 400",
+                    "datum": "12.05.2021",
+                    "station_typ": "Bekanntmachung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+
+        result = await scraper.item_extractor("V-900")
+
+        assert result is None
+        assert scraper._skipped == 1
+
+    @pytest.mark.asyncio
+    async def test_does_not_skip_vorgang_with_parliamentary_stations(self):
+        """Normal Vorgänge with parliamentary stations are not skipped."""
+        scraper = _make_scraper_with_mock_parlis()
+        scraper._raw_cache["V-901"] = _make_raw_vorgang("V-901")
+
+        result = await scraper.item_extractor("V-901")
+
+        assert result is not None
+        assert scraper._skipped == 0
+
 
 class TestPlaceholderDate:
     def test_zero_day_month_falls_back_to_year_start(self, scraper_build_vorgang):

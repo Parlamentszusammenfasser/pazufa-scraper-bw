@@ -157,7 +157,23 @@ class BawueVorgaengeScraper(VorgangsScraper):
             self._skipped += 1
             return None
 
-        return self._build_vorgang(raw)
+        vorgang = self._build_vorgang(raw)
+
+        # Skip non-legislative meta-entries (Bekanntmachungen, Berichtigungen, etc.)
+        # that only have post-parliamentary stations and no parliamentary process.
+        if vorgang.stationen and all(
+            s.typ in self._POSTPARL_TYPEN for s in vorgang.stationen
+        ):
+            logger.info(
+                "Skipping Vorgang %s ('%s'): only post-parliamentary stations, "
+                "not a full legislative process",
+                vorgang_id,
+                vorgang.titel[:60],
+            )
+            self._skipped += 1
+            return None
+
+        return vorgang
 
     def _build_vorgang(self, raw: RawVorgang) -> Vorgang:
         """Convert a raw PARLIS dict into a framework Vorgang model.
@@ -208,6 +224,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
             stationen=stationen,
             ids=ids,
         )
+
+    _POSTPARL_TYPEN: frozenset[Stationstyp] = frozenset({
+        Stationstyp.POSTPARL_MINUS_GSBLT,
+        Stationstyp.POSTPARL_MINUS_VESJA,
+        Stationstyp.POSTPARL_MINUS_VESNE,
+        Stationstyp.POSTPARL_MINUS_KRAFT,
+    })
 
     _AENDERUNGSANTRAG_TYPEN: frozenset[str] = frozenset({
         "änderungsantrag", "änderungsanträge",
