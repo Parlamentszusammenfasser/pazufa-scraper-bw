@@ -354,10 +354,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return
 
         # Determine the date: use the next station's date if available, else the regent's
-        if next_idx < len(stationen):
-            zp_start = stationen[next_idx].zp_start
-        else:
-            zp_start = stationen[regent_idx].zp_start
+        zp_start = stationen[next_idx].zp_start if next_idx < len(stationen) else stationen[regent_idx].zp_start
 
         synthetic = Station(
             typ=Stationstyp.PARL_MINUS_INITIATIV,

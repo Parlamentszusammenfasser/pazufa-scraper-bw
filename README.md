@@ -216,6 +216,9 @@ make clean            # Remove .venv, __pycache__, .pytest_cache
 
 Run `make help` to list all targets.
 
+**Always run `make lint` and `make format` after making changes** to ensure CI passes. The Woodpecker CI
+pipeline checks both linting and formatting on every push and pull request.
+
 ## Running against Staging
 
 The `docker-compose.yml` runs the scraper with Redis and expects secrets in a `.env` file (git-ignored).
