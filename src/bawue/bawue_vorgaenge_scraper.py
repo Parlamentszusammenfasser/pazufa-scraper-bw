@@ -35,11 +35,20 @@ from bawue.wahlperiode_check import check_for_newer_wahlperiode
 logger = logging.getLogger(__name__)
 
 
+_AUTOR_SPLIT_RE = re.compile(
+    r",\s+(?=Fraktion|Ministerium|Landesregierung|Staatsministerium|Präsident|Ständiger|Abg\.)",
+)
+
+
 def _parse_autoren(text: str) -> list[Autor]:
-    """Parse a comma-separated author string into a list of Autor objects."""
+    """Parse a comma-separated author string into a list of Autor objects.
+
+    Uses lookahead splitting to avoid breaking ministry names that contain
+    commas (e.g. "Ministerium für Umwelt, Klima und Energiewirtschaft").
+    """
     if not text or not text.strip():
         return []
-    return [Autor(organisation=part.strip()) for part in text.split(",") if part.strip()]
+    return [Autor(organisation=part.strip()) for part in _AUTOR_SPLIT_RE.split(text) if part.strip()]
 
 
 DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [

@@ -747,6 +747,27 @@ class TestParseAutoren:
     def test_whitespace_only(self):
         assert _parse_autoren("   ") == []
 
+    def test_ministry_name_with_internal_comma(self):
+        """Ministry names containing commas must not be split incorrectly."""
+        result = _parse_autoren(
+            "Ministerium für Umwelt, Klima und Energiewirtschaft, Ministerium für Landesentwicklung und Wohnen"
+        )
+        assert len(result) == 2
+        assert result[0].organisation == "Ministerium für Umwelt, Klima und Energiewirtschaft"
+        assert result[1].organisation == "Ministerium für Landesentwicklung und Wohnen"
+
+    def test_single_ministry_with_internal_comma(self):
+        result = _parse_autoren("Ministerium für Umwelt, Klima und Energiewirtschaft")
+        assert len(result) == 1
+        assert result[0].organisation == "Ministerium für Umwelt, Klima und Energiewirtschaft"
+
+    def test_mixed_fraktionen_and_ministry(self):
+        """Fraktionen and ministries in the same string."""
+        result = _parse_autoren("Fraktion GRÜNE, Ministerium der Justiz und für Migration")
+        assert len(result) == 2
+        assert result[0].organisation == "Fraktion GRÜNE"
+        assert result[1].organisation == "Ministerium der Justiz und für Migration"
+
 
 class TestBuildStationAutoren:
     def test_fundstelle_autor_text_used(self, scraper_build_vorgang):
