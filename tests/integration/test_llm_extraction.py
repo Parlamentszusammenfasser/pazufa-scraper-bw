@@ -97,7 +97,9 @@ class TestEntwurfEnrichment:
         async with aiohttp.ClientSession() as session:
             enriched = await enrich_dokument(session, llm, dok)
 
-        assert enriched.titel == "Gesetz über einen Ausgleich im Zusammenhang mit Coronasoforthilfen des Landes Baden-Württemberg"
+        assert enriched.titel == (
+            "Gesetz über einen Ausgleich im Zusammenhang mit Coronasoforthilfen des Landes Baden-Württemberg"
+        )
         assert enriched.drucksnr == "17/10266"
         assert enriched.typ == Doktyp.ENTWURF
         assert enriched.autoren[0].organisation == "Fraktion GRÜNE"

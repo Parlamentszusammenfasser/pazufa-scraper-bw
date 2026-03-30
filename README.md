@@ -22,7 +22,7 @@ git clone <repo-url> pazufa-bawue-scraper
 git clone https://codeberg.org/PaZuFa/pazufa-collector.git
 
 cd pazufa-bawue-scraper
-python3 -m venv .venv
+python3.14 -m venv .venv
 make install
 
 cp config.sample.toml config.toml
@@ -311,3 +311,4 @@ See [docs/anforderungen.md — Konfiguration](docs/anforderungen.md#konfiguratio
 - [PaZuFa backend OpenAPI Spec](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/specs/openapi.yml)
 - [CI Pipeline](https://ci.codeberg.org/repos/16437) — Woodpecker CI build status
 - [Landtag BaWue](https://www.landtag-bw.de/)
+- [PaZuFa Staging Frontend](https://staging.pazufa.de/)
