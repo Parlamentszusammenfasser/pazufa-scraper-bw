@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -12,11 +13,13 @@ from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.dokument import Dokument
 
 from bawue.bawue_dok import (
+    _hash_cache,
     _prompt_for_doktyp,
     download_pdf,
     enrich_dokument,
     extract_pdf_text,
     extract_semantics,
+    truncate_text,
 )
 
 # ---------------------------------------------------------------------------
@@ -269,6 +272,12 @@ class TestPromptForDoktyp:
 
 
 class TestEnrichDokument:
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
     @pytest.mark.asyncio
     async def test_full_enrichment(self):
         """LLM key set, PDF+LLM succeed → all fields populated."""
@@ -389,3 +398,152 @@ class TestEnrichDokument:
             await enrich_dokument(session, llm, dok)
 
         assert not tmp_path.exists(), "Temporary PDF should be cleaned up"
+
+
+# ---------------------------------------------------------------------------
+# TestTruncateText
+# ---------------------------------------------------------------------------
+
+
+class TestTruncateText:
+    def test_truncates_when_over_limit(self):
+        long_text = "Dies ist ein langer Testtext. " * 500
+        result = truncate_text(long_text, max_tokens=100, model="gpt-4o-mini")
+        import litellm
+
+        token_count = litellm.token_counter(model="gpt-4o-mini", text=result)
+        assert token_count <= 100
+        assert len(result) < len(long_text)
+
+    def test_no_truncation_when_under_limit(self):
+        short_text = "Kurzer Text."
+        result = truncate_text(short_text, max_tokens=1000, model="gpt-4o-mini")
+        assert result == short_text
+
+    def test_disabled_when_zero(self):
+        long_text = "Dies ist ein langer Testtext. " * 500
+        result = truncate_text(long_text, max_tokens=0, model="gpt-4o-mini")
+        assert result == long_text
+
+
+# ---------------------------------------------------------------------------
+# TestHashCache
+# ---------------------------------------------------------------------------
+
+
+class TestHashCache:
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_skips_llm(self):
+        """Second call with same PDF hash reuses cached semantics, no LLM call."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = AsyncMock()
+        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+
+        with _patch_pdf_pipeline():
+            first = await enrich_dokument(session, llm, dok)
+            second = await enrich_dokument(session, llm, dok)
+
+        # LLM called only once despite two enrichments
+        assert llm.generate_text.call_count == 1
+        # Both results have the same semantics
+        assert first.zusammenfassung == second.zusammenfassung
+        assert first.schlagworte == second.schlagworte
+
+    @pytest.mark.asyncio
+    async def test_cache_miss_calls_llm(self):
+        """First call always invokes the LLM."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = AsyncMock()
+        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+
+        with _patch_pdf_pipeline():
+            enriched = await enrich_dokument(session, llm, dok)
+
+        assert llm.generate_text.call_count == 1
+        assert enriched.zusammenfassung is not None
+
+    @pytest.mark.asyncio
+    async def test_different_hashes_both_call_llm(self):
+        """Different PDF hashes result in separate LLM calls."""
+        session = MagicMock()
+        llm = AsyncMock()
+        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+
+        hash_a = "aaaa" * 16
+        hash_b = "bbbb" * 16
+        dok_a = _make_plain_dokument(link="https://example.com/a.pdf")
+        dok_b = _make_plain_dokument(link="https://example.com/b.pdf")
+
+        with _patch_pdf_pipeline(text_and_hash=(SAMPLE_FULL_TEXT, hash_a)):
+            await enrich_dokument(session, llm, dok_a)
+
+        with _patch_pdf_pipeline(text_and_hash=(SAMPLE_FULL_TEXT, hash_b)):
+            await enrich_dokument(session, llm, dok_b)
+
+        assert llm.generate_text.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# TestTokenLogging
+# ---------------------------------------------------------------------------
+
+
+class TestTokenLogging:
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_logs_token_count(self, caplog):
+        """Token count is logged for each LLM call."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = AsyncMock()
+        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+
+        with _patch_pdf_pipeline(), caplog.at_level(logging.INFO, logger="bawue.bawue_dok"):
+            await enrich_dokument(session, llm, dok)
+
+        assert any("token" in r.message.lower() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_logs_truncation(self, caplog):
+        """Truncation is logged when text exceeds limit."""
+        long_text = "Dies ist ein langer Testtext. " * 500
+        long_hash = "cccc" * 16
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = AsyncMock()
+        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+
+        with (
+            _patch_pdf_pipeline(text_and_hash=(long_text, long_hash)),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_dok"),
+        ):
+            await enrich_dokument(session, llm, dok, max_tokens=100)
+
+        assert any("truncat" in r.message.lower() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_logs_cache_hit(self, caplog):
+        """Cache hit is logged when hash matches."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = AsyncMock()
+        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+
+        with _patch_pdf_pipeline(), caplog.at_level(logging.INFO, logger="bawue.bawue_dok"):
+            await enrich_dokument(session, llm, dok)
+            await enrich_dokument(session, llm, dok)
+
+        assert any("cache hit" in r.message.lower() for r in caplog.records)

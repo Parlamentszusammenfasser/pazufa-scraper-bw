@@ -20,6 +20,7 @@ scraper-dir = "./src/bawue"
 
 [llm]
 openai-api-key = "SET_VIA_ENV"
+# truncate-tokens = 12000         # max input tokens for LLM; 0 = no truncation
 
 # BaWue-specific configuration
 [bawue]

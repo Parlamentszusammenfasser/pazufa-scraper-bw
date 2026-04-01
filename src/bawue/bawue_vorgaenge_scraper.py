@@ -104,6 +104,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # LLM document enrichment (optional, requires LLM_PROVIDER_KEY)
         self._llm_enabled = bool(getattr(config, "llm_provider_key", None))
         self._llm = None
+        llm_config = load_toml_section(config, "llm")
+        self._llm_model = getattr(config, "llm_model", "gpt-4o-mini")
+        self._llm_truncate_tokens = int(llm_config.get("truncate-tokens", 12000))
         if self._llm_enabled:
             from collector_core import LLMConnector
 
@@ -603,7 +606,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
             try:
                 from bawue.bawue_dok import enrich_dokument
 
-                dok = await enrich_dokument(self.session, self._llm, dok)
+                dok = await enrich_dokument(
+                    self.session,
+                    self._llm,
+                    dok,
+                    model=self._llm_model,
+                    max_tokens=self._llm_truncate_tokens,
+                )
             except Exception:
                 logger.warning("Document enrichment failed for %s", pdf_url)
 

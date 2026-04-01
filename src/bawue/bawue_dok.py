@@ -14,6 +14,7 @@ import logging
 import tempfile
 from pathlib import Path
 
+import litellm
 from collector_core import LLMConnector
 from kreuzberg import ExtractionConfig, extract_file
 from openapi_client.models.doktyp import Doktyp
@@ -23,7 +24,11 @@ logger = logging.getLogger(__name__)
 
 MAX_JSON_RETRIES = 3
 MIN_TEXT_LENGTH = 64
+DEFAULT_TRUNCATE_TOKENS = 12000
 _LLM_SEMAPHORE = asyncio.Semaphore(3)
+
+# In-memory cache: SHA256 hash → LLM semantics dict (per-run deduplication)
+_hash_cache: dict[str, dict] = {}
 
 # ---------------------------------------------------------------------------
 # LLM Prompts — one per Doktyp group, German, body-only (no header extraction)
@@ -75,6 +80,36 @@ def _prompt_for_doktyp(doktyp: Doktyp) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Text truncation
+# ---------------------------------------------------------------------------
+
+
+def truncate_text(text: str, max_tokens: int, model: str) -> str:
+    """Truncate text to fit within a token budget.
+
+    Args:
+        text: The input text to (possibly) truncate.
+        max_tokens: Maximum number of tokens. 0 means no truncation.
+        model: Model name for tokenizer selection (e.g. "gpt-4o-mini").
+
+    Returns:
+        The original text if within budget, otherwise truncated text.
+    """
+    if max_tokens <= 0:
+        return text
+
+    token_count = litellm.token_counter(model=model, text=text)
+    if token_count <= max_tokens:
+        return text
+
+    tokens = litellm.encode(model=model, text=text)
+    truncated_tokens = tokens[:max_tokens]
+    truncated = litellm.decode(model=model, tokens=truncated_tokens)
+    logger.info("Truncated text from %d to %d tokens", token_count, max_tokens)
+    return truncated
+
+
+# ---------------------------------------------------------------------------
 # PDF download + text extraction
 # ---------------------------------------------------------------------------
 
@@ -115,7 +150,13 @@ async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 
-async def extract_semantics(llm: LLMConnector, full_text: str, doktyp: Doktyp) -> dict:
+async def extract_semantics(
+    llm: LLMConnector,
+    full_text: str,
+    doktyp: Doktyp,
+    model: str = "gpt-4o-mini",
+    max_tokens: int = DEFAULT_TRUNCATE_TOKENS,
+) -> dict:
     """Call LLM to extract structured metadata from document text.
 
     Returns a dict with keys like schlagworte, zusammenfassung, kurztitel,
@@ -123,8 +164,13 @@ async def extract_semantics(llm: LLMConnector, full_text: str, doktyp: Doktyp) -
 
     Retries up to MAX_JSON_RETRIES times on JSON parse failures.
     """
+    text = truncate_text(full_text, max_tokens=max_tokens, model=model)
+
     prompt = _prompt_for_doktyp(doktyp)
-    user_message = f"{prompt}\n\n{full_text}"
+    user_message = f"{prompt}\n\n{text}"
+
+    input_tokens = litellm.token_counter(model=model, text=user_message)
+    logger.info("LLM call: %d input tokens, model=%s", input_tokens, model)
 
     for attempt in range(MAX_JSON_RETRIES):
         async with _LLM_SEMAPHORE:
@@ -148,12 +194,21 @@ async def extract_semantics(llm: LLMConnector, full_text: str, doktyp: Doktyp) -
 # ---------------------------------------------------------------------------
 
 
-async def enrich_dokument(session, llm: LLMConnector, dok: Dokument) -> Dokument:
+async def enrich_dokument(
+    session,
+    llm: LLMConnector,
+    dok: Dokument,
+    model: str = "gpt-4o-mini",
+    max_tokens: int = DEFAULT_TRUNCATE_TOKENS,
+) -> Dokument:
     """Enrich a plain Dokument with PDF text extraction and LLM semantics.
 
     Takes an existing Dokument (as built by the scraper with empty volltext/hash)
     and returns an enriched copy. PARLIS metadata (titel, autoren, drucksnr,
     timestamps) is preserved.
+
+    Uses an in-memory hash cache to skip LLM calls for duplicate PDFs within
+    the same scraper run.
 
     Graceful degradation:
     - Tier 1: Full enrichment (PDF + LLM succeed)
@@ -168,9 +223,14 @@ async def enrich_dokument(session, llm: LLMConnector, dok: Dokument) -> Dokument
         # Extract text + hash
         full_text, doc_hash = await extract_pdf_text(pdf_path)
 
-        # Try LLM extraction
+        # Try LLM extraction (with hash cache deduplication)
         try:
-            semantics = await extract_semantics(llm, full_text, dok.typ)
+            if doc_hash in _hash_cache:
+                logger.info("Hash cache hit for %s, skipping LLM call", doc_hash[:12])
+                semantics = _hash_cache[doc_hash]
+            else:
+                semantics = await extract_semantics(llm, full_text, dok.typ, model=model, max_tokens=max_tokens)
+                _hash_cache[doc_hash] = semantics
 
             return Dokument(
                 titel=dok.titel,
