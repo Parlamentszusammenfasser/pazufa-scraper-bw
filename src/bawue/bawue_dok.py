@@ -84,13 +84,13 @@ def _prompt_for_doktyp(doktyp: Doktyp) -> str:
 # ---------------------------------------------------------------------------
 
 
-def truncate_text(text: str, max_tokens: int, model: str) -> str:
+def truncate_text(text: str, max_tokens: int, model: str = "gpt-5-nano") -> str:
     """Truncate text to fit within a token budget.
 
     Args:
         text: The input text to (possibly) truncate.
         max_tokens: Maximum number of tokens. 0 means no truncation.
-        model: Model name for tokenizer selection (e.g. "gpt-4o-mini").
+        model: Model name for tokenizer selection (e.g. "gpt-5-nano").
 
     Returns:
         The original text if within budget, otherwise truncated text.
@@ -154,7 +154,7 @@ async def extract_semantics(
     llm: LLMConnector,
     full_text: str,
     doktyp: Doktyp,
-    model: str = "gpt-4o-mini",
+    model: str = "gpt-5-nano",
     max_tokens: int = DEFAULT_TRUNCATE_TOKENS,
 ) -> dict:
     """Call LLM to extract structured metadata from document text.
@@ -198,7 +198,7 @@ async def enrich_dokument(
     session,
     llm: LLMConnector,
     dok: Dokument,
-    model: str = "gpt-4o-mini",
+    model: str = "gpt-5-nano",
     max_tokens: int = DEFAULT_TRUNCATE_TOKENS,
 ) -> Dokument:
     """Enrich a plain Dokument with PDF text extraction and LLM semantics.

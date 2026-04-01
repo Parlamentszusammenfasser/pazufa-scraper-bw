@@ -47,7 +47,7 @@ def _make_llm():
     from collector_core import LLMConnector
 
     return LLMConnector(
-        model=os.environ.get("LLM_MODEL", "gpt-4o-mini"),
+        model=os.environ.get("LLM_MODEL", "gpt-5-nano"),
         api_key=LLM_PROVIDER_KEY,
     )
 

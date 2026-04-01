@@ -408,21 +408,21 @@ class TestEnrichDokument:
 class TestTruncateText:
     def test_truncates_when_over_limit(self):
         long_text = "Dies ist ein langer Testtext. " * 500
-        result = truncate_text(long_text, max_tokens=100, model="gpt-4o-mini")
+        result = truncate_text(long_text, max_tokens=100, model="gpt-5-nano")
         import litellm
 
-        token_count = litellm.token_counter(model="gpt-4o-mini", text=result)
+        token_count = litellm.token_counter(model="gpt-5-nano", text=result)
         assert token_count <= 100
         assert len(result) < len(long_text)
 
     def test_no_truncation_when_under_limit(self):
         short_text = "Kurzer Text."
-        result = truncate_text(short_text, max_tokens=1000, model="gpt-4o-mini")
+        result = truncate_text(short_text, max_tokens=1000, model="gpt-5-nano")
         assert result == short_text
 
     def test_disabled_when_zero(self):
         long_text = "Dies ist ein langer Testtext. " * 500
-        result = truncate_text(long_text, max_tokens=0, model="gpt-4o-mini")
+        result = truncate_text(long_text, max_tokens=0, model="gpt-5-nano")
         assert result == long_text
 
 

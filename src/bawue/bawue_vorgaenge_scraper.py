@@ -105,7 +105,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._llm_enabled = bool(getattr(config, "llm_provider_key", None))
         self._llm = None
         llm_config = load_toml_section(config, "llm")
-        self._llm_model = getattr(config, "llm_model", "gpt-4o-mini")
+        self._llm_model = config.llm_model
         self._llm_truncate_tokens = int(llm_config.get("truncate-tokens", 12000))
         if self._llm_enabled:
             from collector_core import LLMConnector
