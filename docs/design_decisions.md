@@ -427,3 +427,82 @@ wird.
 **Implementierung:** `parlis_parser.py`, Funktion `parse_results()` —
 ruft `_extract_json_comments()` und `_parse_results_from_json()` auf,
 fällt bei leerem Ergebnis auf `_parse_results_from_html()` zurück.
+
+---
+
+## DD-015: Volltext-Normalisierung — Garbled-Text-Erkennung, OCR-Retry und XSS-Prävention
+
+**Datum:** 02.04.2026
+
+**Kontext:** PDFs aus dem Baden-Württemberger Landtag — insbesondere
+Anhörungsdokumente (Drucksachen mit angehängten Stellungnahmen) — enthalten
+Fonts mit fehlerhaften oder fehlenden ToUnicode-CMaps. Die visuelle Darstellung
+im PDF-Viewer ist korrekt (Glyph-Outlines), aber die programmatische
+Textextraktion durch kreuzberg liefert falsche Unicode-Zeichen. Zwei Muster
+treten auf:
+
+1. **Latin-Extended-Substitution:** Fonts mappen Glyph-IDs auf Unicode-Zeichen
+   im Bereich U+0100–U+024F. Beispiel: `ĚĞƌ&ƌĂŬƚŝŽŶ` → `der Fraktion`,
+   `ǁćŚƌůĞŝƐƚƵŶŐ` → `währleistung`. Die Zuordnung ist font-spezifisch und
+   nicht durch eine einheitliche Verschiebung erklärbar.
+
+2. **ASCII-Verschiebung (+29):** Ein anderer Font verschiebt jedes Byte um
+   einen konstanten Offset. Beispiel: `6WlGWHWDJ` → `Städtetag`
+   (chr(ord('6')+29) = 'S'). Zusätzlich enthält der Text C1-Steuerzeichen
+   (0x80–0x9F).
+
+Beide Muster treten in derselben PDF vor, typischerweise ab Seite 2 (die
+Stellungnahmen externer Organisationen). Die erste Seite (Deckblatt des
+Landtags) ist korrekt.
+
+**Auswirkung:** Vier Vorgänge (Drucksachen 17/4244, 17/826, 17/8633, 17/5482)
+schlugen mit HTTP 400 (`xss detected`) fehl. Zwei Ursachen:
+
+- **Garbled Angle Brackets:** Die Font-Substitution mappt die Buchstaben K→`<`
+  und L→`>`. Diese falschen Angle Brackets lösen die XSS-Validierung des
+  Backends aus.
+- **Echte E-Mail-Header:** Stellungnahmen, die als E-Mail weitergeleitet
+  wurden, enthalten `<poststelle@lfdi.bwl.de>` im PDF-Text — ebenfalls
+  XSS-positiv, obwohl harmlos.
+
+**Entscheidung:** Dreistufige Absicherung:
+
+1. **Garbled-Text-Erkennung + OCR-Retry:** Nach der normalen Textextraktion
+   prüft `_is_garbled()`, ob mehr als 5 % der alphabetischen Zeichen im
+   Latin-Extended-Bereich (U+0100–U+024F) liegen. Bei positivem Befund wird
+   die Extraktion mit Tesseract-OCR (Sprache: `deu`) wiederholt. OCR rendert
+   jede Seite als Bild und erkennt die Zeichen visuell — die fehlerhaften
+   Font-Mappings werden damit umgangen. Das OCR-Ergebnis wird nur übernommen,
+   wenn es tatsächlich besser ist (nicht selbst garbled); andernfalls bleibt
+   der Originaltext erhalten.
+
+   **Wichtig:** `ExtractionConfig(force_ocr=True)` allein löst in kreuzberg
+   4.x kein OCR aus — es muss zusätzlich `ocr=OcrConfig(backend="tesseract",
+   language="deu")` gesetzt werden. Ohne explizite OCR-Konfiguration gibt
+   kreuzberg identischen (garbled) Text zurück.
+
+2. **Paragraph-Quality-Scoring:** `normalize_volltext()` teilt den Text in
+   Absätze und bewertet jeden mit `_paragraph_quality_score()`. Die Bewertung
+   kombiniert vier Signale:
+   - C1-Steuerzeichen (0x80–0x9F)
+   - Latin-Extended-B-Zeichen (0x0180–0x024F)
+   - Lange Wörter ohne deutsche Vokale
+   - Übermäßiger Großbuchstabenanteil (>60 %)
+
+   Absätze mit Score < 0,5 werden entfernt. Bei Drucksache 17/4244 überlebten
+   2 von 24 Absätzen (1 738 von 38 168 Zeichen).
+
+3. **Angle-Bracket-Neutralisierung:** Verbleibende `<` und `>` (aus
+   E-Mail-Headern oder nicht vollständig gefiltertem Garbled-Text) werden
+   durch Guillemets `‹` (U+2039) und `›` (U+203A) ersetzt.
+
+Stufe 1 rettet den Inhalt (OCR produziert korrekten Text: 37 117 Zeichen,
+1 Latin-Extended-Zeichen). Stufen 2 und 3 sind Defense-in-Depth für Fälle,
+in denen OCR nicht verfügbar ist oder fehlschlägt.
+
+**Implementierung:** `bawue_dok.py`:
+- `_is_garbled()` — Latin-Extended-Ratio > 5 % der Alpha-Zeichen
+- `extract_pdf_text()` — OCR-Retry mit `_OCR_CONFIG` bei garbled Text
+- `_paragraph_quality_score()` — Multi-Signal-Bewertung pro Absatz
+- `normalize_volltext()` — Absatzfilterung, NFKC, C1-Stripping,
+  CRLF-Normalisierung, Angle-Bracket-Ersetzung

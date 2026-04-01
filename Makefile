@@ -41,6 +41,6 @@ package: install lint format test ## Vendor collector and build Docker image
 	docker build -t bawue-scraper .
 
 clean: ## Remove .venv, __pycache__, .pytest_cache, locallogs, and MagicMock
-	rm -rf .venv __pycache__ .pytest_cache locallogs MagicMock vendor
+	rm -rf .venv __pycache__ .pytest_cache .kreuzberg locallogs MagicMock vendor
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type d -name .pytest_cache -exec rm -rf {} +

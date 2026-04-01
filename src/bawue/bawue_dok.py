@@ -19,7 +19,7 @@ from typing import NamedTuple
 
 import litellm
 from collector_core import LLMConnector
-from kreuzberg import ExtractionConfig, extract_file
+from kreuzberg import ExtractionConfig, OcrConfig, extract_file
 from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.dokument import Dokument
 
@@ -179,6 +179,38 @@ def normalize_volltext(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Garbled text detection
+# ---------------------------------------------------------------------------
+
+GARBLED_LATIN_EXT_THRESHOLD = 0.05  # 5% of alpha chars in Latin Extended → garbled
+
+
+def _is_garbled(text: str) -> bool:
+    """Detect garbled PDF text from broken font encodings.
+
+    Returns True when the ratio of Latin Extended characters (U+0100-U+024F)
+    to total alphabetic characters exceeds 5%.  These characters appear when
+    a PDF font lacks a proper ToUnicode CMap and kreuzberg maps glyph IDs to
+    wrong Unicode code points.
+    """
+    if not text or len(text) < MIN_TEXT_LENGTH:
+        return False
+
+    alpha_count = 0
+    latin_ext_count = 0
+    for c in text:
+        if c.isalpha():
+            alpha_count += 1
+            if 0x0100 <= ord(c) <= 0x024F:
+                latin_ext_count += 1
+
+    if alpha_count == 0:
+        return False
+
+    return (latin_ext_count / alpha_count) > GARBLED_LATIN_EXT_THRESHOLD
+
+
+# ---------------------------------------------------------------------------
 # Text truncation
 # ---------------------------------------------------------------------------
 
@@ -225,10 +257,20 @@ async def download_pdf(session, url: str) -> Path:
     return Path(tmp.name)
 
 
+_OCR_CONFIG = ExtractionConfig(
+    force_ocr=True,
+    ocr=OcrConfig(backend="tesseract", language="deu"),
+)
+
+
 async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
     """Extract text and compute SHA256 hash from a PDF file.
 
-    Returns (full_text, hash). Falls back to OCR if normal extraction yields <64 chars.
+    Returns (full_text, hash).  Falls back to OCR when:
+    1. Normal extraction yields fewer than 64 characters, or
+    2. The extracted text is garbled (broken font encoding detected).
+
+    OCR uses Tesseract with German language for proper character recognition.
     """
     with open(pdf_path, "rb") as f:
         doc_hash = hashlib.file_digest(f, "sha256").hexdigest()
@@ -238,8 +280,19 @@ async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
 
     if len(text) < MIN_TEXT_LENGTH:
         logger.warning("Normal text extraction yielded <%d chars, retrying with OCR", MIN_TEXT_LENGTH)
-        ocr_result = await extract_file(pdf_path, config=ExtractionConfig(force_ocr=True))
+        ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
         text = ocr_result.content or ""
+    elif _is_garbled(text):
+        logger.warning("Garbled text detected (broken font encoding), retrying with OCR")
+        try:
+            ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
+            ocr_text = ocr_result.content or ""
+            if ocr_text and not _is_garbled(ocr_text):
+                text = ocr_text
+            else:
+                logger.warning("OCR did not improve garbled text, keeping original")
+        except Exception:
+            logger.warning("OCR retry failed, keeping original garbled text")
 
     return text, doc_hash
 
