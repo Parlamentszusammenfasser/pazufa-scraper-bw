@@ -1939,3 +1939,84 @@ class TestStationSkippedForUnparseableDate:
         vorgang = await scraper_build_vorgang(raw)
         assert len(vorgang.stationen) == 1
         assert vorgang.stationen[0].zp_start == datetime(2025, 6, 15, tzinfo=UTC)
+
+
+class TestTrojanergefahr:
+    @pytest.mark.asyncio
+    async def test_trojanergefahr_set_on_station_when_llm_enabled(self):
+        """LLM returns trojanergefahr → Station gets the value."""
+        from unittest.mock import AsyncMock
+
+        from openapi_client.models.autor import Autor
+        from openapi_client.models.dokument import Dokument
+
+        from bawue.bawue_dok import EnrichmentResult
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+        scraper._llm_enabled = True
+        scraper._llm = AsyncMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._llm_truncate_tokens = 12000
+        scraper.session = MagicMock()
+
+        enriched_dok = Dokument(
+            titel="Testgesetz",
+            volltext="extracted text",
+            hash="abc123",
+            typ=Doktyp.ENTWURF,
+            zp_modifiziert=datetime(2026, 2, 4, tzinfo=UTC),
+            zp_referenz=datetime(2026, 2, 4, tzinfo=UTC),
+            link="https://www.landtag-bw.de/resource/blob/12345/doc.pdf",
+            autoren=[Autor(person="Test", organisation="Fraktion GRÜNE")],
+            drucksnr="17/10266",
+        )
+        mock_result = EnrichmentResult(
+            dokument=enriched_dok,
+            trojanergefahr=7,
+        )
+
+        raw = _make_raw_vorgang(
+            "V-900",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 13,
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/12345/doc.pdf",
+                },
+            ],
+        )
+
+        with patch("bawue.bawue_dok.enrich_dokument", new_callable=AsyncMock, return_value=mock_result):
+            vorgang = await scraper._build_vorgang(raw)
+
+        assert vorgang.stationen[0].trojanergefahr == 7
+
+    @pytest.mark.asyncio
+    async def test_trojanergefahr_none_when_llm_disabled(self):
+        """LLM disabled → Station.trojanergefahr is None."""
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+        scraper._llm_enabled = False
+        scraper._llm = None
+        scraper.session = MagicMock()
+
+        raw = _make_raw_vorgang(
+            "V-901",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 13,
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/12345/doc.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper._build_vorgang(raw)
+
+        assert vorgang.stationen[0].trojanergefahr is None

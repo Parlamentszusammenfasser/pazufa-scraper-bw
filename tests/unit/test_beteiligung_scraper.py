@@ -221,6 +221,89 @@ class TestBuildVorgang:
         assert len(vorgang.stationen[0].dokumente) == 2
 
 
+def _make_enriched_dok(url: str = "https://example.com/test.pdf"):
+    """Create a Dokument suitable for EnrichmentResult (passes Pydantic validation)."""
+    from openapi_client.models.autor import Autor
+    from openapi_client.models.dokument import Dokument
+
+    return Dokument(
+        titel="Enriched",
+        volltext="text",
+        hash="abc",
+        typ=Doktyp.PREPARL_MINUS_ENTWURF,
+        zp_modifiziert=datetime(2025, 11, 13, tzinfo=UTC),
+        zp_referenz=datetime(2025, 11, 13, tzinfo=UTC),
+        link=url,
+        autoren=[Autor(organisation="Test")],
+    )
+
+
+class TestTrojanergefahr:
+    @pytest.mark.asyncio
+    async def test_trojanergefahr_set_on_station_when_llm_enabled(self):
+        """LLM enrichment returns trojanergefahr → Station gets the value."""
+        from bawue.bawue_dok import EnrichmentResult
+
+        scraper = _make_scraper()
+        scraper._llm_enabled = True
+        scraper._llm = AsyncMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._llm_truncate_tokens = 12000
+
+        mock_result = EnrichmentResult(
+            dokument=_make_enriched_dok(),
+            trojanergefahr=5,
+        )
+
+        detail = _make_detail()
+
+        with patch("bawue.bawue_dok.enrich_dokument", new_callable=AsyncMock, return_value=mock_result):
+            vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
+
+        assert vorgang.stationen[0].trojanergefahr == 5
+
+    @pytest.mark.asyncio
+    async def test_trojanergefahr_none_when_llm_disabled(self):
+        """LLM disabled → Station.trojanergefahr is None."""
+        scraper = _make_scraper()
+        detail = _make_detail()
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
+
+        assert vorgang.stationen[0].trojanergefahr is None
+
+    @pytest.mark.asyncio
+    async def test_trojanergefahr_max_across_multiple_documents(self):
+        """Multiple docs with different trojanergefahr → Station gets max."""
+        from bawue.bawue_dok import EnrichmentResult
+
+        scraper = _make_scraper()
+        scraper._llm_enabled = True
+        scraper._llm = AsyncMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._llm_truncate_tokens = 12000
+
+        results = [
+            EnrichmentResult(dokument=_make_enriched_dok("https://example.com/a.pdf"), trojanergefahr=3),
+            EnrichmentResult(dokument=_make_enriched_dok("https://example.com/b.pdf"), trojanergefahr=8),
+        ]
+
+        detail = _make_detail(
+            pdf_links=[
+                {"title": "Entwurf A (PDF)", "url": "https://example.com/a.pdf"},
+                {"title": "Entwurf B (PDF)", "url": "https://example.com/b.pdf"},
+            ]
+        )
+
+        with patch(
+            "bawue.bawue_dok.enrich_dokument",
+            new_callable=AsyncMock,
+            side_effect=results,
+        ):
+            vorgang = await scraper._build_vorgang("test-slug", detail)
+
+        assert vorgang.stationen[0].trojanergefahr == 8
+
+
 class TestListingPageExtractor:
     @pytest.mark.asyncio
     async def test_returns_slugs(self):

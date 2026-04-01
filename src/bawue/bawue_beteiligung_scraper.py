@@ -157,6 +157,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
         # Build documents
         dokumente: list[StationDokumenteInner] = []
+        trojaner_scores: list[int] = []
         for pdf in detail.pdf_links:
             dok = Dokument(
                 titel=pdf["title"],
@@ -173,13 +174,16 @@ class BawueBeteiligungScraper(VorgangsScraper):
                 try:
                     from bawue.bawue_dok import enrich_dokument
 
-                    dok = await enrich_dokument(
+                    result = await enrich_dokument(
                         self.session,
                         self._llm,
                         dok,
                         model=self._llm_model,
                         max_tokens=self._llm_truncate_tokens,
                     )
+                    dok = result.dokument
+                    if result.trojanergefahr is not None:
+                        trojaner_scores.append(result.trojanergefahr)
                 except Exception:
                     logger.warning("Document enrichment failed for %s", pdf["url"])
 
@@ -192,6 +196,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             dokumente=dokumente,
             zp_start=zp_start,
             gremium=gremium,
+            trojanergefahr=max(trojaner_scores) if trojaner_scores else None,
         )
 
         beteiligung_url = f"{BASE_URL}/de/mitmachen/lp-{self._wahlperiode}/{slug}"

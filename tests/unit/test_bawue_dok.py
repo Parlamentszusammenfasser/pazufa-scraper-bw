@@ -13,6 +13,7 @@ from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.dokument import Dokument
 
 from bawue.bawue_dok import (
+    EnrichmentResult,
     _hash_cache,
     _prompt_for_doktyp,
     download_pdf,
@@ -287,13 +288,15 @@ class TestEnrichDokument:
         llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
 
         with _patch_pdf_pipeline():
-            enriched = await enrich_dokument(session, llm, dok)
+            result = await enrich_dokument(session, llm, dok)
 
-        assert enriched.volltext == SAMPLE_FULL_TEXT
-        assert enriched.hash == SAMPLE_HASH
-        assert enriched.zusammenfassung == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
-        assert enriched.schlagworte == ["umwelt", "klimaschutz", "energie"]
-        assert enriched.kurztitel == "Erneuerbare-Energien-Gesetz"
+        assert isinstance(result, EnrichmentResult)
+        assert result.dokument.volltext == SAMPLE_FULL_TEXT
+        assert result.dokument.hash == SAMPLE_HASH
+        assert result.dokument.zusammenfassung == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
+        assert result.dokument.schlagworte == ["umwelt", "klimaschutz", "energie"]
+        assert result.dokument.kurztitel == "Erneuerbare-Energien-Gesetz"
+        assert result.trojanergefahr == 3
 
     @pytest.mark.asyncio
     async def test_preserves_parlis_metadata(self):
@@ -304,13 +307,13 @@ class TestEnrichDokument:
         llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
 
         with _patch_pdf_pipeline():
-            enriched = await enrich_dokument(session, llm, dok)
+            result = await enrich_dokument(session, llm, dok)
 
-        assert enriched.titel == "Testgesetz"
-        assert enriched.autoren[0].person == "Max Mustermann"
-        assert enriched.drucksnr == "17/10266"
-        assert enriched.zp_modifiziert == datetime(2026, 1, 15, tzinfo=UTC)
-        assert enriched.typ == Doktyp.ENTWURF
+        assert result.dokument.titel == "Testgesetz"
+        assert result.dokument.autoren[0].person == "Max Mustermann"
+        assert result.dokument.drucksnr == "17/10266"
+        assert result.dokument.zp_modifiziert == datetime(2026, 1, 15, tzinfo=UTC)
+        assert result.dokument.typ == Doktyp.ENTWURF
 
     @pytest.mark.asyncio
     async def test_stellungnahme_gets_meinung(self):
@@ -320,9 +323,10 @@ class TestEnrichDokument:
         llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_STELLUNGNAHME)
 
         with _patch_pdf_pipeline():
-            enriched = await enrich_dokument(session, llm, dok)
+            result = await enrich_dokument(session, llm, dok)
 
-        assert enriched.meinung == 4
+        assert result.dokument.meinung == 4
+        assert result.trojanergefahr is None
 
     @pytest.mark.asyncio
     async def test_beschlussempf_gets_meinung_and_trojanergefahr(self):
@@ -332,42 +336,57 @@ class TestEnrichDokument:
         llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF)
 
         with _patch_pdf_pipeline():
-            enriched = await enrich_dokument(session, llm, dok)
+            result = await enrich_dokument(session, llm, dok)
 
-        assert enriched.meinung == 5
+        assert result.dokument.meinung == 5
+        assert result.trojanergefahr == 2
+
+    @pytest.mark.asyncio
+    async def test_generic_has_no_trojanergefahr(self):
+        dok = _make_plain_dokument(typ=Doktyp.MITTEILUNG)
+        session = MagicMock()
+        llm = AsyncMock()
+        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_GENERIC)
+
+        with _patch_pdf_pipeline():
+            result = await enrich_dokument(session, llm, dok)
+
+        assert result.trojanergefahr is None
 
     @pytest.mark.asyncio
     async def test_text_only_fallback_on_llm_failure(self):
-        """LLM fails → volltext+hash set, no LLM fields."""
+        """LLM fails → volltext+hash set, no LLM fields, no trojanergefahr."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
         llm = AsyncMock()
         llm.generate_text = AsyncMock(side_effect=Exception("LLM unavailable"))
 
         with _patch_pdf_pipeline():
-            enriched = await enrich_dokument(session, llm, dok)
+            result = await enrich_dokument(session, llm, dok)
 
         # Text-only: volltext and hash populated
-        assert enriched.volltext == SAMPLE_FULL_TEXT
-        assert enriched.hash == SAMPLE_HASH
+        assert result.dokument.volltext == SAMPLE_FULL_TEXT
+        assert result.dokument.hash == SAMPLE_HASH
         # No LLM fields
-        assert enriched.zusammenfassung is None
-        assert enriched.schlagworte is None
+        assert result.dokument.zusammenfassung is None
+        assert result.dokument.schlagworte is None
+        assert result.trojanergefahr is None
 
     @pytest.mark.asyncio
     async def test_metadata_only_fallback_on_download_failure(self):
-        """PDF download fails → original Dokument unchanged."""
+        """PDF download fails → original Dokument unchanged, no trojanergefahr."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
         llm = AsyncMock()
 
         with patch("bawue.bawue_dok.download_pdf", new_callable=AsyncMock, side_effect=Exception("Download failed")):
-            enriched = await enrich_dokument(session, llm, dok)
+            result = await enrich_dokument(session, llm, dok)
 
         # Original document returned unchanged
-        assert enriched.volltext == ""
-        assert enriched.hash == ""
-        assert enriched.zusammenfassung is None
+        assert result.dokument.volltext == ""
+        assert result.dokument.hash == ""
+        assert result.dokument.zusammenfassung is None
+        assert result.trojanergefahr is None
 
     @pytest.mark.asyncio
     async def test_tempfile_cleaned_up_after_enrichment(self):
@@ -453,8 +472,9 @@ class TestHashCache:
         # LLM called only once despite two enrichments
         assert llm.generate_text.call_count == 1
         # Both results have the same semantics
-        assert first.zusammenfassung == second.zusammenfassung
-        assert first.schlagworte == second.schlagworte
+        assert first.dokument.zusammenfassung == second.dokument.zusammenfassung
+        assert first.dokument.schlagworte == second.dokument.schlagworte
+        assert first.trojanergefahr == second.trojanergefahr
 
     @pytest.mark.asyncio
     async def test_cache_miss_calls_llm(self):
@@ -465,10 +485,10 @@ class TestHashCache:
         llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
 
         with _patch_pdf_pipeline():
-            enriched = await enrich_dokument(session, llm, dok)
+            result = await enrich_dokument(session, llm, dok)
 
         assert llm.generate_text.call_count == 1
-        assert enriched.zusammenfassung is not None
+        assert result.dokument.zusammenfassung is not None
 
     @pytest.mark.asyncio
     async def test_different_hashes_both_call_llm(self):
