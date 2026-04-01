@@ -1,11 +1,121 @@
-"""HTML parsing and Fundstelle regex extraction for PARLIS responses."""
+"""HTML parsing, Fundstelle regex extraction, and JSON comment parsing for PARLIS responses."""
 
+import json
+import logging
 import re
 from datetime import datetime
 
 from lxml import html
 
 from bawue.types import RawVorgang
+
+logger = logging.getLogger(__name__)
+
+_HTML_COMMENT_RE = re.compile(r"<!--(.*?)-->", re.DOTALL)
+
+
+def _extract_json_comments(html_content: str) -> list[dict]:
+    """Extract JSON objects embedded in HTML comments (<!--{...}-->)."""
+    results = []
+    for match in _HTML_COMMENT_RE.finditer(html_content):
+        text = match.group(1).strip()
+        if not text.startswith("{"):
+            continue
+        try:
+            results.append(json.loads(text))
+        except json.JSONDecodeError:
+            logger.debug("Skipping malformed JSON in HTML comment")
+    return results
+
+
+# PARLIS JSON comment field codes
+_FIELD_TITEL = "EWBV10"
+_FIELD_VORGANGS_ID = "EWBV02"
+_FIELD_VORGANGS_ID_ALT = "WMV40"
+_FIELD_VORGANGSTYP = "WMV41"
+_FIELD_INITIATIVE = "WMV30"
+_FIELD_AKTUELLER_STAND = "WMV31"
+_FIELD_SACHGEBIET = "WMV32"
+_FIELD_FUNDSTELLEN = "WMV35"
+
+_BASE_URL = "https://parlis.landtag-bw.de/parlis/"
+
+
+def _safe_main(data: dict, key: str) -> str | None:
+    """Safely extract data[key][0]["main"], returning None if any level is missing."""
+    entries = data.get(key)
+    if not entries or not isinstance(entries, list):
+        return None
+    first = entries[0]
+    if not isinstance(first, dict):
+        return None
+    return first.get("main")
+
+
+def _parse_wmv35_fundstellen(wmv35_raw: str) -> list[dict]:
+    """Parse the WMV35 Fundstellen field into a list of RawFundstelle dicts.
+
+    Format per entry: ``pdf_url @@ blob_id @@ mime @@ description || internal_id``
+    Entries are separated by ``<br>``.
+    """
+    results = []
+    segments = re.split(r"\s*<br>\s*", wmv35_raw, flags=re.IGNORECASE)
+    for segment in segments:
+        segment = segment.strip()
+        if not segment:
+            continue
+        parts = segment.split(" @@ ")
+        pdf_url = parts[0].strip() if parts else ""
+        description = parts[3] if len(parts) >= 4 else segment
+        # Strip trailing " || internal_id"
+        id_sep = description.rfind(" || ")
+        if id_sep != -1:
+            description = description[:id_sep]
+        parsed = parse_fundstelle_text(description.strip())
+        if pdf_url:
+            parsed["pdf_url"] = pdf_url
+        results.append(parsed)
+    return results
+
+
+def _json_comment_to_raw_vorgang(data: dict) -> RawVorgang | None:
+    """Convert a PARLIS embedded JSON comment to a RawVorgang dict."""
+    vorgangs_id = _safe_main(data, _FIELD_VORGANGS_ID) or _safe_main(data, _FIELD_VORGANGS_ID_ALT)
+    if not vorgangs_id:
+        return None
+
+    titel = _safe_main(data, _FIELD_TITEL)
+    if not titel:
+        return None
+
+    result: RawVorgang = {
+        "titel": titel,
+        "vorgangs_id": vorgangs_id,
+        "detail_url": f"{_BASE_URL}vorgang/{vorgangs_id}",
+    }
+
+    vorgangstyp = _safe_main(data, _FIELD_VORGANGSTYP)
+    if vorgangstyp:
+        result["Vorgangstyp"] = vorgangstyp
+
+    initiative = _safe_main(data, _FIELD_INITIATIVE)
+    if initiative:
+        result["Initiative"] = initiative.strip()
+
+    aktueller_stand = _safe_main(data, _FIELD_AKTUELLER_STAND)
+    if aktueller_stand:
+        result["Aktueller Stand"] = aktueller_stand
+
+    sachgebiet = _safe_main(data, _FIELD_SACHGEBIET)
+    if sachgebiet:
+        result["Sachgebiet"] = sachgebiet
+
+    wmv35 = _safe_main(data, _FIELD_FUNDSTELLEN)
+    if wmv35:
+        result["fundstellen_parsed"] = _parse_wmv35_fundstellen(wmv35)
+
+    return result
+
 
 _GERMAN_MONTHS = {
     "Januar": "01",
@@ -153,8 +263,18 @@ def _extract_from_scripts(record) -> tuple[str | None, str | None]:
     return vorgangs_id, detail_url
 
 
-def parse_results(html_content: str) -> list[RawVorgang]:
-    """Parse Vorgang results from PARLIS HTML response."""
+def _parse_results_from_json(json_comments: list[dict]) -> list[RawVorgang]:
+    """Convert a list of PARLIS JSON comment dicts to RawVorgang list."""
+    results = []
+    for data in json_comments:
+        vorgang = _json_comment_to_raw_vorgang(data)
+        if vorgang:
+            results.append(vorgang)
+    return results
+
+
+def _parse_results_from_html(html_content: str) -> list[RawVorgang]:
+    """Parse Vorgang results from PARLIS HTML response (XPath/regex fallback)."""
     tree = html.fromstring(html_content)
     records = tree.xpath('.//div[contains(@class, "efxRecordRepeater")]')
 
@@ -190,3 +310,18 @@ def parse_results(html_content: str) -> list[RawVorgang]:
             results.append(item)
 
     return results
+
+
+def parse_results(html_content: str) -> list[RawVorgang]:
+    """Parse Vorgang results from PARLIS HTML response.
+
+    Tries JSON comment extraction first (more robust), falls back to HTML/XPath
+    parsing when no embedded JSON comments are found.
+    """
+    json_comments = _extract_json_comments(html_content)
+    if json_comments:
+        results = _parse_results_from_json(json_comments)
+        if results:
+            return results
+        logger.warning("JSON comments found but yielded no results, falling back to HTML parsing")
+    return _parse_results_from_html(html_content)
