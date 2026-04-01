@@ -26,7 +26,7 @@ python3.14 -m venv .venv
 make install
 
 cp config.sample.toml config.toml
-# Edit config.toml: set ltzf-api-url, ltzf-api-key, collector-uuid
+# Edit config.toml: set ltzf-api-url, ltzf-api-key, collector-uuid...
 ```
 
 ## Build
