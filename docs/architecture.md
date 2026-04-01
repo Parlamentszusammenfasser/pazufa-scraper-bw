@@ -20,6 +20,7 @@ graph LR
         PDFs["Drucksachen PDFs<br/>(landtag-bw.de)"]
         BetPortal["Beteiligungsportal<br/>(beteiligungsportal.baden-wuerttemberg.de)"]
         ICSFeed["ICS Calendar<br/>(landtag-bw.de)"]
+        LLMProvider["LLM Provider<br/>(via litellm)"]
     end
 
     subgraph "pazufa-collector Framework"
@@ -39,6 +40,9 @@ graph LR
         EM["EnumMapper"]
         BC["BeteiligungClient"]
         BP["BeteiligungParser"]
+        BDK["BawueDok<br/>(PDF + LLM enrichment)"]
+        RL["AdaptiveRateLimiter"]
+        UT["UploadThrottle"]
     end
 
     subgraph "PaZuFa Platform"
@@ -62,6 +66,10 @@ graph LR
     APIClient -->|" PUT /api/v2/vorgang "| API
     APIClient -->|" PUT /api/v2/kalender "| API
     PDFs --> DocPipeline
+    PDFs -->|" PDF download "| BDK
+    LLMProvider -->|" semantic extraction "| BDK
+    BVS --> BDK
+    BBS --> BDK
     ICSFeed -->|" ics data "| ICS --> BSS
     API --> DB
     DB --> Web
@@ -110,16 +118,18 @@ Dashed lines mark stages not yet implemented. See [status.md](status.md) for imp
 
 ## 2. Dependencies
 
-| Dependency       | Purpose                                                 | Owned by      |
-|------------------|---------------------------------------------------------|---------------|
-| `requests`       | PARLIS + Beteiligungsportal HTTP sessions (synchronous) | BaWue scraper |
-| `lxml`           | HTML parsing of PARLIS and Beteiligungsportal pages     | BaWue scraper |
-| `icalendar`      | ICS calendar feed parsing for Sitzungen                 | BaWue scraper |
-| `aiohttp`        | Async HTTP sessions for framework                       | Framework     |
-| `httpx`          | Auto-generated PaZuFa API client                        | Framework     |
-| `openapi-client` | Auto-generated Pydantic models from OpenAPI spec        | Framework     |
-| `redis`          | Caching of processed Vorgänge/Dokumente                 | Framework     |
-| `litellm`        | LLM integration for document summarization              | Framework     |
+| Dependency       | Purpose                                                         | Owned by                          |
+|------------------|-----------------------------------------------------------------|-----------------------------------|
+| `requests`       | PARLIS + Beteiligungsportal HTTP sessions (synchronous)         | BaWue scraper                     |
+| `lxml`           | HTML parsing of PARLIS and Beteiligungsportal pages             | BaWue scraper                     |
+| `icalendar`      | ICS calendar feed parsing for Sitzungen                         | BaWue scraper                     |
+| `aiohttp`        | Async HTTP sessions for framework                               | Framework                         |
+| `httpx`          | Auto-generated PaZuFa API client                                | Framework                         |
+| `openapi-client` | Auto-generated Pydantic models from OpenAPI spec                | Framework                         |
+| `kreuzberg`      | PDF text extraction (normal + OCR fallback)                     | BaWue scraper                     |
+| `redis`          | Caching of processed Vorgänge/Dokumente                         | Framework                         |
+| `litellm`        | LLM integration: token counting/truncation + framework pipeline | Framework + BaWue scraper         |
+| `collector-core` | LLMConnector base class for LLM calls                           | Framework (used by BaWue scraper) |
 
 ## 3. Framework Integration
 
@@ -196,6 +206,9 @@ classDiagram
     class ParlisParser {
         +parse_results(html) list[RawVorgang]
         +parse_fundstelle_text(text) dict
+        -_extract_json_comments(html) list[dict]
+        -_parse_results_from_json(comments) list[RawVorgang]
+        -_parse_results_from_html(html) list[RawVorgang]
     }
 
     class IcsParser {
@@ -205,9 +218,30 @@ classDiagram
         +group_events_by_date(events) dict
     }
 
+    class BawueDok {
+        <<module>>
+        +enrich_dokument(session, llm, dok, model, max_tokens) Dokument
+        +download_pdf(session, url) Path
+        +extract_pdf_text(pdf_path) tuple
+        +extract_semantics(llm, text, doktyp, model, max_tokens) dict
+        +truncate_text(text, max_tokens, model) str
+        -_hash_cache: dict
+        -_LLM_SEMAPHORE: Semaphore
+    }
+
+    class UploadThrottle {
+        <<module>>
+        +with_upload_retry(api_call, rate_limiter, max_retries, exception_type) T
+        +upload_vorgang(oapiconfig, scraper_id, upload_limiter, item, dry_run, log_item) Vorgang|None
+    }
+
     BawueVorgaengeScraper --> ParlisClient
+    BawueVorgaengeScraper --> BawueDok
+    BawueVorgaengeScraper --> UploadThrottle
     ParlisClient --> ParlisParser
     BawueBeteiligungScraper --> BeteiligungClient
+    BawueBeteiligungScraper --> BawueDok
+    BawueBeteiligungScraper --> UploadThrottle
     BeteiligungClient --> BeteiligungParser
     BawueSitzungenScraper --> IcsParser
 ```
@@ -219,11 +253,11 @@ All three scrapers follow the same two-phase pattern:
 1. `listing_page_extractor(key)` — fetches the source and returns item identifiers; stores raw data in `_raw_cache`
 2. `item_extractor(id)` — looks up `_raw_cache`, builds and returns the framework model
 
-| Scraper                    | `listing_urls` values        | `listing_page_extractor` returns | `item_extractor` returns       | `send_result` override |
-|----------------------------|------------------------------|----------------------------------|--------------------------------|------------------------|
-| `BawueVorgaengeScraper`    | enabled Vorgangstyp strings (3 by default, configurable) | vorgang IDs | `Vorgang`             | No                     |
-| `BawueBeteiligungScraper`  | LP index keys (`lp-17`)      | process slugs                    | `Vorgang\|None`                | No                     |
-| `BawueSitzungenScraper`    | ICS feed URL                 | ISO date strings                 | `(datetime, List[Sitzung])`    | Yes — use `Parlament.BW` |
+| Scraper                   | `listing_urls` values                                    | `listing_page_extractor` returns | `item_extractor` returns    | `send_result` override   |
+|---------------------------|----------------------------------------------------------|----------------------------------|-----------------------------|--------------------------|
+| `BawueVorgaengeScraper`   | enabled Vorgangstyp strings (3 by default, configurable) | vorgang IDs                      | `Vorgang`                   | No                       |
+| `BawueBeteiligungScraper` | LP index keys (`lp-17`)                                  | process slugs                    | `Vorgang\|None`             | No                       |
+| `BawueSitzungenScraper`   | ICS feed URL                                             | ISO date strings                 | `(datetime, List[Sitzung])` | Yes — use `Parlament.BW` |
 
 **PARLIS listing URL pattern:** PARLIS has no traditional listing URLs. `listing_urls` contains the enabled Vorgangstyp
 strings. By default these are the 3 types with full PaZuFa model support: `"Gesetzgebung"`, `"Haushaltsgesetzgebung"`,
@@ -252,6 +286,7 @@ sequenceDiagram
     participant PC as ParlisClient
     participant PP as ParlisParser
     participant EM as EnumMapper
+    participant BDK as BawueDok
     participant Cache as Redis ScraperCache
     participant API as PaZuFa API Client
 
@@ -272,6 +307,15 @@ sequenceDiagram
         BVS->>EM: map enums (Vorgangstyp, Stationstyp, Doktyp)
         EM-->>BVS: mapped enum values
         BVS->>BVS: _build_vorgang → Vorgang model
+
+        opt LLM enabled
+            BVS->>BDK: enrich_dokument(session, llm, dok)
+            BDK->>BDK: download_pdf(url)
+            BDK->>BDK: extract_pdf_text(pdf_path)
+            BDK->>BDK: extract_semantics(llm, text, doktyp)
+            BDK-->>BVS: enriched Dokument
+        end
+
         BVS-->>FW: Vorgang
 
         FW->>Cache: check if already processed
@@ -317,17 +361,17 @@ Configuration from `[beteiligung]` section.
 
 **Vorgang / Station mapping:**
 
-| Field            | Value                                                 |
-|------------------|-------------------------------------------------------|
-| `api_id`         | `uuid5(NAMESPACE_URL, "beteiligung-{slug}")`          |
-| `titel`          | Detail page heading (dossier-header h1)               |
-| `kurztitel`      | URL slug (for backend merging with PARLIS data)       |
-| `typ`            | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`               |
-| `initiatoren`    | `[Autor(organisation=ministry)]`                      |
-| Station `typ`    | `Stationstyp.PREPARL_MINUS_REGENT`                    |
-| Station `gremium`| `Parlament.BW, "Landesregierung"`                     |
-| Station `dokumente` | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF`          |
-| Station `zp_start` | Comment deadline date                               |
+| Field               | Value                                           |
+|---------------------|-------------------------------------------------|
+| `api_id`            | `uuid5(NAMESPACE_URL, "beteiligung-{slug}")`    |
+| `titel`             | Detail page heading (dossier-header h1)         |
+| `kurztitel`         | URL slug (for backend merging with PARLIS data) |
+| `typ`               | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`          |
+| `initiatoren`       | `[Autor(organisation=ministry)]`                |
+| Station `typ`       | `Stationstyp.PREPARL_MINUS_REGENT`              |
+| Station `gremium`   | `Parlament.BW, "Landesregierung"`               |
+| Station `dokumente` | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF`       |
+| Station `zp_start`  | Comment deadline date                           |
 
 ### BeteiligungClient / BeteiligungParser
 
@@ -356,8 +400,11 @@ Stateless ICS parsing via the `icalendar` library. Filters events by SUMMARY pre
 `ParlisClient` manages sessions, constructs search queries, executes `POST browse.tt.json`, and fetches paginated
 results via `GET report.tt.html`. Handles automatic date subdivision for large result sets.
 
-`ParlisParser` is stateless HTML/XPath parsing: extracts Vorgang fields and parses Fundstellen text into structured
-data via regex.
+`ParlisParser` extracts Vorgang data from PARLIS HTML responses. The primary path parses structured JSON objects
+embedded in HTML comments (`<!--{...}-->`) using stable field codes (`EWBV10` for title, `WMV35` for Fundstellen,
+etc.). If no JSON comments are found, it falls back to HTML/XPath parsing with regex-based Fundstellen extraction
+(DD-014). Fundstelle text parsing (dates, Drucksache/Plenarprotokoll numbers, committee names, authors) is shared
+by both paths.
 
 ### EnumMapper
 
@@ -370,6 +417,43 @@ AIMD-inspired adaptive request pacing for `ParlisClient` and `BeteiligungClient`
 - **Success:** delay shrinks 10% toward minimum
 - **HTTP 429:** pause 30× current delay, then resume at 50%
 - `wait()` sleeps only the remaining time since the last request (no double-waiting)
+
+### UploadThrottle
+
+Retry wrapper for direct API uploads (`upload_throttle.py`). Used by `BawueVorgaengeScraper` and
+`BawueBeteiligungScraper` for submitting `Vorgang` objects to the PaZuFa API:
+
+- `with_upload_retry()` — generic retry function with 429 detection (max 5 retries, backed by `AdaptiveRateLimiter`)
+- `upload_vorgang()` — uploads a single `Vorgang` with error handling, dry-run support, and per-status-code logging
+
+### BawueDok (Document Enrichment)
+
+Optional document enrichment module (`bawue_dok.py`). Downloads PDFs, extracts text, and calls an LLM for semantic
+metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` environment variable.
+
+**PDF pipeline:**
+- Downloads PDF via `aiohttp` session to a temporary file
+- Extracts text via `kreuzberg` (normal extraction first; OCR fallback if result < 64 chars)
+- Computes SHA256 hash for deduplication
+
+**LLM pipeline:**
+- Document-type-specific German prompts (4 variants: ENTWURF, STELLUNGNAHME, BESCHLUSSEMPF, GENERIC)
+- Extracts: `zusammenfassung`, `schlagworte`, `kurztitel`, and optionally `meinung` (1–5 score) and `trojanergefahr` (1–10 score)
+- JSON response with up to 3 retries on parse failures
+- Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
+- In-memory SHA256 hash cache skips LLM calls for duplicate PDFs within a run
+- Optional token truncation (default 12 000 tokens, configurable via `truncate-tokens` in `[llm]` config, DD-013)
+
+**Graceful degradation (3 tiers):**
+
+| Tier | Condition | Result |
+|------|-----------|--------|
+| 1 — Full | PDF + LLM succeed | Dokument with volltext, hash, and all LLM fields |
+| 2 — Text-only | PDF succeeds, LLM fails | Dokument with volltext + hash, no LLM fields |
+| 3 — Metadata-only | PDF download fails | Original Dokument unchanged |
+
+**Note:** The LLM prompts for ENTWURF and BESCHLUSSEMPF extract `trojanergefahr`, but this value is **not** set on
+the `Dokument` model — it is a `Station`-level field in the data model. This remains a gap.
 
 ### Types
 

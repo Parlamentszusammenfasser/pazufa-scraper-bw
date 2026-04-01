@@ -1,6 +1,197 @@
-"""Tests for PARLIS HTML parsing and Fundstelle regex extraction."""
+"""Tests for PARLIS HTML parsing, Fundstelle regex extraction, and JSON comment parsing."""
 
-from bawue.parlis_parser import parse_fundstelle_text, parse_results
+from pathlib import Path
+
+from bawue.parlis_parser import (
+    _extract_json_comments,
+    _json_comment_to_raw_vorgang,
+    _parse_results_from_html,
+    _parse_results_from_json,
+    _parse_wmv35_fundstellen,
+    parse_fundstelle_text,
+    parse_results,
+)
+
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "parlis"
+
+
+class TestExtractJsonComments:
+    def test_extracts_single_json_comment(self):
+        html = '<div><!--{"key": "val"}--></div>'
+        result = _extract_json_comments(html)
+        assert len(result) == 1
+        assert result[0]["key"] == "val"
+
+    def test_extracts_multiple_json_comments(self):
+        html = '<!--{"a": 1}--><div>text</div><!--{"b": 2}-->'
+        result = _extract_json_comments(html)
+        assert len(result) == 2
+        assert result[0]["a"] == 1
+        assert result[1]["b"] == 2
+
+    def test_returns_empty_for_no_comments(self):
+        html = "<html><body><div>no comments</div></body></html>"
+        assert _extract_json_comments(html) == []
+
+    def test_skips_malformed_json_comment(self):
+        html = '<!--{broken json--><div></div><!--{"valid": true}-->'
+        result = _extract_json_comments(html)
+        assert len(result) == 1
+        assert result[0]["valid"] is True
+
+    def test_ignores_non_json_comments(self):
+        html = '<!-- regular comment --><div></div><!--{"ok": 1}-->'
+        result = _extract_json_comments(html)
+        assert len(result) == 1
+        assert result[0]["ok"] == 1
+
+    def test_handles_nested_braces(self):
+        html = '<!--{"outer": {"inner": [1, 2]}}-->'
+        result = _extract_json_comments(html)
+        assert len(result) == 1
+        assert result[0]["outer"]["inner"] == [1, 2]
+
+    def test_handles_multiline_json_comment(self):
+        html = '<!--{\n  "key": "value"\n}-->'
+        result = _extract_json_comments(html)
+        assert len(result) == 1
+        assert result[0]["key"] == "value"
+
+
+SAMPLE_JSON_COMMENT_FULL = {
+    "EWBV10": [{"main": "Gesetz zur Förderung erneuerbarer Energien"}],
+    "EWBV02": [{"main": "V-98001"}],
+    "WMV40": [{"main": "V-98001"}],
+    "WMV41": [{"main": "Gesetzgebung"}],
+    "WMV30": [{"main": " Fraktion GRÜNE, Fraktion CDU"}],
+    "WMV31": [{"main": "Verkündet"}],
+    "WMV32": [{"main": "Umwelt; Energie"}],
+    "WMV35": [
+        {
+            "main": (
+                "https://www.landtag-bw.de/files/gg1-entwurf.pdf"
+                " @@ 326783 @@ application/pdf"
+                " @@ Gesetzentwurf    Fraktion GRÜNE, Fraktion CDU  10.01.2026"
+                " Drucksache 17/12001   (24 S.)"
+                " || 243551 <br> "
+                "https://www.landtag-bw.de/files/plp/17_0150.pdf#page=33"
+                " @@  @@  @@ Erste Beratung   Plenarprotokoll 17/150 15.01.2026"
+                "  S. 8659-8667 || 243589 <br> "
+            )
+        }
+    ],
+}
+
+
+class TestJsonCommentToRawVorgang:
+    def test_maps_basic_fields(self):
+        result = _json_comment_to_raw_vorgang(SAMPLE_JSON_COMMENT_FULL)
+        assert result is not None
+        assert result["titel"] == "Gesetz zur Förderung erneuerbarer Energien"
+        assert result["vorgangs_id"] == "V-98001"
+        assert result["Vorgangstyp"] == "Gesetzgebung"
+        assert result["Initiative"] == "Fraktion GRÜNE, Fraktion CDU"
+        assert result["Aktueller Stand"] == "Verkündet"
+
+    def test_builds_detail_url(self):
+        result = _json_comment_to_raw_vorgang(SAMPLE_JSON_COMMENT_FULL)
+        assert result["detail_url"] == "https://parlis.landtag-bw.de/parlis/vorgang/V-98001"
+
+    def test_strips_leading_whitespace_from_initiative(self):
+        result = _json_comment_to_raw_vorgang(SAMPLE_JSON_COMMENT_FULL)
+        assert not result["Initiative"].startswith(" ")
+
+    def test_falls_back_to_wmv40_for_vorgangs_id(self):
+        data = {
+            "WMV40": [{"main": "V-99999"}],
+            "EWBV10": [{"main": "Some Title"}],
+            "WMV41": [{"main": "Gesetzgebung"}],
+        }
+        result = _json_comment_to_raw_vorgang(data)
+        assert result["vorgangs_id"] == "V-99999"
+
+    def test_returns_none_for_empty_data(self):
+        assert _json_comment_to_raw_vorgang({}) is None
+
+    def test_returns_none_without_vorgangs_id(self):
+        data = {"EWBV10": [{"main": "Title Only"}]}
+        assert _json_comment_to_raw_vorgang(data) is None
+
+    def test_handles_missing_optional_fields(self):
+        data = {
+            "EWBV02": [{"main": "V-11111"}],
+            "EWBV10": [{"main": "Minimal Vorgang"}],
+            "WMV41": [{"main": "Gesetzgebung"}],
+        }
+        result = _json_comment_to_raw_vorgang(data)
+        assert result is not None
+        assert result["titel"] == "Minimal Vorgang"
+        assert result["vorgangs_id"] == "V-11111"
+        assert "Initiative" not in result
+        assert "Aktueller Stand" not in result
+
+    def test_includes_fundstellen_parsed(self):
+        result = _json_comment_to_raw_vorgang(SAMPLE_JSON_COMMENT_FULL)
+        assert "fundstellen_parsed" in result
+        assert len(result["fundstellen_parsed"]) == 2
+
+
+class TestParseWmv35Fundstellen:
+    def test_parses_single_fundstelle(self):
+        wmv35 = (
+            "https://example.com/doc.pdf @@ 12345 @@ application/pdf"
+            " @@ Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)"
+            " || 99999"
+        )
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert len(result) == 1
+        assert result[0]["pdf_url"] == "https://example.com/doc.pdf"
+        assert result[0]["datum"] == "04.02.2026"
+        assert result[0]["drucksache"] == "17/10266"
+        assert result[0]["station_typ"] == "Gesetzentwurf"
+        assert result[0]["seiten"] == 13
+
+    def test_parses_multiple_fundstellen(self):
+        wmv35 = (
+            "https://example.com/a.pdf @@ 1 @@ application/pdf"
+            " @@ Gesetzentwurf    CDU  01.01.2026 Drucksache 17/10000 || 100 <br> "
+            "https://example.com/b.pdf @@ 2 @@ application/pdf"
+            " @@ Erste Beratung   Plenarprotokoll 17/141 05.02.2026 || 200 <br> "
+        )
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert len(result) == 2
+        assert result[0]["station_typ"] == "Gesetzentwurf"
+        assert result[1]["plenarprotokoll"] == "17/141"
+
+    def test_extracts_pdf_url(self):
+        wmv35 = (
+            "https://www.landtag-bw.de/files/doc.pdf @@ 123 @@ application/pdf"
+            " @@ Gesetzentwurf    CDU  01.01.2026 || 50"
+        )
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert result[0]["pdf_url"] == "https://www.landtag-bw.de/files/doc.pdf"
+
+    def test_handles_empty_blob_and_mime(self):
+        """Real PARLIS pattern: URL present but blob_id and mime are empty."""
+        wmv35 = (
+            "https://www.landtag-bw.de/files/plp/17_141.pdf#page=33"
+            " @@  @@  @@ Erste Beratung   Plenarprotokoll 17/141 05.02.2026"
+            "  S. 8659-8667 || 243589"
+        )
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert len(result) == 1
+        assert result[0]["pdf_url"] == "https://www.landtag-bw.de/files/plp/17_141.pdf#page=33"
+        assert result[0]["plenarprotokoll"] == "17/141"
+
+    def test_returns_empty_for_empty_input(self):
+        assert _parse_wmv35_fundstellen("") == []
+        assert _parse_wmv35_fundstellen("   ") == []
+
+    def test_strips_trailing_br(self):
+        wmv35 = "https://example.com/a.pdf @@ 1 @@ pdf @@ Gesetzentwurf    CDU  01.01.2026 || 100 <br> "
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert len(result) == 1
+
 
 SAMPLE_HTML_RECORD = """<html><body>
 <div class="efxRecordRepeater">
@@ -150,6 +341,65 @@ class TestParseResults:
         assert results == []
 
 
+_SAMPLE_JSON_COMMENT = (
+    '{"EWBV10": [{"main": "JSON-Parsed Title"}],'
+    ' "EWBV02": [{"main": "V-77777"}],'
+    ' "WMV41": [{"main": "Gesetzgebung"}],'
+    ' "WMV30": [{"main": " Fraktion SPD"}],'
+    ' "WMV31": [{"main": "Verkündet"}],'
+    ' "WMV35": [{"main": "https://example.com/doc.pdf'
+    " @@ 111 @@ application/pdf"
+    " @@ Gesetzentwurf    Fraktion SPD  01.03.2026"
+    ' Drucksache 17/11000   (5 S.) || 500"}]}'
+)
+
+SAMPLE_JSON_IN_HTML = f"""<html><body>
+<div class="record-container">
+  <div class="efxRecordRepeater" data-efx-rec="abc123">
+    <!--{_SAMPLE_JSON_COMMENT}-->
+    <a class="efxZoomShort-Vorgang">HTML-Parsed Title</a>
+    <dl><dt>Vorgangs-ID:</dt><dd>V-77777</dd></dl>
+  </div>
+</div>
+</body></html>"""
+
+
+class TestParseResultsDispatcher:
+    def test_prefers_json_when_available(self):
+        results = parse_results(SAMPLE_JSON_IN_HTML)
+        assert len(results) == 1
+        assert results[0]["titel"] == "JSON-Parsed Title"
+        assert results[0]["vorgangs_id"] == "V-77777"
+        assert results[0]["Vorgangstyp"] == "Gesetzgebung"
+
+    def test_falls_back_to_html_when_no_json(self):
+        """Existing HTML-only fixtures still work via fallback."""
+        results = parse_results(SAMPLE_HTML_RECORD)
+        assert len(results) == 1
+        assert results[0]["titel"] == "Gesetz zur Änderung des Landeshochschulgesetzes"
+
+    def test_falls_back_on_malformed_json_comments(self):
+        html = """<html><body>
+<!--{this is not valid json}-->
+<div class="efxRecordRepeater">
+  <a class="efxZoomShort-Vorgang">Fallback Title</a>
+  <dl><dt>Vorgangs-ID:</dt><dd>V-55555</dd><dt>Vorgangstyp:</dt><dd>Gesetzgebung</dd></dl>
+  <script>var url = "/parlis/vorgang/V-55555";</script>
+</div>
+</body></html>"""
+        results = parse_results(html)
+        assert len(results) == 1
+        assert results[0]["titel"] == "Fallback Title"
+
+    def test_json_path_extracts_fundstellen(self):
+        results = parse_results(SAMPLE_JSON_IN_HTML)
+        fundstellen = results[0]["fundstellen_parsed"]
+        assert len(fundstellen) == 1
+        assert fundstellen[0]["station_typ"] == "Gesetzentwurf"
+        assert fundstellen[0]["datum"] == "01.03.2026"
+        assert fundstellen[0]["pdf_url"] == "https://example.com/doc.pdf"
+
+
 class TestParseFundstelleSingleSpaceFallback:
     """When PARLIS uses a single space as separator, station_typ is not extracted.
 
@@ -283,3 +533,49 @@ class TestParseResultsTimeElementSiblingSpan:
         fundstellen = results[0]["fundstellen_parsed"]
         assert len(fundstellen) == 1
         assert fundstellen[0]["datum"] == "18.01.2022"
+
+
+def _compare_vorgang_core_fields(json_result, html_result):
+    """Compare the core fields that both paths must agree on."""
+    assert json_result["titel"] == html_result["titel"]
+    assert json_result["vorgangs_id"] == html_result["vorgangs_id"]
+    if "Vorgangstyp" in html_result:
+        assert json_result["Vorgangstyp"] == html_result["Vorgangstyp"]
+    if "Initiative" in html_result:
+        assert json_result["Initiative"] == html_result["Initiative"]
+    assert json_result["detail_url"] == html_result["detail_url"]
+
+    json_fund = json_result.get("fundstellen_parsed", [])
+    html_fund = html_result.get("fundstellen_parsed", [])
+    assert len(json_fund) == len(html_fund), f"Fundstellen count mismatch: JSON={len(json_fund)}, HTML={len(html_fund)}"
+
+    for i, (jf, hf) in enumerate(zip(json_fund, html_fund, strict=True)):
+        assert jf.get("station_typ") == hf.get("station_typ"), f"Fund[{i}] station_typ"
+        assert jf.get("datum") == hf.get("datum"), f"Fund[{i}] datum"
+        assert jf.get("drucksache") == hf.get("drucksache"), f"Fund[{i}] drucksache"
+        assert jf.get("plenarprotokoll") == hf.get("plenarprotokoll"), f"Fund[{i}] pp"
+        assert jf.get("ausschuss") == hf.get("ausschuss"), f"Fund[{i}] ausschuss"
+        assert jf.get("autor_text") == hf.get("autor_text"), f"Fund[{i}] autor"
+        assert jf.get("seiten") == hf.get("seiten"), f"Fund[{i}] seiten"
+
+
+class TestParseResultsParity:
+    """Verify JSON and HTML parsing paths produce equivalent results."""
+
+    def _load_and_compare(self, fixture_name: str):
+        html_content = (FIXTURES_DIR / fixture_name).read_text(encoding="utf-8")
+        json_comments = _extract_json_comments(html_content)
+        json_results = _parse_results_from_json(json_comments)
+        html_results = _parse_results_from_html(html_content)
+        assert len(json_results) == len(html_results)
+        for jr, hr in zip(json_results, html_results, strict=True):
+            _compare_vorgang_core_fields(jr, hr)
+
+    def test_gesetzgebung_parity(self):
+        self._load_and_compare("gesetzgebung_results_with_json.html")
+
+    def test_kleine_anfrage_parity(self):
+        self._load_and_compare("kleine_anfrage_results_with_json.html")
+
+    def test_antrag_parity(self):
+        self._load_and_compare("antrag_results_with_json.html")
