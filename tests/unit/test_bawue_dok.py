@@ -15,11 +15,13 @@ from openapi_client.models.dokument import Dokument
 from bawue.bawue_dok import (
     EnrichmentResult,
     _hash_cache,
+    _paragraph_quality_score,
     _prompt_for_doktyp,
     download_pdf,
     enrich_dokument,
     extract_pdf_text,
     extract_semantics,
+    normalize_volltext,
     truncate_text,
 )
 
@@ -567,3 +569,127 @@ class TestTokenLogging:
             await enrich_dokument(session, llm, dok)
 
         assert any("cache hit" in r.message.lower() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# TestParagraphQualityScore
+# ---------------------------------------------------------------------------
+
+
+class TestParagraphQualityScore:
+    def test_clean_german_scores_high(self):
+        text = "Gemäß § 50a Absatz 2 der Geschäftsordnung habe ich im Einvernehmen mit den Antragstellern"
+        assert _paragraph_quality_score(text) > 0.9
+
+    def test_garbled_shifted_text_scores_low(self):
+        """Shifted font encoding: consonant-heavy gibberish with C1 control chars."""
+        text = "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW"
+        assert _paragraph_quality_score(text) < 0.5
+
+    def test_garbled_latin_extended_scores_low(self):
+        """Latin Extended-B garbled output from broken ToUnicode maps."""
+        text = "ůĂƐƐĞŶ-ŵŝƚ-ǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶ-ƵŶĚ"
+        assert _paragraph_quality_score(text) < 0.5
+
+    def test_empty_text_scores_high(self):
+        assert _paragraph_quality_score("") == 1.0
+
+    def test_whitespace_only_scores_high(self):
+        assert _paragraph_quality_score("   \n  ") == 1.0
+
+    def test_german_with_umlauts_scores_high(self):
+        text = "\u00c4nderung des Schulgesetzes f\u00fcr Baden-W\u00fcrttemberg - Drucksache 17/4142"
+        assert _paragraph_quality_score(text) > 0.9
+
+    def test_page_header_scores_high(self):
+        """Page headers like 'Landtag von Baden-Württemberg Drucksache 17 / 4244' are clean."""
+        text = "Landtag von Baden-Württemberg Drucksache 17 / 4244"
+        assert _paragraph_quality_score(text) > 0.9
+
+    def test_long_garbled_paragraph_scores_low(self):
+        text = (
+            "6WlGWHWDJVVWHOOXQJQDKPH]XP*HVHW]HQWZXUI-GHU)'3'93]XU:LHGHUKHUVWHOOXQJ\r\n"
+            "GHU-9HUELQGOLFKNHLW-GHU*UXQGVFKXOHPSIHKOXQJ/DQGWDJVGUXFNVDFKH\r\n"
+        )
+        assert _paragraph_quality_score(text) < 0.5
+
+
+# ---------------------------------------------------------------------------
+# TestNormalizeVolltext
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeVolltext:
+    def test_clean_text_unchanged(self):
+        """Clean German text should pass through without modification."""
+        text = "Gemäß § 50a Absatz 2 der Geschäftsordnung."
+        assert normalize_volltext(text) == text
+
+    def test_crlf_normalized_to_lf(self):
+        assert normalize_volltext("Zeile eins\r\nZeile zwei") == "Zeile eins\nZeile zwei"
+
+    def test_lone_cr_normalized_to_lf(self):
+        assert normalize_volltext("Zeile eins\rZeile zwei") == "Zeile eins\nZeile zwei"
+
+    def test_excessive_blank_lines_collapsed(self):
+        text = "Absatz eins\n\n\n\n\nAbsatz zwei"
+        result = normalize_volltext(text)
+        assert result == "Absatz eins\n\nAbsatz zwei"
+
+    def test_trailing_whitespace_stripped(self):
+        text = "Zeile mit Leerzeichen   \nNächste Zeile  "
+        result = normalize_volltext(text)
+        assert result == "Zeile mit Leerzeichen\nNächste Zeile"
+
+    def test_angle_brackets_replaced_with_guillemets(self):
+        text = "Kontakt: <poststelle@sm.bwl.de> für Anfragen"
+        result = normalize_volltext(text)
+        assert "<" not in result
+        assert ">" not in result
+        assert "\u2039poststelle@sm.bwl.de\u203a" in result
+
+    def test_multiple_angle_brackets_replaced(self):
+        text = "<Poststelle@lfdi.bwl.de> und <info@example.com>"
+        result = normalize_volltext(text)
+        assert result == "\u2039Poststelle@lfdi.bwl.de\u203a und \u2039info@example.com\u203a"
+
+    def test_c1_control_chars_stripped(self):
+        text = "Text\x81mit\x87Steuerzeichen\x89hier"
+        result = normalize_volltext(text)
+        assert "\x81" not in result
+        assert "\x87" not in result
+        assert "\x89" not in result
+        assert "Textmit" in result  # chars removed, words joined
+
+    def test_garbled_paragraphs_removed(self):
+        """Mixed document: clean intro followed by garbled body."""
+        clean = "Landtag von Baden-Württemberg\nDrucksache 17/4244"
+        garbled = "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW"
+        text = f"{clean}\n\n{garbled}"
+        result = normalize_volltext(text)
+        assert "Landtag" in result
+        assert "6WlGWHWDJ" not in result
+
+    def test_garbled_latin_extended_paragraphs_removed(self):
+        clean = "Ein normaler deutscher Absatz mit korrektem Text."
+        garbled = "ůĂƐƐĞŶ-ŵŝƚ-ǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶ-ƵŶĚ"
+        text = f"{clean}\n\n{garbled}"
+        result = normalize_volltext(text)
+        assert "normaler" in result
+        assert "ůĂƐƐĞŶ" not in result
+
+    def test_empty_string_returns_empty(self):
+        assert normalize_volltext("") == ""
+
+    def test_unicode_nfkc_normalization(self):
+        """NFKC should normalize compatibility characters."""
+        # ﬁ (U+FB01 LATIN SMALL LIGATURE FI) → fi
+        text = "Deﬁnition eines Begriffs"
+        result = normalize_volltext(text)
+        assert "Definition" in result
+
+    def test_all_garbled_returns_empty(self):
+        """If entire text is garbled, result should be empty or near-empty."""
+        text = "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW"
+        result = normalize_volltext(text)
+        assert len(result.strip()) == 0 or "6WlGWHWDJ" not in result

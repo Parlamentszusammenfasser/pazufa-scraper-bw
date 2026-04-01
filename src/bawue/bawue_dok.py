@@ -11,7 +11,9 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import NamedTuple
 
@@ -86,6 +88,94 @@ _DOKTYP_PROMPT_MAP: dict[Doktyp, str] = {
 def _prompt_for_doktyp(doktyp: Doktyp) -> str:
     """Return the appropriate LLM prompt for a given document type."""
     return _DOKTYP_PROMPT_MAP.get(doktyp, BODY_PROMPT_GENERIC)
+
+
+# ---------------------------------------------------------------------------
+# Text normalization
+# ---------------------------------------------------------------------------
+
+_C1_CONTROL_RE = re.compile(r"[\x80-\x9f]")
+_EXCESSIVE_BLANK_LINES_RE = re.compile(r"\n{3,}")
+_TRAILING_WHITESPACE_RE = re.compile(r"[ \t]+$", re.MULTILINE)
+
+
+def _paragraph_quality_score(text: str) -> float:
+    """Score a paragraph's text quality from 0.0 (garbled) to 1.0 (clean).
+
+    Detects broken PDF font encoding via three signals:
+    - C1 control characters (0x80-0x9F)
+    - Latin Extended-B characters (0x0180-0x024F)
+    - Long words without German vowels
+    """
+    if not text or not text.strip():
+        return 1.0
+
+    alpha_chars = [c for c in text if c.isalpha()]
+    n = len(alpha_chars)
+    if n == 0:
+        return 1.0
+
+    # Signal 1: C1 control characters — never in properly extracted German text
+    c1_count = sum(1 for c in text if 0x80 <= ord(c) <= 0x9F)
+
+    # Signal 2: Latin Extended-B (ůĂƐƐĞŶ-ŵŝƚ patterns from broken ToUnicode)
+    ext_count = sum(1 for c in text if 0x0180 <= ord(c) <= 0x024F)
+
+    # Signal 3: long words without German vowels (German is vowel-rich)
+    words = re.findall(r"[a-zA-ZäöüÄÖÜß]+", text)
+    long_words = [w for w in words if len(w) >= 5]
+    if long_words:
+        vowelless = sum(1 for w in long_words if not re.search(r"[aeiouäöüAEIOUÄÖÜ]", w, re.IGNORECASE))
+        vowelless_ratio = vowelless / len(long_words)
+    else:
+        vowelless_ratio = 0.0
+
+    # Signal 4: excessive uppercase ratio — garbled font encoding produces mostly uppercase.
+    # Normal German prose is ~5-15% uppercase (sentence starts, nouns).
+    upper_count = sum(1 for c in alpha_chars if c.isupper())
+    upper_ratio = upper_count / n
+    # Only penalize when ratio is abnormally high (>60%)
+    upper_penalty = max(0.0, (upper_ratio - 0.6) * 3) if upper_ratio > 0.6 else 0.0
+
+    c1_ratio = c1_count / n
+    ext_ratio = ext_count / n
+
+    quality = 1.0 - min(1.0, c1_ratio * 20 + ext_ratio * 5 + vowelless_ratio * 1.5 + upper_penalty)
+    return max(0.0, quality)
+
+
+def normalize_volltext(text: str) -> str:
+    """Normalize extracted PDF text: fix encoding, strip garbled sections, escape XSS.
+
+    Applied after PDF text extraction, before LLM and API submission.
+    """
+    if not text:
+        return text
+
+    # 1. Unicode NFKC normalization (e.g. ﬁ ligature → fi)
+    text = unicodedata.normalize("NFKC", text)
+
+    # 2. Strip C1 control characters (0x80-0x9F)
+    text = _C1_CONTROL_RE.sub("", text)
+
+    # 3. Normalize line endings: \r\n → \n, lone \r → \n
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # 4. Remove garbled paragraphs (split on double-newline, score each)
+    paragraphs = re.split(r"\n\n+", text)
+    clean_paragraphs = [p for p in paragraphs if _paragraph_quality_score(p) >= 0.5]
+    text = "\n\n".join(clean_paragraphs)
+
+    # 5. Collapse excessive blank lines (3+ → 2)
+    text = _EXCESSIVE_BLANK_LINES_RE.sub("\n\n", text)
+
+    # 6. Strip trailing whitespace per line
+    text = _TRAILING_WHITESPACE_RE.sub("", text)
+
+    # 7. Neutralize angle brackets (XSS prevention): < and > to guillemets
+    text = text.replace("<", "\u2039").replace(">", "\u203a")
+
+    return text.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -230,8 +320,9 @@ async def enrich_dokument(
         # Download PDF
         pdf_path = await download_pdf(session, dok.link)
 
-        # Extract text + hash
+        # Extract text + hash, then normalize
         full_text, doc_hash = await extract_pdf_text(pdf_path)
+        full_text = normalize_volltext(full_text)
 
         # Try LLM extraction (with hash cache deduplication)
         try:
