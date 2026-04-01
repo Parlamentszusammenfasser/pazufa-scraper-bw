@@ -118,18 +118,18 @@ Dashed lines mark stages not yet implemented. See [status.md](status.md) for imp
 
 ## 2. Dependencies
 
-| Dependency       | Purpose                                                 | Owned by      |
-|------------------|---------------------------------------------------------|---------------|
-| `requests`       | PARLIS + Beteiligungsportal HTTP sessions (synchronous) | BaWue scraper |
-| `lxml`           | HTML parsing of PARLIS and Beteiligungsportal pages     | BaWue scraper |
-| `icalendar`      | ICS calendar feed parsing for Sitzungen                 | BaWue scraper |
-| `aiohttp`        | Async HTTP sessions for framework                       | Framework     |
-| `httpx`          | Auto-generated PaZuFa API client                        | Framework     |
-| `openapi-client` | Auto-generated Pydantic models from OpenAPI spec        | Framework     |
-| `kreuzberg`      | PDF text extraction (normal + OCR fallback)              | BaWue scraper |
-| `redis`          | Caching of processed Vorgänge/Dokumente                 | Framework     |
-| `litellm`        | LLM integration: token counting/truncation + framework pipeline | Framework + BaWue scraper |
-| `collector-core` | LLMConnector base class for LLM calls                   | Framework (used by BaWue scraper) |
+| Dependency       | Purpose                                                         | Owned by                          |
+|------------------|-----------------------------------------------------------------|-----------------------------------|
+| `requests`       | PARLIS + Beteiligungsportal HTTP sessions (synchronous)         | BaWue scraper                     |
+| `lxml`           | HTML parsing of PARLIS and Beteiligungsportal pages             | BaWue scraper                     |
+| `icalendar`      | ICS calendar feed parsing for Sitzungen                         | BaWue scraper                     |
+| `aiohttp`        | Async HTTP sessions for framework                               | Framework                         |
+| `httpx`          | Auto-generated PaZuFa API client                                | Framework                         |
+| `openapi-client` | Auto-generated Pydantic models from OpenAPI spec                | Framework                         |
+| `kreuzberg`      | PDF text extraction (normal + OCR fallback)                     | BaWue scraper                     |
+| `redis`          | Caching of processed Vorgänge/Dokumente                         | Framework                         |
+| `litellm`        | LLM integration: token counting/truncation + framework pipeline | Framework + BaWue scraper         |
+| `collector-core` | LLMConnector base class for LLM calls                           | Framework (used by BaWue scraper) |
 
 ## 3. Framework Integration
 
@@ -253,11 +253,11 @@ All three scrapers follow the same two-phase pattern:
 1. `listing_page_extractor(key)` — fetches the source and returns item identifiers; stores raw data in `_raw_cache`
 2. `item_extractor(id)` — looks up `_raw_cache`, builds and returns the framework model
 
-| Scraper                    | `listing_urls` values        | `listing_page_extractor` returns | `item_extractor` returns       | `send_result` override |
-|----------------------------|------------------------------|----------------------------------|--------------------------------|------------------------|
-| `BawueVorgaengeScraper`    | enabled Vorgangstyp strings (3 by default, configurable) | vorgang IDs | `Vorgang`             | No                     |
-| `BawueBeteiligungScraper`  | LP index keys (`lp-17`)      | process slugs                    | `Vorgang\|None`                | No                     |
-| `BawueSitzungenScraper`    | ICS feed URL                 | ISO date strings                 | `(datetime, List[Sitzung])`    | Yes — use `Parlament.BW` |
+| Scraper                   | `listing_urls` values                                    | `listing_page_extractor` returns | `item_extractor` returns    | `send_result` override   |
+|---------------------------|----------------------------------------------------------|----------------------------------|-----------------------------|--------------------------|
+| `BawueVorgaengeScraper`   | enabled Vorgangstyp strings (3 by default, configurable) | vorgang IDs                      | `Vorgang`                   | No                       |
+| `BawueBeteiligungScraper` | LP index keys (`lp-17`)                                  | process slugs                    | `Vorgang\|None`             | No                       |
+| `BawueSitzungenScraper`   | ICS feed URL                                             | ISO date strings                 | `(datetime, List[Sitzung])` | Yes — use `Parlament.BW` |
 
 **PARLIS listing URL pattern:** PARLIS has no traditional listing URLs. `listing_urls` contains the enabled Vorgangstyp
 strings. By default these are the 3 types with full PaZuFa model support: `"Gesetzgebung"`, `"Haushaltsgesetzgebung"`,
@@ -361,17 +361,17 @@ Configuration from `[beteiligung]` section.
 
 **Vorgang / Station mapping:**
 
-| Field            | Value                                                 |
-|------------------|-------------------------------------------------------|
-| `api_id`         | `uuid5(NAMESPACE_URL, "beteiligung-{slug}")`          |
-| `titel`          | Detail page heading (dossier-header h1)               |
-| `kurztitel`      | URL slug (for backend merging with PARLIS data)       |
-| `typ`            | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`               |
-| `initiatoren`    | `[Autor(organisation=ministry)]`                      |
-| Station `typ`    | `Stationstyp.PREPARL_MINUS_REGENT`                    |
-| Station `gremium`| `Parlament.BW, "Landesregierung"`                     |
-| Station `dokumente` | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF`          |
-| Station `zp_start` | Comment deadline date                               |
+| Field               | Value                                           |
+|---------------------|-------------------------------------------------|
+| `api_id`            | `uuid5(NAMESPACE_URL, "beteiligung-{slug}")`    |
+| `titel`             | Detail page heading (dossier-header h1)         |
+| `kurztitel`         | URL slug (for backend merging with PARLIS data) |
+| `typ`               | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`          |
+| `initiatoren`       | `[Autor(organisation=ministry)]`                |
+| Station `typ`       | `Stationstyp.PREPARL_MINUS_REGENT`              |
+| Station `gremium`   | `Parlament.BW, "Landesregierung"`               |
+| Station `dokumente` | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF`       |
+| Station `zp_start`  | Comment deadline date                           |
 
 ### BeteiligungClient / BeteiligungParser
 

@@ -22,9 +22,9 @@ Datenlieferung erfolgt vollständig durch das Framework. Der Scraper erzeugt nur
 
 **Schreib-Endpunkte (Framework, Scope `collector`):**
 
-| Endpunkt                               | Methode | Beschreibung                                                |
-|----------------------------------------|---------|-------------------------------------------------------------|
-| `/api/v2/vorgang`                      | PUT     | Vorgang einliefern (idempotent, Backend übernimmt Merging)  |
+| Endpunkt                               | Methode | Beschreibung                                               |
+|----------------------------------------|---------|------------------------------------------------------------|
+| `/api/v2/vorgang`                      | PUT     | Vorgang einliefern (idempotent, Backend übernimmt Merging) |
 | `/api/v2/kalender/{parlament}/{datum}` | PUT     | Sitzungen für ein Datum setzen (max. 1 Tag in der Zukunft) |
 
 **Authentifizierung:** Header `X-API-Key`, 64-Zeichen-Key mit Präfix `ltzf_`.
@@ -39,58 +39,58 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 
 ### Vorgang
 
-| Feld                  | Typ           | Pflicht | BaWue-Hinweise                                                     |
-|-----------------------|---------------|---------|--------------------------------------------------------------------|
-| `api_id`              | UUID          | Ja      | `uuid5(NAMESPACE_URL, vorgangs_id)`                                |
-| `titel`               | string        | Ja      |                                                                    |
-| `typ`                 | Vorgangstyp   | Ja      |                                                                    |
-| `wahlperiode`         | integer       | Ja      | Aktuell: 17                                                        |
-| `verfassungsaendernd` | boolean       | Ja      | Immer `false` (PARLIS liefert diese Information nicht)             |
-| `initiatoren`         | list[Autor]   | Ja      |                                                                    |
-| `stationen`           | list[Station] | Ja      |                                                                    |
-| `kurztitel`           | string        | Nein    |                                                                    |
-| `ids`                 | list[VgIdent] | Nein    | Enthält `VgIdent(id=vorgangs_id, typ=VgIdentTyp.VORGNR)`          |
-| `lobbyregister`       | list[...]     | Nein    |                                                                    |
+| Feld                  | Typ           | Pflicht | BaWue-Hinweise                                           |
+|-----------------------|---------------|---------|----------------------------------------------------------|
+| `api_id`              | UUID          | Ja      | `uuid5(NAMESPACE_URL, vorgangs_id)`                      |
+| `titel`               | string        | Ja      |                                                          |
+| `typ`                 | Vorgangstyp   | Ja      |                                                          |
+| `wahlperiode`         | integer       | Ja      | Aktuell: 17                                              |
+| `verfassungsaendernd` | boolean       | Ja      | Immer `false` (PARLIS liefert diese Information nicht)   |
+| `initiatoren`         | list[Autor]   | Ja      |                                                          |
+| `stationen`           | list[Station] | Ja      |                                                          |
+| `kurztitel`           | string        | Nein    |                                                          |
+| `ids`                 | list[VgIdent] | Nein    | Enthält `VgIdent(id=vorgangs_id, typ=VgIdentTyp.VORGNR)` |
+| `lobbyregister`       | list[...]     | Nein    |                                                          |
 
 ### Station
 
-| Feld        | Typ                         | Pflicht | BaWue-Hinweise                                                        |
-|-------------|-----------------------------|---------|-----------------------------------------------------------------------|
-| `typ`       | Stationstyp                 | Ja      |                                                                       |
-| `dokumente` | list[StationDokumenteInner] | Ja      | `StationDokumenteInner`-Wrapper (Union-Typ aus OpenAPI-Spec)          |
-| `zp_start`  | datetime                    | Ja      |                                                                       |
-| `gremium`   | Gremium                     | Ja      | Aus PARLIS-Fundstellen abgeleitet — siehe [architecture.md](architecture.md) |
-| `titel`     | string                      | Nein    |                                                                       |
-| `schlagworte` | list[string]              | Nein    |                                                                       |
-| `trojanergefahr` | integer (1–10)         | Nein    |                                                                       |
+| Feld             | Typ                         | Pflicht | BaWue-Hinweise                                                               |
+|------------------|-----------------------------|---------|------------------------------------------------------------------------------|
+| `typ`            | Stationstyp                 | Ja      |                                                                              |
+| `dokumente`      | list[StationDokumenteInner] | Ja      | `StationDokumenteInner`-Wrapper (Union-Typ aus OpenAPI-Spec)                 |
+| `zp_start`       | datetime                    | Ja      |                                                                              |
+| `gremium`        | Gremium                     | Ja      | Aus PARLIS-Fundstellen abgeleitet — siehe [architecture.md](architecture.md) |
+| `titel`          | string                      | Nein    |                                                                              |
+| `schlagworte`    | list[string]                | Nein    |                                                                              |
+| `trojanergefahr` | integer (1–10)              | Nein    |                                                                              |
 
 ### Dokument
 
-| Feld             | Typ         | Pflicht | BaWue-Hinweise                                                          |
-|------------------|-------------|---------|-------------------------------------------------------------------------|
-| `titel`          | string      | Ja      |                                                                         |
-| `volltext`       | string      | Ja      | Initial leer — Framework füllt via Dokumentpipeline. Bei aktivem LLM (`[llm]`) füllt `bawue_dok.py` den Volltext direkt via PDF-Extraktion (kreuzberg). |
-| `hash`           | string      | Ja      | Initial leer — Framework füllt via Dokumentpipeline. Bei aktivem LLM (`[llm]`) berechnet `bawue_dok.py` den SHA256-Hash. |
-| `typ`            | Doktyp      | Ja      |                                                                         |
-| `zp_modifiziert` | datetime    | Ja      | Fundstellen-Datum                                                       |
-| `zp_referenz`    | datetime    | Ja      | Fundstellen-Datum                                                       |
-| `link`           | URI         | Ja      |                                                                         |
-| `autoren`        | list[Autor] | Ja      | Aus Fundstelle-Text extrahiert; Fallback auf `Initiative`-Feld. Ausschuss- und Plenarprotokoll-Fundstellen ausgenommen. |
-| `drucksnr`       | string      | Nein    |                                                                         |
-| `zusammenfassung` | string     | Nein    | LLM-generiert via `bawue_dok.py` (150–250 Worte). Leer wenn LLM deaktiviert. |
-| `schlagworte`    | list[string] | Nein   | LLM-generiert via `bawue_dok.py`. Leer wenn LLM deaktiviert.           |
-| `kurztitel`      | string      | Nein    | LLM-generiert via `bawue_dok.py` (einfache Sprache). Leer wenn LLM deaktiviert. |
-| `meinung`        | integer (1–5) | Nein  | LLM-generiert via `bawue_dok.py`, nur für Stellungnahmen und Beschlussempfehlungen. 1=ablehnend, 5=zustimmend. |
+| Feld              | Typ           | Pflicht | BaWue-Hinweise                                                                                                                                          |
+|-------------------|---------------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `titel`           | string        | Ja      |                                                                                                                                                         |
+| `volltext`        | string        | Ja      | Initial leer — Framework füllt via Dokumentpipeline. Bei aktivem LLM (`[llm]`) füllt `bawue_dok.py` den Volltext direkt via PDF-Extraktion (kreuzberg). |
+| `hash`            | string        | Ja      | Initial leer — Framework füllt via Dokumentpipeline. Bei aktivem LLM (`[llm]`) berechnet `bawue_dok.py` den SHA256-Hash.                                |
+| `typ`             | Doktyp        | Ja      |                                                                                                                                                         |
+| `zp_modifiziert`  | datetime      | Ja      | Fundstellen-Datum                                                                                                                                       |
+| `zp_referenz`     | datetime      | Ja      | Fundstellen-Datum                                                                                                                                       |
+| `link`            | URI           | Ja      |                                                                                                                                                         |
+| `autoren`         | list[Autor]   | Ja      | Aus Fundstelle-Text extrahiert; Fallback auf `Initiative`-Feld. Ausschuss- und Plenarprotokoll-Fundstellen ausgenommen.                                 |
+| `drucksnr`        | string        | Nein    |                                                                                                                                                         |
+| `zusammenfassung` | string        | Nein    | LLM-generiert via `bawue_dok.py` (150–250 Worte). Leer wenn LLM deaktiviert.                                                                            |
+| `schlagworte`     | list[string]  | Nein    | LLM-generiert via `bawue_dok.py`. Leer wenn LLM deaktiviert.                                                                                            |
+| `kurztitel`       | string        | Nein    | LLM-generiert via `bawue_dok.py` (einfache Sprache). Leer wenn LLM deaktiviert.                                                                         |
+| `meinung`         | integer (1–5) | Nein    | LLM-generiert via `bawue_dok.py`, nur für Stellungnahmen und Beschlussempfehlungen. 1=ablehnend, 5=zustimmend.                                          |
 
 ### Sitzung
 
-| Feld      | Typ       | Pflicht | BaWue-Hinweise                                                                                  |
-|-----------|-----------|---------|-------------------------------------------------------------------------------------------------|
-| `termin`  | datetime  | Ja      |                                                                                                 |
-| `gremium` | Gremium   | Ja      |                                                                                                 |
-| `nummer`  | integer   | Ja      | Plenarsitzungen: aus SUMMARY extrahiert (`"142. Sitzung"` → `142`). Ausschüsse: `0`.          |
-| `tops`    | list[Top] | Ja      | Aktuell `[]` — TOP-Scraping via PDF noch nicht implementiert                                   |
-| `public`  | boolean   | Ja      |                                                                                                 |
+| Feld      | Typ       | Pflicht | BaWue-Hinweise                                                                       |
+|-----------|-----------|---------|--------------------------------------------------------------------------------------|
+| `termin`  | datetime  | Ja      |                                                                                      |
+| `gremium` | Gremium   | Ja      |                                                                                      |
+| `nummer`  | integer   | Ja      | Plenarsitzungen: aus SUMMARY extrahiert (`"142. Sitzung"` → `142`). Ausschüsse: `0`. |
+| `tops`    | list[Top] | Ja      | Aktuell `[]` — TOP-Scraping via PDF noch nicht implementiert                         |
+| `public`  | boolean   | Ja      |                                                                                      |
 
 ### Gremium
 
@@ -159,15 +159,15 @@ Enum-Member verwenden die `MINUS`-Namenskonvention (z.B. `Stationstyp.PARL_MINUS
 
 > Der Landtag BaWue bietet **keine offizielle API** und keine Open-Data-Schnittstelle.
 
-| Quelle                   | Typ                       | Priorität  | Liefert                                                         |
-|--------------------------|---------------------------|------------|-----------------------------------------------------------------|
-| **PARLIS JSON-Endpunkt** | Undokumentierte API       | Primär     | `Vorgang` + `Station` (Gesetzgebungsvorgänge)                   |
-| **landtag-bw.de PDFs**   | Download + Textextraktion | Primär     | `Dokument` (via Framework-Dokumentpipeline)                     |
-| **ICS-Kalender**         | ICS-Feed                  | Primär     | `Sitzung` (implementiert in `BawueSitzungenScraper`)            |
-| **Beteiligungsportal**   | Web-Scraping              | Ergänzend  | `preparl-regent`-Stationen, vorparlamentarische Entwürfe        |
-| **Gesetzblatt BaWue**    | Web-Suche                 | Ergänzend  | `postparl-gsblt`-Stationen                                      |
-| **Kabinettsberichte**    | Web-Scraping (Fließtext)  | Optional   | Signalquelle für neue Vorgänge vom Typ `preparl-regbsl`         |
-| **LLM-Provider**         | API (litellm)             | Optional   | `Dokument`-Metadaten: `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` (via `bawue_dok.py`) |
+| Quelle                   | Typ                       | Priorität | Liefert                                                                                             |
+|--------------------------|---------------------------|-----------|-----------------------------------------------------------------------------------------------------|
+| **PARLIS JSON-Endpunkt** | Undokumentierte API       | Primär    | `Vorgang` + `Station` (Gesetzgebungsvorgänge)                                                       |
+| **landtag-bw.de PDFs**   | Download + Textextraktion | Primär    | `Dokument` (via Framework-Dokumentpipeline)                                                         |
+| **ICS-Kalender**         | ICS-Feed                  | Primär    | `Sitzung` (implementiert in `BawueSitzungenScraper`)                                                |
+| **Beteiligungsportal**   | Web-Scraping              | Ergänzend | `preparl-regent`-Stationen, vorparlamentarische Entwürfe                                            |
+| **Gesetzblatt BaWue**    | Web-Suche                 | Ergänzend | `postparl-gsblt`-Stationen                                                                          |
+| **Kabinettsberichte**    | Web-Scraping (Fließtext)  | Optional  | Signalquelle für neue Vorgänge vom Typ `preparl-regbsl`                                             |
+| **LLM-Provider**         | API (litellm)             | Optional  | `Dokument`-Metadaten: `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` (via `bawue_dok.py`) |
 
 ### PARLIS (Primärquelle)
 
@@ -203,24 +203,24 @@ PDFs mit Blob-IDs (`/resource/blob/{id}/...`). Kein REST-API, kein RSS-Feed.
 
 4-Tier: Defaults → `config.toml` → Umgebungsvariablen → CLI-Argumente.
 
-| Sektion         | Schlüssel                | Standard          | Pflicht | Beschreibung                               |
-|-----------------|--------------------------|-------------------|---------|--------------------------------------------|
-| `[backend]`     | `ltzf-api-url`           |                   | Ja      | URL des PaZuFa-Backends                    |
-| `[backend]`     | `ltzf-api-key`           |                   | Ja      | API-Key (Scope: collector)                 |
-| `[main]`        | `collector-uuid`         |                   | Ja      | Eindeutige Collector-ID                    |
-| `[scrapers]`    | `scraper-dir`            |                   | Ja      | Verzeichnis mit Scraper-Modulen            |
-| `[cache]`       | `redis-host`             |                   | Nein    | Redis-Host                                 |
-| `[cache]`       | `redis-port`             | 6379              | Nein    | Redis-Port                                 |
-| `[llm]`         | `provider-key`           |                   | Nein    | API-Key für LLM-Provider (via `LLM_PROVIDER_KEY` Umgebungsvariable)    |
-| `[llm]`         | `model`                  | *(gpt-5-nano)*    | Nein    | LLM-Modellname (z.B. `gpt-5-nano`, `gpt-4.1-nano`)                    |
-| `[llm]`         | `truncate-tokens`        | 12000             | Nein    | Max. Token-Anzahl für LLM-Input; 0 = keine Kürzung (DD-013)           |
-| `[bawue]`       | `enabled-vorgangstypen`  | `["Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag"]` | Nein | PARLIS-Vorgangstypen die gescrapt werden (Framework `listing_urls`) |
-| `[bawue]`       | `wahlperiode`            | 17                | Nein    | Aktuelle Wahlperiode                       |
-| `[bawue]`       | `parlis-request-delay-s` | 1.0               | Nein    | Verzögerung zwischen PARLIS-Anfragen (s)   |
-| `[bawue]`       | `wahlperiode-start-date` | `"2021-04-26"`    | Nein    | Startdatum der Wahlperiode (Suchbereich)   |
-| `[bawue]`       | `ics-url`                | *(landtag-bw.de)* | Nein    | ICS-Kalender-Feed für Sitzungen            |
-| `[beteiligung]` | `wahlperiode`            | 17                | Nein    | Wahlperiode für Beteiligungsportal-Index   |
-| `[beteiligung]` | `request-delay-s`        | 2.0               | Nein    | Verzögerung zwischen Anfragen (s)          |
+| Sektion         | Schlüssel                | Standard                                                   | Pflicht | Beschreibung                                                        |
+|-----------------|--------------------------|------------------------------------------------------------|---------|---------------------------------------------------------------------|
+| `[backend]`     | `ltzf-api-url`           |                                                            | Ja      | URL des PaZuFa-Backends                                             |
+| `[backend]`     | `ltzf-api-key`           |                                                            | Ja      | API-Key (Scope: collector)                                          |
+| `[main]`        | `collector-uuid`         |                                                            | Ja      | Eindeutige Collector-ID                                             |
+| `[scrapers]`    | `scraper-dir`            |                                                            | Ja      | Verzeichnis mit Scraper-Modulen                                     |
+| `[cache]`       | `redis-host`             |                                                            | Nein    | Redis-Host                                                          |
+| `[cache]`       | `redis-port`             | 6379                                                       | Nein    | Redis-Port                                                          |
+| `[llm]`         | `provider-key`           |                                                            | Nein    | API-Key für LLM-Provider (via `LLM_PROVIDER_KEY` Umgebungsvariable) |
+| `[llm]`         | `model`                  | *(gpt-5-nano)*                                             | Nein    | LLM-Modellname (z.B. `gpt-5-nano`, `gpt-4.1-nano`)                  |
+| `[llm]`         | `truncate-tokens`        | 12000                                                      | Nein    | Max. Token-Anzahl für LLM-Input; 0 = keine Kürzung (DD-013)         |
+| `[bawue]`       | `enabled-vorgangstypen`  | `["Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag"]` | Nein    | PARLIS-Vorgangstypen die gescrapt werden (Framework `listing_urls`) |
+| `[bawue]`       | `wahlperiode`            | 17                                                         | Nein    | Aktuelle Wahlperiode                                                |
+| `[bawue]`       | `parlis-request-delay-s` | 1.0                                                        | Nein    | Verzögerung zwischen PARLIS-Anfragen (s)                            |
+| `[bawue]`       | `wahlperiode-start-date` | `"2021-04-26"`                                             | Nein    | Startdatum der Wahlperiode (Suchbereich)                            |
+| `[bawue]`       | `ics-url`                | *(landtag-bw.de)*                                          | Nein    | ICS-Kalender-Feed für Sitzungen                                     |
+| `[beteiligung]` | `wahlperiode`            | 17                                                         | Nein    | Wahlperiode für Beteiligungsportal-Index                            |
+| `[beteiligung]` | `request-delay-s`        | 2.0                                                        | Nein    | Verzögerung zwischen Anfragen (s)                                   |
 
 ## Generelle Anforderungen
 
