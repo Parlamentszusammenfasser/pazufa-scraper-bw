@@ -69,15 +69,18 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 | Feld             | Typ         | Pflicht | BaWue-Hinweise                                                          |
 |------------------|-------------|---------|-------------------------------------------------------------------------|
 | `titel`          | string      | Ja      |                                                                         |
-| `volltext`       | string      | Ja      | Initial leer — Framework füllt via Dokumentpipeline                    |
-| `hash`           | string      | Ja      | Initial leer — Framework füllt via Dokumentpipeline                    |
+| `volltext`       | string      | Ja      | Initial leer — Framework füllt via Dokumentpipeline. Bei aktivem LLM (`[llm]`) füllt `bawue_dok.py` den Volltext direkt via PDF-Extraktion (kreuzberg). |
+| `hash`           | string      | Ja      | Initial leer — Framework füllt via Dokumentpipeline. Bei aktivem LLM (`[llm]`) berechnet `bawue_dok.py` den SHA256-Hash. |
 | `typ`            | Doktyp      | Ja      |                                                                         |
 | `zp_modifiziert` | datetime    | Ja      | Fundstellen-Datum                                                       |
 | `zp_referenz`    | datetime    | Ja      | Fundstellen-Datum                                                       |
 | `link`           | URI         | Ja      |                                                                         |
 | `autoren`        | list[Autor] | Ja      | Aus Fundstelle-Text extrahiert; Fallback auf `Initiative`-Feld. Ausschuss- und Plenarprotokoll-Fundstellen ausgenommen. |
 | `drucksnr`       | string      | Nein    |                                                                         |
-| `zusammenfassung` | string     | Nein    |                                                                         |
+| `zusammenfassung` | string     | Nein    | LLM-generiert via `bawue_dok.py` (150–250 Worte). Leer wenn LLM deaktiviert. |
+| `schlagworte`    | list[string] | Nein   | LLM-generiert via `bawue_dok.py`. Leer wenn LLM deaktiviert.           |
+| `kurztitel`      | string      | Nein    | LLM-generiert via `bawue_dok.py` (einfache Sprache). Leer wenn LLM deaktiviert. |
+| `meinung`        | integer (1–5) | Nein  | LLM-generiert via `bawue_dok.py`, nur für Stellungnahmen und Beschlussempfehlungen. 1=ablehnend, 5=zustimmend. |
 
 ### Sitzung
 
@@ -164,10 +167,14 @@ Enum-Member verwenden die `MINUS`-Namenskonvention (z.B. `Stationstyp.PARL_MINUS
 | **Beteiligungsportal**   | Web-Scraping              | Ergänzend  | `preparl-regent`-Stationen, vorparlamentarische Entwürfe        |
 | **Gesetzblatt BaWue**    | Web-Suche                 | Ergänzend  | `postparl-gsblt`-Stationen                                      |
 | **Kabinettsberichte**    | Web-Scraping (Fließtext)  | Optional   | Signalquelle für neue Vorgänge vom Typ `preparl-regbsl`         |
+| **LLM-Provider**         | API (litellm)             | Optional   | `Dokument`-Metadaten: `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` (via `bawue_dok.py`) |
 
 ### PARLIS (Primärquelle)
 
 `parlis.landtag-bw.de` — undokumentiert, aber produktiv genutzt von [dokukratie (OKF)](https://github.com/okfde/dokukratie/blob/main/dokukratie/bw.yml).
+PARLIS bettet strukturierte JSON-Objekte in HTML-Kommentare ein (`<!--{...}-->`). Diese enthalten Felder mit stabilen
+Feldcodes (z.B. `EWBV10` für Titel, `WMV35` für Fundstellen). Der Parser nutzt diese primär; das HTML/XPath-Parsing
+dient als Fallback (DD-014).
 
 | Endpunkt                                             | Methode     | Funktion                                              |
 |------------------------------------------------------|-------------|-------------------------------------------------------|
@@ -204,7 +211,10 @@ PDFs mit Blob-IDs (`/resource/blob/{id}/...`). Kein REST-API, kein RSS-Feed.
 | `[scrapers]`    | `scraper-dir`            |                   | Ja      | Verzeichnis mit Scraper-Modulen            |
 | `[cache]`       | `redis-host`             |                   | Nein    | Redis-Host                                 |
 | `[cache]`       | `redis-port`             | 6379              | Nein    | Redis-Port                                 |
-| `[llm]`         | `openai-api-key`         |                   | Nein    | API-Key für LLM-Zusammenfassungen          |
+| `[llm]`         | `provider-key`           |                   | Nein    | API-Key für LLM-Provider (via `LLM_PROVIDER_KEY` Umgebungsvariable)    |
+| `[llm]`         | `model`                  | *(gpt-5-nano)*    | Nein    | LLM-Modellname (z.B. `gpt-5-nano`, `gpt-4.1-nano`)                    |
+| `[llm]`         | `truncate-tokens`        | 12000             | Nein    | Max. Token-Anzahl für LLM-Input; 0 = keine Kürzung (DD-013)           |
+| `[bawue]`       | `enabled-vorgangstypen`  | `["Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag"]` | Nein | PARLIS-Vorgangstypen die gescrapt werden (Framework `listing_urls`) |
 | `[bawue]`       | `wahlperiode`            | 17                | Nein    | Aktuelle Wahlperiode                       |
 | `[bawue]`       | `parlis-request-delay-s` | 1.0               | Nein    | Verzögerung zwischen PARLIS-Anfragen (s)   |
 | `[bawue]`       | `wahlperiode-start-date` | `"2021-04-26"`    | Nein    | Startdatum der Wahlperiode (Suchbereich)   |
@@ -217,7 +227,8 @@ PDFs mit Blob-IDs (`/resource/blob/{id}/...`). Kein REST-API, kein RSS-Feed.
 1. **Idempotenz:** Wiederholtes Ausführen darf keine Duplikate erzeugen (Framework + Backend)
 2. **Fehlertoleranz:** Einzelne fehlgeschlagene Vorgänge dürfen nicht den gesamten Scraper stoppen (Framework)
 3. **Rate-Limiting:** Respektierung der Landtags-Website (konfigurierbare Verzögerung in `[bawue]`)
-4. **Volltext-Extraktion:** PDFs werden über die Framework-Dokumentpipeline verarbeitet
+4. **Volltext-Extraktion:** PDFs werden über die Framework-Dokumentpipeline oder die BaWue-eigene Extraktion (`bawue_dok.py` + kreuzberg) verarbeitet
 5. **Korrekte Zuordnung:** Enum-Mapping via `enum_mapper.py` mit `sonstig` als Fallback
 6. **Logging:** Nachvollziehbare Logs für Debugging und Monitoring
 7. **Konfigurierbarkeit:** Alle Einstellungen über `config.toml` / Umgebungsvariablen (4-Tier)
+8. **LLM-Anreicherung (optional):** Bei konfiguriertem `[llm]`-Abschnitt extrahiert `bawue_dok.py` semantische Metadaten (Zusammenfassung, Schlagworte, Kurztitel, Meinung) aus Dokumenten. 3-stufige Degradation: Voll (PDF+LLM) → Text-only (PDF ok, LLM fehlt) → Metadaten-only (PDF-Download fehlgeschlagen). Aktivierung via `LLM_PROVIDER_KEY` Umgebungsvariable.

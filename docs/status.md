@@ -1,11 +1,11 @@
 # Implementation Status: BaWue Scraper
 
-## Completeness (as of March 2026)
+## Completeness (as of April 2026)
 
 | Category | Estimate | Notes |
 |---|---|---|
-| **Pflichtfunktionalität** | **~80 %** | Core fields complete; `tops=[]` and `nummer=0` for committees outstanding |
-| **Optionale Funktionalität** | **~22 %** | Primary IDs and base data present; metadata and additional sources missing |
+| **Pflichtfunktionalität** | **~85 %** | Core fields complete; `volltext`/`hash` now also filled at scraper level (LLM). `tops=[]` and `nummer=0` for committees outstanding. |
+| **Optionale Funktionalität** | **~45 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. Zusätzliche Datenquellen und Station-Level-Felder fehlen weiterhin. |
 
 ### Known Gaps — Required Fields
 
@@ -15,8 +15,12 @@
 
 ### Known Gaps — Optional Fields
 
-Missing fields: `kurztitel` (Vorgang/Dokument), `links` (Vorgang), `lobbyregister`, `schlagworte`
-(Station/Dokument), `stellungnahmen`, `trojanergefahr`, `vorwort`, `zp_modifiziert` (Station), `gremium_federf`
+Bei aktivem LLM (`[llm]`): `zusammenfassung`, `schlagworte`, `kurztitel` und `meinung` werden auf **Dokument-Ebene**
+gefüllt. Auf **Station-Ebene** und **Vorgang-Ebene** bleiben Lücken.
+
+Missing fields: `kurztitel` (Vorgang — nur Beteiligungsportal), `links` (Vorgang), `lobbyregister`,
+`schlagworte` (Station), `trojanergefahr` (Station — LLM extrahiert, aber nicht auf Modell gesetzt),
+`stellungnahmen`, `vorwort`, `zp_modifiziert` (Station), `gremium_federf`
 
 Missing data sources: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse STM
 
@@ -36,13 +40,17 @@ Missing data sources: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse
 | Station | `zp_start` | ✅ Complete | From Fundstelle date (with fallbacks) |
 | Station | `gremium` | ✅ Complete | From committee / Plenarprotokoll |
 | Dokument | `titel` | ✅ Complete | Station type as fallback |
-| Dokument | `volltext` | ⚠️ Framework | Framework pipeline (PyPDF + OCR + LLM) |
-| Dokument | `hash` | ⚠️ Framework | Computed by framework |
+| Dokument | `volltext` | ✅ Complete* | Framework pipeline OR scraper-level extraction via `bawue_dok.py` (when LLM enabled) |
+| Dokument | `hash` | ✅ Complete* | Framework pipeline OR scraper-level SHA256 via `bawue_dok.py` (when LLM enabled) |
 | Dokument | `typ` | ✅ Complete | Enum-mapped |
 | Dokument | `zp_modifiziert` | ✅ Complete | Fundstelle date |
 | Dokument | `zp_referenz` | ✅ Complete | Fundstelle date |
 | Dokument | `link` | ✅ Complete | PDF URL from Fundstelle |
 | Dokument | `autoren` | ✅ Complete | From Fundstelle text, fallback to Initiative |
+| Dokument | `zusammenfassung` | ✅ LLM | LLM-generated summary (150–250 words). Requires `[llm]` config. |
+| Dokument | `schlagworte` | ✅ LLM | LLM-generated keyword list. Requires `[llm]` config. |
+| Dokument | `kurztitel` | ✅ LLM | LLM-generated short title in plain language. Requires `[llm]` config. |
+| Dokument | `meinung` | ✅ LLM | LLM-generated opinion score (1–5). Only for Stellungnahme/Beschlussempfehlung. |
 | Sitzung | `termin` | ✅ Complete | ICS DTSTART (Berlin TZ → UTC) |
 | Sitzung | `gremium` | ✅ Complete | From ICS SUMMARY |
 | Sitzung | `nummer` | ⚠️ Partial | Regex for Plenum; committees = `0` |
@@ -63,6 +71,10 @@ Missing data sources: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse
 | Scheduling | Framework | Configurable via `cycle-time-s` in config.toml |
 | PDF full-text extraction | Framework pipeline | PyPDF + Kreuzberg/EasyOCR + LLM (via pazufa-collector) |
 | Document authors | Working | Extracted from Fundstelle text, fallback to Initiative |
+| LLM document enrichment | Working (optional) | PDF text extraction + LLM semantic metadata via `bawue_dok.py`. Enabled via `LLM_PROVIDER_KEY`. 3-tier graceful degradation. |
+| JSON-comment parsing | Working | Primary PARLIS parsing path via embedded JSON comments. HTML/XPath as fallback (DD-014). |
+| Synthetic stations | Working | `parl-initiativ` after `preparl-regent` (DD-012), `parl-ablehnung` from "Aktueller Stand" (DD-010) |
+| Upload throttle | Working | Adaptive rate limiting for API uploads with 429 retry (`upload_throttle.py`) |
 | Beteiligungsportal | Working | Pre-parliamentary drafts (`preparl-regent` station with Entwurf PDFs) |
 | Sitzungskalender Phase 1+2 | Working | ICS feed parsing; `nummer` extracted for Plenum via regex; `tops=[]` |
 | PARLIS detail pages | Not implemented | Additional metadata from individual Vorgang detail pages |
@@ -77,4 +89,7 @@ Missing data sources: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse
 | 1 | ~~SitzungsScraper (ICS)~~ | ~~High~~ | ~~Phase 1+2 implemented~~ — `BawueSitzungenScraper` parses ICS feed, `nummer` extracted for Plenum |
 | 2 | SitzungsScraper Phase 3 (TOPs) | Low | Enrich with Tagesordnungen-PDFs: scrape blob URLs from landtag-bw.de, parse TOPs from PDFs |
 | 3 | ~~Beteiligungsportal~~ | ~~Supplementary~~ | ~~`BawueBeteiligungScraper` implemented~~ — `preparl-regent` station with Entwurf PDFs |
-| 4 | Gesetzblatt BaWue | Supplementary | Capture publications (`postparl-gsblt`). Completes the legislative lifecycle after the parliamentary phase |
+| 4 | ~~LLM Document Enrichment~~ | ~~Optional~~ | ~~Implemented~~ — `bawue_dok.py` provides PDF text extraction + LLM semantic metadata (summary, keywords, short title, opinion score) |
+| 5 | ~~JSON-Comment Parsing~~ | ~~Robustness~~ | ~~Implemented~~ — Primary PARLIS parsing via embedded JSON comments; HTML/XPath retained as fallback (DD-014) |
+| 6 | Gesetzblatt BaWue | Supplementary | Capture publications (`postparl-gsblt`). Completes the legislative lifecycle after the parliamentary phase |
+| 7 | `trojanergefahr` auf Station-Ebene | Medium | LLM extrahiert `trojanergefahr` bereits, aber der Wert wird noch nicht auf das Station-Modell übertragen |
