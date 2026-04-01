@@ -446,11 +446,11 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 
 **Graceful degradation (3 tiers):**
 
-| Tier | Condition | Result |
-|------|-----------|--------|
-| 1 — Full | PDF + LLM succeed | Dokument with volltext, hash, and all LLM fields |
-| 2 — Text-only | PDF succeeds, LLM fails | Dokument with volltext + hash, no LLM fields |
-| 3 — Metadata-only | PDF download fails | Original Dokument unchanged |
+| Tier              | Condition               | Result                                           |
+|-------------------|-------------------------|--------------------------------------------------|
+| 1 — Full          | PDF + LLM succeed       | Dokument with volltext, hash, and all LLM fields |
+| 2 — Text-only     | PDF succeeds, LLM fails | Dokument with volltext + hash, no LLM fields     |
+| 3 — Metadata-only | PDF download fails      | Original Dokument unchanged                      |
 
 `trojanergefahr` (extracted for ENTWURF and BESCHLUSSEMPF) is a Station-level field. `enrich_dokument()` returns an
 `EnrichmentResult(dokument, trojanergefahr)` NamedTuple so callers can set it on the Station. When a Station has

@@ -2,9 +2,9 @@
 
 ## Completeness (as of April 2026)
 
-| Category                     | Estimate  | Notes                                                                                                                                                      |
-|------------------------------|-----------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Pflichtfunktionalität**    | **~85 %** | Core fields complete; `volltext`/`hash` now also filled at scraper level (LLM). `tops=[]` and `nummer=0` for committees outstanding.                       |
+| Category                     | Estimate  | Notes                                                                                                                                                                               |
+|------------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Pflichtfunktionalität**    | **~85 %** | Core fields complete; `volltext`/`hash` now also filled at scraper level (LLM). `tops=[]` and `nummer=0` for committees outstanding.                                                |
 | **Optionale Funktionalität** | **~50 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. `trojanergefahr` jetzt auf Station-Ebene gesetzt. Zusätzliche Datenquellen fehlen weiterhin. |
 
 ### Known Gaps — Required Fields
@@ -84,12 +84,12 @@ Missing data sources: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse
 
 ## Roadmap
 
-| # | Feature                            | Priority          | Description                                                                                                                           |
-|---|------------------------------------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| 1 | ~~SitzungsScraper (ICS)~~          | ~~High~~          | ~~Phase 1+2 implemented~~ — `BawueSitzungenScraper` parses ICS feed, `nummer` extracted for Plenum                                    |
-| 2 | SitzungsScraper Phase 3 (TOPs)     | Low               | Enrich with Tagesordnungen-PDFs: scrape blob URLs from landtag-bw.de, parse TOPs from PDFs                                            |
-| 3 | ~~Beteiligungsportal~~             | ~~Supplementary~~ | ~~`BawueBeteiligungScraper` implemented~~ — `preparl-regent` station with Entwurf PDFs                                                |
-| 4 | ~~LLM Document Enrichment~~        | ~~Optional~~      | ~~Implemented~~ — `bawue_dok.py` provides PDF text extraction + LLM semantic metadata (summary, keywords, short title, opinion score) |
-| 5 | ~~JSON-Comment Parsing~~           | ~~Robustness~~    | ~~Implemented~~ — Primary PARLIS parsing via embedded JSON comments; HTML/XPath retained as fallback (DD-014)                         |
-| 6 | Gesetzblatt BaWue                  | Supplementary     | Capture publications (`postparl-gsblt`). Completes the legislative lifecycle after the parliamentary phase                            |
-| 7 | ~~`trojanergefahr` auf Station-Ebene~~ | ~~Medium~~    | ~~Implemented~~ — LLM-extrahierter Wert wird via `EnrichmentResult` an Station übergeben (max. über alle Dokumente)                  |
+| # | Feature                                | Priority          | Description                                                                                                                           |
+|---|----------------------------------------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| 1 | ~~SitzungsScraper (ICS)~~              | ~~High~~          | ~~Phase 1+2 implemented~~ — `BawueSitzungenScraper` parses ICS feed, `nummer` extracted for Plenum                                    |
+| 2 | SitzungsScraper Phase 3 (TOPs)         | Low               | Enrich with Tagesordnungen-PDFs: scrape blob URLs from landtag-bw.de, parse TOPs from PDFs                                            |
+| 3 | ~~Beteiligungsportal~~                 | ~~Supplementary~~ | ~~`BawueBeteiligungScraper` implemented~~ — `preparl-regent` station with Entwurf PDFs                                                |
+| 4 | ~~LLM Document Enrichment~~            | ~~Optional~~      | ~~Implemented~~ — `bawue_dok.py` provides PDF text extraction + LLM semantic metadata (summary, keywords, short title, opinion score) |
+| 5 | ~~JSON-Comment Parsing~~               | ~~Robustness~~    | ~~Implemented~~ — Primary PARLIS parsing via embedded JSON comments; HTML/XPath retained as fallback (DD-014)                         |
+| 6 | Gesetzblatt BaWue                      | Supplementary     | Capture publications (`postparl-gsblt`). Completes the legislative lifecycle after the parliamentary phase                            |
+| 7 | ~~`trojanergefahr` auf Station-Ebene~~ | ~~Medium~~        | ~~Implemented~~ — LLM-extrahierter Wert wird via `EnrichmentResult` an Station übergeben (max. über alle Dokumente)                   |
