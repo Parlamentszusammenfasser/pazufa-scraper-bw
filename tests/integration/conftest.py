@@ -144,6 +144,8 @@ def scraper(collector_config):
         s._lookback_days = lookback_days
         s._parlis = ParlisClient(wahlperiode=17, request_delay_s=0.0)
         s._raw_cache = {}
+        s._llm_enabled = False
+        s._llm = None
 
         return s
 

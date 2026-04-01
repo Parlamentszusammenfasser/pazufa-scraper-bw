@@ -101,6 +101,22 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._skipped: int = 0
         self._by_type: dict[str, int] = {}
 
+        # LLM document enrichment (optional, requires LLM_PROVIDER_KEY)
+        self._llm_enabled = bool(getattr(config, "llm_provider_key", None))
+        self._llm = None
+        llm_config = load_toml_section(config, "llm")
+        self._llm_model = config.llm_model
+        self._llm_truncate_tokens = int(llm_config.get("truncate-tokens", 12000))
+        if self._llm_enabled:
+            from collector_core import LLMConnector
+
+            self._llm = LLMConnector(
+                model=config.llm_model,
+                api_key=config.llm_provider_key,
+                rate_limit_max_calls=5,
+                rate_limit_window_seconds=60,
+            )
+
     async def run(self) -> None:
         check_for_newer_wahlperiode(self._wahlperiode)
         start = time.monotonic()
@@ -167,7 +183,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             self._skipped += 1
             return None
 
-        vorgang = self._build_vorgang(raw)
+        vorgang = await self._build_vorgang(raw)
 
         # Skip non-legislative meta-entries (Bekanntmachungen, Berichtigungen, etc.)
         # that only have post-parliamentary stations and no parliamentary process.
@@ -182,7 +198,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         return vorgang
 
-    def _build_vorgang(self, raw: RawVorgang) -> Vorgang:
+    async def _build_vorgang(self, raw: RawVorgang) -> Vorgang:
         """Convert a raw PARLIS dict into a framework Vorgang model.
 
         Each PARLIS Vorgang contains a list of Fundstellen (references to printed documents
@@ -210,7 +226,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         initiatoren = _parse_autoren(initiative)
 
         fundstellen_parsed = raw.get("fundstellen_parsed", [])
-        stationen = self._collect_stationen(fundstellen_parsed, initiative, vorgang_id)
+        stationen = await self._collect_stationen(fundstellen_parsed, initiative, vorgang_id)
 
         if fundstellen_parsed and not stationen:
             logger.error(
@@ -266,7 +282,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
         }
     )
 
-    def _collect_stationen(self, fundstellen: list[RawFundstelle], initiative: str, vorgang_id: str) -> list[Station]:
+    async def _collect_stationen(
+        self, fundstellen: list[RawFundstelle], initiative: str, vorgang_id: str
+    ) -> list[Station]:
         """Build stations from parsed Fundstellen, nesting Stellungnahmen as children.
 
         PARLIS lists Stellungnahmen as separate Fundstellen, but they belong to the
@@ -279,7 +297,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         stationen: list[Station] = []
         pending_aenderungsantraege: list[list[StationDokumenteInner]] = []
         for fund in fundstellen:
-            station = self._build_station(fund, initiative)
+            station = await self._build_station(fund, initiative)
             if station is None:
                 continue
             station_typ_str = fund.get("station_typ", "")
@@ -475,7 +493,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 vorgang_id,
             )
 
-    def _build_station(self, fund: RawFundstelle, initiative: str) -> Station | None:
+    async def _build_station(self, fund: RawFundstelle, initiative: str) -> Station | None:
         """Convert a parsed Fundstelle dict into a framework Station.
 
         A Fundstelle is a reference line from the PARLIS search results, e.g.:
@@ -517,7 +535,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return None
 
         gremium = self._determine_gremium(fund)
-        dokumente = self._build_dokumente(fund, station_typ_str, mapping_text, station_typ, initiative, zp_start)
+        dokumente = await self._build_dokumente(fund, station_typ_str, mapping_text, station_typ, initiative, zp_start)
 
         return Station(
             typ=station_typ,
@@ -540,8 +558,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
             name = "Landtag"
         return Gremium(parlament=Parlament.BW, name=name, wahlperiode=self._wahlperiode)
 
-    @staticmethod
-    def _build_dokumente(
+    async def _build_dokumente(
+        self,
         fund: RawFundstelle,
         station_typ_str: str,
         mapping_text: str,
@@ -554,6 +572,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
         A document is only created when the Fundstelle includes a PDF link.
         Authors are taken from the Fundstelle's autor_text if available,
         otherwise fall back to the Vorgang-level initiative (who initiated the process).
+
+        When LLM is enabled, enriches the document with PDF text extraction
+        and LLM-based semantic extraction (summary, keywords, scores).
         """
         pdf_url = fund.get("pdf_url", "")
         if not pdf_url:
@@ -580,6 +601,21 @@ class BawueVorgaengeScraper(VorgangsScraper):
             autoren=autoren,
             drucksnr=fund.get("drucksache"),
         )
+
+        if self._llm_enabled and self._llm is not None:
+            try:
+                from bawue.bawue_dok import enrich_dokument
+
+                dok = await enrich_dokument(
+                    self.session,
+                    self._llm,
+                    dok,
+                    model=self._llm_model,
+                    max_tokens=self._llm_truncate_tokens,
+                )
+            except Exception:
+                logger.warning("Document enrichment failed for %s", pdf_url)
+
         return [StationDokumenteInner(dok)]
 
 

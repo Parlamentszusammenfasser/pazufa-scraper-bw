@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
 import sys
@@ -466,6 +467,9 @@ def run_vorgaenge(
     # Use object.__new__ to access _build_vorgang without full scraper init
     scraper = object.__new__(BawueVorgaengeScraper)
     scraper._wahlperiode = wahlperiode
+    scraper._llm_enabled = False
+    scraper._llm = None
+    scraper.session = None
 
     # Collect all raw results per type in parallel, then apply limit in deterministic order
     all_raw_by_type: dict[str, list[dict]] = {}
@@ -485,7 +489,7 @@ def run_vorgaenge(
         for raw in all_raw_by_type.get(vt, []):
             if limit is not None and len(all_reports) >= limit:
                 return all_reports, all_raw
-            vorgang = scraper._build_vorgang(raw)
+            vorgang = asyncio.run(scraper._build_vorgang(raw))
             all_reports.append(analyze_vorgang(raw, vorgang))
             all_raw.append(raw)
 

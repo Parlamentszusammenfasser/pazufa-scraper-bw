@@ -22,12 +22,45 @@ git clone <repo-url> pazufa-bawue-scraper
 git clone https://codeberg.org/PaZuFa/pazufa-collector.git
 
 cd pazufa-bawue-scraper
-python3 -m venv .venv
+python3.14 -m venv .venv
 make install
 
 cp config.sample.toml config.toml
 # Edit config.toml: set ltzf-api-url, ltzf-api-key, collector-uuid
 ```
+
+## Build
+
+### Application
+
+After setup, install all dependencies and vendor the collector libraries:
+
+```bash
+make install
+```
+
+This creates the virtual environment, installs Poetry, vendors `pazufa-collector` and `pazufa-collector-core` from
+sibling directories, and runs `poetry install`.
+
+### Docker Image
+
+Build the Docker image with all dependencies vendored and tests passing:
+
+```bash
+make package
+```
+
+This runs `install`, `lint`, `format`, and `test` before building the image. The resulting image is tagged
+`bawue-scraper` and includes Tesseract OCR with the German language pack.
+
+To build the Docker image directly (skipping lint/test):
+
+```bash
+docker build -t bawue-scraper .
+```
+
+The image uses a multi-stage build (Python 3.14-slim) — the builder stage installs dependencies, and the runtime
+stage copies only the installed packages and source code.
 
 ## Usage
 
@@ -219,6 +252,31 @@ Run `make help` to list all targets.
 **Always run `make lint` and `make format` after making changes** to ensure CI passes. The Woodpecker CI
 pipeline checks both linting and formatting on every push and pull request.
 
+### LLM Integration Tests
+
+The scraper optionally enriches documents with LLM-extracted metadata (summary, keywords, short title). The
+LLM integration tests download a real PDF from the Landtag BW website and call a real LLM API to verify the
+full enrichment pipeline end-to-end.
+
+**Requirements:**
+- An LLM provider API key (e.g. OpenAI)
+- Internet access (downloads PDFs from `landtag-bw.de`)
+
+**Run:**
+
+```bash
+LLM_PROVIDER_KEY=sk-... pytest -m integration tests/integration/test_llm_extraction.py -s
+```
+
+Optionally set `LLM_MODEL` to override the default model (`gpt-4o-mini`):
+
+```bash
+LLM_PROVIDER_KEY=sk-... LLM_MODEL=gpt-4o pytest -m integration tests/integration/test_llm_extraction.py -s
+```
+
+The tests are skipped automatically when `LLM_PROVIDER_KEY` is not set, so `make test-integration` and CI
+runs are unaffected.
+
 ## Running against Staging
 
 The `docker-compose.yml` runs the scraper with Redis and expects secrets in a `.env` file (git-ignored).
@@ -286,3 +344,4 @@ See [docs/anforderungen.md — Konfiguration](docs/anforderungen.md#konfiguratio
 - [PaZuFa backend OpenAPI Spec](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/specs/openapi.yml)
 - [CI Pipeline](https://ci.codeberg.org/repos/16437) — Woodpecker CI build status
 - [Landtag BaWue](https://www.landtag-bw.de/)
+- [PaZuFa Staging Frontend](https://staging.pazufa.de/)

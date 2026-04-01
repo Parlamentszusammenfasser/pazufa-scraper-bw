@@ -8,7 +8,9 @@ services:
       - redis-data:/data
 
   scraper:
-    build: .
+    # References the image build from `make package`
+    # to re-create the image with the latest code run `make clean package`
+    image: bawue-scraper:latest
     # Override entrypoint to drop --once so the framework loops via cycle-time-s
     entrypoint: ["sh", "-c", "python -m collector --config-file config.toml 2>&1 | tee /app/locallogs/stdout.log"]
     environment:
