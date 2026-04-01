@@ -5,7 +5,7 @@
 | Category                     | Estimate  | Notes                                                                                                                                                      |
 |------------------------------|-----------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Pflichtfunktionalität**    | **~85 %** | Core fields complete; `volltext`/`hash` now also filled at scraper level (LLM). `tops=[]` and `nummer=0` for committees outstanding.                       |
-| **Optionale Funktionalität** | **~45 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. Zusätzliche Datenquellen und Station-Level-Felder fehlen weiterhin. |
+| **Optionale Funktionalität** | **~50 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. `trojanergefahr` jetzt auf Station-Ebene gesetzt. Zusätzliche Datenquellen fehlen weiterhin. |
 
 ### Known Gaps — Required Fields
 
@@ -16,11 +16,10 @@
 ### Known Gaps — Optional Fields
 
 Bei aktivem LLM (`[llm]`): `zusammenfassung`, `schlagworte`, `kurztitel` und `meinung` werden auf **Dokument-Ebene**
-gefüllt. Auf **Station-Ebene** und **Vorgang-Ebene** bleiben Lücken.
+gefüllt. `trojanergefahr` wird auf **Station-Ebene** gesetzt (max. Wert über alle Dokumente). Auf **Vorgang-Ebene** bleiben Lücken.
 
 Missing fields: `kurztitel` (Vorgang — nur Beteiligungsportal), `links` (Vorgang), `lobbyregister`,
-`schlagworte` (Station), `trojanergefahr` (Station — LLM extrahiert, aber nicht auf Modell gesetzt),
-`stellungnahmen`, `vorwort`, `zp_modifiziert` (Station), `gremium_federf`
+`schlagworte` (Station), `stellungnahmen`, `vorwort`, `zp_modifiziert` (Station), `gremium_federf`
 
 Missing data sources: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse STM
 
@@ -39,6 +38,7 @@ Missing data sources: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse
 | Station  | `dokumente`           | ✅ Complete  | PDF links from Fundstelle                                                            |
 | Station  | `zp_start`            | ✅ Complete  | From Fundstelle date (with fallbacks)                                                |
 | Station  | `gremium`             | ✅ Complete  | From committee / Plenarprotokoll                                                     |
+| Station  | `trojanergefahr`      | ✅ LLM       | Max across enriched documents (1–10). Requires `[llm]` config.                       |
 | Dokument | `titel`               | ✅ Complete  | Station type as fallback                                                             |
 | Dokument | `volltext`            | ✅ Complete* | Framework pipeline OR scraper-level extraction via `bawue_dok.py` (when LLM enabled) |
 | Dokument | `hash`                | ✅ Complete* | Framework pipeline OR scraper-level SHA256 via `bawue_dok.py` (when LLM enabled)     |
@@ -92,4 +92,4 @@ Missing data sources: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse
 | 4 | ~~LLM Document Enrichment~~        | ~~Optional~~      | ~~Implemented~~ — `bawue_dok.py` provides PDF text extraction + LLM semantic metadata (summary, keywords, short title, opinion score) |
 | 5 | ~~JSON-Comment Parsing~~           | ~~Robustness~~    | ~~Implemented~~ — Primary PARLIS parsing via embedded JSON comments; HTML/XPath retained as fallback (DD-014)                         |
 | 6 | Gesetzblatt BaWue                  | Supplementary     | Capture publications (`postparl-gsblt`). Completes the legislative lifecycle after the parliamentary phase                            |
-| 7 | `trojanergefahr` auf Station-Ebene | Medium            | LLM extrahiert `trojanergefahr` bereits, aber der Wert wird noch nicht auf das Station-Modell übertragen                              |
+| 7 | ~~`trojanergefahr` auf Station-Ebene~~ | ~~Medium~~    | ~~Implemented~~ — LLM-extrahierter Wert wird via `EnrichmentResult` an Station übergeben (max. über alle Dokumente)                  |

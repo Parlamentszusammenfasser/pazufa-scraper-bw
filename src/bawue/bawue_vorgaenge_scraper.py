@@ -535,13 +535,16 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return None
 
         gremium = self._determine_gremium(fund)
-        dokumente = await self._build_dokumente(fund, station_typ_str, mapping_text, station_typ, initiative, zp_start)
+        dokumente, trojanergefahr = await self._build_dokumente(
+            fund, station_typ_str, mapping_text, station_typ, initiative, zp_start
+        )
 
         return Station(
             typ=station_typ,
             dokumente=dokumente,
             zp_start=zp_start,
             gremium=gremium,
+            trojanergefahr=trojanergefahr,
         )
 
     def _determine_gremium(self, fund: RawFundstelle) -> Gremium:
@@ -566,7 +569,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         station_typ: Stationstyp,
         initiative: str,
         zp_start: datetime,
-    ) -> list[StationDokumenteInner]:
+    ) -> tuple[list[StationDokumenteInner], int | None]:
         """Build the document list for a station (0 or 1 documents).
 
         A document is only created when the Fundstelle includes a PDF link.
@@ -575,10 +578,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         When LLM is enabled, enriches the document with PDF text extraction
         and LLM-based semantic extraction (summary, keywords, scores).
+
+        Returns (dokumente, trojanergefahr) where trojanergefahr is a Station-level
+        score extracted by the LLM (or None).
         """
         pdf_url = fund.get("pdf_url", "")
         if not pdf_url:
-            return []
+            return [], None
 
         doc_typ = map_dokumententyp(
             mapping_text,
@@ -602,21 +608,24 @@ class BawueVorgaengeScraper(VorgangsScraper):
             drucksnr=fund.get("drucksache"),
         )
 
+        trojanergefahr = None
         if self._llm_enabled and self._llm is not None:
             try:
                 from bawue.bawue_dok import enrich_dokument
 
-                dok = await enrich_dokument(
+                result = await enrich_dokument(
                     self.session,
                     self._llm,
                     dok,
                     model=self._llm_model,
                     max_tokens=self._llm_truncate_tokens,
                 )
+                dok = result.dokument
+                trojanergefahr = result.trojanergefahr
             except Exception:
                 logger.warning("Document enrichment failed for %s", pdf_url)
 
-        return [StationDokumenteInner(dok)]
+        return [StationDokumenteInner(dok)], trojanergefahr
 
 
 def _dedup_drucks(doks: list[StationDokumenteInner]) -> list[StationDokumenteInner]:

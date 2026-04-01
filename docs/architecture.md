@@ -438,7 +438,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 
 **LLM pipeline:**
 - Document-type-specific German prompts (4 variants: ENTWURF, STELLUNGNAHME, BESCHLUSSEMPF, GENERIC)
-- Extracts: `zusammenfassung`, `schlagworte`, `kurztitel`, and optionally `meinung` (1–5 score) and `trojanergefahr` (1–10 score)
+- Extracts: `zusammenfassung`, `schlagworte`, `kurztitel`, and optionally `meinung` (1–5 score) and `trojanergefahr` (1–10 score, passed to Station via `EnrichmentResult`)
 - JSON response with up to 3 retries on parse failures
 - Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
 - In-memory SHA256 hash cache skips LLM calls for duplicate PDFs within a run
@@ -452,8 +452,9 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 | 2 — Text-only | PDF succeeds, LLM fails | Dokument with volltext + hash, no LLM fields |
 | 3 — Metadata-only | PDF download fails | Original Dokument unchanged |
 
-**Note:** The LLM prompts for ENTWURF and BESCHLUSSEMPF extract `trojanergefahr`, but this value is **not** set on
-the `Dokument` model — it is a `Station`-level field in the data model. This remains a gap.
+`trojanergefahr` (extracted for ENTWURF and BESCHLUSSEMPF) is a Station-level field. `enrich_dokument()` returns an
+`EnrichmentResult(dokument, trojanergefahr)` NamedTuple so callers can set it on the Station. When a Station has
+multiple enriched documents, the maximum score across all documents is used.
 
 ### Types
 

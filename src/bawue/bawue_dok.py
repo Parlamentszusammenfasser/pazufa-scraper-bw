@@ -13,6 +13,7 @@ import json
 import logging
 import tempfile
 from pathlib import Path
+from typing import NamedTuple
 
 import litellm
 from collector_core import LLMConnector
@@ -21,6 +22,14 @@ from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.dokument import Dokument
 
 logger = logging.getLogger(__name__)
+
+
+class EnrichmentResult(NamedTuple):
+    """Result of document enrichment: enriched Dokument + optional Station-level fields."""
+
+    dokument: Dokument
+    trojanergefahr: int | None = None
+
 
 MAX_JSON_RETRIES = 3
 MIN_TEXT_LENGTH = 64
@@ -200,12 +209,13 @@ async def enrich_dokument(
     dok: Dokument,
     model: str = "gpt-5-nano",
     max_tokens: int = DEFAULT_TRUNCATE_TOKENS,
-) -> Dokument:
+) -> EnrichmentResult:
     """Enrich a plain Dokument with PDF text extraction and LLM semantics.
 
     Takes an existing Dokument (as built by the scraper with empty volltext/hash)
-    and returns an enriched copy. PARLIS metadata (titel, autoren, drucksnr,
-    timestamps) is preserved.
+    and returns an EnrichmentResult containing the enriched Dokument and an optional
+    trojanergefahr score (Station-level field extracted by LLM). PARLIS metadata
+    (titel, autoren, drucksnr, timestamps) is preserved.
 
     Uses an in-memory hash cache to skip LLM calls for duplicate PDFs within
     the same scraper run.
@@ -232,40 +242,45 @@ async def enrich_dokument(
                 semantics = await extract_semantics(llm, full_text, dok.typ, model=model, max_tokens=max_tokens)
                 _hash_cache[doc_hash] = semantics
 
-            return Dokument(
-                titel=dok.titel,
-                volltext=full_text,
-                hash=doc_hash,
-                typ=dok.typ,
-                zp_modifiziert=dok.zp_modifiziert,
-                zp_referenz=dok.zp_referenz,
-                zp_erstellt=dok.zp_erstellt,
-                link=dok.link,
-                autoren=dok.autoren,
-                drucksnr=dok.drucksnr,
-                zusammenfassung=semantics.get("zusammenfassung"),
-                schlagworte=semantics.get("schlagworte"),
-                kurztitel=semantics.get("kurztitel"),
-                meinung=semantics.get("meinung"),
+            return EnrichmentResult(
+                dokument=Dokument(
+                    titel=dok.titel,
+                    volltext=full_text,
+                    hash=doc_hash,
+                    typ=dok.typ,
+                    zp_modifiziert=dok.zp_modifiziert,
+                    zp_referenz=dok.zp_referenz,
+                    zp_erstellt=dok.zp_erstellt,
+                    link=dok.link,
+                    autoren=dok.autoren,
+                    drucksnr=dok.drucksnr,
+                    zusammenfassung=semantics.get("zusammenfassung"),
+                    schlagworte=semantics.get("schlagworte"),
+                    kurztitel=semantics.get("kurztitel"),
+                    meinung=semantics.get("meinung"),
+                ),
+                trojanergefahr=semantics.get("trojanergefahr"),
             )
         except Exception:
             logger.warning("LLM extraction failed for %s, using text-only fallback", dok.link)
-            return Dokument(
-                titel=dok.titel,
-                volltext=full_text,
-                hash=doc_hash,
-                typ=dok.typ,
-                zp_modifiziert=dok.zp_modifiziert,
-                zp_referenz=dok.zp_referenz,
-                zp_erstellt=dok.zp_erstellt,
-                link=dok.link,
-                autoren=dok.autoren,
-                drucksnr=dok.drucksnr,
+            return EnrichmentResult(
+                dokument=Dokument(
+                    titel=dok.titel,
+                    volltext=full_text,
+                    hash=doc_hash,
+                    typ=dok.typ,
+                    zp_modifiziert=dok.zp_modifiziert,
+                    zp_referenz=dok.zp_referenz,
+                    zp_erstellt=dok.zp_erstellt,
+                    link=dok.link,
+                    autoren=dok.autoren,
+                    drucksnr=dok.drucksnr,
+                ),
             )
 
     except Exception:
         logger.warning("PDF download/extraction failed for %s, returning original document", dok.link)
-        return dok
+        return EnrichmentResult(dokument=dok)
 
     finally:
         if pdf_path is not None:
