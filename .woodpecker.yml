@@ -29,6 +29,7 @@ steps:
       DEBIAN_FRONTEND: noninteractive
     commands:
       - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
+      - git clone --depth 1 https://codeberg.org/PaZuFa/pazufa-collector-core.git ../pazufa-collector-core
       - pip install --quiet poetry
       - poetry install --no-interaction --no-ansi
       - poetry run pytest -m 'not integration'
