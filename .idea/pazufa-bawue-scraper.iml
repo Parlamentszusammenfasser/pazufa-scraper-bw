@@ -5,6 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/vendor/pazufa-collector/.venv" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.14 (pazufa-bawue-scraper)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

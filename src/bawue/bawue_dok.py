@@ -7,6 +7,7 @@ BaWue-specific: PARLIS already provides title, authors, dates, and drucksache nu
 The LLM is only used for body semantics (single pass, no header extraction needed).
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 MAX_JSON_RETRIES = 3
 MIN_TEXT_LENGTH = 64
+_LLM_SEMAPHORE = asyncio.Semaphore(3)
 
 # ---------------------------------------------------------------------------
 # LLM Prompts — one per Doktyp group, German, body-only (no header extraction)
@@ -125,7 +127,8 @@ async def extract_semantics(llm: LLMConnector, full_text: str, doktyp: Doktyp) -
     user_message = f"{prompt}\n\n{full_text}"
 
     for attempt in range(MAX_JSON_RETRIES):
-        response = await llm.generate_text(user_message)
+        async with _LLM_SEMAPHORE:
+            response = await llm.generate_text(user_message)
         try:
             return json.loads(response)
         except json.JSONDecodeError:

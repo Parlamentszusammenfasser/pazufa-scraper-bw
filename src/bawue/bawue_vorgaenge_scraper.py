@@ -110,6 +110,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
             self._llm = LLMConnector(
                 model=config.llm_model,
                 api_key=config.llm_provider_key,
+                rate_limit_max_calls=5,
+                rate_limit_window_seconds=60,
             )
 
     async def run(self) -> None:

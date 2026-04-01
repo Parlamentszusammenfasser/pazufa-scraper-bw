@@ -29,6 +29,39 @@ cp config.sample.toml config.toml
 # Edit config.toml: set ltzf-api-url, ltzf-api-key, collector-uuid
 ```
 
+## Build
+
+### Application
+
+After setup, install all dependencies and vendor the collector libraries:
+
+```bash
+make install
+```
+
+This creates the virtual environment, installs Poetry, vendors `pazufa-collector` and `pazufa-collector-core` from
+sibling directories, and runs `poetry install`.
+
+### Docker Image
+
+Build the Docker image with all dependencies vendored and tests passing:
+
+```bash
+make package
+```
+
+This runs `install`, `lint`, `format`, and `test` before building the image. The resulting image is tagged
+`bawue-scraper` and includes Tesseract OCR with the German language pack.
+
+To build the Docker image directly (skipping lint/test):
+
+```bash
+docker build -t bawue-scraper .
+```
+
+The image uses a multi-stage build (Python 3.14-slim) — the builder stage installs dependencies, and the runtime
+stage copies only the installed packages and source code.
+
 ## Usage
 
 ### Run
