@@ -809,10 +809,7 @@ class TestExtractPdfTextOcrRetry:
 
         # Second call (OCR retry) should use force_ocr=True and language='deu'
         assert mock_extract.call_count == 2
-        ocr_call_config = mock_extract.call_args_list[1][1].get(
-            "config", mock_extract.call_args_list[1][0][1] if len(mock_extract.call_args_list[1][0]) > 1 else None
-        )
-        assert ocr_call_config is not None
+        ocr_call_config = mock_extract.call_args_list[1].kwargs["config"]
         assert ocr_call_config.force_ocr is True
         assert ocr_call_config.ocr is not None
         assert ocr_call_config.ocr.language == "deu"

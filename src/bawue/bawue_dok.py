@@ -39,6 +39,10 @@ DEFAULT_TRUNCATE_TOKENS = 12000
 _LLM_SEMAPHORE = asyncio.Semaphore(3)
 
 # In-memory cache: SHA256 hash → LLM semantics dict (per-run deduplication)
+# Keyed on raw-PDF SHA-256, not normalized text.  This is intentional: the hash
+# doubles as a content identifier sent to the backend, and within a single run
+# the extraction + normalization pipeline is deterministic for a given binary.
+# The cache is ephemeral (in-process dict, cleared on restart).
 _hash_cache: dict[str, dict] = {}
 
 # ---------------------------------------------------------------------------
@@ -104,7 +108,7 @@ def _paragraph_quality_score(text: str) -> float:
 
     Detects broken PDF font encoding via three signals:
     - C1 control characters (0x80-0x9F)
-    - Latin Extended-B characters (0x0180-0x024F)
+    - Latin Extended-A+B characters (0x0100-0x024F)
     - Long words without German vowels
     """
     if not text or not text.strip():
@@ -118,8 +122,8 @@ def _paragraph_quality_score(text: str) -> float:
     # Signal 1: C1 control characters — never in properly extracted German text
     c1_count = sum(1 for c in text if 0x80 <= ord(c) <= 0x9F)
 
-    # Signal 2: Latin Extended-B (ůĂƐƐĞŶ-ŵŝƚ patterns from broken ToUnicode)
-    ext_count = sum(1 for c in text if 0x0180 <= ord(c) <= 0x024F)
+    # Signal 2: Latin Extended-A+B (0x0100-0x024F, same range as _is_garbled)
+    ext_count = sum(1 for c in text if 0x0100 <= ord(c) <= 0x024F)
 
     # Signal 3: long words without German vowels (German is vowel-rich)
     words = re.findall(r"[a-zA-ZäöüÄÖÜß]+", text)
@@ -182,7 +186,7 @@ def normalize_volltext(text: str) -> str:
 # Garbled text detection
 # ---------------------------------------------------------------------------
 
-GARBLED_LATIN_EXT_THRESHOLD = 0.05  # 5% of alpha chars in Latin Extended → garbled
+_GARBLED_LATIN_EXT_THRESHOLD = 0.05  # 5% of alpha chars in Latin Extended → garbled
 
 
 def _is_garbled(text: str) -> bool:
@@ -207,7 +211,7 @@ def _is_garbled(text: str) -> bool:
     if alpha_count == 0:
         return False
 
-    return (latin_ext_count / alpha_count) > GARBLED_LATIN_EXT_THRESHOLD
+    return (latin_ext_count / alpha_count) > _GARBLED_LATIN_EXT_THRESHOLD
 
 
 # ---------------------------------------------------------------------------
@@ -291,8 +295,8 @@ async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
                 text = ocr_text
             else:
                 logger.warning("OCR did not improve garbled text, keeping original")
-        except Exception:
-            logger.warning("OCR retry failed, keeping original garbled text")
+        except Exception as exc:
+            logger.warning("OCR retry failed (%s), keeping original garbled text", type(exc).__name__)
 
     return text, doc_hash
 
