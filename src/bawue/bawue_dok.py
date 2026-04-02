@@ -99,7 +99,6 @@ def _prompt_for_doktyp(doktyp: Doktyp) -> str:
 # ---------------------------------------------------------------------------
 
 _C1_CONTROL_RE = re.compile(r"[\x80-\x9f]")
-_EXCESSIVE_BLANK_LINES_RE = re.compile(r"\n{3,}")
 _TRAILING_WHITESPACE_RE = re.compile(r"[ \t]+$", re.MULTILINE)
 
 
@@ -165,18 +164,16 @@ def normalize_volltext(text: str) -> str:
     # 3. Normalize line endings: \r\n → \n, lone \r → \n
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
-    # 4. Remove garbled paragraphs (split on double-newline, score each)
+    # 4. Remove garbled paragraphs (split on double-newline, score each).
+    #    Also collapses excessive blank lines: split on \n\n+ and rejoin with \n\n.
     paragraphs = re.split(r"\n\n+", text)
     clean_paragraphs = [p for p in paragraphs if _paragraph_quality_score(p) >= 0.5]
     text = "\n\n".join(clean_paragraphs)
 
-    # 5. Collapse excessive blank lines (3+ → 2)
-    text = _EXCESSIVE_BLANK_LINES_RE.sub("\n\n", text)
-
-    # 6. Strip trailing whitespace per line
+    # 5. Strip trailing whitespace per line
     text = _TRAILING_WHITESPACE_RE.sub("", text)
 
-    # 7. Neutralize angle brackets (XSS prevention): < and > to guillemets
+    # 6. Neutralize angle brackets (XSS prevention): < and > to guillemets
     text = text.replace("<", "\u2039").replace(">", "\u203a")
 
     return text.strip()
