@@ -54,7 +54,7 @@ steps:
       DEBIAN_FRONTEND: noninteractive
     commands:
       - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
-      - pip install --quiet poetry pip-audit
+      - pip install --quiet "pip>=26.0" poetry pip-audit
       # Repos already cloned by previous steps (shared workspace); poetry.toml enforces no-scripts
       - poetry install --no-interaction --no-ansi --only main
       - pip-audit
