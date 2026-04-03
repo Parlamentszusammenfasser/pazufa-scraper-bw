@@ -25,6 +25,9 @@ test-all: ## Run all tests including integration
 test-integration: ## Run integration tests only (requires backend)
 	$(VENV)/pytest -m integration
 
+audit: ## Scan dependencies for known vulnerabilities (SCA)
+	$(VENV)/pip-audit
+
 lint: ## Lint source and tests
 	$(VENV)/ruff check src/ tests/
 
