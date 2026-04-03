@@ -25,6 +25,9 @@ test-all: ## Run all tests including integration
 test-integration: ## Run integration tests only (requires backend)
 	$(VENV)/pytest -m integration
 
+audit: ## Scan dependencies for known vulnerabilities (SCA)
+	$(VENV)/pip-audit
+
 lint: ## Lint source and tests
 	$(VENV)/ruff check src/ tests/
 
@@ -41,6 +44,6 @@ package: install lint format test ## Vendor collector and build Docker image
 	docker build -t bawue-scraper .
 
 clean: ## Remove .venv, __pycache__, .pytest_cache, locallogs, and MagicMock
-	rm -rf .venv __pycache__ .pytest_cache locallogs MagicMock vendor
+	rm -rf .venv __pycache__ .pytest_cache .kreuzberg locallogs MagicMock vendor
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type d -name .pytest_cache -exec rm -rf {} +

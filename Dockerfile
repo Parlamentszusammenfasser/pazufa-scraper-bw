@@ -1,5 +1,8 @@
+ARG PYTHON_VERSION=3.14.3
+ARG PYTHON_MINOR=3.14
+
 # ---- Builder stage ----
-FROM python:3.14.3-slim AS builder
+FROM python:${PYTHON_VERSION}-slim AS builder
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -12,7 +15,7 @@ RUN pip install --no-cache-dir poetry==2.3.2
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml poetry.lock poetry.toml ./
 COPY vendor/pazufa-collector/ vendor/pazufa-collector/
 COPY vendor/pazufa-collector-core/ vendor/pazufa-collector-core/
 
@@ -29,7 +32,9 @@ RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --only main --no-root
 
 # ---- Runtime stage ----
-FROM python:3.14.3-slim
+ARG PYTHON_VERSION
+ARG PYTHON_MINOR
+FROM python:${PYTHON_VERSION}-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -43,7 +48,7 @@ RUN apt-get update \
 WORKDIR /app
 
 # Copy installed Python packages from builder
-COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
+COPY --from=builder /usr/local/lib/python${PYTHON_MINOR}/site-packages /usr/local/lib/python${PYTHON_MINOR}/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY src/ src/

@@ -11,13 +11,15 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import NamedTuple
 
 import litellm
 from collector_core import LLMConnector
-from kreuzberg import ExtractionConfig, extract_file
+from kreuzberg import ExtractionConfig, OcrConfig, extract_file
 from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.dokument import Dokument
 
@@ -37,6 +39,10 @@ DEFAULT_TRUNCATE_TOKENS = 12000
 _LLM_SEMAPHORE = asyncio.Semaphore(3)
 
 # In-memory cache: SHA256 hash → LLM semantics dict (per-run deduplication)
+# Keyed on raw-PDF SHA-256, not normalized text.  This is intentional: the hash
+# doubles as a content identifier sent to the backend, and within a single run
+# the extraction + normalization pipeline is deterministic for a given binary.
+# The cache is ephemeral (in-process dict, cleared on restart).
 _hash_cache: dict[str, dict] = {}
 
 # ---------------------------------------------------------------------------
@@ -89,6 +95,127 @@ def _prompt_for_doktyp(doktyp: Doktyp) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Text normalization
+# ---------------------------------------------------------------------------
+
+_C1_CONTROL_RE = re.compile(r"[\x80-\x9f]")
+_TRAILING_WHITESPACE_RE = re.compile(r"[ \t]+$", re.MULTILINE)
+
+
+def _paragraph_quality_score(text: str) -> float:
+    """Score a paragraph's text quality from 0.0 (garbled) to 1.0 (clean).
+
+    Detects broken PDF font encoding via three signals:
+    - C1 control characters (0x80-0x9F)
+    - Latin Extended-A+B characters (0x0100-0x024F)
+    - Long words without German vowels
+    """
+    if not text or not text.strip():
+        return 1.0
+
+    alpha_chars = [c for c in text if c.isalpha()]
+    n = len(alpha_chars)
+    if n == 0:
+        return 1.0
+
+    # Signal 1: C1 control characters — never in properly extracted German text
+    c1_count = sum(1 for c in text if 0x80 <= ord(c) <= 0x9F)
+
+    # Signal 2: Latin Extended-A+B (0x0100-0x024F, same range as _is_garbled)
+    ext_count = sum(1 for c in text if 0x0100 <= ord(c) <= 0x024F)
+
+    # Signal 3: long words without German vowels (German is vowel-rich)
+    words = re.findall(r"[a-zA-ZäöüÄÖÜß]+", text)
+    long_words = [w for w in words if len(w) >= 5]
+    if long_words:
+        vowelless = sum(1 for w in long_words if not re.search(r"[aeiouäöüAEIOUÄÖÜ]", w, re.IGNORECASE))
+        vowelless_ratio = vowelless / len(long_words)
+    else:
+        vowelless_ratio = 0.0
+
+    # Signal 4: excessive uppercase ratio — garbled font encoding produces mostly uppercase.
+    # Normal German prose is ~5-15% uppercase (sentence starts, nouns).
+    upper_count = sum(1 for c in alpha_chars if c.isupper())
+    upper_ratio = upper_count / n
+    # Only penalize when ratio is abnormally high (>60%)
+    upper_penalty = max(0.0, (upper_ratio - 0.6) * 3) if upper_ratio > 0.6 else 0.0
+
+    c1_ratio = c1_count / n
+    ext_ratio = ext_count / n
+
+    quality = 1.0 - min(1.0, c1_ratio * 20 + ext_ratio * 5 + vowelless_ratio * 1.5 + upper_penalty)
+    return max(0.0, quality)
+
+
+def normalize_volltext(text: str) -> str:
+    """Normalize extracted PDF text: fix encoding, strip garbled sections, escape XSS.
+
+    Applied after PDF text extraction, before LLM and API submission.
+    """
+    if not text:
+        return text
+
+    # 1. Unicode NFKC normalization (e.g. ﬁ ligature → fi)
+    text = unicodedata.normalize("NFKC", text)
+
+    # 2. Join soft-hyphenated words: PARLIS PDFs use U+0002 (STX) as soft hyphen
+    # e.g. "ausgezeich\u0002net" -> "ausgezeichnet"
+    text = text.replace("\x02", "")
+
+    # 3. Strip C1 control characters (0x80-0x9F)
+    text = _C1_CONTROL_RE.sub("", text)
+
+    # 4. Normalize line endings: \r\n → \n, lone \r → \n
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # 5. Remove garbled paragraphs (split on double-newline, score each).
+    #    Also collapses excessive blank lines: split on \n\n+ and rejoin with \n\n.
+    paragraphs = re.split(r"\n\n+", text)
+    clean_paragraphs = [p for p in paragraphs if _paragraph_quality_score(p) >= 0.5]
+    text = "\n\n".join(clean_paragraphs)
+
+    # 6. Strip trailing whitespace per line
+    text = _TRAILING_WHITESPACE_RE.sub("", text)
+
+    # 7. Neutralize angle brackets (XSS prevention): < and > to guillemets
+    text = text.replace("<", "\u2039").replace(">", "\u203a")
+
+    return text.strip()
+
+
+# ---------------------------------------------------------------------------
+# Garbled text detection
+# ---------------------------------------------------------------------------
+
+_GARBLED_LATIN_EXT_THRESHOLD = 0.05  # 5% of alpha chars in Latin Extended → garbled
+
+
+def _is_garbled(text: str) -> bool:
+    """Detect garbled PDF text from broken font encodings.
+
+    Returns True when the ratio of Latin Extended characters (U+0100-U+024F)
+    to total alphabetic characters exceeds 5%.  These characters appear when
+    a PDF font lacks a proper ToUnicode CMap and kreuzberg maps glyph IDs to
+    wrong Unicode code points.
+    """
+    if not text or len(text) < MIN_TEXT_LENGTH:
+        return False
+
+    alpha_count = 0
+    latin_ext_count = 0
+    for c in text:
+        if c.isalpha():
+            alpha_count += 1
+            if 0x0100 <= ord(c) <= 0x024F:
+                latin_ext_count += 1
+
+    if alpha_count == 0:
+        return False
+
+    return (latin_ext_count / alpha_count) > _GARBLED_LATIN_EXT_THRESHOLD
+
+
+# ---------------------------------------------------------------------------
 # Text truncation
 # ---------------------------------------------------------------------------
 
@@ -135,10 +262,20 @@ async def download_pdf(session, url: str) -> Path:
     return Path(tmp.name)
 
 
+_OCR_CONFIG = ExtractionConfig(
+    force_ocr=True,
+    ocr=OcrConfig(backend="tesseract", language="deu"),
+)
+
+
 async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
     """Extract text and compute SHA256 hash from a PDF file.
 
-    Returns (full_text, hash). Falls back to OCR if normal extraction yields <64 chars.
+    Returns (full_text, hash).  Falls back to OCR when:
+    1. Normal extraction yields fewer than 64 characters, or
+    2. The extracted text is garbled (broken font encoding detected).
+
+    OCR uses Tesseract with German language for proper character recognition.
     """
     with open(pdf_path, "rb") as f:
         doc_hash = hashlib.file_digest(f, "sha256").hexdigest()
@@ -148,8 +285,19 @@ async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
 
     if len(text) < MIN_TEXT_LENGTH:
         logger.warning("Normal text extraction yielded <%d chars, retrying with OCR", MIN_TEXT_LENGTH)
-        ocr_result = await extract_file(pdf_path, config=ExtractionConfig(force_ocr=True))
+        ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
         text = ocr_result.content or ""
+    elif _is_garbled(text):
+        logger.warning("Garbled text detected (broken font encoding), retrying with OCR")
+        try:
+            ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
+            ocr_text = ocr_result.content or ""
+            if ocr_text and not _is_garbled(ocr_text):
+                text = ocr_text
+            else:
+                logger.warning("OCR did not improve garbled text, keeping original")
+        except Exception as exc:
+            logger.warning("OCR retry failed (%s), keeping original garbled text", type(exc).__name__)
 
     return text, doc_hash
 
@@ -230,8 +378,9 @@ async def enrich_dokument(
         # Download PDF
         pdf_path = await download_pdf(session, dok.link)
 
-        # Extract text + hash
+        # Extract text + hash, then normalize
         full_text, doc_hash = await extract_pdf_text(pdf_path)
+        full_text = normalize_volltext(full_text)
 
         # Try LLM extraction (with hash cache deduplication)
         try:

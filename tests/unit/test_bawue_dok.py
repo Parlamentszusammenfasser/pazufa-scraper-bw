@@ -15,11 +15,14 @@ from openapi_client.models.dokument import Dokument
 from bawue.bawue_dok import (
     EnrichmentResult,
     _hash_cache,
+    _is_garbled,
+    _paragraph_quality_score,
     _prompt_for_doktyp,
     download_pdf,
     enrich_dokument,
     extract_pdf_text,
     extract_semantics,
+    normalize_volltext,
     truncate_text,
 )
 
@@ -567,3 +570,346 @@ class TestTokenLogging:
             await enrich_dokument(session, llm, dok)
 
         assert any("cache hit" in r.message.lower() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# TestParagraphQualityScore
+# ---------------------------------------------------------------------------
+
+
+class TestParagraphQualityScore:
+    def test_clean_german_scores_high(self):
+        text = "Gemäß § 50a Absatz 2 der Geschäftsordnung habe ich im Einvernehmen mit den Antragstellern"
+        assert _paragraph_quality_score(text) > 0.9
+
+    def test_garbled_shifted_text_scores_low(self):
+        """Shifted font encoding: consonant-heavy gibberish with C1 control chars."""
+        text = "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW"
+        assert _paragraph_quality_score(text) < 0.5
+
+    def test_garbled_latin_extended_scores_low(self):
+        """Latin Extended-B garbled output from broken ToUnicode maps."""
+        text = "ůĂƐƐĞŶ-ŵŝƚ-ǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶ-ƵŶĚ"
+        assert _paragraph_quality_score(text) < 0.5
+
+    def test_empty_text_scores_high(self):
+        assert _paragraph_quality_score("") == 1.0
+
+    def test_whitespace_only_scores_high(self):
+        assert _paragraph_quality_score("   \n  ") == 1.0
+
+    def test_german_with_umlauts_scores_high(self):
+        text = "\u00c4nderung des Schulgesetzes f\u00fcr Baden-W\u00fcrttemberg - Drucksache 17/4142"
+        assert _paragraph_quality_score(text) > 0.9
+
+    def test_page_header_scores_high(self):
+        """Page headers like 'Landtag von Baden-Württemberg Drucksache 17 / 4244' are clean."""
+        text = "Landtag von Baden-Württemberg Drucksache 17 / 4244"
+        assert _paragraph_quality_score(text) > 0.9
+
+    def test_long_garbled_paragraph_scores_low(self):
+        text = (
+            "6WlGWHWDJVVWHOOXQJQDKPH]XP*HVHW]HQWZXUI-GHU)'3'93]XU:LHGHUKHUVWHOOXQJ\r\n"
+            "GHU-9HUELQGOLFKNHLW-GHU*UXQGVFKXOHPSIHKOXQJ/DQGWDJVGUXFNVDFKH\r\n"
+        )
+        assert _paragraph_quality_score(text) < 0.5
+
+
+# ---------------------------------------------------------------------------
+# TestNormalizeVolltext
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeVolltext:
+    def test_clean_text_unchanged(self):
+        """Clean German text should pass through without modification."""
+        text = "Gemäß § 50a Absatz 2 der Geschäftsordnung."
+        assert normalize_volltext(text) == text
+
+    def test_crlf_normalized_to_lf(self):
+        assert normalize_volltext("Zeile eins\r\nZeile zwei") == "Zeile eins\nZeile zwei"
+
+    def test_lone_cr_normalized_to_lf(self):
+        assert normalize_volltext("Zeile eins\rZeile zwei") == "Zeile eins\nZeile zwei"
+
+    def test_excessive_blank_lines_collapsed(self):
+        text = "Absatz eins\n\n\n\n\nAbsatz zwei"
+        result = normalize_volltext(text)
+        assert result == "Absatz eins\n\nAbsatz zwei"
+
+    def test_trailing_whitespace_stripped(self):
+        text = "Zeile mit Leerzeichen   \nNächste Zeile  "
+        result = normalize_volltext(text)
+        assert result == "Zeile mit Leerzeichen\nNächste Zeile"
+
+    def test_angle_brackets_replaced_with_guillemets(self):
+        text = "Kontakt: <poststelle@sm.bwl.de> für Anfragen"
+        result = normalize_volltext(text)
+        assert "<" not in result
+        assert ">" not in result
+        assert "\u2039poststelle@sm.bwl.de\u203a" in result
+
+    def test_multiple_angle_brackets_replaced(self):
+        text = "<Poststelle@lfdi.bwl.de> und <info@example.com>"
+        result = normalize_volltext(text)
+        assert result == "\u2039Poststelle@lfdi.bwl.de\u203a und \u2039info@example.com\u203a"
+
+    def test_c1_control_chars_stripped(self):
+        text = "Text\x81mit\x87Steuerzeichen\x89hier"
+        result = normalize_volltext(text)
+        assert "\x81" not in result
+        assert "\x87" not in result
+        assert "\x89" not in result
+        assert "Textmit" in result  # chars removed, words joined
+
+    def test_garbled_paragraphs_removed(self):
+        """Mixed document: clean intro followed by garbled body."""
+        clean = "Landtag von Baden-Württemberg\nDrucksache 17/4244"
+        garbled = "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW"
+        text = f"{clean}\n\n{garbled}"
+        result = normalize_volltext(text)
+        assert "Landtag" in result
+        assert "6WlGWHWDJ" not in result
+
+    def test_garbled_latin_extended_paragraphs_removed(self):
+        clean = "Ein normaler deutscher Absatz mit korrektem Text."
+        garbled = "ůĂƐƐĞŶ-ŵŝƚ-ǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶ-ƵŶĚ"
+        text = f"{clean}\n\n{garbled}"
+        result = normalize_volltext(text)
+        assert "normaler" in result
+        assert "ůĂƐƐĞŶ" not in result
+
+    def test_empty_string_returns_empty(self):
+        assert normalize_volltext("") == ""
+
+    def test_unicode_nfkc_normalization(self):
+        """NFKC should normalize compatibility characters."""
+        # ﬁ (U+FB01 LATIN SMALL LIGATURE FI) → fi
+        text = "Deﬁnition eines Begriffs"
+        result = normalize_volltext(text)
+        assert "Definition" in result
+
+    def test_all_garbled_returns_empty(self):
+        """If entire text is garbled, result should be empty or near-empty."""
+        text = "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW"
+        result = normalize_volltext(text)
+        assert len(result.strip()) == 0 or "6WlGWHWDJ" not in result
+
+
+# ---------------------------------------------------------------------------
+# TestIsGarbled
+# ---------------------------------------------------------------------------
+
+
+class TestIsGarbled:
+    def test_clean_german_text_not_garbled(self):
+        text = (
+            "Gemäß § 50a Absatz 2 der Geschäftsordnung habe ich im Einvernehmen "
+            "mit den Antragstellern die Landesregierung gebeten, zu dem Gesetzentwurf "
+            "der Fraktion FDP/DVP die Anhörung durchzuführen."
+        )
+        assert _is_garbled(text) is False
+
+    def test_latin_extended_garbled_text_detected(self):
+        """Latin Extended characters from broken ToUnicode CMap."""
+        text = "ZĞ͗'ĞƐĞƚǌĞŶƚǁƵƌĨĚĞƌ&ƌĂŬƚŝŽŶĚĞƌ&WͬsWͲ'ĞƐĞƚǌǌƵƌtŝĞĚĞƌŚĞƌƐƚĞůůƵŶŐĚĞƌsĞƌďŝŶĚůŝĐŚŬĞŝƚĚĞƌ'ƌƵŶĚƐĐŚƵůĞŵƉĨĞŚůƵŶŐ"
+        assert _is_garbled(text) is True
+
+    def test_mixed_clean_and_garbled_detected(self):
+        """Document with clean first page and garbled rest — overall garbled."""
+        clean = "Landtag von Baden-Württemberg\n17. Wahlperiode\nDrucksache 17/4244\n" * 3
+        garbled = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 20
+        text = clean + garbled
+        assert _is_garbled(text) is True
+
+    def test_shifted_ascii_not_latin_extended(self):
+        """ASCII shift garbling (ROT-29 type) doesn't have Latin Extended chars.
+
+        This type is caught by normalize_volltext's paragraph quality scoring
+        (C1 control chars + vowelless words), not by _is_garbled.
+        """
+        text = "6WlGWHWDJ%DGHQUWWHPEHUJ3RVWIDFK6WXWWJDUW )UDNWLRQGHU)'3'93]XU:LHGHUHLQIKUXQJ"
+        assert _is_garbled(text) is False
+
+    def test_empty_text_not_garbled(self):
+        assert _is_garbled("") is False
+
+    def test_short_text_not_garbled(self):
+        """Very short text should not be flagged — too little signal."""
+        assert _is_garbled("Kurz.") is False
+
+    def test_text_with_few_umlauts_not_garbled(self):
+        """German umlauts (U+00C4-U+00FC) are NOT Latin Extended, must not trigger."""
+        text = "Änderung des Gesetzes für Straßenverkehr mit Ölprüfung und Übergabe"
+        assert _is_garbled(text) is False
+
+    def test_threshold_boundary(self):
+        """Just below the garbling threshold should not be flagged."""
+        # 95 clean ASCII alpha chars + 4 Latin Extended = 4/99 ≈ 4% (below 5%)
+        clean = "a" * 95
+        garbled = "ůĂƐŝ"  # 4 Latin Extended chars
+        text = clean + garbled
+        assert _is_garbled(text) is False
+
+    def test_above_threshold_is_garbled(self):
+        """Just above the threshold should be flagged."""
+        # 80 clean ASCII alpha chars + 20 Latin Extended = 20/100 = 20% (above 5%)
+        clean = "a" * 80
+        garbled = "ůĂƐŝĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂ"  # 20 Latin Extended chars
+        text = clean + garbled
+        assert _is_garbled(text) is True
+
+
+# ---------------------------------------------------------------------------
+# TestExtractPdfTextOcrRetry
+# ---------------------------------------------------------------------------
+
+
+class TestExtractPdfTextOcrRetry:
+    @pytest.mark.asyncio
+    async def test_ocr_retry_on_garbled_text(self, tmp_path):
+        """When normal extraction returns garbled text, should retry with OCR."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+
+        garbled_text = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10
+        clean_text = "Dies ist ein korrekter deutscher Text mit genügend Zeichen für den Test."
+
+        garbled_result = _mock_extraction_result(content=garbled_text)
+        ocr_result = _mock_extraction_result(content=clean_text)
+
+        with patch(
+            "bawue.bawue_dok.extract_file",
+            new_callable=AsyncMock,
+            side_effect=[garbled_result, ocr_result],
+        ):
+            text, _hash = await extract_pdf_text(pdf_file)
+
+        assert text == clean_text
+        assert "ůĂƐƐĞŶ" not in text
+
+    @pytest.mark.asyncio
+    async def test_ocr_retry_uses_german_language(self, tmp_path):
+        """OCR retry must use language='deu' for proper German text extraction."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+
+        garbled_text = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10
+        clean_text = "Korrekter deutscher Volltext mit ausreichender Länge."
+
+        garbled_result = _mock_extraction_result(content=garbled_text)
+        ocr_result = _mock_extraction_result(content=clean_text)
+
+        with patch(
+            "bawue.bawue_dok.extract_file",
+            new_callable=AsyncMock,
+            side_effect=[garbled_result, ocr_result],
+        ) as mock_extract:
+            await extract_pdf_text(pdf_file)
+
+        # Second call (OCR retry) should use force_ocr=True and language='deu'
+        assert mock_extract.call_count == 2
+        ocr_call_config = mock_extract.call_args_list[1].kwargs["config"]
+        assert ocr_call_config.force_ocr is True
+        assert ocr_call_config.ocr is not None
+        assert ocr_call_config.ocr.language == "deu"
+
+    @pytest.mark.asyncio
+    async def test_clean_text_no_ocr_retry(self, tmp_path):
+        """When normal extraction returns clean text, should NOT retry with OCR."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+
+        clean_result = _mock_extraction_result(content=SAMPLE_FULL_TEXT)
+
+        with patch(
+            "bawue.bawue_dok.extract_file",
+            new_callable=AsyncMock,
+            return_value=clean_result,
+        ) as mock_extract:
+            text, _ = await extract_pdf_text(pdf_file)
+
+        assert text == SAMPLE_FULL_TEXT
+        assert mock_extract.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_ocr_failure_keeps_original_text(self, tmp_path):
+        """If OCR retry also returns garbled text, keep original (normalize will strip)."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+
+        garbled_text = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10
+
+        garbled_result = _mock_extraction_result(content=garbled_text)
+        still_garbled = _mock_extraction_result(content=garbled_text)
+
+        with patch(
+            "bawue.bawue_dok.extract_file",
+            new_callable=AsyncMock,
+            side_effect=[garbled_result, still_garbled],
+        ):
+            text, _ = await extract_pdf_text(pdf_file)
+
+        # Original text returned when OCR doesn't improve it
+        assert text == garbled_text
+
+    @pytest.mark.asyncio
+    async def test_ocr_exception_keeps_original_text(self, tmp_path):
+        """If OCR retry raises an exception, keep original text."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+
+        garbled_text = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10
+
+        garbled_result = _mock_extraction_result(content=garbled_text)
+
+        with patch(
+            "bawue.bawue_dok.extract_file",
+            new_callable=AsyncMock,
+            side_effect=[garbled_result, RuntimeError("OCR failed")],
+        ):
+            text, _ = await extract_pdf_text(pdf_file)
+
+        assert text == garbled_text
+
+    @pytest.mark.asyncio
+    async def test_short_text_triggers_ocr_before_garble_check(self, tmp_path):
+        """Short text fallback still works — length check comes before garble check."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+
+        short_result = _mock_extraction_result(content="Too short")
+        ocr_result = _mock_extraction_result(content=SAMPLE_FULL_TEXT)
+
+        with patch(
+            "bawue.bawue_dok.extract_file",
+            new_callable=AsyncMock,
+            side_effect=[short_result, ocr_result],
+        ):
+            text, _ = await extract_pdf_text(pdf_file)
+
+        assert text == SAMPLE_FULL_TEXT
+
+    @pytest.mark.asyncio
+    async def test_logs_garbled_detection(self, tmp_path, caplog):
+        """Should log a warning when garbled text is detected."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+
+        garbled_text = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10
+        clean_text = "Korrekter Text mit ausreichender Länge für den Test hier."
+
+        garbled_result = _mock_extraction_result(content=garbled_text)
+        ocr_result = _mock_extraction_result(content=clean_text)
+
+        with (
+            patch(
+                "bawue.bawue_dok.extract_file",
+                new_callable=AsyncMock,
+                side_effect=[garbled_result, ocr_result],
+            ),
+            caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"),
+        ):
+            await extract_pdf_text(pdf_file)
+
+        assert any("garbled" in r.message.lower() for r in caplog.records)
