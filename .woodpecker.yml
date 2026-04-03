@@ -43,9 +43,9 @@ steps:
       - git clone https://codeberg.org/PaZuFa/pazufa-collector-core.git ../pazufa-collector-core
       - git -C ../pazufa-collector-core checkout 6ab0ae68eee0835f2df351b45a5de5f5a9751e34
       - pip install --quiet poetry
-      # Verify lock file integrity, then install without running post-install scripts
+      # Verify lock file integrity; poetry.toml enforces no-scripts
       - poetry check --lock
-      - poetry install --no-interaction --no-ansi --no-scripts
+      - poetry install --no-interaction --no-ansi
       - poetry run pytest -m 'not integration'
 
   - name: dependency-audit
@@ -55,6 +55,6 @@ steps:
     commands:
       - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
       - pip install --quiet poetry pip-audit
-      # Repos already cloned by previous steps (shared workspace)
-      - poetry install --no-interaction --no-ansi --no-scripts --only main
+      # Repos already cloned by previous steps (shared workspace); poetry.toml enforces no-scripts
+      - poetry install --no-interaction --no-ansi --only main
       - pip-audit

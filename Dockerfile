@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir poetry==2.3.2
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml poetry.lock poetry.toml ./
 COPY vendor/pazufa-collector/ vendor/pazufa-collector/
 COPY vendor/pazufa-collector-core/ vendor/pazufa-collector-core/
 
@@ -26,7 +26,7 @@ RUN sed -i 's|path = "\.\./pazufa-collector", develop = true|path = "vendor/pazu
 
 RUN poetry config virtualenvs.create false \
     && poetry lock --regenerate \
-    && poetry install --no-interaction --no-ansi --only main --no-root --no-scripts
+    && poetry install --no-interaction --no-ansi --only main --no-root
 
 # ---- Runtime stage ----
 FROM python:3.14.3-slim

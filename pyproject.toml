@@ -1,13 +1,15 @@
-[tool.poetry]
+[project]
 name = "pazufa-bawue-scraper"
 version = "0.1.0b1"
 description = "Baden-Württemberg PARLIS scraper for the PaZuFa collector framework"
-authors = ["schneefisch"]
+authors = [{name = "schneefisch"}]
 readme = "README.md"
+requires-python = ">=3.14,<4.0"
+
+[tool.poetry]
 packages = [{include = "bawue", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.14"
 collector = {path = "../pazufa-collector", develop = true}
 collector-core = {path = "../pazufa-collector-core", develop = true}
 openapi-client = {path = "../pazufa-collector/oapicode", develop = true}
