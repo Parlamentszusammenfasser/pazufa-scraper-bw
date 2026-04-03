@@ -26,7 +26,7 @@ RUN sed -i 's|path = "\.\./pazufa-collector", develop = true|path = "vendor/pazu
 
 RUN poetry config virtualenvs.create false \
     && poetry lock --regenerate \
-    && poetry install --no-interaction --no-ansi --only main --no-root
+    && poetry install --no-interaction --no-ansi --only main --no-root --no-scripts
 
 # ---- Runtime stage ----
 FROM python:3.14.3-slim

@@ -1,6 +1,12 @@
 when:
   - event: [push, pull_request]
 
+# Supply-chain hardening: pin external dependencies to reviewed commits.
+# Update these hashes when upgrading framework versions.
+#   pazufa-collector:      be0940cb74c582b19409a409916d1e5c02b4427f
+#   pazufa-collector-core: 6ab0ae68eee0835f2df351b45a5de5f5a9751e34
+#   openapi-generator-cli: 7.15.0 (SHA256 verified below)
+
 steps:
   - name: ruff-lint
     image: python:3.14-slim
@@ -18,9 +24,13 @@ steps:
     image: eclipse-temurin:17-jre-alpine
     commands:
       - apk add --no-cache -q curl git
-      - git clone --depth 1 https://codeberg.org/PaZuFa/pazufa-collector.git ../pazufa-collector
+      # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
+      - git clone https://codeberg.org/PaZuFa/pazufa-collector.git ../pazufa-collector
+      - git -C ../pazufa-collector checkout be0940cb74c582b19409a409916d1e5c02b4427f
       - curl -sf -o ../pazufa-collector/openapi.yml "https://raw.githubusercontent.com/Chrystalkey/landtagszusammenfasser/9c20dd1913eac99bd14edcd9676e188305064f1a/docs/specs/openapi.yml"
+      # Verify artifact integrity before execution
       - curl -sfL -o /tmp/openapi-generator-cli.jar "https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.15.0/openapi-generator-cli-7.15.0.jar"
+      - echo "4da1a7cdb78c3a43b1eab0648891135e8c3547d2eedba0dd69daf377f865f366  /tmp/openapi-generator-cli.jar" | sha256sum -c -
       - java -jar /tmp/openapi-generator-cli.jar generate -i ../pazufa-collector/openapi.yml -g python -o ../pazufa-collector/oapicode
 
   - name: pytest
@@ -29,7 +39,22 @@ steps:
       DEBIAN_FRONTEND: noninteractive
     commands:
       - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
-      - git clone --depth 1 https://codeberg.org/PaZuFa/pazufa-collector-core.git ../pazufa-collector-core
+      # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
+      - git clone https://codeberg.org/PaZuFa/pazufa-collector-core.git ../pazufa-collector-core
+      - git -C ../pazufa-collector-core checkout 6ab0ae68eee0835f2df351b45a5de5f5a9751e34
       - pip install --quiet poetry
-      - poetry install --no-interaction --no-ansi
+      # Verify lock file integrity, then install without running post-install scripts
+      - poetry check --lock
+      - poetry install --no-interaction --no-ansi --no-scripts
       - poetry run pytest -m 'not integration'
+
+  - name: dependency-audit
+    image: python:3.14-slim
+    environment:
+      DEBIAN_FRONTEND: noninteractive
+    commands:
+      - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
+      - pip install --quiet poetry pip-audit
+      # Repos already cloned by previous steps (shared workspace)
+      - poetry install --no-interaction --no-ansi --no-scripts --only main
+      - pip-audit
