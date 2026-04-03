@@ -37,6 +37,7 @@ steps:
     image: python:3.14-slim
     environment:
       DEBIAN_FRONTEND: noninteractive
+      PIP_ROOT_USER_ACTION: ignore
     commands:
       - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
       # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
