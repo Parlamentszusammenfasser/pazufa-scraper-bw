@@ -158,22 +158,26 @@ def normalize_volltext(text: str) -> str:
     # 1. Unicode NFKC normalization (e.g. ﬁ ligature → fi)
     text = unicodedata.normalize("NFKC", text)
 
-    # 2. Strip C1 control characters (0x80-0x9F)
+    # 2. Join soft-hyphenated words: PARLIS PDFs use U+0002 (STX) as soft hyphen
+    # e.g. "ausgezeich\u0002net" -> "ausgezeichnet"
+    text = text.replace("\x02", "")
+
+    # 3. Strip C1 control characters (0x80-0x9F)
     text = _C1_CONTROL_RE.sub("", text)
 
-    # 3. Normalize line endings: \r\n → \n, lone \r → \n
+    # 4. Normalize line endings: \r\n → \n, lone \r → \n
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
-    # 4. Remove garbled paragraphs (split on double-newline, score each).
+    # 5. Remove garbled paragraphs (split on double-newline, score each).
     #    Also collapses excessive blank lines: split on \n\n+ and rejoin with \n\n.
     paragraphs = re.split(r"\n\n+", text)
     clean_paragraphs = [p for p in paragraphs if _paragraph_quality_score(p) >= 0.5]
     text = "\n\n".join(clean_paragraphs)
 
-    # 5. Strip trailing whitespace per line
+    # 6. Strip trailing whitespace per line
     text = _TRAILING_WHITESPACE_RE.sub("", text)
 
-    # 6. Neutralize angle brackets (XSS prevention): < and > to guillemets
+    # 7. Neutralize angle brackets (XSS prevention): < and > to guillemets
     text = text.replace("<", "\u2039").replace(">", "\u203a")
 
     return text.strip()
