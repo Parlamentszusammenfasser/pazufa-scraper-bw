@@ -23,7 +23,6 @@ from pathlib import Path
 import aiohttp
 
 from bawue.bawue_dok import (
-    MIN_TEXT_LENGTH,
     _is_garbled,
     _paragraph_quality_score,
     extract_pdf_text,
@@ -74,15 +73,11 @@ def _paragraph_stats(text: str) -> dict:
         "total": len(scores),
         "kept": len(scores) - len(removed),
         "removed": len(removed),
-        "removed_snippets": [
-            {"score": round(s, 3), "snippet": snippet} for snippet, s in removed
-        ],
+        "removed_snippets": [{"score": round(s, 3), "snippet": snippet} for snippet, s in removed],
     }
 
 
-def _analyze_pdf(
-    url: str, raw_text: str, normalized_text: str, doc_hash: str
-) -> dict:
+def _analyze_pdf(url: str, raw_text: str, normalized_text: str, doc_hash: str) -> dict:
     """Build a detailed analysis dict for one PDF."""
     para_stats = _paragraph_stats(raw_text)
 
@@ -126,9 +121,7 @@ class OcrLogCapture(logging.Handler):
             self.messages.append(msg)
 
 
-async def process_one_pdf(
-    session: aiohttp.ClientSession, url: str, ocr_handler: OcrLogCapture
-) -> dict:
+async def process_one_pdf(session: aiohttp.ClientSession, url: str, ocr_handler: OcrLogCapture) -> dict:
     """Download one PDF, extract text, normalize, and return analysis."""
     ocr_handler.messages.clear()
 
@@ -243,25 +236,25 @@ def _print_analysis(analysis: dict, verbosity: int, index: int) -> None:
         steps.append(f"Angle brackets neutralized: {analysis['raw_angle_brackets']}")
 
     if steps:
-        print(f"  Normalization:", file=sys.stderr)
+        print("  Normalization:", file=sys.stderr)
         for s in steps:
             print(f"    - {s}", file=sys.stderr)
     else:
-        print(f"  Normalization: no changes needed", file=sys.stderr)
+        print("  Normalization: no changes needed", file=sys.stderr)
 
     if analysis["ocr_messages"]:
-        print(f"  OCR events:", file=sys.stderr)
+        print("  OCR events:", file=sys.stderr)
         for msg in analysis["ocr_messages"]:
             print(f"    - {msg}", file=sys.stderr)
 
     if verbosity >= 2:
-        print(f"\n  === Raw text (first 500 chars) ===", file=sys.stderr)
+        print("\n  === Raw text (first 500 chars) ===", file=sys.stderr)
         print(f"  {analysis['raw_snippet']!r}", file=sys.stderr)
-        print(f"\n  === Normalized text (first 500 chars) ===", file=sys.stderr)
+        print("\n  === Normalized text (first 500 chars) ===", file=sys.stderr)
         print(f"  {analysis['normalized_snippet']!r}", file=sys.stderr)
 
         if analysis["paragraphs"]["removed_snippets"]:
-            print(f"\n  === Removed paragraphs ===", file=sys.stderr)
+            print("\n  === Removed paragraphs ===", file=sys.stderr)
             for rp in analysis["paragraphs"]["removed_snippets"]:
                 print(f"    score={rp['score']}: {rp['snippet']!r}", file=sys.stderr)
 
@@ -301,7 +294,7 @@ def _print_summary(results: list[dict], duration: float) -> None:
     print(f"  Paragraphs filtered: {total_removed}/{total_paras}", file=sys.stderr)
 
     # Verify normalization invariants
-    print(f"\n  --- Invariant checks ---", file=sys.stderr)
+    print("\n  --- Invariant checks ---", file=sys.stderr)
     all_norm_c1_zero = all(r["norm_c1_chars"] == 0 for r in ok)
     all_norm_cr_zero = all(r["norm_cr_count"] == 0 for r in ok)
     all_norm_no_angles = all(r["norm_angle_brackets"] == 0 for r in ok)
@@ -382,13 +375,22 @@ async def _run(args: argparse.Namespace) -> None:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Verify PDF fulltext extraction and normalization"
-    )
+    parser = argparse.ArgumentParser(description="Verify PDF fulltext extraction and normalization")
     parser.add_argument("--limit", type=int, default=5, help="Max PDFs to process (default: 5)")
-    parser.add_argument("--vorgangstyp", type=str, default="Gesetzgebung", help="PARLIS Vorgangstyp (default: Gesetzgebung)")
+    parser.add_argument(
+        "--vorgangstyp",
+        type=str,
+        default="Gesetzgebung",
+        help="PARLIS Vorgangstyp (default: Gesetzgebung)",
+    )
     parser.add_argument("--wahlperiode", type=int, default=17, help="Wahlperiode (default: 17)")
-    parser.add_argument("--verbosity", type=int, choices=[0, 1, 2], default=1, help="0=summary, 1=per-PDF, 2=text snippets")
+    parser.add_argument(
+        "--verbosity",
+        type=int,
+        choices=[0, 1, 2],
+        default=1,
+        help="0=summary, 1=per-PDF, 2=text snippets",
+    )
     parser.add_argument(
         "--wahlperiode-start-date",
         type=date.fromisoformat,

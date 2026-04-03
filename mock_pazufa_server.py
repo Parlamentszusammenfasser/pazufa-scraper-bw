@@ -18,12 +18,13 @@ import base64
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # ──────────────────────────────────────────────────────────────────────────────
 # JWT helpers (stdlib only — no signature verification, decode only)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def _b64_decode(data: str) -> bytes:
     """Decode base64url without padding."""
@@ -67,7 +68,7 @@ def _h(text: str, color: str) -> str:
 
 
 def print_request(method: str, path: str, headers: dict, body_raw: bytes, extra: dict | None = None):
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     sep = "─" * 72
 
     print(f"\n{_h(sep, CYAN)}")
@@ -95,20 +96,23 @@ def print_request(method: str, path: str, headers: dict, body_raw: bytes, extra:
             # Highlight scope/exp/sub
             payload = jwt["payload"]
             if "exp" in payload:
-                exp_dt = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
-                now = datetime.now(timezone.utc)
+                exp_dt = datetime.fromtimestamp(payload["exp"], tz=UTC)
+                now = datetime.now(UTC)
                 expired = exp_dt < now
                 status = _h("EXPIRED", RED) if expired else _h("valid", GREEN)
                 print(f"    → exp: {exp_dt.isoformat()}  [{status}]")
             if "scope" in payload:
                 scopes = payload["scope"]
                 has_collector = "collector" in str(scopes)
-                scope_status = _h("✓ collector scope present", GREEN) if has_collector else _h("✗ collector scope MISSING", RED)
+                scope_status = (
+                    _h("✓ collector scope present", GREEN) if has_collector else _h("✗ collector scope MISSING", RED)
+                )
                 print(f"    → scope: {scopes}  [{scope_status}]")
             if "sub" in payload:
                 print(f"    → sub: {payload['sub']}")
         else:
-            print(f"\n  {_h('X-API-Key:', YELLOW)} (not a JWT — plain key) {api_key[:40]}{'...' if len(api_key) > 40 else ''}")
+            suffix = "..." if len(api_key) > 40 else ""
+            print(f"\n  {_h('X-API-Key:', YELLOW)} (not a JWT — plain key) {api_key[:40]}{suffix}")
     else:
         print(f"\n  {_h('⚠ X-API-Key header MISSING', RED)}")
 
@@ -181,7 +185,7 @@ class MockPazufaHandler(BaseHTTPRequestHandler):
         headers = self._headers_dict()
         body = self._read_body()
 
-        for pattern, name, _ in ROUTES:
+        for pattern, _name, _ in ROUTES:
             m = pattern.match(path)
             if m:
                 extra = m.groupdict() or None
@@ -212,6 +216,7 @@ class MockPazufaHandler(BaseHTTPRequestHandler):
 # Entry point
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(description="Mock PaZuFa backend server")
     parser.add_argument("--port", type=int, default=8080, help="Port to listen on (default: 8080)")
@@ -222,15 +227,15 @@ def main():
 
     print(f"{_h('PaZuFa Mock Server', GREEN)}")
     print(f"  Listening on {_h(f'http://{args.host}:{args.port}', CYAN)}")
-    print(f"  Endpoints:")
+    print("  Endpoints:")
     print(f"    {YELLOW}PUT /api/v2/vorgang{RESET}")
     print(f"    {YELLOW}PUT /api/v2/kalender/{{parlament}}/{{datum}}{RESET}")
     print(f"    {DIM}GET /health{RESET}")
-    print(f"\n  Configure scraper:")
+    print("\n  Configure scraper:")
     print(f"    {DIM}[backend]{RESET}")
-    print(f"    {DIM}ltzf-api-url = \"http://{args.host}:{args.port}\"{RESET}")
-    print(f"    {DIM}ltzf-api-key = \"any-key-or-jwt\"{RESET}")
-    print(f"\nWaiting for requests... (Ctrl+C to stop)\n")
+    print(f'    {DIM}ltzf-api-url = "http://{args.host}:{args.port}"{RESET}')
+    print(f'    {DIM}ltzf-api-key = "any-key-or-jwt"{RESET}')
+    print("\nWaiting for requests... (Ctrl+C to stop)\n")
 
     try:
         server.serve_forever()
