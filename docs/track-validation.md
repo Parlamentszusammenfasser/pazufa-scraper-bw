@@ -721,6 +721,264 @@ melden. Auf Scraper-Seite werden wir die fehlenden Mappings ergaenzen.
 
 ---
 
+## Scraper-Anpassungen bei Track-Erzwingung
+
+Wenn das Backend den vorgeschlagenen Track
+`R?I((VA*(Z|V?JY?GK?|V?N|VA*(Z|V?JY?GK?|V?N)))|Z)` tatsaechlich gegen die Regex
+erzwingt, muessen folgende Scraper-Aenderungen implementiert werden.
+
+**Grundlage:** 171 Vorgaenge aus dem Dev-Lauf (04.04.2026). Ohne Aenderungen wuerden
+28 Vorgaenge am Backend scheitern. Mit den Fixes unten sinkt das auf 0 (bei
+Praefix-Matching) bzw. max. 4 (bei Full-Matching fuer partielle Sequenzen).
+
+### Uebersicht
+
+| # | Fix | Prio | Betroffene | Datei | Beschreibung |
+|---|-----|------|-----------|-------|-------------|
+| 1 | `sonstig` eliminieren | P0 | 28 Vorgaenge | `bawue_vorgaenge_scraper.py` | Stationen mit Typ `sonstig` herausfiltern |
+| 2 | Leere Stationen | P0 | 1 Vorgang | `bawue_vorgaenge_scraper.py` | Vorgaenge ohne Stationen ueberspringen |
+| 3 | Post-G abschneiden | P1 | ~5 Vorgaenge | `bawue_vorgaenge_scraper.py` | Stationen nach Gesetzblatt (G) entfernen |
+| 4 | Doppelte I | P2 | 1 Vorgang | `bawue_vorgaenge_scraper.py` | Zweite `parl-initiativ` deduplizieren |
+| 5 | Partielle Sequenzen | P2* | 4 Vorgaenge | `bawue_vorgaenge_scraper.py` | Abhaengig von Praefix-Matching |
+
+\* Fix 5 entfaellt, wenn das Backend Praefix-Matching unterstuetzt.
+
+---
+
+### Fix 1: `sonstig`-Stationen eliminieren (P0)
+
+**Problem:** PARLIS-Fundstellen "Mitteilung" (35x) und "Dokument" (9x) sind nicht
+in `STATIONSTYP_MAP` (`enum_mapper.py:82-109`). Die Funktion `map_stationstyp()`
+(`enum_mapper.py:158-173`) faellt auf `Stationstyp.SONSTIG` zurueck. Der Typ
+`sonstig` hat keinen Buchstaben im Track-Alphabet → Backend-Panic bei
+`validate.rs:310:48`.
+
+**Warum kein Mapping statt Filter:** "Mitteilung" ist kontextabhaengig (DD-002).
+Eine "Mitteilung der Praesidentin" (Ausschussueberweisung) hat eine andere Bedeutung
+als eine "Mitteilung der Landesregierung" (Umsetzungsbericht nach Verkuendung).
+Pauschales Mapping auf einen Stationstyp waere semantisch falsch.
+
+**Aenderung:** In `_collect_stationen()` (`bawue_vorgaenge_scraper.py:299-302`)
+nach dem Aufruf von `_build_station()` pruefen:
+
+```python
+# bawue_vorgaenge_scraper.py, nach Zeile 302
+station = await self._build_station(fund, initiative)
+if station is None:
+    continue
+
+# NEU: sonstig-Stationen herausfiltern (kein Buchstabe im Track-Alphabet)
+if station.typ == Stationstyp.SONSTIG:
+    logger.info(
+        "Filtering sonstig station from Vorgang (Fundstelle: '%s')",
+        fund.get("raw", "")[:80],
+    )
+    continue
+```
+
+**Tests:**
+- Unit-Test: Vorgang mit Mitteilung-Fundstelle → Station wird nicht in `stationen` aufgenommen
+- Unit-Test: Vorgang mit Mischung aus regulaeren + sonstig Fundstellen → nur regulaere bleiben
+
+---
+
+### Fix 2: Leere Stationen ueberspringen (P0)
+
+**Problem:** "Berichtigung"-Vorgang hat keine parsebaren Fundstellen → `stationen=[]`
+→ wird an API gesendet → Validation Error. Der Postparl-Filter
+(`bawue_vorgaenge_scraper.py:190`) greift nicht bei leerer Liste:
+
+```python
+# Zeile 190: `[] and ...` ist False → leere Vorgaenge rutschen durch
+if vorgang.stationen and all(s.typ in self._POSTPARL_TYPEN for s in vorgang.stationen):
+```
+
+**Aenderung:** Guard VOR dem Postparl-Filter einfuegen (`bawue_vorgaenge_scraper.py:189`):
+
+```python
+# bawue_vorgaenge_scraper.py, vor Zeile 190
+if not vorgang.stationen:
+    logger.warning(
+        "Skipping Vorgang %s ('%s'): no stations after parsing %d Fundstellen",
+        vorgang_id,
+        vorgang.titel[:60] if hasattr(vorgang, 'titel') else "?",
+        len(raw.get("fundstellen_parsed", [])),
+    )
+    self._skipped += 1
+    return None
+```
+
+**Tests:**
+- Unit-Test: Vorgang mit leerer `stationen`-Liste → `item_extractor` gibt `None` zurueck
+
+---
+
+### Fix 3: Post-G Stationen als Kinder der vorherigen Station (P1)
+
+**Problem:** Sequenzen wie `RIVAVJG?A?`, `RIVAVJG??A?`, `RIVA?V?JG??A?????????`
+haben Stationen NACH Gesetzblatt (G). PARLIS gibt Fundstellen in Seitenreihenfolge
+zurueck, nicht chronologisch. Der Track erlaubt nach G nur optionales K.
+
+Betroffene Sequenzen aus dem Dev-Lauf (alle enthalten auch `sonstig` → Fix 1
+entfernt die `?`-Stationen, aber es koennen regulaere Stationen nach G verbleiben):
+
+| Sequenz                 | Nach Fix 1  | Nach Fix 3                      |
+|-------------------------|-------------|---------------------------------|
+| `RIVAVJG?`              | `RIVAVJG`   | `RIVAVJG` (kein Schnitt noetig) |
+| `RIVAVJG??A?`           | `RIVAVJGA`  | `RIVAVJG`                       |
+| `RIVAIVJG?A?`           | `RIVAIVJGA` | Fix 4 zuerst                    |
+| `IV?AVJG?`              | `IVAVJG`    | `IVAVJG` (kein Schnitt noetig)  |
+| `RIVA?V?JG??A?????????` | `RIVAVJGA`  | `RIVAVJG`                       |
+
+**Aenderung:** Neue Hilfsfunktion am Ende von `_collect_stationen()`
+(`bawue_vorgaenge_scraper.py`), nach der Hauptschleife (nach Zeile 334):
+
+
+**Reihenfolge:** Fix 1 (sonstig filtern) → Fix 3 (post-G als kinder von G), da
+die meisten Post-G-Stationen `sonstig` sind und durch Fix 1 bereits entfallen.
+
+**Tests:**
+- Unit-Test: Vorgang mit Station nach G → wird als Kinder von G gezaehlt
+- Unit-Test: Vorgang mit K nach G → K bleibt erhalten
+
+---
+
+### Fix 4: Doppelte `parl-initiativ` deduplizieren (P2)
+
+**Problem:** `RIVAIVJG?A?` — PARLIS liefert zwei "Gesetzentwurf"-Fundstellen im
+selben Vorgang. Die erste wird als R (Landesregierung) gemappt, DD-012 fuegt
+synthetisches I ein. Die zweite Fundstelle mappt ebenfalls auf I (ohne
+Landesregierung-Kontext). Ergebnis: `R, I(synth), V, A, I(real), V, J, G, ...`
+
+**Mechanismus im Detail:**
+1. `_build_station()` (`bawue_vorgaenge_scraper.py:504-554`): Erste Fundstelle →
+   R (`map_stationstyp("Gesetzentwurf", "Landesregierung")` → `PREPARL_MINUS_REGENT`)
+2. `_ensure_initiativ_after_regent()` (`bawue_vorgaenge_scraper.py:381-419`):
+   Fuegt synthetisches I nach R ein
+3. Zweite "Gesetzentwurf"-Fundstelle → I (`map_stationstyp("Gesetzentwurf", ...)`)
+   weil der `initiator`-Check den vollen Initiative-String prueft, der bei der
+   zweiten Fundstelle moeglicherweise anders ist
+
+**Aenderung:** In `_ensure_initiativ_after_regent()` (`bawue_vorgaenge_scraper.py:381`),
+nach dem Einfuegen des synthetischen I, alle weiteren `parl-initiativ`-Stationen
+entfernen:
+
+```python
+# bawue_vorgaenge_scraper.py, am Ende von _ensure_initiativ_after_regent()
+# Doppelte parl-initiativ nach der ersten entfernen
+first_i_found = False
+to_remove = []
+for i, s in enumerate(stationen):
+    if s.typ == Stationstyp.PARL_MINUS_INITIATIV:
+        if first_i_found:
+            to_remove.append(i)
+        first_i_found = True
+for i in reversed(to_remove):
+    logger.info("Removing duplicate parl-initiativ at position %d", i)
+    stationen.pop(i)
+```
+
+**Tests:**
+- Unit-Test: Regierungsentwurf mit zwei "Gesetzentwurf"-Fundstellen → nur ein I
+
+---
+
+### Fix 5: Partielle Sequenzen (P2, abhaengig von Backend)
+
+**Problem:** In-Progress-Vorgaenge mit unvollstaendigen Stationsfolgen:
+
+| Sequenz | Anzahl | Track-Match (full)? | Track-Match (prefix)? |
+|---------|--------|--------------------|-----------------------|
+| `R` → `RI` (nach DD-012) | 2 | NEIN (`RI` ≠ `R?I((...)\|Z)`) | JA (Praefix von `RIVAVJG`) |
+| `I` | 1 | NEIN | JA (Praefix von `IVAVJG`) |
+| `IV` | 1 | NEIN | JA (Praefix von `IVAVJG`) |
+
+**Ursache:** PARLIS liefert fuer diese Vorgaenge nur 1-2 Fundstellen. Die
+parlamentarische Behandlung hat noch nicht stattgefunden oder PARLIS hat die
+Daten noch nicht erfasst.
+
+**Entscheidung abhaengig vom Backend:**
+
+**Variante A — Backend unterstuetzt Praefix-Matching:**
+Kein Scraper-Fix noetig. Partielle Sequenzen sind gueltige Praefixe des Tracks.
+Das ist die sauberere Loesung, da die Vorgaenge real existieren und spaeter
+vervollstaendigt werden.
+
+**Variante B — Backend erzwingt Full-Matching:**
+Mindest-Stationen-Guard in `item_extractor()` (`bawue_vorgaenge_scraper.py:186`):
+
+```python
+# Minimale Stationsanzahl: IVZ (3) oder IZ (2) — je nach Track
+MIN_STATIONS_FOR_TRACK = 2  # IZ ist kuerzeste gueltige Sequenz
+if len(vorgang.stationen) < MIN_STATIONS_FOR_TRACK:
+    logger.info(
+        "Skipping Vorgang %s: only %d station(s), too few for track validation",
+        vorgang_id, len(vorgang.stationen),
+    )
+    self._skipped += 1
+    return None
+```
+
+**Achtung:** Selbst mit Guard wuerde `RI` (2 Stationen) durchrutschen und am Track
+scheitern. Ein Guard auf < 3 wuerde `IZ` (gueltig!) ebenfalls blockieren. Deshalb
+ist Praefix-Matching die bessere Loesung.
+
+**→ Klaerung mit Backend-Team erforderlich.**
+
+---
+
+### Erwartetes Ergebnis nach Fixes
+
+Sequenztransformation fuer alle 19 beobachteten Muster:
+
+| Sequenz (vorher) | Anzahl | Fix | Sequenz (nachher) | Track-Match? |
+|-----------------|--------|-----|-------------------|-------------|
+| `RIVAVJG` | 112 | — | `RIVAVJG` | JA |
+| `I?VAVN` | 15 | Fix 1 | `IVAVN` | JA |
+| `IVAVJG` | 14 | — | `IVAVJG` | JA |
+| `IVAVN` | 11 | — | `IVAVN` | JA |
+| `IV?AVN` | 3 | Fix 1 | `IVAVN` | JA |
+| `R` | 2 | Fix 5* | `RI` (nach DD-012) | Praefix |
+| `IVAVVJG` | 2 | — | `IVAVVJG` | JA |
+| `(leer)` | 1 | Fix 2 | uebersprungen | — |
+| `I` | 1 | Fix 5* | `I` | Praefix |
+| `IV` | 1 | Fix 5* | `IV` | Praefix |
+| `I?V` | 1 | Fix 1 | `IV` | Praefix |
+| `IV?AVVJG` | 1 | Fix 1 | `IVAVVJG` | JA |
+| `IV?AV?N` | 1 | Fix 1 | `IVAVN` | JA |
+| `RIVAVJG?` | 1 | Fix 1 | `RIVAVJG` | JA |
+| `RIVAIVJG?A?` | 1 | Fix 1+3+4 | `RIVAVJG` | JA |
+| `IV?AVJG` | 1 | Fix 1 | `IVAVJG` | JA |
+| `RIVAVJG??A?` | 1 | Fix 1+3 | `RIVAVJG` | JA |
+| `IV?AVJG?` | 1 | Fix 1 | `IVAVJG` | JA |
+| `RIVA?V?JG??A?????????` | 1 | Fix 1+3 | `RIVAVJG` | JA |
+
+\* Fix 5 nur noetig bei Full-Matching. Bei Praefix-Matching: partielle Sequenzen
+werden ohne Aenderung akzeptiert.
+
+**Ergebnis:** 167/171 Vorgaenge matchen den Track. 4 partielle Sequenzen (`RI`,
+`I`, `IV`) benoetigen Praefix-Matching oder werden uebersprungen.
+
+---
+
+### Abhaengigkeiten
+
+| Abhaengigkeit | Status | Auswirkung |
+|--------------|--------|-----------|
+| Backend implementiert BW-Track | Ausstehend | Ohne Track-Erzwingung sind die Fixes optional (aber empfohlen fuer Datenqualitaet) |
+| Backend: Praefix- vs. Full-Matching | Offen | Bestimmt, ob Fix 5 noetig ist |
+| Backend: `sonstig` Panic beheben (`validate.rs:310`) | Ausstehend | Fix 1 behebt das Problem auf Scraper-Seite; Backend-Fix ist trotzdem noetig fuer `.get()` statt `[]` |
+| `gg-land-volk` Track fuer Volksantraege | Offen | Separates Issue — kein Volksantrag im Dev-Lauf aufgetreten |
+
+### Implementierungsreihenfolge
+
+1. **Fix 1 + Fix 2** (P0) — sofort implementierbar, unabhaengig vom Backend
+2. **Fix 3** (P1) — nach Fix 1, da die meisten Post-G-Stationen `sonstig` sind
+3. **Fix 4** (P2) — nach Fix 1+3, da der betroffene Vorgang auch `sonstig` enthaelt
+4. **Fix 5** (P2) — erst nach Klaerung Praefix-Matching mit Backend-Team
+
+---
+
 ## Referenzen
 
 - [tracks.toml](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/specs/tracks.toml) — Track-Definitionen
