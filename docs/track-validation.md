@@ -1,0 +1,561 @@
+# Track Validation: Analyse fuer Baden-Wuerttemberg
+
+**Datum:** 04.04.2026
+**Backend-Version:** v0.2.7 (Track Validation eingefuehrt)
+**Status:** Analyse — Staging-Validierung ausstehend
+
+---
+
+## Hintergrund
+
+Mit Backend v0.2.7 werden eingereichte Vorgaenge gegen Track-Definitionen validiert.
+Tracks beschreiben als DFA/Regex, in welcher Reihenfolge Stationen eines Vorgangs
+aufeinander folgen duerfen. Die Track-Definitionen liegen im
+[parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/specs/tracks.toml).
+
+**Aktueller Zustand:** BW (Baden-Wuerttemberg) verwendet den identischen Track wie
+BY (Bayern). Laut Backend-Announcement ist das fuer die meisten Laender nicht korrekt.
+
+Quelle: [Wiki — Track Validation](https://wiki.pazufa.de/books/backend-api/page/track-validation)
+
+---
+
+## Stations-Alphabet
+
+Jeder Stationstyp hat einen Buchstaben in der Track-Regex:
+
+| Buchstabe | Stationstyp | Bedeutung |
+|-----------|-------------|-----------|
+| `R` | `preparl-regent` | Regierungsentwurf |
+| `E` | `preparl-eckpup` | Eckpunktepapier |
+| `S` | `preparl-regbsl` | Kabinettsbeschluss |
+| `I` | `parl-initiativ` | Parlamentarische Initiative |
+| `V` | `parl-vollvlsgn` | Plenarlesung (1./2./3. Beratung) |
+| `A` | `parl-ausschber` | Ausschussberatung |
+| `J` | `parl-akzeptanz` | Annahme/Verabschiedung |
+| `N` | `parl-ablehnung` | Ablehnung |
+| `Z` | `parl-zurueckgz` | Zurueckgezogen |
+| `G` | `postparl-gsblt` | Gesetzblatt-Verkuendung |
+| `K` | `postparl-kraft` | Inkrafttreten |
+| `Y` | `postparl-vesja` | Ausfertigung (Unterschrift MP) |
+| `X` | `postparl-vesne` | Ausfertigung verweigert (Veto) |
+
+---
+
+## Aktueller Track (BY, zugewiesen an BW)
+
+```
+gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)"
+```
+
+### Aufschluesselung
+
+| Regex-Teil | Bedeutung |
+|------------|-----------|
+| `((E*R+)?S)?` | Optionaler vorparlamentarischer Praefix: Eckpunkte + Regierungsentwurf + **Kabinettsbeschluss (S pflicht nach R)** |
+| `I` | Parlamentarische Initiative (immer erforderlich) |
+| `VA*` | Erste Lesung (V) + null oder mehr Ausschussberatungen (A) |
+| `Z` | Ruecknahme |
+| `VJGK` | Zweite Lesung (V) + Annahme (J) + Gesetzblatt (G) + Inkrafttreten (K) — **alle vier zusammen** |
+| `VN` | Zweite Lesung (V) + Ablehnung (N) |
+| `VA*(Z\|VJGK\|VN)` | Weitere Ausschussrunde mit gleichen Endoptionen |
+
+### Gueltige Sequenzen (BY-Track)
+
+- `IZ` — eingereicht, zurueckgezogen
+- `IVVJGK` — zwei Lesungen, angenommen, verkuendet, in Kraft
+- `SIVVJGK` — mit Kabinettsbeschluss
+- `ERSIVAVJGK` — Eckpunkte + Regierungsentwurf + Kabinett + Initiative + 1. Lesung + Ausschuss + 2. Lesung + Annahme + Gesetzblatt + Inkrafttreten
+- `IVVN` — zwei Lesungen, abgelehnt
+- `IVAZ` — 1. Lesung, Ausschuss, zurueckgezogen
+
+---
+
+## Stationsfolgen des BaWue-Scrapers
+
+### Fall 1: Fraktionsentwurf (haeufigster Fall)
+
+PARLIS-Fundstellen:
+```
+Gesetzentwurf → Erste Beratung → Beschlussempfehlung und Bericht → Zustimmung
+```
+
+Stationsfolge:
+```
+I (parl-initiativ) → V (parl-vollvlsgn) → A (parl-ausschber) → J (parl-akzeptanz)
+Buchstabenfolge: IVAJ
+```
+
+**Quelle:** Test-Fixture `tests/fixtures/parlis/gesetzgebung_results.html`,
+Integration-Test `test_gesetzgebung_station_types_mapped_correctly`
+
+### Fall 2: Regierungsentwurf
+
+PARLIS-Fundstellen:
+```
+Gesetzentwurf (Landesregierung) → Erste Beratung → Beschlussempfehlung → Zustimmung
+```
+
+Stationsfolge (nach DD-003 + DD-012):
+```
+R (preparl-regent) → I (synthetisch) → V → A → J
+Buchstabenfolge: RIVAJ
+```
+
+**Quelle:** DD-012 in `docs/design_decisions.md`, Test `test_gesetzentwurf_from_landesregierung`
+
+### Fall 3: Ablehnung
+
+PARLIS-Fundstellen:
+```
+Gesetzentwurf → Zweite Beratung
+Metadaten: Aktueller Stand = "Abgelehnt"
+```
+
+Stationsfolge (nach DD-010):
+```
+I → V → N (synthetisch)
+Buchstabenfolge: IVN
+```
+
+**Quelle:** DD-010 in `docs/design_decisions.md`, Test `test_abgelehnt_appends_ablehnung_station`
+
+### Fall 4: "Beschluss des Landtags in Zweiter Beratung"
+
+PARLIS-Fundstellen (Haushaltsgesetzgebung):
+```
+Gesetzentwurf (Landesregierung) → Beschluss des Landtags in Zweiter Beratung
+```
+
+Stationsfolge (nach DD-011):
+```
+R → I (synthetisch) → V (Beschluss des Landtags in Zweiter Beratung)
+Buchstabenfolge: RIV
+```
+
+**Quelle:** DD-011 in `docs/design_decisions.md`
+
+### Fall 5: Vollstaendiger Gesetzgebungszyklus (wenn PARLIS alle Schritte liefert)
+
+```
+Gesetzentwurf → Erste Beratung → Beschlussempfehlung → Zweite Beratung → Zustimmung → Gesetzblatt → Inkrafttreten
+I → V → A → V → J → G → K
+Buchstabenfolge: IVAVJGK
+```
+
+Dieser Fall **wuerde** den BY-Track erfuellen — aber es ist unklar, ob PARLIS
+fuer BaWue tatsaechlich immer separate Fundstellen fuer "Zweite Beratung" (V)
+und "Zustimmung" (J) liefert.
+
+---
+
+## Regex-Analyse: Wo scheitert der BY-Track?
+
+### Problem 1 (KRITISCH): `R` ohne `S` — Regierungsentwuerfe
+
+**Betroffene Sequenz:** `RI...` (jeder Regierungsentwurf)
+
+Der Track-Praefix `((E*R+)?S)?` verlangt `S` (Kabinettsbeschluss) nach `R`:
+
+```
+((E*R+)?S)?  →  erlaubt: nichts, S, RS, RRS, ERS, EERS, ...
+                erlaubt NICHT: R allein, RI, ERI
+```
+
+**Warum BaWue betroffen ist:**
+
+Das BaWue-PARLIS kennt keine "Kabinettsbeschluss"-Fundstelle. Der Stationstyp
+`preparl-regbsl` (S) hat keine Zuordnung in `enum_mapper.py:STATIONSTYP_MAP` und
+wird vom Scraper nie erzeugt.
+
+**Regex-Matching fuer `RIVAJ`:**
+```
+Versuch: ((E*R+)?S)? matcht "R I V A J"
+  (E*R+)? matcht R ✓
+  S erwartet S, findet I → FAIL
+  Backtrack: (E*R+)? matcht leer
+  S erwartet S, findet R → FAIL
+  Aeusseres ? ueberspringt die ganze Gruppe
+  I erwartet I, findet R → GESAMTFEHLER
+```
+
+**Ergebnis:** Jeder Regierungsentwurf scheitert an der Track-Validierung.
+
+---
+
+### Problem 2 (HOCH): `J` ohne vorheriges `V` — Annahme ohne separate Zweite Lesung
+
+**Betroffene Sequenz:** `IVAJ` (haeufigster Fraktionsentwurf-Pfad)
+
+Der Track verlangt `VJ` als zusammengehoeriges Paar. `J` darf nie direkt nach `A` kommen.
+
+**Regex-Matching fuer `IVAJ`:**
+```
+Nach I: VA*(Z|VJGK|VN|VA*(...))
+  V matcht V ✓
+  A* matcht A (ein A) ✓
+  Dann brauchen wir: Z|VJGK|VN|VA*(...)
+  Vorhanden: J
+  - Z? Nein (J ≠ Z)
+  - VJGK? Nein (J ≠ V, braeuchte VJGK)
+  - VN? Nein (J ≠ V)
+  - VA*(...)? Nein (J ≠ V)
+  → Keine Alternative matcht → FAIL
+```
+
+**Warum BaWue betroffen ist:**
+
+PARLIS liefert bei vielen Vorgaengen nur "Zustimmung" (→ `parl-akzeptanz` / J)
+ohne eine separate "Zweite Beratung" (→ `parl-vollvlsgn` / V) Fundstelle davor.
+Die Zustimmung findet zwar in einer Plenarsitzung statt, aber PARLIS erzeugt
+dafuer nicht immer eine eigene Fundstelle.
+
+DD-011 belegt, dass "Beschluss des Landtags in Zweiter Beratung" als Fundstelle
+existiert (→ mappt auf V) — aber das ist nicht fuer alle Vorgangstypen der Fall.
+Das Test-Fixture (`gesetzgebung_results.html`) zeigt nur "Zustimmung" (→ J)
+ohne vorherige Zweite Beratung.
+
+**Ergebnis:** Der haeufigste BaWue-Gesetzgebungspfad (`IVAJ`) scheitert.
+
+---
+
+### Problem 3 (MITTEL): `N` ohne vorheriges `V` — Ablehnung ohne Zweite Lesung
+
+**Betroffene Sequenz:** `IVN` oder `IVAN`
+
+Gleiche Logik wie Problem 2: `VN` ist nur als Paar gueltig.
+
+**Regex-Matching fuer `IVN`:**
+```
+Nach I: VA*(Z|VN|...)
+  V matcht V ✓
+  A* matcht leer ✓
+  Dann: Z|VJGK|VN|VA*(...)
+  Vorhanden: N
+  - VN? Nein (N ≠ V, braeuchte VN = zwei Zeichen)
+  → FAIL
+```
+
+**Warum:** Wenn ein Vorgang in der Ersten Beratung abgelehnt wird, gibt es nur
+eine Lesung (V). Die synthetische Ablehnung (N, DD-010) folgt direkt danach.
+Der Track verlangt aber VVN (eine Lesung verbraucht durch VA*, eine durch VN).
+
+**Ergebnis:** Ablehnungen nach erster Lesung scheitern. Ablehnungen nach Ausschuss
+und zweiter Lesung (`IVAVN`) funktionieren.
+
+---
+
+### Problem 4 (NIEDRIG): `Y` (Ausfertigung) nicht im Track
+
+**Betroffene Sequenz:** `...VJYGK` (mit Ausfertigung)
+
+`enum_mapper.py:104` mappt "Ausfertigung" → `postparl-vesja` (Y). Der Track
+kennt nur `VJGK` als Annahmepfad — `Y` dazwischen bricht die Sequenz.
+
+**Auswirkung:** Unklar, ob BaWue-PARLIS "Ausfertigung" als Fundstelle liefert.
+Falls ja, scheitern betroffene Vorgaenge.
+
+---
+
+### Problem 5 (NIEDRIG): `VJGK` verlangt alle vier zusammen
+
+Der Track erlaubt `J` nur als Teil von `VJGK`. Das bedeutet: ein angenommener
+Vorgang, bei dem `G` (Gesetzblatt) und `K` (Inkrafttreten) noch nicht in PARLIS
+stehen, wuerde ebenfalls scheitern.
+
+`docs/status.md` listet "Missing data sources: Gesetzblatt BaWue (postparl-gsblt)"
+als offenen Punkt. Falls PARLIS diese Fundstellen nicht liefert, kann der
+vollstaendige `VJGK`-Pfad nie erfuellt werden.
+
+**Hinweis:** Das Backend koennte Praefix-Matching verwenden (Teilsequenzen
+validieren). In dem Fall waere `IVAVJ` ein gueltiger Praefix von `IVAVJGK`.
+Das muss gegen das Staging-Backend verifiziert werden.
+
+---
+
+### Problem 6 (NIEDRIG): Kein `gg-land-volk` Track definiert
+
+Der Scraper mappt `Volksantrag` → vgtyp `gg-land-volk`. Fuer BW existiert in
+`tracks.toml` nur `gg-land-parl`. Verhalten bei fehlendem Track ist unbekannt.
+
+---
+
+## Zusammenfassung
+
+| # | Problem | Sequenz | Erwartet (BY) | Match? |
+|---|---------|---------|---------------|--------|
+| 1 | Regierungsentwurf ohne S | `RI...` | `((E*R+)?S)?I...` | NEIN |
+| 2 | Annahme ohne 2. Lesung | `IVAJ` | `VA*(VJGK)` | NEIN |
+| 3 | Ablehnung ohne 2. Lesung | `IVN`, `IVAN` | `VA*(VN)` | NEIN |
+| 4 | Ausfertigung im Pfad | `VJYGK` | `VJGK` | NEIN |
+| 5 | Annahme ohne G+K | `IVAVJ` | `VJGK` (alle vier) | NEIN* |
+| 6 | Volksantrag | vgtyp `gg-land-volk` | nicht definiert | NEIN |
+
+\* Abhaengig davon, ob das Backend Praefix-Matching unterstuetzt.
+
+### Strukturelle Unterschiede BW vs. BY
+
+| Aspekt | Bayern (BY) | Baden-Wuerttemberg (BW) |
+|--------|------------|------------------------|
+| Kabinettsbeschluss (S) | Explizit im Datensatz | Nicht in PARLIS |
+| 2. Lesung vor Abstimmung | Immer separates V vor J/N | Manchmal mit J/N verschmolzen |
+| Ausfertigung (Y) | Unbekannt | Gemappt, evtl. selten |
+| Volksantrag-Track | N/A | Benoetigt eigenen Track |
+
+---
+
+## Vorgeschlagener BaWue-Track
+
+```toml
+BW = {
+    gg-land-parl = "R?I((VA*(Z|V?JY?G?K?|V?N|VA*(Z|V?JY?G?K?|V?N)))|Z)",
+}
+```
+
+### Aenderungen gegenueber BY
+
+| BY-Track | BW-Vorschlag | Begruendung |
+|----------|-------------|-------------|
+| `((E*R+)?S)?` | `R?` | S (Kabinettsbeschluss) existiert nicht in PARLIS BaWue. Einfaches optionales R genuegt. E wird nicht gescrapt. |
+| `VJ` | `V?J` | Zweite Lesung (V) vor Annahme (J) ist nicht immer als separate Fundstelle vorhanden. |
+| `VN` | `V?N` | Ablehnungen koennen nach erster Lesung erfolgen, ohne separate zweite Lesung. |
+| `GK` (pflicht) | `G?K?` (optional) | Gesetzblatt und Inkrafttreten sind nicht immer in PARLIS. Optional falls kein Praefix-Matching. |
+| (nicht vorhanden) | `Y?` nach J | Ausfertigung (postparl-vesja) kann zwischen Annahme und Gesetzblatt stehen. |
+
+### Gueltige Sequenzen mit dem vorgeschlagenen Track
+
+- `IZ` — eingereicht, zurueckgezogen
+- `IVAJ` — 1. Lesung, Ausschuss, Annahme (haeufigster BaWue-Pfad)
+- `IVAVJGK` — vollstaendiger Zyklus mit 2. Lesung
+- `IVAVJYGK` — mit Ausfertigung
+- `RIVAJ` — Regierungsentwurf, 1. Lesung, Ausschuss, Annahme
+- `RIVAVJGK` — Regierungsentwurf, vollstaendiger Zyklus
+- `IVN` — abgelehnt nach 1. Lesung
+- `IVAN` — abgelehnt nach Ausschuss
+- `IVAVN` — abgelehnt nach 2. Lesung
+- `IVAJ` — angenommen, Gesetzblatt steht noch aus
+
+---
+
+## Validierung gegen Staging-Backend
+
+### Log-Quellen
+
+1. **ERROR-Log-Zeilen** — Track-Validation-Fehler des Backends:
+   ```
+   ERROR: API Exception: (400)
+   HTTP response body: Track validation Failed. Reasons:
+   The Vorgang with this station ordering: ["(date / type)", ...] has at least one station ...
+   ```
+   Enthaelt: Stationsfolge des Vorgangs, problematische Stationen, verwendeter Track.
+   Vorgang-Titel/ID steht in der vorhergehenden INFO-Zeile:
+   ```
+   INFO: Sending Vorgang 'Titel...' (id=...) to API
+   ```
+
+2. **JSONL-Log** — Vollstaendige Vorgang-Objekte (vor API-Aufruf geschrieben):
+   ```
+   locallogs/{scraper_id}.jsonl
+   ```
+   Enthaelt: Alle Stationen mit `typ`, `zp_start`, `gremium` fuer jeden Vorgang.
+
+   **Hinweis:** JSONL-Logging ist nur aktiv, wenn `api-obj-log = "locallogs"` in der
+   Config gesetzt ist. `config.dev.toml` hat das aktiviert, `config.staging.toml` nicht.
+   Fuer Staging-Laeufe entweder in `config.staging.toml` ergaenzen:
+   ```toml
+   [logging]
+   api-obj-log = "locallogs"
+   ```
+   Oder nur auf die ERROR-Log-Zeilen stuetzen (enthalten die Stationsfolge aus der
+   Backend-Antwort).
+
+3. **stdout.log** (Docker-Compose):
+   ```
+   locallogs/stdout.log
+   ```
+   Kompletter Log-Output inklusive INFO und ERROR (via `tee` in `docker-compose.yml`).
+
+### Auswertungs-Anleitung
+
+**Schritt 1: Scraper laufen lassen**
+
+Gegen lokales Backend:
+```bash
+cd /Users/froeser/Workspace/schneefisch/pazufa-bawue-scraper
+source .venv/bin/activate
+python -m collector --config-file config.dev.toml --once
+```
+
+Gegen Staging (Docker):
+```bash
+docker-compose up --build
+```
+
+**Schritt 2: Track-Validation-Fehler extrahieren**
+
+```bash
+# Alle Track-Validation-Fehler
+grep "Track validation Failed" locallogs/stdout.log
+
+# Stationsfolgen der fehlgeschlagenen Vorgaenge
+grep -A5 "Track validation Failed" locallogs/stdout.log | grep "station ordering"
+
+# Anzahl fehlgeschlagener Vorgaenge
+grep -c "Track validation Failed" locallogs/stdout.log
+```
+
+**Schritt 3: Gegen Vorhersagen validieren**
+
+Erwartete Muster in den Fehlermeldungen:
+
+| Vorhergesagtes Muster | Erkennbar im Log durch |
+|----------------------|----------------------|
+| Problem 1: R ohne S | `preparl-regent` gefolgt von `parl-initiativ` ohne `preparl-regbsl` dazwischen; Vorgaenge mit "Landesregierung" als Initiative |
+| Problem 2: J nach A | `parl-ausschber` direkt gefolgt von `parl-akzeptanz` ohne `parl-vollvlsgn` dazwischen |
+| Problem 3: N nach V | `parl-vollvlsgn` direkt gefolgt von `parl-ablehnung` bei nur einer Lesung |
+| Problem 5: J ohne GK | `parl-akzeptanz` am Ende ohne `postparl-gsblt`/`postparl-kraft` |
+
+**Schritt 4: Stationsfolgen als Buchstaben uebersetzen**
+
+Fuer jede Fehlermeldung die Stationsfolge in Buchstaben uebersetzen und gegen
+den BY-Track `((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)` pruefen.
+
+Uebersetzung:
+```
+preparl-regent  → R    parl-initiativ  → I    parl-vollvlsgn → V
+parl-ausschber  → A    parl-akzeptanz  → J    parl-ablehnung → N
+parl-zurueckgz  → Z    postparl-gsblt  → G    postparl-kraft → K
+postparl-vesja  → Y    sonstig         → ? (kein Buchstabe)
+```
+
+### Erwartetes Ergebnis
+
+- **Viele HTTP 400** — insbesondere fuer Fraktionsentwuerfe (IVAJ) und Regierungsentwuerfe (RIVAJ)
+- **Wenige bis keine erfolgreichen Vorgaenge** — nur Vorgaenge mit vollstaendigem `IVAVJGK`-Pfad sollten durchgehen
+- **Bestaetigte Probleme** — die Fehlermeldungen sollten die Probleme 1-3 widerspiegeln
+
+Falls wider Erwarten alle Vorgaenge durchgehen, muss geprueft werden, ob:
+- PARLIS tatsaechlich immer separate "Zweite Beratung"-Fundstellen liefert (widerlegt Problem 2)
+- Das Backend fuer BW die Validierung ausgeschaltet hat
+- Das Backend Praefix-Matching verwendet
+
+---
+
+## Ergebnis: Lokaler Dev-Lauf (04.04.2026)
+
+**Backend:** v0.2.7 (lokal via docker-compose.dev.yml)
+**Scraper:** 173 Vorgaenge gefunden, 141 publiziert, 28 fehlgeschlagen
+
+### Beobachtete Stationsfolgen
+
+171 Vorgaenge im JSONL-Log (alle `gg-land-parl`). 19 verschiedene Sequenzen:
+
+| Sequenz | Anzahl | BY-Track | Backend-Ergebnis |
+|---------|--------|----------|-----------------|
+| `RIVAVJG` | 112 | FAIL | Akzeptiert |
+| `I?VAVN` | 15 | FAIL | **PANIC** |
+| `IVAVJG` | 14 | FAIL | Akzeptiert |
+| `IVAVN` | 11 | PASS | Akzeptiert |
+| `IV?AVN` | 3 | FAIL | **PANIC** |
+| `R` | 2 | FAIL | Akzeptiert |
+| `IVAVVJG` | 2 | FAIL | Akzeptiert |
+| `(leer)` | 1 | FAIL | **Validation Error** |
+| `I` | 1 | FAIL | Akzeptiert |
+| `IV` | 1 | FAIL | Akzeptiert |
+| `I?V` | 1 | FAIL | **PANIC** |
+| `IV?AVVJG` | 1 | FAIL | **PANIC** |
+| `IV?AV?N` | 1 | FAIL | **PANIC** |
+| `RIVAVJG?` | 1 | FAIL | **PANIC** |
+| `RIVAIVJG?A?` | 1 | FAIL | **PANIC** |
+| `IV?AVJG` | 1 | FAIL | **PANIC** |
+| `RIVAVJG??A?` | 1 | FAIL | **PANIC** |
+| `IV?AVJG?` | 1 | FAIL | **PANIC** |
+| `RIVA?V?JG??A?????????` | 1 | FAIL | **PANIC** |
+
+Legende: `?` = `sonstig` Stationstyp (nicht gemappte Fundstelle).
+
+### PASS/FAIL Zusammenfassung
+
+- **BY-Track PASS:** 11 Vorgaenge (nur `IVAVN`)
+- **BY-Track FAIL:** 160 Vorgaenge
+- **Backend akzeptiert:** 143 Vorgaenge (davon 132 die am BY-Regex scheitern)
+- **Backend Panic:** 27 Vorgaenge (108 Panics = 27 x 4 Retries)
+- **Validation Error:** 1 Vorgang (leere Stationen)
+
+### Kritische Erkenntnis: Backend erzwingt Track-Regex NICHT
+
+Das Backend v0.2.7 **prueft Stationsfolgen nicht gegen die Track-Regex**.
+Die `track_class`-SQL-Abfrage wird ausgefuehrt, aber das Ergebnis dient nur fuer
+eine HashMap-Zuordnung der Stationstypen. Solange alle Stationstypen im Track-Alphabet
+bekannt sind, fuegt das Backend den Vorgang ein — unabhaengig davon, ob die Sequenz
+zur Regex passt.
+
+Die 108 Panics bei `validate.rs:310:48` ("no entry found for key") treten auf, weil
+der Stationstyp `sonstig` **kein Schluessel in der Backend-HashMap** ist. Der Rust-Code
+verwendet den `[]`-Operator (panict bei fehlendem Key) statt `.get()`.
+
+**Konsequenz:** Die 132 Vorgaenge mit Sequenzen wie `RIVAVJG` (die am BY-Regex scheitern
+wuerden) wurden stillschweigend akzeptiert. Track-Validation ist fuer BaWue effektiv
+nicht funktional — sie crasht nur bei unbekannten Stationstypen.
+
+### Validierung der Vorhersagen
+
+| # | Vorhergesagtes Problem | Schwere (alt) | Tatsaechlich | Schwere (neu) |
+|---|----------------------|--------------|-------------|--------------|
+| P1 | R ohne S | KRITISCH | 118 Vorgaenge mit R ohne S. **Nicht abgelehnt** — Backend akzeptiert alle. | NIEDRIG (solange keine Regex-Erzwingung) |
+| P2 | J ohne vorheriges V | HOCH | Dominantes Muster ist `IVAVJG` (separate "Zweite Beratung"). PARLIS liefert fast immer ein eigenes V. Nur 1 Randfall. | **NIEDRIG** |
+| P3 | N ohne vorheriges V | MITTEL | Ablehnungen folgen konsistent `IVAVN` (PASS). Nur 1 Randfall. | **NIEDRIG** |
+| P4 | Y (Ausfertigung) im Pfad | NIEDRIG | **Nicht beobachtet** — Null Vorgaenge mit Y-Stationen. | NIEDRIG |
+| P5 | J ohne GK | NIEDRIG | 135 Vorgaenge enden mit G ohne K. Backend akzeptiert alle. | NIEDRIG |
+| P6 | gg-land-volk Track | NIEDRIG | **Nicht ausgeloest** — keine Volksantraege im Lauf. | NIEDRIG |
+
+**Zentrale Ueberraschung:** Problem P2 und P3 waren weitgehend falsch. Die Analyse
+sagte `IVAJ` als haeufigsten Pfad voraus, aber das tatsaechliche Hauptmuster ist
+`IVAVJG` (1. Lesung V + Ausschuss A + 2. Lesung V + Annahme J + Gesetzblatt G).
+BaWue-PARLIS liefert fast immer eine separate "Zweite Beratung"-Fundstelle.
+
+### Neue Probleme (nicht vorhergesagt)
+
+| # | Problem | Betroffene | Beschreibung |
+|---|---------|-----------|-------------|
+| P7 | `sonstig` crasht Backend | 27 Vorgaenge (108 Panics) | **KRITISCH.** Stationstyp `sonstig` ist nicht im Track-Alphabet des Backends. Rust-HashMap-Panic statt HTTP 400. Ursache: PARLIS-Fundstellen "Mitteilung" (35x) und "Dokument" (9x) sind nicht in `enum_mapper.py:STATIONSTYP_MAP`. |
+| P8 | G ohne K | 135 Vorgaenge | PARLIS liefert kein Inkrafttreten. `K?` im vorgeschlagenen Track bestaetigt. |
+| P9 | Leere Stationen | 1 Vorgang | "Berichtigung" ohne parsebare Stationen wird eingereicht und abgelehnt. |
+
+### Aktualisierter BaWue-Track-Vorschlag
+
+Basierend auf den tatsaechlichen Daten:
+
+```toml
+BW = {
+    gg-land-parl = "R?I((VA*(Z|V?JY?G?K?|V?N|VA*(Z|V?JY?G?K?|V?N)))|Z)",
+}
+```
+
+Der urspruengliche Vorschlag bleibt gueltig. Die `V?` vor J und N werden nur selten
+benoetigt (je 1 Randfall), sind aber noetig fuer vollstaendige Abdeckung.
+
+---
+
+## Naechste Schritte
+
+1. ~~Staging-Lauf durchfuehren~~ **Erledigt** (lokaler Dev-Lauf, 04.04.2026)
+2. **Scraper-Fixes implementieren:**
+   - "Mitteilung" zu `STATIONSTYP_MAP` hinzufuegen (behebt 27/28 Fehler)
+   - Vorgaenge mit leeren Stationen ueberspringen (behebt 1/28 Fehler)
+3. **Backend-Bug melden:** Panic bei `validate.rs:310` — `.get()` statt `[]` verwenden
+4. **Issue eroeffnen** im [parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser/issues):
+   - Titel: "Track-Definition fuer BW (Baden-Wuerttemberg) — gg-land-parl"
+   - Inhalt: Vorgeschlagener Track, Beispiel-Sequenzen aus dem Lauf
+   - Hinweis: Track-Regex wird aktuell nicht erzwungen (nur Alphabet-Lookup)
+5. **`gg-land-volk` Track** separat klaeren (fuer Volksantraege)
+
+---
+
+## Referenzen
+
+- [tracks.toml](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/specs/tracks.toml) — Track-Definitionen
+- [Wiki: Track Validation](https://wiki.pazufa.de/books/backend-api/page/track-validation) — Dokumentation
+- [Backend v0.2.7 Release](https://codeberg.org/PaZuFa/pazufa-backend/releases/tag/v0.2.7) — Release mit Track Validation
+- `docs/design_decisions.md` — DD-010 (synth. Ablehnung), DD-011 (Whitespace), DD-012 (synth. Initiative)
+- `src/bawue/enum_mapper.py` — Stationstyp-Zuordnungen
