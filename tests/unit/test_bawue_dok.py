@@ -14,8 +14,8 @@ from openapi_client.models.dokument import Dokument
 
 from bawue.bawue_dok import (
     EnrichmentResult,
-    _extract_relevant_pages,
     LLMMetrics,
+    _extract_relevant_pages,
     _hash_cache,
     _is_garbled,
     _paragraph_quality_score,
