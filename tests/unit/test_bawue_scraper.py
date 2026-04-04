@@ -9,6 +9,7 @@ from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.stationstyp import Stationstyp
 from openapi_client.models.vorgangstyp import Vorgangstyp
 
+from bawue.bawue_dok import LLMMetrics
 from bawue.bawue_vorgaenge_scraper import (
     DEFAULT_ENABLED_VORGANGSTYPEN,
     DEFAULT_WAHLPERIODE,
@@ -345,6 +346,7 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     scraper.scraper_id = "test-scraper-id"
     scraper._llm_enabled = False
     scraper._llm = None
+    scraper._llm_metrics = LLMMetrics()
     scraper.session = MagicMock()
     return scraper
 
@@ -733,6 +735,8 @@ class TestRunDurationLog:
         scraper._failed = 0
         scraper._skipped = 0
         scraper._by_type = {}
+        scraper._llm_enabled = False
+        scraper._llm_metrics = LLMMetrics()
 
         with (
             patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
@@ -753,6 +757,8 @@ class TestRunDurationLog:
         scraper._failed = 0
         scraper._skipped = 0
         scraper._by_type = {}
+        scraper._llm_enabled = False
+        scraper._llm_metrics = LLMMetrics()
 
         mock_run = AsyncMock(side_effect=RuntimeError("boom"))
         with (
@@ -1958,6 +1964,7 @@ class TestTrojanergefahr:
         scraper._llm = AsyncMock()
         scraper._llm_model = "gpt-5-nano"
         scraper._llm_truncate_tokens = 12000
+        scraper._llm_metrics = LLMMetrics()
         scraper.session = MagicMock()
 
         enriched_dok = Dokument(
