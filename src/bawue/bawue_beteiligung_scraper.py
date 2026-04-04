@@ -24,6 +24,7 @@ from openapi_client.models import (
     Vorgangstyp,
 )
 
+from bawue.bawue_dok import LLMMetrics
 from bawue.beteiligung_client import BASE_URL, BeteiligungClient
 from bawue.beteiligung_parser import (
     RawBeteiligungDetail,
@@ -66,6 +67,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         # LLM document enrichment (optional, requires LLM_PROVIDER_KEY)
         self._llm_enabled = bool(getattr(config, "llm_provider_key", None))
         self._llm = None
+        self._llm_metrics = LLMMetrics()
         llm_config = load_toml_section(config, "llm")
         self._llm_model = config.llm_model
         self._llm_truncate_tokens = int(llm_config.get("truncate-tokens", 12000))
@@ -86,7 +88,13 @@ class BawueBeteiligungScraper(VorgangsScraper):
         finally:
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
-            _print_beteiligung_summary(self._published, self._skipped, self._failed, duration)
+            _print_beteiligung_summary(
+                self._published,
+                self._skipped,
+                self._failed,
+                duration,
+                self._llm_metrics if self._llm_enabled else None,
+            )
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
         result = upload_vorgang(
@@ -180,6 +188,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
                         dok,
                         model=self._llm_model,
                         max_tokens=self._llm_truncate_tokens,
+                        metrics=self._llm_metrics,
                     )
                     dok = result.dokument
                     if result.trojanergefahr is not None:
@@ -215,7 +224,13 @@ class BawueBeteiligungScraper(VorgangsScraper):
         )
 
 
-def _print_beteiligung_summary(published: int, skipped: int, failed: int, duration: float) -> None:
+def _print_beteiligung_summary(
+    published: int,
+    skipped: int,
+    failed: int,
+    duration: float,
+    llm_metrics: LLMMetrics | None = None,
+) -> None:
     discovered = published + skipped + failed
     lines = [
         "=== BaWue Beteiligung Run Summary ===",
@@ -225,4 +240,6 @@ def _print_beteiligung_summary(published: int, skipped: int, failed: int, durati
         f"Skipped:     {skipped}  (no legislative PDFs)",
         f"Failed:      {failed}",
     ]
+    if llm_metrics is not None and llm_metrics.total > 0:
+        lines.extend(llm_metrics.format_lines())
     print("\n".join(lines))

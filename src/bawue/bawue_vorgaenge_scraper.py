@@ -24,6 +24,7 @@ from openapi_client.models import (
 )
 from openapi_client.models.doktyp import Doktyp
 
+from bawue.bawue_dok import LLMMetrics
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
 from bawue.parlis_client import ParlisClient
@@ -104,6 +105,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # LLM document enrichment (optional, requires LLM_PROVIDER_KEY)
         self._llm_enabled = bool(getattr(config, "llm_provider_key", None))
         self._llm = None
+        self._llm_metrics = LLMMetrics()
         llm_config = load_toml_section(config, "llm")
         self._llm_model = config.llm_model
         self._llm_truncate_tokens = int(llm_config.get("truncate-tokens", 12000))
@@ -126,7 +128,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
             _print_vorgaenge_summary(
-                self._wahlperiode, self._by_type, self._published, self._skipped, self._failed, duration
+                self._wahlperiode,
+                self._by_type,
+                self._published,
+                self._skipped,
+                self._failed,
+                duration,
+                self._llm_metrics if self._llm_enabled else None,
             )
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
@@ -619,6 +627,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     dok,
                     model=self._llm_model,
                     max_tokens=self._llm_truncate_tokens,
+                    metrics=self._llm_metrics,
                 )
                 dok = result.dokument
                 trojanergefahr = result.trojanergefahr
@@ -656,6 +665,7 @@ def _print_vorgaenge_summary(
     skipped: int,
     failed: int,
     duration: float,
+    llm_metrics: LLMMetrics | None = None,
 ) -> None:
     discovered = sum(by_type.values())
     lines = [
@@ -671,6 +681,8 @@ def _print_vorgaenge_summary(
         lines.append("By type:")
         for typ, count in by_type.items():
             lines.append(f"  {typ}:  {count}")
+    if llm_metrics is not None and llm_metrics.total > 0:
+        lines.extend(llm_metrics.format_lines())
     print("\n".join(lines))
 
 

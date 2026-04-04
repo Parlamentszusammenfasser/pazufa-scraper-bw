@@ -33,6 +33,29 @@ class EnrichmentResult(NamedTuple):
     trojanergefahr: int | None = None
 
 
+class LLMMetrics:
+    """Tracks LLM enrichment statistics for a scraper run."""
+
+    def __init__(self) -> None:
+        self.success: int = 0
+        self.failed: int = 0
+        self.cache_hits: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.success + self.failed + self.cache_hits
+
+    def format_lines(self) -> list[str]:
+        return [
+            "",
+            "LLM enrichment:",
+            f"  Success:     {self.success}",
+            f"  Failed:      {self.failed}",
+            f"  Cache hits:  {self.cache_hits}",
+            f"  Total:       {self.total}",
+        ]
+
+
 MAX_JSON_RETRIES = 3
 MIN_TEXT_LENGTH = 64
 DEFAULT_TRUNCATE_TOKENS = 12000
@@ -49,11 +72,21 @@ _hash_cache: dict[str, dict] = {}
 # LLM Prompts — one per Doktyp group, German, body-only (no header extraction)
 # ---------------------------------------------------------------------------
 
+_SYSTEM_PROMPT = (
+    "Du bist ein präziser Assistent für politische und juristische Texte. "
+    "Antworte klar, faktenorientiert. "
+    "Füge keine Formatierungen oder Hervorhebungen hinzu. "
+    "Antworte nur mit dem reinen Text, ohne Einleitungen oder Erklärungen. "
+    "Die Antwort darf nur die direkt angeforderten Informationen enthalten. "
+    "Spekulationen oder Annahmen sind zu vermeiden."
+)
+
 BODY_PROMPT_ENTWURF = """\
 Extrahiere aus dem folgenden Gesetzestext die folgenden Informationen als JSON:
 {"schlagworte": ["Liste inhaltlich bedeutsamer Schlagworte"],
  "zusammenfassung": "Zusammenfassung in 150-250 Worten",
  "kurztitel": "Kurzer verständlicher Titel in einfacher Sprache",
+ "vorwort": "Präambel oder Intentionsbeschreibung des Entwurfs, falls vorhanden",
  "trojanergefahr": <1-10, Wahrscheinlichkeit versteckter Zwecke>}
 Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
 
@@ -92,6 +125,37 @@ _DOKTYP_PROMPT_MAP: dict[Doktyp, str] = {
 def _prompt_for_doktyp(doktyp: Doktyp) -> str:
     """Return the appropriate LLM prompt for a given document type."""
     return _DOKTYP_PROMPT_MAP.get(doktyp, BODY_PROMPT_GENERIC)
+
+
+# ---------------------------------------------------------------------------
+# Score validation
+# ---------------------------------------------------------------------------
+
+_SCORE_RANGES: dict[str, tuple[int, int]] = {
+    "trojanergefahr": (1, 10),
+    "meinung": (1, 5),
+}
+
+
+def _validate_scores(data: dict) -> dict:
+    """Validate and clamp trojanergefahr (1-10) and meinung (1-5) ranges.
+
+    Non-numeric values are removed. Numeric values are clamped to valid ranges.
+    """
+    for field, (lo, hi) in _SCORE_RANGES.items():
+        if field not in data:
+            continue
+        val = data[field]
+        if not isinstance(val, (int, float)):
+            logger.warning("LLM returned non-numeric %s=%r, removing", field, val)
+            data[field] = None
+        else:
+            clamped = max(lo, min(hi, int(val)))
+            if clamped != val:
+                logger.warning("LLM %s=%r out of range [%d,%d], clamped to %d", field, val, lo, hi, clamped)
+            data[field] = clamped
+    # Remove None entries set by non-numeric removal
+    return {k: v for k, v in data.items() if v is not None}
 
 
 # ---------------------------------------------------------------------------
@@ -317,9 +381,10 @@ async def extract_semantics(
     """Call LLM to extract structured metadata from document text.
 
     Returns a dict with keys like schlagworte, zusammenfassung, kurztitel,
-    and optionally trojanergefahr/meinung depending on doktyp.
+    and optionally trojanergefahr/meinung/vorwort depending on doktyp.
 
-    Retries up to MAX_JSON_RETRIES times on JSON parse failures.
+    Uses response_format=json_object for guaranteed valid JSON output,
+    and validates score ranges post-extraction.
     """
     text = truncate_text(full_text, max_tokens=max_tokens, model=model)
 
@@ -329,21 +394,25 @@ async def extract_semantics(
     input_tokens = litellm.token_counter(model=model, text=user_message)
     logger.info("LLM call: %d input tokens, model=%s", input_tokens, model)
 
-    for attempt in range(MAX_JSON_RETRIES):
-        async with _LLM_SEMAPHORE:
-            response = await llm.generate_text(user_message)
-        try:
-            return json.loads(response)
-        except json.JSONDecodeError:
-            logger.warning(
-                "LLM response not valid JSON (attempt %d/%d)",
-                attempt + 1,
-                MAX_JSON_RETRIES,
-            )
-            if attempt == MAX_JSON_RETRIES - 1:
-                raise
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user", "content": user_message},
+    ]
 
-    raise RuntimeError("Should not reach here")  # pragma: no cover
+    async with _LLM_SEMAPHORE:
+        response = await litellm.acompletion(
+            model=model,
+            api_key=llm.api_key,
+            messages=messages,
+            temperature=llm.temperature,
+            timeout=llm.timeout_seconds,
+            response_format={"type": "json_object"},
+            num_retries=MAX_JSON_RETRIES,
+        )
+
+    content = response.choices[0].message.content
+    data = json.loads(content)
+    return _validate_scores(data)
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +426,7 @@ async def enrich_dokument(
     dok: Dokument,
     model: str = "gpt-5-nano",
     max_tokens: int = DEFAULT_TRUNCATE_TOKENS,
+    metrics: LLMMetrics | None = None,
 ) -> EnrichmentResult:
     """Enrich a plain Dokument with PDF text extraction and LLM semantics.
 
@@ -387,9 +457,13 @@ async def enrich_dokument(
             if doc_hash in _hash_cache:
                 logger.info("Hash cache hit for %s, skipping LLM call", doc_hash[:12])
                 semantics = _hash_cache[doc_hash]
+                if metrics is not None:
+                    metrics.cache_hits += 1
             else:
                 semantics = await extract_semantics(llm, full_text, dok.typ, model=model, max_tokens=max_tokens)
                 _hash_cache[doc_hash] = semantics
+                if metrics is not None:
+                    metrics.success += 1
 
             return EnrichmentResult(
                 dokument=Dokument(
@@ -407,11 +481,14 @@ async def enrich_dokument(
                     schlagworte=semantics.get("schlagworte"),
                     kurztitel=semantics.get("kurztitel"),
                     meinung=semantics.get("meinung"),
+                    vorwort=semantics.get("vorwort"),
                 ),
                 trojanergefahr=semantics.get("trojanergefahr"),
             )
         except Exception:
             logger.warning("LLM extraction failed for %s, using text-only fallback", dok.link)
+            if metrics is not None:
+                metrics.failed += 1
             return EnrichmentResult(
                 dokument=Dokument(
                     titel=dok.titel,

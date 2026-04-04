@@ -14,10 +14,12 @@ from openapi_client.models.dokument import Dokument
 
 from bawue.bawue_dok import (
     EnrichmentResult,
+    LLMMetrics,
     _hash_cache,
     _is_garbled,
     _paragraph_quality_score,
     _prompt_for_doktyp,
+    _validate_scores,
     download_pdf,
     enrich_dokument,
     extract_pdf_text,
@@ -40,6 +42,7 @@ SAMPLE_LLM_RESPONSE_ENTWURF = json.dumps(
         "zusammenfassung": "Ein Gesetzentwurf zur Förderung erneuerbarer Energien.",
         "kurztitel": "Erneuerbare-Energien-Gesetz",
         "trojanergefahr": 3,
+        "vorwort": "Ziel dieses Gesetzentwurfs ist die Förderung erneuerbarer Energien.",
     }
 )
 
@@ -124,6 +127,23 @@ def _patch_pdf_pipeline(text_and_hash=SAMPLE_TEXT_AND_HASH):
     return _ctx()
 
 
+def _mock_llm_response(json_str: str):
+    """Create a mock litellm response with the given JSON content."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = json_str
+    return mock_response
+
+
+def _patch_llm(json_str: str):
+    """Context manager that mocks litellm.acompletion to return the given JSON."""
+    return patch(
+        "bawue.bawue_dok.litellm.acompletion",
+        new_callable=AsyncMock,
+        return_value=_mock_llm_response(json_str),
+    )
+
+
 # ---------------------------------------------------------------------------
 # TestDownloadPdf
 # ---------------------------------------------------------------------------
@@ -205,13 +225,25 @@ class TestExtractPdfText:
 # ---------------------------------------------------------------------------
 
 
+def _make_llm_mock():
+    """Create a mock LLMConnector with proper non-coroutine attributes."""
+    llm = MagicMock()
+    llm.api_key = "test-key"
+    llm.temperature = 0.1
+    llm.timeout_seconds = 60.0
+    return llm
+
+
 class TestExtractSemantics:
     @pytest.mark.asyncio
     async def test_parses_json_response(self):
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+        llm = _make_llm_mock()
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = SAMPLE_LLM_RESPONSE_ENTWURF
 
-        result = await extract_semantics(llm, SAMPLE_FULL_TEXT, Doktyp.ENTWURF)
+        with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, return_value=mock_response):
+            result = await extract_semantics(llm, SAMPLE_FULL_TEXT, Doktyp.ENTWURF)
 
         assert result["schlagworte"] == ["umwelt", "klimaschutz", "energie"]
         assert "Gesetzentwurf" in result["zusammenfassung"]
@@ -219,21 +251,17 @@ class TestExtractSemantics:
         assert result["trojanergefahr"] == 3
 
     @pytest.mark.asyncio
-    async def test_retries_on_invalid_json(self):
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(side_effect=["not valid json", SAMPLE_LLM_RESPONSE_GENERIC])
+    async def test_raises_on_invalid_json_from_provider(self):
+        """If provider returns invalid JSON despite response_format, JSONDecodeError is raised."""
+        llm = _make_llm_mock()
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "not json at all"
 
-        result = await extract_semantics(llm, SAMPLE_FULL_TEXT, Doktyp.MITTEILUNG)
-
-        assert result["schlagworte"] == ["verwaltung", "reform"]
-        assert llm.generate_text.call_count == 2
-
-    @pytest.mark.asyncio
-    async def test_raises_after_max_retries(self):
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value="not json at all")
-
-        with pytest.raises(json.JSONDecodeError):
+        with (
+            patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, return_value=mock_response),
+            pytest.raises(json.JSONDecodeError),
+        ):
             await extract_semantics(llm, SAMPLE_FULL_TEXT, Doktyp.ENTWURF)
 
 
@@ -287,10 +315,9 @@ class TestEnrichDokument:
         """LLM key set, PDF+LLM succeed → all fields populated."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+        llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline():
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
             result = await enrich_dokument(session, llm, dok)
 
         assert isinstance(result, EnrichmentResult)
@@ -306,10 +333,9 @@ class TestEnrichDokument:
         """PARLIS metadata (titel, autoren, drucksnr, timestamps) must not change."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+        llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline():
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
             result = await enrich_dokument(session, llm, dok)
 
         assert result.dokument.titel == "Testgesetz"
@@ -322,10 +348,9 @@ class TestEnrichDokument:
     async def test_stellungnahme_gets_meinung(self):
         dok = _make_plain_dokument(typ=Doktyp.STELLUNGNAHME)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_STELLUNGNAHME)
+        llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline():
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_STELLUNGNAHME):
             result = await enrich_dokument(session, llm, dok)
 
         assert result.dokument.meinung == 4
@@ -335,10 +360,9 @@ class TestEnrichDokument:
     async def test_beschlussempf_gets_meinung_and_trojanergefahr(self):
         dok = _make_plain_dokument(typ=Doktyp.BESCHLUSSEMPF)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF)
+        llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline():
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF):
             result = await enrich_dokument(session, llm, dok)
 
         assert result.dokument.meinung == 5
@@ -348,10 +372,9 @@ class TestEnrichDokument:
     async def test_generic_has_no_trojanergefahr(self):
         dok = _make_plain_dokument(typ=Doktyp.MITTEILUNG)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_GENERIC)
+        llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline():
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC):
             result = await enrich_dokument(session, llm, dok)
 
         assert result.trojanergefahr is None
@@ -361,10 +384,14 @@ class TestEnrichDokument:
         """LLM fails → volltext+hash set, no LLM fields, no trojanergefahr."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(side_effect=Exception("LLM unavailable"))
+        llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline():
+        llm_fail = patch(
+            "bawue.bawue_dok.litellm.acompletion",
+            new_callable=AsyncMock,
+            side_effect=Exception("LLM unavailable"),
+        )
+        with _patch_pdf_pipeline(), llm_fail:
             result = await enrich_dokument(session, llm, dok)
 
         # Text-only: volltext and hash populated
@@ -402,8 +429,7 @@ class TestEnrichDokument:
 
         dok = _make_plain_dokument(typ=Doktyp.MITTEILUNG)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_GENERIC)
+        llm = _make_llm_mock()
 
         with (
             patch(
@@ -416,6 +442,7 @@ class TestEnrichDokument:
                 new_callable=AsyncMock,
                 return_value=SAMPLE_TEXT_AND_HASH,
             ),
+            _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC),
         ):
             await enrich_dokument(session, llm, dok)
 
@@ -465,15 +492,14 @@ class TestHashCache:
         """Second call with same PDF hash reuses cached semantics, no LLM call."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+        llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline():
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp:
             first = await enrich_dokument(session, llm, dok)
             second = await enrich_dokument(session, llm, dok)
 
         # LLM called only once despite two enrichments
-        assert llm.generate_text.call_count == 1
+        assert mock_acomp.call_count == 1
         # Both results have the same semantics
         assert first.dokument.zusammenfassung == second.dokument.zusammenfassung
         assert first.dokument.schlagworte == second.dokument.schlagworte
@@ -484,34 +510,33 @@ class TestHashCache:
         """First call always invokes the LLM."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+        llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline():
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp:
             result = await enrich_dokument(session, llm, dok)
 
-        assert llm.generate_text.call_count == 1
+        assert mock_acomp.call_count == 1
         assert result.dokument.zusammenfassung is not None
 
     @pytest.mark.asyncio
     async def test_different_hashes_both_call_llm(self):
         """Different PDF hashes result in separate LLM calls."""
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+        llm = _make_llm_mock()
 
         hash_a = "aaaa" * 16
         hash_b = "bbbb" * 16
         dok_a = _make_plain_dokument(link="https://example.com/a.pdf")
         dok_b = _make_plain_dokument(link="https://example.com/b.pdf")
 
-        with _patch_pdf_pipeline(text_and_hash=(SAMPLE_FULL_TEXT, hash_a)):
-            await enrich_dokument(session, llm, dok_a)
+        with _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp:
+            with _patch_pdf_pipeline(text_and_hash=(SAMPLE_FULL_TEXT, hash_a)):
+                await enrich_dokument(session, llm, dok_a)
 
-        with _patch_pdf_pipeline(text_and_hash=(SAMPLE_FULL_TEXT, hash_b)):
-            await enrich_dokument(session, llm, dok_b)
+            with _patch_pdf_pipeline(text_and_hash=(SAMPLE_FULL_TEXT, hash_b)):
+                await enrich_dokument(session, llm, dok_b)
 
-        assert llm.generate_text.call_count == 2
+        assert mock_acomp.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -531,10 +556,13 @@ class TestTokenLogging:
         """Token count is logged for each LLM call."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+        llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline(), caplog.at_level(logging.INFO, logger="bawue.bawue_dok"):
+        with (
+            _patch_pdf_pipeline(),
+            _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_dok"),
+        ):
             await enrich_dokument(session, llm, dok)
 
         assert any("token" in r.message.lower() for r in caplog.records)
@@ -546,11 +574,11 @@ class TestTokenLogging:
         long_hash = "cccc" * 16
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+        llm = _make_llm_mock()
 
         with (
             _patch_pdf_pipeline(text_and_hash=(long_text, long_hash)),
+            _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF),
             caplog.at_level(logging.INFO, logger="bawue.bawue_dok"),
         ):
             await enrich_dokument(session, llm, dok, max_tokens=100)
@@ -562,10 +590,13 @@ class TestTokenLogging:
         """Cache hit is logged when hash matches."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
-        llm = AsyncMock()
-        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_ENTWURF)
+        llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline(), caplog.at_level(logging.INFO, logger="bawue.bawue_dok"):
+        with (
+            _patch_pdf_pipeline(),
+            _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_dok"),
+        ):
             await enrich_dokument(session, llm, dok)
             await enrich_dokument(session, llm, dok)
 
@@ -750,6 +781,196 @@ class TestIsGarbled:
         garbled = "ůĂƐŝ"  # 4 Latin Extended chars
         text = clean + garbled
         assert _is_garbled(text) is False
+
+
+# ---------------------------------------------------------------------------
+# Improvement 1: TestVorwortExtraction
+# ---------------------------------------------------------------------------
+
+
+class TestVorwortExtraction:
+    """Entwurf prompt asks for vorwort, and it gets wired into the Dokument."""
+
+    def test_entwurf_prompt_has_vorwort(self):
+        prompt = _prompt_for_doktyp(Doktyp.ENTWURF)
+        assert "vorwort" in prompt.lower() or "Vorwort" in prompt
+
+    def test_preparl_entwurf_prompt_has_vorwort(self):
+        prompt = _prompt_for_doktyp(Doktyp.PREPARL_MINUS_ENTWURF)
+        assert "vorwort" in prompt.lower() or "Vorwort" in prompt
+
+    def test_stellungnahme_prompt_has_no_vorwort(self):
+        prompt = _prompt_for_doktyp(Doktyp.STELLUNGNAHME)
+        assert "vorwort" not in prompt.lower()
+
+    def test_generic_prompt_has_no_vorwort(self):
+        prompt = _prompt_for_doktyp(Doktyp.MITTEILUNG)
+        assert "vorwort" not in prompt.lower()
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_entwurf_enrichment_populates_vorwort(self):
+        """LLM returns vorwort → Dokument.vorwort gets populated."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = _make_llm_mock()
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
+            result = await enrich_dokument(session, llm, dok)
+
+        assert result.dokument.vorwort == "Ziel dieses Gesetzentwurfs ist die Förderung erneuerbarer Energien."
+
+    @pytest.mark.asyncio
+    async def test_stellungnahme_has_no_vorwort(self):
+        """Non-Entwurf types should not populate vorwort."""
+        dok = _make_plain_dokument(typ=Doktyp.STELLUNGNAHME)
+        session = MagicMock()
+        llm = _make_llm_mock()
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_STELLUNGNAHME):
+            result = await enrich_dokument(session, llm, dok)
+
+        assert result.dokument.vorwort is None
+
+
+# ---------------------------------------------------------------------------
+# Improvement 2: TestJsonStructuredOutput
+# ---------------------------------------------------------------------------
+
+
+class TestJsonStructuredOutput:
+    """extract_semantics uses response_format=json_object via litellm."""
+
+    @pytest.mark.asyncio
+    async def test_uses_response_format_json_object(self):
+        """Verify litellm.acompletion is called with response_format."""
+        with _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp:
+            await extract_semantics(MagicMock(), SAMPLE_FULL_TEXT, Doktyp.ENTWURF)
+
+        # Verify response_format was passed
+        call_kwargs = mock_acomp.call_args.kwargs
+        assert call_kwargs["response_format"] == {"type": "json_object"}
+
+    @pytest.mark.asyncio
+    async def test_returns_parsed_json(self):
+        """extract_semantics returns parsed dict from litellm response."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = SAMPLE_LLM_RESPONSE_GENERIC
+
+        with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, return_value=mock_response):
+            result = await extract_semantics(MagicMock(), SAMPLE_FULL_TEXT, Doktyp.MITTEILUNG)
+
+        assert result["schlagworte"] == ["verwaltung", "reform"]
+        assert result["kurztitel"] == "Verwaltungsreform"
+
+
+# ---------------------------------------------------------------------------
+# Improvement 3: TestValidateScores
+# ---------------------------------------------------------------------------
+
+
+class TestValidateScores:
+    """Post-extraction validation of trojanergefahr (1-10) and meinung (1-5)."""
+
+    def test_valid_trojanergefahr_unchanged(self):
+        data = {"trojanergefahr": 5, "schlagworte": ["test"]}
+        result = _validate_scores(data)
+        assert result["trojanergefahr"] == 5
+
+    def test_trojanergefahr_clamped_to_min(self):
+        data = {"trojanergefahr": 0}
+        result = _validate_scores(data)
+        assert result["trojanergefahr"] == 1
+
+    def test_trojanergefahr_clamped_to_max(self):
+        data = {"trojanergefahr": 15}
+        result = _validate_scores(data)
+        assert result["trojanergefahr"] == 10
+
+    def test_trojanergefahr_negative_clamped(self):
+        data = {"trojanergefahr": -3}
+        result = _validate_scores(data)
+        assert result["trojanergefahr"] == 1
+
+    def test_trojanergefahr_non_int_removed(self):
+        data = {"trojanergefahr": "hoch", "schlagworte": ["test"]}
+        result = _validate_scores(data)
+        assert result.get("trojanergefahr") is None
+
+    def test_valid_meinung_unchanged(self):
+        data = {"meinung": 3}
+        result = _validate_scores(data)
+        assert result["meinung"] == 3
+
+    def test_meinung_clamped_to_min(self):
+        data = {"meinung": 0}
+        result = _validate_scores(data)
+        assert result["meinung"] == 1
+
+    def test_meinung_clamped_to_max(self):
+        data = {"meinung": 8}
+        result = _validate_scores(data)
+        assert result["meinung"] == 5
+
+    def test_meinung_non_int_removed(self):
+        data = {"meinung": "positiv"}
+        result = _validate_scores(data)
+        assert result.get("meinung") is None
+
+    def test_both_scores_validated(self):
+        data = {"trojanergefahr": 0, "meinung": 10}
+        result = _validate_scores(data)
+        assert result["trojanergefahr"] == 1
+        assert result["meinung"] == 5
+
+    def test_no_scores_present(self):
+        data = {"schlagworte": ["test"], "zusammenfassung": "Test."}
+        result = _validate_scores(data)
+        assert result == data
+
+    def test_float_trojanergefahr_truncated(self):
+        data = {"trojanergefahr": 3.7}
+        result = _validate_scores(data)
+        assert result["trojanergefahr"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Improvement 4: TestLLMMetrics
+# ---------------------------------------------------------------------------
+
+
+class TestLLMMetrics:
+    """LLM enrichment metrics tracking."""
+
+    def test_initial_state(self):
+        m = LLMMetrics()
+        assert m.success == 0
+        assert m.failed == 0
+        assert m.cache_hits == 0
+        assert m.total == 0
+
+    def test_total_computed(self):
+        m = LLMMetrics()
+        m.success = 5
+        m.failed = 2
+        m.cache_hits = 3
+        assert m.total == 10
+
+    def test_format_lines(self):
+        m = LLMMetrics()
+        m.success = 10
+        m.failed = 1
+        m.cache_hits = 3
+        lines = m.format_lines()
+        assert any("LLM" in line for line in lines)
+        assert any("10" in line for line in lines)
+        assert any("cache" in line.lower() for line in lines)
 
     def test_above_threshold_is_garbled(self):
         """Just above the threshold should be flagged."""

@@ -13,6 +13,7 @@ from openapi_client.models.stationstyp import Stationstyp
 from openapi_client.models.vorgangstyp import Vorgangstyp
 
 from bawue.bawue_beteiligung_scraper import DEFAULT_WAHLPERIODE, BawueBeteiligungScraper
+from bawue.bawue_dok import LLMMetrics
 from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
@@ -34,6 +35,7 @@ def _make_scraper():
     scraper._skipped = 0
     scraper._llm_enabled = False
     scraper._llm = None
+    scraper._llm_metrics = LLMMetrics()
     scraper.session = MagicMock()
     return scraper
 
