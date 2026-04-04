@@ -16,10 +16,11 @@ import tempfile
 import unicodedata
 from pathlib import Path
 from typing import NamedTuple
+from urllib.parse import urlparse
 
 import litellm
 from collector_core import LLMConnector
-from kreuzberg import ExtractionConfig, OcrConfig, extract_file
+from kreuzberg import ExtractionConfig, OcrConfig, PageConfig, extract_file
 from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.dokument import Dokument
 
@@ -226,6 +227,9 @@ def normalize_volltext(text: str) -> str:
     # e.g. "ausgezeich\u0002net" -> "ausgezeichnet"
     text = text.replace("\x02", "")
 
+    # 2.5. Remove U+FFFD replacement characters (encoding failures)
+    text = text.replace("\ufffd", "")
+
     # 3. Strip C1 control characters (0x80-0x9F)
     text = _C1_CONTROL_RE.sub("", text)
 
@@ -310,15 +314,55 @@ def truncate_text(text: str, max_tokens: int, model: str = "gpt-5-nano") -> str:
 
 
 # ---------------------------------------------------------------------------
+# Page-hint extraction for plenary protocols
+# ---------------------------------------------------------------------------
+
+_PAGE_MARKER_RE = re.compile(r"\n\n<!-- PAGE (\d+) -->\n\n")
+
+
+def _parse_page_hint(url: str) -> int | None:
+    """Extract page number from a URL's ``#page=N`` fragment."""
+    fragment = urlparse(url).fragment
+    match = re.match(r"^page=(\d+)$", fragment)
+    return int(match.group(1)) if match else None
+
+
+def _extract_relevant_pages(text: str, start_page: int, max_pages: int = 30) -> str:
+    """Extract text from *start_page* through *start_page + max_pages* using page markers.
+
+    Falls back to the full text when no markers are found or when the
+    requested page range lies beyond the document.
+    """
+    parts = _PAGE_MARKER_RE.split(text)
+    # parts alternates: [text_before_first_marker, page_num, text, page_num, text, ...]
+    page_map: dict[int, str] = {}
+    for i in range(1, len(parts) - 1, 2):
+        page_map[int(parts[i])] = parts[i + 1]
+
+    if not page_map:
+        return text
+
+    end_page = start_page + max_pages
+    relevant = [page_map[p] for p in sorted(page_map) if start_page <= p < end_page]
+
+    if not relevant:
+        return text
+
+    return "\n\n".join(relevant)
+
+
+# ---------------------------------------------------------------------------
 # PDF download + text extraction
 # ---------------------------------------------------------------------------
 
 
 async def download_pdf(session, url: str) -> Path:
     """Download a PDF to a temporary file via aiohttp session."""
-    async with session.get(url) as response:
+    clean_url = url.split("#")[0] if "#" in url else url
+    async with session.get(clean_url) as response:
         if response.status != 200:
-            raise RuntimeError(f"PDF download failed with status {response.status}: {url}")
+            logger.warning("PDF download returned HTTP %d: %s", response.status, clean_url)
+            raise RuntimeError(f"PDF download failed with status {response.status}: {clean_url}")
         content = await response.read()
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
@@ -332,8 +376,14 @@ _OCR_CONFIG = ExtractionConfig(
 )
 
 
-async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
+async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tuple[str, str]:
     """Extract text and compute SHA256 hash from a PDF file.
+
+    Args:
+        pdf_path: Path to the PDF file.
+        page_hint: Optional page number (from ``#page=N`` URL fragment).
+            When set, page markers are inserted during extraction and only
+            pages *page_hint* through *page_hint + 30* are returned.
 
     Returns (full_text, hash).  Falls back to OCR when:
     1. Normal extraction yields fewer than 64 characters, or
@@ -344,7 +394,12 @@ async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
     with open(pdf_path, "rb") as f:
         doc_hash = hashlib.file_digest(f, "sha256").hexdigest()
 
-    result = await extract_file(pdf_path, config=ExtractionConfig(force_ocr=False))
+    if page_hint is not None:
+        config = ExtractionConfig(force_ocr=False, pages=PageConfig(insert_page_markers=True))
+    else:
+        config = ExtractionConfig(force_ocr=False)
+
+    result = await extract_file(pdf_path, config=config)
     text = result.content or ""
 
     if len(text) < MIN_TEXT_LENGTH:
@@ -362,6 +417,9 @@ async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
                 logger.warning("OCR did not improve garbled text, keeping original")
         except Exception as exc:
             logger.warning("OCR retry failed (%s), keeping original garbled text", type(exc).__name__)
+
+    if page_hint is not None:
+        text = _extract_relevant_pages(text, page_hint)
 
     return text, doc_hash
 
@@ -446,10 +504,11 @@ async def enrich_dokument(
     pdf_path: Path | None = None
     try:
         # Download PDF
+        page_hint = _parse_page_hint(dok.link)
         pdf_path = await download_pdf(session, dok.link)
 
         # Extract text + hash, then normalize
-        full_text, doc_hash = await extract_pdf_text(pdf_path)
+        full_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint)
         full_text = normalize_volltext(full_text)
 
         # Try LLM extraction (with hash cache deduplication)
