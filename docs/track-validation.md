@@ -257,18 +257,23 @@ Falls ja, scheitern betroffene Vorgaenge.
 
 ---
 
-### Problem 5 (NIEDRIG): `VJGK` verlangt alle vier zusammen
+### Problem 5 (NIEDRIG): `K` (Inkrafttreten) fehlt in PARLIS
 
-Der Track erlaubt `J` nur als Teil von `VJGK`. Das bedeutet: ein angenommener
-Vorgang, bei dem `G` (Gesetzblatt) und `K` (Inkrafttreten) noch nicht in PARLIS
-stehen, wuerde ebenfalls scheitern.
+Der BY-Track verlangt `VJGK` als vollstaendigen Annahmepfad. `K` (Inkrafttreten)
+wird von PARLIS jedoch nie als Fundstelle geliefert (0/204 Vorgaenge).
 
-`docs/status.md` listet "Missing data sources: Gesetzblatt BaWue (postparl-gsblt)"
-als offenen Punkt. Falls PARLIS diese Fundstellen nicht liefert, kann der
-vollstaendige `VJGK`-Pfad nie erfuellt werden.
+**Klarstellung zu G (Gesetzblatt):** `docs/status.md` listet "Missing data sources:
+Gesetzblatt BaWue (postparl-gsblt)" — das bezieht sich auf eine **eigenstaendige
+Gesetzblatt-Datenquelle** (separater Scraper), NICHT auf fehlende PARLIS-Fundstellen.
+PARLIS liefert Gesetzblatt-Fundstellen zuverlaessig: **135/135 angenommene Vorgaenge**
+haben eine G-Station (siehe [Korrektur G/K](#korrektur-g-ist-pflicht-k-optional)).
+
+**Warum K fehlt:** Inkrafttreten-Daten stehen im Gesetzestext selbst (z.B. "Dieses
+Gesetz tritt am Tag nach seiner Verkuendung in Kraft"). PARLIS dokumentiert den
+parlamentarischen Prozess (Fundstellen), nicht die nachgelagerte Rechtswirkung.
 
 **Hinweis:** Das Backend koennte Praefix-Matching verwenden (Teilsequenzen
-validieren). In dem Fall waere `IVAVJ` ein gueltiger Praefix von `IVAVJGK`.
+validieren). In dem Fall waere `IVAVJG` ein gueltiger Praefix von `IVAVJGK`.
 Das muss gegen das Staging-Backend verifiziert werden.
 
 ---
@@ -288,7 +293,7 @@ Der Scraper mappt `Volksantrag` → vgtyp `gg-land-volk`. Fuer BW existiert in
 | 2 | Annahme ohne 2. Lesung | `IVAJ` | `VA*(VJGK)` | NEIN |
 | 3 | Ablehnung ohne 2. Lesung | `IVN`, `IVAN` | `VA*(VN)` | NEIN |
 | 4 | Ausfertigung im Pfad | `VJYGK` | `VJGK` | NEIN |
-| 5 | Annahme ohne G+K | `IVAVJ` | `VJGK` (alle vier) | NEIN* |
+| 5 | Inkrafttreten (K) fehlt | `IVAVJG` | `VJGK` (alle vier) | NEIN* |
 | 6 | Volksantrag | vgtyp `gg-land-volk` | nicht definiert | NEIN |
 
 \* Abhaengig davon, ob das Backend Praefix-Matching unterstuetzt.
@@ -308,7 +313,7 @@ Der Scraper mappt `Volksantrag` → vgtyp `gg-land-volk`. Fuer BW existiert in
 
 ```toml
 BW = {
-    gg-land-parl = "R?I((VA*(Z|V?JY?G?K?|V?N|VA*(Z|V?JY?G?K?|V?N)))|Z)",
+    gg-land-parl = "R?I((VA*(Z|V?JY?GK?|V?N|VA*(Z|V?JY?GK?|V?N)))|Z)",
 }
 ```
 
@@ -319,21 +324,21 @@ BW = {
 | `((E*R+)?S)?` | `R?` | S (Kabinettsbeschluss) existiert nicht in PARLIS BaWue. Einfaches optionales R genuegt. E wird nicht gescrapt. |
 | `VJ` | `V?J` | Zweite Lesung (V) vor Annahme (J) ist nicht immer als separate Fundstelle vorhanden. |
 | `VN` | `V?N` | Ablehnungen koennen nach erster Lesung erfolgen, ohne separate zweite Lesung. |
-| `GK` (pflicht) | `G?K?` (optional) | Gesetzblatt und Inkrafttreten sind nicht immer in PARLIS. Optional falls kein Praefix-Matching. |
+| `GK` (pflicht) | `GK?` | G (Gesetzblatt) ist pflicht — 135/135 angenommene Vorgaenge haben G in PARLIS. K (Inkrafttreten) fehlt immer (0/204). Siehe [Korrektur G/K](#korrektur-g-ist-pflicht-k-optional). |
 | (nicht vorhanden) | `Y?` nach J | Ausfertigung (postparl-vesja) kann zwischen Annahme und Gesetzblatt stehen. |
 
 ### Gueltige Sequenzen mit dem vorgeschlagenen Track
 
 - `IZ` — eingereicht, zurueckgezogen
-- `IVAJ` — 1. Lesung, Ausschuss, Annahme (haeufigster BaWue-Pfad)
-- `IVAVJGK` — vollstaendiger Zyklus mit 2. Lesung
+- `IVAJG` — 1. Lesung, Ausschuss, Annahme, Gesetzblatt (ohne separate 2. Lesung)
+- `IVAVJG` — 1. Lesung, Ausschuss, 2. Lesung, Annahme, Gesetzblatt (haeufigster BaWue-Pfad)
+- `IVAVJGK` — vollstaendiger Zyklus mit Inkrafttreten (theoretisch)
 - `IVAVJYGK` — mit Ausfertigung
-- `RIVAJ` — Regierungsentwurf, 1. Lesung, Ausschuss, Annahme
-- `RIVAVJGK` — Regierungsentwurf, vollstaendiger Zyklus
+- `RIVAJG` — Regierungsentwurf, 1. Lesung, Ausschuss, Annahme, Gesetzblatt
+- `RIVAVJG` — Regierungsentwurf, vollstaendiger Zyklus (dominantes Muster: 112/171)
 - `IVN` — abgelehnt nach 1. Lesung
 - `IVAN` — abgelehnt nach Ausschuss
 - `IVAVN` — abgelehnt nach 2. Lesung
-- `IVAJ` — angenommen, Gesetzblatt steht noch aus
 
 ---
 
@@ -506,7 +511,7 @@ nicht funktional — sie crasht nur bei unbekannten Stationstypen.
 | P2 | J ohne vorheriges V | HOCH | Dominantes Muster ist `IVAVJG` (separate "Zweite Beratung"). PARLIS liefert fast immer ein eigenes V. Nur 1 Randfall. | **NIEDRIG** |
 | P3 | N ohne vorheriges V | MITTEL | Ablehnungen folgen konsistent `IVAVN` (PASS). Nur 1 Randfall. | **NIEDRIG** |
 | P4 | Y (Ausfertigung) im Pfad | NIEDRIG | **Nicht beobachtet** — Null Vorgaenge mit Y-Stationen. | NIEDRIG |
-| P5 | J ohne GK | NIEDRIG | 135 Vorgaenge enden mit G ohne K. Backend akzeptiert alle. | NIEDRIG |
+| P5 | K (Inkrafttreten) fehlt | NIEDRIG | G ist in **allen** 135 angenommenen Vorgaengen vorhanden. Nur K fehlt (0/204). Siehe [Korrektur G/K](#korrektur-g-ist-pflicht-k-optional). | NIEDRIG |
 | P6 | gg-land-volk Track | NIEDRIG | **Nicht ausgeloest** — keine Volksantraege im Lauf. | NIEDRIG |
 
 **Zentrale Ueberraschung:** Problem P2 und P3 waren weitgehend falsch. Die Analyse
@@ -519,21 +524,83 @@ BaWue-PARLIS liefert fast immer eine separate "Zweite Beratung"-Fundstelle.
 | # | Problem | Betroffene | Beschreibung |
 |---|---------|-----------|-------------|
 | P7 | `sonstig` crasht Backend | 27 Vorgaenge (108 Panics) | **KRITISCH.** Stationstyp `sonstig` ist nicht im Track-Alphabet des Backends. Rust-HashMap-Panic statt HTTP 400. Ursache: PARLIS-Fundstellen "Mitteilung" (35x) und "Dokument" (9x) sind nicht in `enum_mapper.py:STATIONSTYP_MAP`. |
-| P8 | G ohne K | 135 Vorgaenge | PARLIS liefert kein Inkrafttreten. `K?` im vorgeschlagenen Track bestaetigt. |
+| P8 | K (Inkrafttreten) fehlt in PARLIS | 135 Vorgaenge | G (Gesetzblatt) ist immer vorhanden. K (Inkrafttreten) wird nie als Fundstelle geliefert — steht im Gesetzestext selbst. `GK?` im korrigierten Track. |
 | P9 | Leere Stationen | 1 Vorgang | "Berichtigung" ohne parsebare Stationen wird eingereicht und abgelehnt. |
 
 ### Aktualisierter BaWue-Track-Vorschlag
 
-Basierend auf den tatsaechlichen Daten:
+Basierend auf den tatsaechlichen Daten (korrigiert — G ist pflicht, K optional):
 
 ```toml
 BW = {
-    gg-land-parl = "R?I((VA*(Z|V?JY?G?K?|V?N|VA*(Z|V?JY?G?K?|V?N)))|Z)",
+    gg-land-parl = "R?I((VA*(Z|V?JY?GK?|V?N|VA*(Z|V?JY?GK?|V?N)))|Z)",
 }
 ```
 
-Der urspruengliche Vorschlag bleibt gueltig. Die `V?` vor J und N werden nur selten
-benoetigt (je 1 Randfall), sind aber noetig fuer vollstaendige Abdeckung.
+Aenderung gegenueber erstem Vorschlag: `G?K?` → `GK?`. Gesetzblatt (G) ist in
+135/135 angenommenen Vorgaengen vorhanden (siehe [Korrektur G/K](#korrektur-g-ist-pflicht-k-optional)).
+Die `V?` vor J und N werden nur selten benoetigt (je 1 Randfall), sind aber
+noetig fuer vollstaendige Abdeckung.
+
+---
+
+## Korrektur: G ist Pflicht, K optional
+
+**Datum:** 04.04.2026 (Nachtrag nach Datenauswertung)
+
+Die urspruengliche Analyse schlug `G?K?` (beides optional) vor. Nach Auswertung
+der JSONL-Daten und Verifikation gegen die PARLIS-Website ist das **falsch fuer G**:
+
+### Datengrundlage
+
+| Metrik | Ergebnis |
+|--------|----------|
+| Vorgaenge mit J (parl-akzeptanz) | 135 |
+| davon mit G (postparl-gsblt) | **135 (100%)** |
+| davon mit K (postparl-kraft) | **0 (0%)** |
+
+### PARLIS-Verifikation
+
+Beide Beispiele zeigen: PARLIS liefert Gesetzblatt als Fundstelle **mit PDF-Link**.
+
+**[V-220176](https://parlis.landtag-bw.de/parlis/vorgang/V-220176)** (Fraktionsentwurf):
+```
+Gesetzentwurf (I) → Erste Beratung (V) → Beschlussempfehlung (A) →
+Zweite Beratung (V) → Gesetzesbeschluss (J) →
+Gesetz vom 26.07.2022 GBl Nr. 26 S. 410 (G) ← PDF vorhanden
+```
+
+**[V-214895](https://parlis.landtag-bw.de/parlis/vorgang/V-214895)** (Regierungsentwurf):
+```
+Gesetzentwurf LReg (R+I) → Erste Beratung (V) → Beschlussempfehlung (A) →
+Zweite Beratung (V) → Gesetzesbeschluss (J) →
+Gesetz vom 22.12.2021 GBl Nr. 43 S. 1040-1041 (G) ← PDF vorhanden
+```
+
+Kein Vorgang hat eine "Inkrafttreten"-Fundstelle. Beide: "Aktueller Stand: Verkuendet".
+
+### Ursache des falschen `G?`-Vorschlags
+
+`docs/status.md` (Zeile 24, 82) listet "Missing data sources: Gesetzblatt BaWue
+(`postparl-gsblt`)" und "Gesetzblatt publications: Not implemented". Das bezieht
+sich auf einen **eigenstaendigen Gesetzblatt-Scraper** (separate Datenquelle), NICHT
+auf fehlende Fundstellen in PARLIS-Suchergebnissen. Der PARLIS-Scraper extrahiert
+Gesetzblatt-Stationen bereits erfolgreich fuer 135/135 angenommene Vorgaenge.
+
+### Warum K nie erscheint
+
+Inkrafttreten-Daten stehen im Gesetzestext selbst (z.B. "Dieses Gesetz tritt am
+Tag nach seiner Verkuendung in Kraft"). PARLIS dokumentiert den parlamentarischen
+Prozess, nicht die nachgelagerte Rechtswirkung. K ist kein parlamentarisches Ereignis.
+
+### Korrigierter Track
+
+```
+Vorher:  R?I((VA*(Z|V?JY?G?K?|V?N|VA*(Z|V?JY?G?K?|V?N)))|Z)
+Nachher: R?I((VA*(Z|V?JY?GK?|V?N|VA*(Z|V?JY?GK?|V?N)))|Z)
+                             ^                   ^
+                         G pflicht           G pflicht
+```
 
 ---
 
@@ -549,6 +616,108 @@ benoetigt (je 1 Randfall), sind aber noetig fuer vollstaendige Abdeckung.
    - Inhalt: Vorgeschlagener Track, Beispiel-Sequenzen aus dem Lauf
    - Hinweis: Track-Regex wird aktuell nicht erzwungen (nur Alphabet-Lookup)
 5. **`gg-land-volk` Track** separat klaeren (fuer Volksantraege)
+
+---
+
+## Issue: Track-Definition fuer BW — gg-land-parl
+
+**Issue:** [Issue 26](https://codeberg.org/PaZuFa/pazufa-backend/issues/26)  
+**Zielrepo:** [parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser/issues)
+**Datum:** 04.04.2026
+
+### Zusammenfassung
+
+Der aktuelle Track fuer BW (gg-land-parl) ist identisch mit dem BY-Track:
+
+`((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)`
+
+Dieser Track passt nicht zu den Stationsfolgen, die das BaWue-PARLIS liefert. Ein
+lokaler Dev-Lauf gegen Backend v0.2.7 mit 171 Vorgaengen zeigt, dass nur 11 (6%)
+den BY-Track-Regex matchen wuerden. Die restlichen 160 scheitern an strukturellen
+Unterschieden zwischen BY und BW.
+
+### Beobachtete Stationsfolgen (Dev-Lauf, 04.04.2026)
+
+| Sequenz | Anzahl | BY-Track Match? |
+|---------|--------|-----------------|
+| `RIVAVJG` | 112 | NEIN |
+| `IVAVJG` | 14 | NEIN |
+| `IVAVN` | 11 | JA |
+| `IVAVVJG` | 2 | NEIN |
+| `R` | 2 | NEIN |
+| `I` | 1 | NEIN |
+| `IV` | 1 | NEIN |
+| Sonstige (mit `sonstig`-Stationen) | 28 | NEIN (Backend Panic) |
+
+Die 28 Vorgaenge mit `sonstig`-Stationen verursachen einen Panic im Backend bei
+`validate.rs:310:48` (HashMap-Zugriff mit `[]` statt `.get()` fuer unbekannte
+Stationstypen). Das ist ein separates Backend-Problem.
+
+### Strukturelle Unterschiede BW vs. BY
+
+| Aspekt | BY | BaWue |
+|--------|-----|-------|
+| Kabinettsbeschluss (S) | Explizit vorhanden, Pflicht nach R | Nicht in PARLIS — BaWue liefert kein S |
+| Regierungsentwurf (R) | Nur mit S zusammen: `((E*R+)?S)?` | R steht allein vor I (112 Vorgaenge) |
+| Zweite Lesung vor J/N | Immer separates V vor J/N | Fast immer vorhanden, aber nicht garantiert (Randfaelle) |
+| Inkrafttreten (K) | Track verlangt GK zusammen | PARLIS liefert G, aber nie K (0/204 Vorgaenge). Inkrafttreten steht im Gesetzestext selbst, nicht als Fundstelle. |
+
+### Begruendung der Probleme
+
+**Problem 1 — R ohne S (112 Vorgaenge, KRITISCH):**
+Der Praefix `((E*R+)?S)?` verlangt S nach R. BaWue-PARLIS kennt keine
+Kabinettsbeschluss-Fundstelle. Jeder Regierungsentwurf (`R` → `I` → ...)
+scheitert, weil `R` allein nicht matcht.
+
+**Problem 2 — K (Inkrafttreten) fehlt (135 Vorgaenge):**
+Der Track verlangt `VJGK` als Einheit. PARLIS liefert Gesetzblatt (G)
+**zuverlaessig** (135/135 angenommene Vorgaenge haben G — verifiziert gegen die
+PARLIS-Website, z.B.
+[V-220176](https://parlis.landtag-bw.de/parlis/vorgang/V-220176),
+[V-214895](https://parlis.landtag-bw.de/parlis/vorgang/V-214895)), aber nie
+Inkrafttreten (K). Falls das Backend kein Praefix-Matching macht, scheitern alle
+angenommenen Vorgaenge an dem fehlenden K.
+
+**Problem 3 — V optional vor J/N (Randfaelle):**
+In seltenen Faellen fehlt die separate "Zweite Beratung" (V) vor Annahme (J) oder
+Ablehnung (N). Der Dev-Lauf zeigt, dass PARLIS fast immer ein separates V liefert,
+aber nicht in 100% der Faelle.
+
+### Vorgeschlagener Track
+
+```toml
+[BW]
+gg-land-parl = "R?I((VA*(Z|V?JY?GK?|V?N|VA*(Z|V?JY?GK?|V?N)))|Z)"
+```
+
+### Aenderungen gegenueber BY
+
+| BY-Track | BW-Vorschlag | Begruendung |
+|----------|-------------|-------------|
+| `((E*R+)?S)?` | `R?` | S existiert nicht in BaWue-PARLIS. E wird nicht gescrapt. Einfaches optionales R genuegt. |
+| `VJ` | `V?J` | Zweite Lesung vor Annahme nicht immer als separate Fundstelle vorhanden (Randfaelle). |
+| `VN` | `V?N` | Ablehnung kann nach erster Lesung erfolgen, ohne separate zweite Lesung (Randfaelle). |
+| `GK` (Pflicht) | `GK?` | G (Gesetzblatt) ist Pflicht — 135/135 angenommene Vorgaenge haben G in PARLIS. K (Inkrafttreten) fehlt immer (0/204) — steht im Gesetzestext, nicht als Fundstelle. |
+| (nicht vorhanden) | `Y?` nach J | Ausfertigung (`postparl-vesja`) kann zwischen Annahme und Gesetzblatt stehen. Im Dev-Lauf nicht beobachtet (0 Vorgaenge mit Y), aber im Enum-Mapping vorhanden. |
+
+### Gueltige Sequenzen mit vorgeschlagenem Track
+
+- `IZ` — eingereicht, zurueckgezogen
+- `IVAJG` — 1. Lesung, Ausschuss, Annahme, Gesetzblatt (ohne separate 2. Lesung)
+- `IVAVJG` — 1. Lesung, Ausschuss, 2. Lesung, Annahme, Gesetzblatt (haeufigster Fraktionsentwurf-Pfad, 14x)
+- `RIVAVJG` — mit Regierungsentwurf (dominanter Pfad, 112x)
+- `IVAVN` — abgelehnt nach 2. Lesung (11x)
+- `IVAVJGK` — vollstaendiger Zyklus mit Inkrafttreten (theoretisch, nie beobachtet)
+- `IVN` — abgelehnt nach 1. Lesung
+- `IVAN` — abgelehnt nach Ausschuss
+
+### Anmerkung: `sonstig`-Stationstyp
+
+28 Vorgaenge enthalten Stationen vom Typ `sonstig` (unmapped PARLIS-Fundstellen
+wie "Mitteilung" und "Dokument"). Diese verursachen einen Panic im Backend
+(`validate.rs:310:48`), weil der `sonstig`-Typ nicht im Track-Alphabet ist. Das
+ist ein separates Backend-Problem (HashMap `[]` statt `.get()`), das wir separat
+melden. Auf Scraper-Seite werden wir die fehlenden Mappings ergaenzen.
 
 ---
 
