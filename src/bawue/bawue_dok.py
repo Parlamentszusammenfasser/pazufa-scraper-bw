@@ -12,12 +12,15 @@ import hashlib
 import json
 import logging
 import re
+import ssl
 import tempfile
 import unicodedata
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import urlparse
 
+import aiohttp
+import certifi
 import litellm
 from collector_core import LLMConnector
 from kreuzberg import ExtractionConfig, OcrConfig, PageConfig, extract_file
@@ -359,7 +362,8 @@ def _extract_relevant_pages(text: str, start_page: int, max_pages: int = 30) -> 
 async def download_pdf(session, url: str) -> Path:
     """Download a PDF to a temporary file via aiohttp session."""
     clean_url = url.split("#")[0] if "#" in url else url
-    async with session.get(clean_url) as response:
+    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+    async with session.get(clean_url, ssl=ssl_ctx, timeout=aiohttp.ClientTimeout(total=60)) as response:
         if response.status != 200:
             logger.warning("PDF download returned HTTP %d: %s", response.status, clean_url)
             raise RuntimeError(f"PDF download failed with status {response.status}: {clean_url}")
@@ -545,7 +549,7 @@ async def enrich_dokument(
                 trojanergefahr=semantics.get("trojanergefahr"),
             )
         except Exception:
-            logger.warning("LLM extraction failed for %s, using text-only fallback", dok.link)
+            logger.warning("LLM extraction failed for %s, using text-only fallback", dok.link, exc_info=True)
             if metrics is not None:
                 metrics.failed += 1
             return EnrichmentResult(
@@ -564,7 +568,7 @@ async def enrich_dokument(
             )
 
     except Exception:
-        logger.warning("PDF download/extraction failed for %s, returning original document", dok.link)
+        logger.warning("PDF download/extraction failed for %s, returning original document", dok.link, exc_info=True)
         return EnrichmentResult(dokument=dok)
 
     finally:

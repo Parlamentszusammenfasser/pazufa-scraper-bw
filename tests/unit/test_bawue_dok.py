@@ -3,10 +3,12 @@
 import hashlib
 import json
 import logging
+import ssl
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 from openapi_client.models.autor import Autor
 from openapi_client.models.doktyp import Doktyp
@@ -198,7 +200,29 @@ class TestDownloadPdf:
 
         path = await download_pdf(session, "https://www.landtag-bw.de/files/plp/17_141.pdf#page=33")
         try:
-            session.get.assert_called_once_with("https://www.landtag-bw.de/files/plp/17_141.pdf")
+            args, _kwargs = session.get.call_args
+            assert args[0] == "https://www.landtag-bw.de/files/plp/17_141.pdf"
+        finally:
+            path.unlink(missing_ok=True)
+
+    @pytest.mark.asyncio
+    async def test_passes_ssl_context_and_timeout(self):
+        """download_pdf should pass an SSL context (certifi) and a 60s timeout."""
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        session = MagicMock()
+        session.get = MagicMock(return_value=mock_response)
+
+        path = await download_pdf(session, "https://example.com/test.pdf")
+        try:
+            _, kwargs = session.get.call_args
+            assert isinstance(kwargs["ssl"], ssl.SSLContext)
+            assert isinstance(kwargs["timeout"], aiohttp.ClientTimeout)
+            assert kwargs["timeout"].total == 60
         finally:
             path.unlink(missing_ok=True)
 
