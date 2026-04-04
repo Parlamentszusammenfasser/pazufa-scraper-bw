@@ -35,6 +35,7 @@ RUN poetry config virtualenvs.create false \
 ARG PYTHON_VERSION
 ARG PYTHON_MINOR
 FROM python:${PYTHON_VERSION}-slim
+ARG PYTHON_MINOR
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
