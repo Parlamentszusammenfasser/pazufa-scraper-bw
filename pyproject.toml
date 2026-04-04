@@ -19,6 +19,7 @@ requests = "^2.32"
 toml = ">=0.10"
 icalendar = ">=7.0"
 certifi = ">=2026.0"
+python-json-logger = "^3.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0"
