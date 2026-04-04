@@ -402,11 +402,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-5s %(name)s: %(message)s",
-        stream=sys.stderr,
-    )
+    from pythonjsonlogger.json import JsonFormatter
+
+    from bawue.log_context import VorgangsnummerFilter
+
+    _handler = logging.StreamHandler(sys.stderr)
+    _handler.setFormatter(JsonFormatter("%(asctime)s %(levelname)s %(name)s %(message)s %(vorgangs_id)s"))
+    _handler.addFilter(VorgangsnummerFilter())
+    logging.root.setLevel(logging.INFO)
+    logging.root.addHandler(_handler)
     asyncio.run(_run(args))
 
 

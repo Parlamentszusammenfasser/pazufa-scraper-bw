@@ -27,6 +27,7 @@ from openapi_client.models.doktyp import Doktyp
 from bawue.bawue_dok import LLMMetrics
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
+from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.parlis_client import ParlisClient
 from bawue.rate_limiter import create_upload_limiter
 from bawue.types import RawFundstelle, RawVorgang
@@ -185,26 +186,30 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         The framework calls this for each item returned by listing_page_extractor.
         """
-        raw = self._raw_cache.pop(vorgang_id, None)
-        if raw is None:
-            logger.error("No raw data found for vorgang_id %s", vorgang_id)
-            self._skipped += 1
-            return None
+        token = set_vorgangs_id(vorgang_id)
+        try:
+            raw = self._raw_cache.pop(vorgang_id, None)
+            if raw is None:
+                logger.error("No raw data found for vorgang_id %s", vorgang_id)
+                self._skipped += 1
+                return None
 
-        vorgang = await self._build_vorgang(raw)
+            vorgang = await self._build_vorgang(raw)
 
-        # Skip non-legislative meta-entries (Bekanntmachungen, Berichtigungen, etc.)
-        # that only have post-parliamentary stations and no parliamentary process.
-        if vorgang.stationen and all(s.typ in self._POSTPARL_TYPEN for s in vorgang.stationen):
-            logger.info(
-                "Skipping Vorgang %s ('%s'): only post-parliamentary stations, not a full legislative process",
-                vorgang_id,
-                vorgang.titel[:60],
-            )
-            self._skipped += 1
-            return None
+            # Skip non-legislative meta-entries (Bekanntmachungen, Berichtigungen, etc.)
+            # that only have post-parliamentary stations and no parliamentary process.
+            if vorgang.stationen and all(s.typ in self._POSTPARL_TYPEN for s in vorgang.stationen):
+                logger.info(
+                    "Skipping Vorgang %s ('%s'): only post-parliamentary stations, not a full legislative process",
+                    vorgang_id,
+                    vorgang.titel[:60],
+                )
+                self._skipped += 1
+                return None
 
-        return vorgang
+            return vorgang
+        finally:
+            reset_vorgangs_id(token)
 
     async def _build_vorgang(self, raw: RawVorgang) -> Vorgang:
         """Convert a raw PARLIS dict into a framework Vorgang model.
