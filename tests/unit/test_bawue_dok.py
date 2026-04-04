@@ -15,9 +15,11 @@ from openapi_client.models.dokument import Dokument
 from bawue.bawue_dok import (
     EnrichmentResult,
     LLMMetrics,
+    _extract_relevant_pages,
     _hash_cache,
     _is_garbled,
     _paragraph_quality_score,
+    _parse_page_hint,
     _prompt_for_doktyp,
     _validate_scores,
     download_pdf,
@@ -182,6 +184,43 @@ class TestDownloadPdf:
         with pytest.raises(Exception, match="404"):
             await download_pdf(session, "https://example.com/missing.pdf")
 
+    @pytest.mark.asyncio
+    async def test_download_pdf_strips_url_fragment(self):
+        """URL fragment (#page=33) should be stripped before HTTP request."""
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        session = MagicMock()
+        session.get = MagicMock(return_value=mock_response)
+
+        path = await download_pdf(session, "https://www.landtag-bw.de/files/plp/17_141.pdf#page=33")
+        try:
+            session.get.assert_called_once_with("https://www.landtag-bw.de/files/plp/17_141.pdf")
+        finally:
+            path.unlink(missing_ok=True)
+
+    @pytest.mark.asyncio
+    async def test_logs_http_status_on_download_failure(self, caplog):
+        """Non-200 status should be logged as warning before raising."""
+        mock_response = AsyncMock()
+        mock_response.status = 404
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        session = MagicMock()
+        session.get = MagicMock(return_value=mock_response)
+
+        with (
+            pytest.raises(RuntimeError),
+            caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"),
+        ):
+            await download_pdf(session, "https://example.com/missing.pdf")
+
+        assert any("404" in r.message for r in caplog.records)
+
 
 # ---------------------------------------------------------------------------
 # TestExtractPdfText
@@ -200,6 +239,30 @@ class TestExtractPdfText:
 
         assert text == SAMPLE_FULL_TEXT
         assert doc_hash == SAMPLE_HASH
+
+    @pytest.mark.asyncio
+    async def test_extract_pdf_text_with_page_hint(self, tmp_path):
+        """When page_hint is set, PageConfig(insert_page_markers=True) should be used."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+
+        # Build text with page markers — page 33 has the relevant content
+        pages = []
+        for i in range(1, 40):
+            pages.append(f"\n\n<!-- PAGE {i} -->\n\nContent of page {i}")
+        marked_text = "".join(pages)
+
+        mock_result = _mock_extraction_result(content=marked_text)
+        with patch("bawue.bawue_dok.extract_file", new_callable=AsyncMock, return_value=mock_result) as mock_extract:
+            text, _ = await extract_pdf_text(pdf_file, page_hint=33)
+
+        # Verify PageConfig was used
+        call_config = mock_extract.call_args_list[0].kwargs["config"]
+        assert call_config.pages is not None
+        assert call_config.pages.insert_page_markers is True
+        # Verify only relevant pages returned
+        assert "Content of page 33" in text
+        assert "Content of page 1" not in text
 
     @pytest.mark.asyncio
     async def test_ocr_fallback_on_short_text(self, tmp_path):
@@ -401,6 +464,36 @@ class TestEnrichDokument:
         assert result.dokument.zusammenfassung is None
         assert result.dokument.schlagworte is None
         assert result.trojanergefahr is None
+
+    @pytest.mark.asyncio
+    async def test_enrich_dokument_with_page_hint(self):
+        """URL with #page=N: fragment stripped for download, page_hint passed to extraction, link preserved."""
+        page_url = "https://www.landtag-bw.de/files/plp/17_141.pdf#page=33"
+        dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link=page_url)
+        session = MagicMock()
+        llm = AsyncMock()
+        llm.generate_text = AsyncMock(return_value=SAMPLE_LLM_RESPONSE_GENERIC)
+
+        with (
+            patch(
+                "bawue.bawue_dok.download_pdf",
+                new_callable=AsyncMock,
+                return_value=Path("/tmp/fake.pdf"),
+            ) as mock_download,
+            patch(
+                "bawue.bawue_dok.extract_pdf_text",
+                new_callable=AsyncMock,
+                return_value=SAMPLE_TEXT_AND_HASH,
+            ) as mock_extract,
+        ):
+            result = await enrich_dokument(session, llm, dok)
+
+        # download_pdf receives the full URL (fragment stripping happens inside)
+        mock_download.assert_called_once_with(session, page_url)
+        # extract_pdf_text receives the page_hint
+        mock_extract.assert_called_once_with(Path("/tmp/fake.pdf"), page_hint=33)
+        # dok.link preserves the original URL with fragment
+        assert result.dokument.link == page_url
 
     @pytest.mark.asyncio
     async def test_metadata_only_fallback_on_download_failure(self):
@@ -725,6 +818,18 @@ class TestNormalizeVolltext:
         text = "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW"
         result = normalize_volltext(text)
         assert len(result.strip()) == 0 or "6WlGWHWDJ" not in result
+
+    def test_replacement_character_removed(self):
+        """U+FFFD replacement characters from encoding failures should be stripped."""
+        text = "Ein \ufffd Text mit \ufffd Zeichen"
+        result = normalize_volltext(text)
+        assert "\ufffd" not in result
+
+    def test_replacement_character_joins_word_fragments(self):
+        """U+FFFD between word parts should be removed, joining the fragments."""
+        text = "ausgezeich\ufffdnet"
+        result = normalize_volltext(text)
+        assert result == "ausgezeichnet"
 
 
 # ---------------------------------------------------------------------------
@@ -1134,3 +1239,48 @@ class TestExtractPdfTextOcrRetry:
             await extract_pdf_text(pdf_file)
 
         assert any("garbled" in r.message.lower() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# TestPageHintExtraction
+# ---------------------------------------------------------------------------
+
+
+class TestPageHintExtraction:
+    def test_parse_page_hint_extracts_page_number(self):
+        assert _parse_page_hint("https://www.landtag-bw.de/files/plp/17_141.pdf#page=33") == 33
+
+    def test_parse_page_hint_no_fragment(self):
+        assert _parse_page_hint("https://www.landtag-bw.de/files/plp/17_141.pdf") is None
+
+    def test_parse_page_hint_non_page_fragment(self):
+        assert _parse_page_hint("https://example.com/doc.pdf#section1") is None
+
+    def test_extract_relevant_pages_finds_correct_section(self):
+        """Pages outside start..start+max_pages should be excluded."""
+        pages = []
+        for i in range(1, 51):
+            pages.append(f"\n\n<!-- PAGE {i} -->\n\nContent of page {i}")
+        text = "Preamble" + "".join(pages)
+
+        result = _extract_relevant_pages(text, start_page=33, max_pages=5)
+        assert "Content of page 33" in result
+        assert "Content of page 37" in result
+        assert "Content of page 1" not in result
+        assert "Content of page 40" not in result
+
+    def test_extract_relevant_pages_no_markers_returns_full(self):
+        """Without page markers, full text is returned as fallback."""
+        text = "Plain text without any page markers at all."
+        result = _extract_relevant_pages(text, start_page=33)
+        assert result == text
+
+    def test_extract_relevant_pages_page_beyond_end(self):
+        """Page hint beyond document end falls back to full text."""
+        pages = []
+        for i in range(1, 11):
+            pages.append(f"\n\n<!-- PAGE {i} -->\n\nContent of page {i}")
+        text = "Preamble" + "".join(pages)
+
+        result = _extract_relevant_pages(text, start_page=50)
+        assert result == text
