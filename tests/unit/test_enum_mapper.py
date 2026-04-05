@@ -114,7 +114,6 @@ class TestStationstypMapping:
                 Stationstyp.PARL_MINUS_VOLLVLSGN,
             ),
             ("Ablehnung   Plenarprotokoll 17/143", None, Stationstyp.PARL_MINUS_ABLEHNUNG),
-            ("Ausfertigung   10.03.2026", None, Stationstyp.POSTPARL_MINUS_VESJA),
             (
                 "Gesetz  vom 10. Februar 2026 Gesetzblatt für Baden-Württemberg 2026 Nr. 22",
                 None,
@@ -234,7 +233,6 @@ class TestEnumValuesExistInFramework:
             "parl-vollvlsgn",
             "parl-akzeptanz",
             "parl-ablehnung",
-            "postparl-vesja",
             "postparl-gsblt",
             "postparl-kraft",
             "sonstig",

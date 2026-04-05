@@ -67,8 +67,8 @@ VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
 #   PARL_MINUS_GGENTWURF  — Gegenentwurf (Alternativentwurf zu einem Gesetzentwurf)
 #
 # Nachparlamentarisch (postparl-*):
-#   POSTPARL_MINUS_VESJA  — Ausfertigung (Unterschrift durch den Ministerpräsidenten)
-#   POSTPARL_MINUS_VESNE  — Veto (Ausfertigung verweigert)
+#   POSTPARL_MINUS_VESJA  — Volksentscheid Ja (Referendum angenommen)
+#   POSTPARL_MINUS_VESNE  — Volksentscheid Nein (Referendum abgelehnt)
 #   POSTPARL_MINUS_GSBLT  — Gesetzblatt (Verkündung im Gesetzblatt)
 #   POSTPARL_MINUS_KRAFT  — Inkrafttreten (Gesetz tritt in Kraft)
 #
@@ -101,7 +101,6 @@ STATIONSTYP_MAP: dict[str, Stationstyp] = {
     "Zustimmung": Stationstyp.PARL_MINUS_AKZEPTANZ,
     "Annahme": Stationstyp.PARL_MINUS_AKZEPTANZ,
     "Ablehnung": Stationstyp.PARL_MINUS_ABLEHNUNG,
-    "Ausfertigung": Stationstyp.POSTPARL_MINUS_VESJA,
     "Bekanntmachung": Stationstyp.POSTPARL_MINUS_GSBLT,
     "Gesetzblatt": Stationstyp.POSTPARL_MINUS_GSBLT,
     "Gesetz": Stationstyp.POSTPARL_MINUS_GSBLT,

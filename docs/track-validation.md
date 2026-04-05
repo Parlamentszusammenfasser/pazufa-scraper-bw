@@ -220,7 +220,7 @@ fuer "Ausfertigung" (= Unterschrift MP).
 | P1 | R ohne S                  | KRITISCH      | **GELOEST**         | R → S Umklassifizierung im Scraper                            |
 | P2 | J ohne vorheriges V       | NIEDRIG       | **GELOEST**         | GO §42 schreibt 2 Lesungen vor, kommt praktisch nicht vor     |
 | P3 | N ohne vorheriges V       | NIEDRIG       | **TRACK-AENDERUNG** | IVN zulassen (Punkt 4)                                        |
-| P4 | Y im Pfad                 | NIEDRIG       | **GELOEST**         | Y = Volksentscheid (bestaetigt). Irrelevant fuer `gg-land-parl`. **enum_mapper.py:104 Mapping falsch — Fix noetig.** |
+| P4 | Y im Pfad                 | NIEDRIG       | **GELOEST**         | Y = Volksentscheid (bestaetigt). Irrelevant fuer `gg-land-parl`. ✅ Mapping entfernt, Kommentare korrigiert. |
 | P5 | K fehlt                   | NIEDRIG       | **GELOEST**         | Prefix-Matching akzeptiert `IVAVJG` als Praefix von `IVAVJGK` |
 | P6 | Kein `gg-land-volk` Track | NIEDRIG       | OFFEN               | Separates Issue                                               |
 | P7 | `sonstig` crasht Backend  | KRITISCH      | OFFEN               | Backend-Bug (`validate.rs:310`), scraper-seitig filtern       |

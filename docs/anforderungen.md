@@ -123,7 +123,6 @@ Enum-Member verwenden die `MINUS`-Namenskonvention (z.B. `Stationstyp.PARL_MINUS
 | `parl-vollvlsgn` | `Stationstyp.PARL_MINUS_VOLLVLSGN` | Lesungen im Plenum                      |
 | `parl-akzeptanz` | `Stationstyp.PARL_MINUS_AKZEPTANZ` | Verabschiedung durch den Landtag        |
 | `parl-ablehnung` | `Stationstyp.PARL_MINUS_ABLEHNUNG` | Ablehnung durch den Landtag             |
-| `postparl-vesja` | `Stationstyp.POSTPARL_MINUS_VESJA` | Volksentscheid (Ja)                     |
 | `postparl-gsblt` | `Stationstyp.POSTPARL_MINUS_GSBLT` | Verkündung im Gesetzblatt               |
 | `postparl-kraft` | `Stationstyp.POSTPARL_MINUS_KRAFT` | Gesetz tritt in Kraft                   |
 | `sonstig`        | `Stationstyp.SONSTIG`              | Andere Stationen                        |

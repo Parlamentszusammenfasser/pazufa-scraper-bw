@@ -560,7 +560,6 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | Gesetzesbeschluss, Beschluss des Landtags        | `parl-akzeptanz`     |
 | Zustimmung, Annahme                              | `parl-akzeptanz`     |
 | Ablehnung                                        | `parl-ablehnung`     |
-| Volksentscheid (Ja)                              | `postparl-vesja`     |
 | Gesetz, Bekanntmachung                           | `postparl-gsblt`     |
 | Gesetzblatt                                      | `postparl-gsblt`     |
 | Inkrafttreten                                    | `postparl-kraft`     |
