@@ -469,6 +469,7 @@ def run_vorgaenge(
     scraper._wahlperiode = wahlperiode
     scraper._llm_enabled = False
     scraper._llm = None
+    scraper._filter_sonstig = True
     scraper.session = None
 
     # Collect all raw results per type in parallel, then apply limit in deterministic order

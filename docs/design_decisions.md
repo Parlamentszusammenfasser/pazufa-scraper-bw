@@ -521,43 +521,75 @@ in denen OCR nicht verfügbar ist oder fehlschlägt.
 
 ---
 
-## DD-016: Track-Validierung — Tracks bilden parlamentarisches Recht ab
+## DD-016: Track-Validierung — BW verwendet den BY-Track unverändert
 
-**Datum:** 05.04.2026
+**Datum:** 05.04.2026 | **Aktualisiert:** 06.04.2026
 
-**Kontext:** Bei der Erstanalyse der Track-Validierung (Backend v0.2.7) schlug der
-BaWue-Scraper vor, den BW-Track an die PARLIS-Daten anzupassen — z. B. `V?J` statt
-`VJ`, weil PARLIS nicht immer eine separate Zweite-Beratung-Fundstelle liefert.
-Der Backend-Entwickler (Crystalkey) wies darauf hin, dass GO BW §42 mindestens zwei
-Lesungen vorschreibt und §49 die Schlussabstimmung am Ende der letzten Lesung
-regelt. Der Dev-Lauf bestätigte: 126/128 Annahme-Vorgänge haben zwei explizite
-Lesungen (V) vor Annahme (J).
+**Kontext:** Mit Backend v0.2.7 werden Vorgänge gegen Track-Definitionen (DFA/Regex)
+validiert. Die Erstanalyse schlug einen eigenen BW-Track vor, der PARLIS-Abweichungen
+durch optionale Elemente (`V?J`, `V?N`) kompensiert. Nach Review durch den
+Backend-Entwickler (Crystalkey) und Analyse der Geschäftsordnung des Landtags BW
+(17. WP, §42–§49) zeigte sich: Alle Abweichungen lassen sich scraper-seitig lösen.
 
-Zwei Philosophien standen zur Wahl:
+**Entscheidung:** BW verwendet den BY-Track unverändert:
 
-1. **Tracks = SOLL** (Crystalkey): Tracks definieren, was laut parlamentarischem
-   Recht passieren soll. Abweichungen in PARLIS-Daten sind Scraper-Bugs oder
-   PARLIS-Datenfehler.
-2. **Tracks = KANN** (Erstanalyse): Tracks sollten akzeptieren, was der Scraper
-   liefern kann. Fehlende Daten werden durch optionale Elemente (`V?`) kompensiert.
-
-**Entscheidung:** Tracks bilden parlamentarisches Recht ab (Philosophie 1). Wenn
-PARLIS-Daten von der Geschäftsordnung abweichen, ist das ein Scraper-Problem —
-nicht ein Grund, den Track abzuschwächen.
+```
+gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)"
+```
 
 **Begründung:**
-- Erzwingt korrekte Daten statt fehlerhafte zu tolerieren
-- Gibt allen Scrapern einheitliche Leitschienen
-- Prefix-Matching (alle DFA-Zustände akzeptierend) erlaubt unvollständige
-  Vorgänge ohnehin — ein Vorgang mit `IVAVJG` ist ein gültiger Präfix von
-  `IVAVJGK`, auch wenn K noch nicht gescrapt wurde
-- Die Daten stützen die GO: 126/128 Annahmen und 11/11 Ablehnungen zeigen das
-  erwartete Zwei-Lesungen-Muster
 
-**Konsequenz:** Track-Änderungen werden nur vorgeschlagen, wenn die parlamentarische
-Praxis tatsächlich abweicht (z. B. Ablehnung nach 1. Lesung = IVN), nicht weil
-PARLIS eine Fundstelle nicht liefert.
+1. **Tracks bilden parlamentarisches Recht ab**, nicht was der Scraper liefern kann.
+   Abweichungen in PARLIS-Daten sind Scraper-Bugs, kein Grund den Track abzuschwächen.
+2. **R→S Umklassifizierung** (DD-003): PARLIS „Gesetzentwurf Landesregierung" wird
+   als `preparl-regbsl` (S) statt `preparl-regent` (R) klassifiziert. Damit matcht
+   der BY-Präfix `((E*R+)?S)?` korrekt.
+3. **GO §42 schreibt mindestens zwei Lesungen vor** — `VJ` statt `V?J` ist korrekt.
+   126/128 Annahme-Vorgänge bestätigen zwei explizite Lesungen vor Annahme.
+4. **GO §43 Abs. 4 verbietet jede Abstimmung in der 1. Lesung** — `IVN` (Ablehnung
+   nach nur einer Lesung) ist rechtlich unmöglich. Alle 31 Ablehnungen folgen `IVAVN`.
+5. **Prefix-Matching** akzeptiert unvollständige Vorgänge ohnehin — `IVAVJG` ist ein
+   gültiger Präfix von `IVAVJGK`, auch wenn K (Inkrafttreten) nicht gescrapt wurde.
+6. **Y = Volksentscheid** (`postparl-vesja`), nicht Ausfertigung. Irrelevant für den
+   `gg-land-parl`-Track. Volksanträge benötigen ggf. einen eigenen `gg-land-volk`-Track.
+
+**Validierte Sequenzen** (Dev-Lauf 171 Vorgänge, WP 17):
+
+| Sequenz   | Anzahl | Beschreibung                                      |
+|-----------|--------|---------------------------------------------------|
+| `SIVAVJG` | 112    | Regierungsentwurf (nach R→S) + Annahme            |
+| `IVAVJG`  | 14     | Fraktionsentwurf + Annahme                        |
+| `IVAVN`   | 31     | Ablehnung nach Ausschuss und 2. Lesung            |
+| `S`, `SI` | 3      | Unvollständig — gültige Präfixe                   |
 
 Quelle: [Issue #26](https://codeberg.org/PaZuFa/pazufa-backend/issues/26),
-Crystalkey-Review 05.04.2026. Siehe `docs/track-validation.md`, Punkt 3.
+Crystalkey-Review 05.04.2026.
+
+---
+
+## DD-017: Konfigurierbare Filterung von `sonstig`-Stationen
+
+**Datum:** 06.04.2026
+
+**Kontext:** PARLIS liefert Fundstellen wie „Mitteilung" oder „Dokument", die keinem
+spezifischen Stationstyp zugeordnet werden können (s. DD-002). Der `enum_mapper`
+klassifiziert diese als `Stationstyp.SONSTIG`. Das Backend (v0.2.7) löst bei
+`sonstig`-Stationen einen Panic aus (`validate.rs:310`, `.get()` statt `[]`).
+28 Vorgänge im Dev-Lauf waren betroffen.
+
+Das Backend wird diesen Bug voraussichtlich in einer kommenden Version beheben und
+`sonstig`-Stationen akzeptieren.
+
+**Entscheidung:** `sonstig`-Stationen werden in `_collect_stationen()` herausgefiltert,
+gesteuert durch den Konfigurationsparameter `filter-sonstig-stations` (Default: `true`).
+Sobald das Backend `sonstig` akzeptiert, kann der Filter durch Setzen auf `false`
+deaktiviert werden.
+
+Der Filter greift **nach** den Sonderbehandlungen für Stellungnahmen,
+Änderungsanträge und Entschließungsanträge (DD-001, DD-005), da diese ebenfalls
+als `sonstig` klassifiziert werden können, aber als Dokumente an vorhergehende
+Stationen angehängt werden sollen.
+
+**Implementierung:** `bawue_vorgaenge_scraper.py`, Methode `_collect_stationen()`.
+Konfiguration über `[bawue]` → `filter-sonstig-stations` in `config.toml`.
 

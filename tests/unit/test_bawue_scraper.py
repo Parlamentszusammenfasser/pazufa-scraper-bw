@@ -64,6 +64,7 @@ def scraper_build_vorgang():
     scraper._wahlperiode = 17
     scraper._llm_enabled = False
     scraper._llm = None
+    scraper._filter_sonstig = True
     scraper.session = MagicMock()
     return scraper._build_vorgang
 
@@ -347,6 +348,7 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     scraper._llm_enabled = False
     scraper._llm = None
     scraper._llm_metrics = LLMMetrics()
+    scraper._filter_sonstig = True
     scraper.session = MagicMock()
     return scraper
 
@@ -489,6 +491,7 @@ class TestPlaceholderDate:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -582,6 +585,7 @@ class TestDatetimeFallbackWarning:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -608,6 +612,7 @@ class TestDatetimeFallbackWarning:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -1184,6 +1189,7 @@ class TestStellungnahmenAsChildren:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -1566,6 +1572,7 @@ class TestAenderungsantragHandling:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -1965,6 +1972,7 @@ class TestTrojanergefahr:
         scraper._llm_model = "gpt-5-nano"
         scraper._llm_truncate_tokens = 12000
         scraper._llm_metrics = LLMMetrics()
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         enriched_dok = Dokument(
@@ -2009,6 +2017,7 @@ class TestTrojanergefahr:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -2027,3 +2036,98 @@ class TestTrojanergefahr:
         vorgang = await scraper._build_vorgang(raw)
 
         assert vorgang.stationen[0].trojanergefahr is None
+
+
+class TestFilterSonstigStations:
+    """Tests for configurable sonstig station filtering."""
+
+    @pytest.mark.asyncio
+    async def test_sonstig_station_filtered_when_enabled(self, scraper_build_vorgang):
+        """When filter-sonstig-stations=true, sonstig stations are removed."""
+        raw = _make_raw_vorgang(
+            "V-700",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 13,
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/12345/doc.pdf",
+                },
+                {
+                    "raw": "Mitteilung   Plenarprotokoll 17/141  06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Mitteilung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_INITIATIV
+
+    @pytest.mark.asyncio
+    async def test_sonstig_station_kept_when_disabled(self):
+        """When filter-sonstig-stations=false, sonstig stations pass through."""
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+        scraper._llm_enabled = False
+        scraper._llm = None
+        scraper._filter_sonstig = False
+        scraper.session = MagicMock()
+
+        raw = _make_raw_vorgang(
+            "V-701",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 13,
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/12345/doc.pdf",
+                },
+                {
+                    "raw": "Mitteilung   Plenarprotokoll 17/141  06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Mitteilung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper._build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 2
+        assert vorgang.stationen[1].typ == Stationstyp.SONSTIG
+
+    @pytest.mark.asyncio
+    async def test_sonstig_filtering_logs_debug_message(self, scraper_build_vorgang, caplog):
+        """Filtered sonstig stations are logged at DEBUG level."""
+        raw = _make_raw_vorgang(
+            "V-702",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 13,
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/12345/doc.pdf",
+                },
+                {
+                    "raw": "Mitteilung   Plenarprotokoll 17/141  06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Mitteilung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        with caplog.at_level(logging.DEBUG, logger="bawue.bawue_vorgaenge_scraper"):
+            await scraper_build_vorgang(raw)
+
+        assert any("sonstig" in r.message.lower() for r in caplog.records)

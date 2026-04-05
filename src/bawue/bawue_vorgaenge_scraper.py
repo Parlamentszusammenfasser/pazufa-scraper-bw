@@ -82,6 +82,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # The listing_urls are Vorgangstyp strings — the framework passes them to listing_page_extractor
         listing_urls = bawue_config.get("enabled-vorgangstypen", DEFAULT_ENABLED_VORGANGSTYPEN)
         self._enabled_vorgangstypen: frozenset[str] = frozenset(listing_urls)
+        self._filter_sonstig = bawue_config.get("filter-sonstig-stations", True)
 
         super().__init__(config, uuid.UUID(config.collector_id), listing_urls, session)
 
@@ -326,6 +327,14 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
             if self._is_stellungnahme(station, station_typ_str):
                 self._attach_stellungnahme(stationen, station.dokumente, vorgang_id)
+                continue
+
+            if self._filter_sonstig and station.typ == Stationstyp.SONSTIG:
+                logger.debug(
+                    "Filtering sonstig station (Fundstelle: %s) in %s",
+                    fund.get("raw", "?"),
+                    vorgang_id,
+                )
                 continue
 
             if station.dokumente and self._try_merge_station(stationen, station):

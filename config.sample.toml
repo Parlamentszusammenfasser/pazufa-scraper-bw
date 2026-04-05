@@ -41,6 +41,11 @@ wahlperiode-start-date = "2021-04-26"  # WP 17: Landtag constituted
 #   "Dringliche Anfrage", "Änderungsantrag", "Unterrichtung", "Bericht", "Wahlvorschlag",
 #   "Sonstiges"
 enabled-vorgangstypen = ["Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag"]
+# Filter out stations with type "sonstig" (unmapped Fundstellen like "Mitteilung").
+# The backend currently panics on sonstig stations (validate.rs:310).
+# Set to false once the backend accepts sonstig.
+#filter-sonstig-stations = true
+
 ics-url = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkalender.ics"
 
 # Beteiligungsportal-specific configuration
