@@ -133,10 +133,9 @@ Validierung gegen Daten:
 - Im 171-Vorgang-Dev-Lauf wurde `IVAJ` **kein einziges Mal** beobachtet — widerlegt
   unsere urspruengliche Vorhersage, dass IVAJ der haeufigste Pfad sei
 
-**Offene Frage:** Soll der Track *parlamentarisches Recht* abbilden (immer VJ) oder
-*was PARLIS liefert* (fast immer VJ, selten nur J)? Crystalkeys Philosophie: Tracks
-definieren was passieren SOLL. Unsere Erstanalyse: Tracks sollten akzeptieren was
-Scraper liefern KOENNEN. → Crystalkeys Ansatz ist sauberer.
+**Entscheidung:** Crystalkeys Ansatz uebernommen — Tracks bilden parlamentarisches
+Recht ab (was passieren SOLL), nicht was der Scraper liefern KANN. Wenn PARLIS-Daten
+von der GO abweichen, ist das ein Scraper-Bug oder PARLIS-Datenfehler, kein Track-Problem.
 
 **Konsequenz:** `V?J` ist unnoetig. `VJ` (wie im BY-Track) ist korrekt.
 
@@ -399,17 +398,6 @@ zu erstellen, nicht im pazufa-backend. Issue #26 wurde im falschen Repo eroeffne
 
 - **Aktion:** Neues Issue in parlamentszusammenfasser erstellen mit dem aktualisierten
   BW-Track-Vorschlag. Issue #26 referenzieren und als "falsch platziert" kennzeichnen.
-
-### 5. Tracks und Scraper-Philosophie
-
-Crystalkeys Position: Tracks definieren was passieren SOLL (parlamentarisches Recht).
-Unsere Erstanalyse: Tracks sollten akzeptieren was Scraper liefern KOENNEN.
-
-- Crystalkeys Ansatz ist sauberer — er erzwingt korrekte Daten statt fehlerhafte zu tolerieren
-- **Konsequenz fuer uns:** Wenn PARLIS-Daten von der GO abweichen, ist das ein
-  Scraper-Bug (oder ein PARLIS-Datenfehler), nicht ein Track-Problem
-- **Frage an uns selbst:** Gibt es echte Faelle, in denen BaWue von GO §42 (2 Lesungen)
-  abweicht? Die Daten (126/128) sagen: praktisch nein.
 
 ---
 

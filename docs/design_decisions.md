@@ -518,3 +518,46 @@ in denen OCR nicht verfügbar ist oder fehlschlägt.
 - `_paragraph_quality_score()` — Multi-Signal-Bewertung pro Absatz
 - `normalize_volltext()` — Absatzfilterung, NFKC, C1-Stripping,
   CRLF-Normalisierung, Angle-Bracket-Ersetzung
+
+---
+
+## DD-016: Track-Validierung — Tracks bilden parlamentarisches Recht ab
+
+**Datum:** 05.04.2026
+
+**Kontext:** Bei der Erstanalyse der Track-Validierung (Backend v0.2.7) schlug der
+BaWue-Scraper vor, den BW-Track an die PARLIS-Daten anzupassen — z. B. `V?J` statt
+`VJ`, weil PARLIS nicht immer eine separate Zweite-Beratung-Fundstelle liefert.
+Der Backend-Entwickler (Crystalkey) wies darauf hin, dass GO BW §42 mindestens zwei
+Lesungen vorschreibt und §49 die Schlussabstimmung am Ende der letzten Lesung
+regelt. Der Dev-Lauf bestätigte: 126/128 Annahme-Vorgänge haben zwei explizite
+Lesungen (V) vor Annahme (J).
+
+Zwei Philosophien standen zur Wahl:
+
+1. **Tracks = SOLL** (Crystalkey): Tracks definieren, was laut parlamentarischem
+   Recht passieren soll. Abweichungen in PARLIS-Daten sind Scraper-Bugs oder
+   PARLIS-Datenfehler.
+2. **Tracks = KANN** (Erstanalyse): Tracks sollten akzeptieren, was der Scraper
+   liefern kann. Fehlende Daten werden durch optionale Elemente (`V?`) kompensiert.
+
+**Entscheidung:** Tracks bilden parlamentarisches Recht ab (Philosophie 1). Wenn
+PARLIS-Daten von der Geschäftsordnung abweichen, ist das ein Scraper-Problem —
+nicht ein Grund, den Track abzuschwächen.
+
+**Begründung:**
+- Erzwingt korrekte Daten statt fehlerhafte zu tolerieren
+- Gibt allen Scrapern einheitliche Leitschienen
+- Prefix-Matching (alle DFA-Zustände akzeptierend) erlaubt unvollständige
+  Vorgänge ohnehin — ein Vorgang mit `IVAVJG` ist ein gültiger Präfix von
+  `IVAVJGK`, auch wenn K noch nicht gescrapt wurde
+- Die Daten stützen die GO: 126/128 Annahmen und 11/11 Ablehnungen zeigen das
+  erwartete Zwei-Lesungen-Muster
+
+**Konsequenz:** Track-Änderungen werden nur vorgeschlagen, wenn die parlamentarische
+Praxis tatsächlich abweicht (z. B. Ablehnung nach 1. Lesung = IVN), nicht weil
+PARLIS eine Fundstelle nicht liefert.
+
+Quelle: [Issue #26](https://codeberg.org/PaZuFa/pazufa-backend/issues/26),
+Crystalkey-Review 05.04.2026. Siehe `docs/track-validation.md`, Punkt 3.
+
