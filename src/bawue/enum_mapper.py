@@ -162,13 +162,14 @@ def map_stationstyp(fundstelle_text: str, initiator: str | None = None) -> Stati
     Whitespace is normalized so that internal double-spaces (common in PARLIS
     Fundstelle text) don't prevent matching of multi-word keys like
     "Beschluss des Landtags in".
-    If the station is a Gesetzentwurf from the Landesregierung, maps to PREPARL_REGENT.
+    If the station is a Gesetzentwurf from the Landesregierung, maps to PREPARL_REGBSL
+    (Kabinettsbeschluss) — PARLIS shows the bill after the cabinet decided to submit it.
     """
     text_lower = _normalize_whitespace(fundstelle_text).lower()
     for key in _STATIONSTYP_KEYS_SORTED:
         if key.lower() in text_lower:
             if key == "Gesetzentwurf" and initiator and "Landesregierung" in initiator:
-                return Stationstyp.PREPARL_MINUS_REGENT
+                return Stationstyp.PREPARL_MINUS_REGBSL
             return STATIONSTYP_MAP[key]
     return Stationstyp.SONSTIG
 

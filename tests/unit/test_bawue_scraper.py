@@ -116,7 +116,7 @@ class TestBuildVorgang:
         assert vorgang.initiatoren[0].organisation == "Landesregierung"
 
         station = vorgang.stationen[0]
-        assert station.typ == Stationstyp.PREPARL_MINUS_REGENT
+        assert station.typ == Stationstyp.PREPARL_MINUS_REGBSL
         assert station.dokumente[0].actual_instance.typ == Doktyp.PREPARL_MINUS_ENTWURF
         assert station.dokumente[0].actual_instance.drucksnr == "17/11000"
 
@@ -1491,7 +1491,7 @@ class TestAenderungsantragHandling:
         # Should have 3 stations: preparl-regent + synthetic parl-initiativ + Zweite Beratung
         station_types = [s.typ for s in vorgang.stationen]
         assert station_types == [
-            Stationstyp.PREPARL_MINUS_REGENT,
+            Stationstyp.PREPARL_MINUS_REGBSL,
             Stationstyp.PARL_MINUS_INITIATIV,
             Stationstyp.PARL_MINUS_VOLLVLSGN,
         ]

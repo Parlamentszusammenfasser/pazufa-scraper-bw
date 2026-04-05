@@ -75,7 +75,7 @@ class TestStationstypMapping:
             (
                 "Gesetzentwurf    Landesregierung  04.02.2026 Drucksache 17/10266",
                 "Landesregierung",
-                Stationstyp.PREPARL_MINUS_REGENT,
+                Stationstyp.PREPARL_MINUS_REGBSL,
             ),
             (
                 "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  02.02.2026 Drucksache 17/10210",

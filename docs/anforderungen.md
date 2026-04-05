@@ -116,7 +116,7 @@ Enum-Member verwenden die `MINUS`-Namenskonvention (z.B. `Stationstyp.PARL_MINUS
 
 | Wert             | Python-Enum-Member                 | Bedeutung                               |
 |------------------|------------------------------------|-----------------------------------------|
-| `preparl-regent` | `Stationstyp.PREPARL_MINUS_REGENT` | Gesetzentwürfe der Landesregierung      |
+| `preparl-regent` | `Stationstyp.PREPARL_MINUS_REGENT` | Regierungsentwürfe (Beteiligungsportal) |
 | `preparl-regbsl` | `Stationstyp.PREPARL_MINUS_REGBSL` | Kabinettsbeschlüsse                     |
 | `parl-initiativ` | `Stationstyp.PARL_MINUS_INITIATIV` | Gesetzentwürfe, Anträge aus dem Landtag |
 | `parl-ausschber` | `Stationstyp.PARL_MINUS_AUSSCHBER` | Beratung in Fachausschüssen             |

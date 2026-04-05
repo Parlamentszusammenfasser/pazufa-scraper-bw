@@ -127,7 +127,7 @@ class TestGesetzgebungFullLifecycle:
         assert vg["initiatoren"][0]["organisation"] == "Landesregierung"
 
         station = vg["stationen"][0]
-        assert station["typ"] == Stationstyp.PREPARL_MINUS_REGENT.value
+        assert station["typ"] == Stationstyp.PREPARL_MINUS_REGBSL.value
 
 
 # ===================================================================

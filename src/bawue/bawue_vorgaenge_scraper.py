@@ -252,7 +252,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 [f.get("raw", "")[:100] for f in fundstellen_parsed],
             )
 
-        self._ensure_initiativ_after_regent(stationen)
+        self._ensure_initiativ_after_regbsl(stationen)
 
         # parse rejections
         aktueller_stand = raw.get("Aktueller Stand", "")
@@ -383,38 +383,38 @@ class BawueVorgaengeScraper(VorgangsScraper):
             vorgang_id,
         )
 
-    def _ensure_initiativ_after_regent(self, stationen: list[Station]) -> None:
-        """Insert a synthetic parl-initiativ station after preparl-regent if missing.
+    def _ensure_initiativ_after_regbsl(self, stationen: list[Station]) -> None:
+        """Insert a synthetic parl-initiativ station after preparl-regbsl if missing.
 
         PARLIS uses a single Fundstelle "Gesetzentwurf" for government bills, which
-        the scraper maps to preparl-regent.  However, the backend track definition
-        requires a parl-initiativ station between the pre-parliamentary phase and
-        the first plenary reading (parl-vollvlsgn).  The parliamentary introduction
-        is implicit in PARLIS data — this method makes it explicit.
+        the scraper maps to preparl-regbsl (Kabinettsbeschluss).  However, the backend
+        track definition requires a parl-initiativ station between the pre-parliamentary
+        phase and the first plenary reading (parl-vollvlsgn).  The parliamentary
+        introduction is implicit in PARLIS data — this method makes it explicit.
         """
         if not stationen:
             return
 
-        # Find the last preparl-regent (there may be several pre-parliamentary stations)
-        regent_idx = None
+        # Find the last preparl-regbsl (there may be several pre-parliamentary stations)
+        regbsl_idx = None
         for i, s in enumerate(stationen):
-            if s.typ == Stationstyp.PREPARL_MINUS_REGENT:
-                regent_idx = i
+            if s.typ == Stationstyp.PREPARL_MINUS_REGBSL:
+                regbsl_idx = i
 
-        if regent_idx is None:
+        if regbsl_idx is None:
             return
 
         # Check if a parl-initiativ already follows
-        next_idx = regent_idx + 1
+        next_idx = regbsl_idx + 1
         if next_idx < len(stationen) and stationen[next_idx].typ == Stationstyp.PARL_MINUS_INITIATIV:
             return
 
-        # Determine the date: use the next station's date if available, else the regent's
-        zp_start = stationen[next_idx].zp_start if next_idx < len(stationen) else stationen[regent_idx].zp_start
+        # Determine the date: use the next station's date if available, else the regbsl's
+        zp_start = stationen[next_idx].zp_start if next_idx < len(stationen) else stationen[regbsl_idx].zp_start
 
         synthetic = Station(
             typ=Stationstyp.PARL_MINUS_INITIATIV,
-            dokumente=stationen[regent_idx].dokumente.copy(),
+            dokumente=stationen[regbsl_idx].dokumente.copy(),
             zp_start=zp_start,
             gremium=Gremium(
                 parlament=Parlament.BW,
@@ -601,7 +601,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         doc_typ = map_dokumententyp(
             mapping_text,
-            is_vorparlamentarisch=(station_typ == Stationstyp.PREPARL_MINUS_REGENT),
+            is_vorparlamentarisch=(station_typ == Stationstyp.PREPARL_MINUS_REGBSL),
         )
         if doc_typ == Doktyp.SONSTIG and fund.get("plenarprotokoll"):
             doc_typ = Doktyp.REDEPROTOKOLL
