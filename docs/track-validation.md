@@ -1,6 +1,6 @@
 # Track Validation: Analyse fuer Baden-Wuerttemberg
 
-**Datum:** 04.04.2026 (Erstanalyse) | 05.04.2026 (Review-Update + Analyse Crystalkey-Response)
+**Datum:** 04.04.2026 (Erstanalyse) | 05.04.2026 (Review-Update + Analyse Crystalkey-Response) | 06.04.2026 (GO-Analyse: IVN unmoeglich)
 **Backend-Version:** v0.2.7 (Track Validation eingefuehrt)
 **Issue:** [Issue 26](https://codeberg.org/PaZuFa/pazufa-backend/issues/26) (eingereicht in pazufa-backend, kuenftige Track-Issues in [parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser/issues))
 **Review:** Crystalkey (Backend-Entwickler), 05.04.2026
@@ -12,8 +12,10 @@
 Mit Backend v0.2.7 werden Vorgaenge gegen Track-Definitionen (DFA/Regex) validiert.
 BW verwendet aktuell den BY-Track. Die Erstanalyse ergab 6 Abweichungen und schlug
 einen eigenen BW-Track vor. Nach Review durch Crystalkey zeigt sich: **Die meisten
-Abweichungen lassen sich scraper-seitig loesen.** Nur eine minimale Track-Aenderung
-ist noetig.
+Abweichungen lassen sich scraper-seitig loesen.** Die GO-Analyse (06.04.2026)
+widerlegt die letzte geplante Track-Aenderung (IVN): §43 Abs. 4 GO verbietet
+jede Abstimmung in der 1. Lesung. **Keine Track-Aenderung noetig — BY-Track
+passt fuer BW.**
 
 Quellen: [tracks.toml](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/specs/tracks.toml), [Wiki — Track Validation](https://wiki.pazufa.de/books/backend-api/page/track-validation)
 
@@ -65,7 +67,7 @@ gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)"
 | 1 | Prefix-Matching ist inhaerent        | BESTAETIGT   | `GK?` unnoetig — `IVAVJG` ist gueltiger Praefix von `IVAVJGK`              |
 | 2 | R als S umklassifizieren             | UEBERNOMMEN  | Scraper-Fix: `preparl-regent` → `preparl-regbsl`. BY-Praefix funktioniert. |
 | 3 | V vor J — GO §42 verlangt 2 Lesungen | UEBERNOMMEN  | `V?J` unnoetig. 126/128 Annahmen haben zwei explizite V.                   |
-| 4 | V vor N — Strukturvorschlag          | TEILWEISE    | Ablehnung nach 1. Lesung (IVN) zulassen. **Einzige Track-Aenderung.**      |
+| 4 | V vor N — Strukturvorschlag          | ABGELEHNT    | GO §43 Abs. 4 verbietet Abstimmung in 1. Lesung. IVN rechtlich unmoeglich. **Keine Track-Aenderung noetig.** |
 | 5 | K nicht abschwaechen                 | UEBERNOMMEN  | `GK` beibehalten. Prefix-Matching loest das Problem.                       |
 | 6 | Y ≠ Ausfertigung                     | BESTAETIGT   | `postparl-vesja` = Volksentscheid. **enum_mapper.py:104 Mapping falsch.**  |
 
@@ -144,26 +146,33 @@ von der GO abweichen, ist das ein Scraper-Bug oder PARLIS-Datenfehler, kein Trac
 **Crystalkey:** Schlaegt `IV(N|...)` statt unserem `V?N` vor. Wenn Ablehnung nach
 der 1. Lesung passiert, soll das strukturell sauber abgebildet werden.
 
-**Bewertung: STRUKTURELL BESSER als unser Vorschlag.**
+**Bewertung: ABGELEHNT — IVN ist rechtlich unmoeglich.**
 
-Unser `V?N` ist zu permissiv — es wuerde N ohne jedes vorherige V an bestimmten
-Regex-Positionen erlauben. Crystalkeys Ansatz `IV(N|VA*(...))` bewahrt die Semantik:
-es gibt immer mindestens EINE Lesung (V) vor Ablehnung, aber keine zweite Pflicht-
-Lesung vor N.
+~~Unser `V?N` ist zu permissiv. Crystalkeys Ansatz `IV(N|VA*(...))` waere
+strukturell besser, ist aber unnoetig.~~
 
-Vergleich:
-```
-Unser V?N:        ...VA*(Z|V?JGK|V?N|...)     — N kann ohne V in aeusseren Alternativen stehen
-Crystalkeys:      I(V(N|A*(Z|VJGK|VN|...)))   — sauberer, aber restrukturiert den ganzen Regex
-```
+**Analyse der Geschaeftsordnung des Landtags BW (17. WP), §42-§49:**
 
-Validierung gegen Daten:
-- 11 Ablehnungen, ALLE folgen `IVAVN` (zwei Lesungen vor Ablehnung)
-- `IVN` (Ablehnung nach 1. Lesung) wurde im Dev-Lauf nicht beobachtet, ist aber
-  theoretisch moeglich (Vorgang wird in 1. Lesung abgelehnt, keine Ueberweisung)
-- `IN` (Ablehnung ohne Lesung) kommt nicht vor — Crystalkeys Struktur verhindert das korrekt
+| GO-Paragraph   | Regelung                                                             | Konsequenz fuer IVN                          |
+|----------------|----------------------------------------------------------------------|----------------------------------------------|
+| §42 Abs. 1     | Gesetzentwuerfe werden in **mindestens zwei Beratungen** erledigt    | Mindestens 2 Lesungen vor jeder Entscheidung |
+| §43 Abs. 1     | Erste Beratung bespricht nur die Grundsaetze der Vorlage             | Keine Sachentscheidung in 1. Lesung          |
+| §43 Abs. 3     | Am Schluss der 1. Beratung: Beschluss ueber Ausschuss-Ueberweisung   | Einzige erlaubte Entscheidung                |
+| **§43 Abs. 4** | **"In der Ersten Beratung findet keine andere Abstimmung statt."**   | **Ablehnung in 1. Lesung ist verboten**      |
+| §45 Abs. 5     | Bei Ablehnung aller Teile in der 2. Beratung: keine weitere Beratung | Ablehnung passiert fruehestens in 2. Lesung  |
 
-**Dies ist die einzige Aenderung am Track-String.** Siehe "Vorgeschlagener BW-Track".
+**Selbst ohne Ausschuss-Ueberweisung** waere der minimale Ablehnungspfad IVVN
+(1. Lesung → 2. Lesung → Ablehnung), nicht IVN.
+
+Validierung gegen Daten (Scraper-Lauf 05.04.2026, JSONL-Log):
+- **31 Ablehnungen** im aktuellen Lauf, **ALLE** folgen `IVAVN`
+- `IVN`: 0 Vorgaenge (rechtlich unmoeglich nach §43 Abs. 4)
+- `IVVN`: 0 Vorgaenge (theoretisch moeglich, aber nie beobachtet — in der Praxis
+  wird immer an einen Ausschuss ueberwiesen)
+- `IN`: 0 Vorgaenge (ebenfalls unmoeglich)
+
+**Konsequenz: Keine Track-Aenderung noetig.** Der BY-Track mit `VN` (Ablehnung nach
+2. Lesung) ist korrekt und ausreichend. IVN muss nicht zugelassen werden.
 
 ### Punkt 5: K (Inkrafttreten) beibehalten
 
@@ -215,67 +224,40 @@ fuer "Ausfertigung" (= Unterschrift MP).
 
 ## Aktualisierte Problemtabelle
 
-| #  | Problem                   | Schwere (alt) | Status nach Review  | Loesung                                                       |
-|----|---------------------------|---------------|---------------------|---------------------------------------------------------------|
-| P1 | R ohne S                  | KRITISCH      | **GELOEST**         | R → S Umklassifizierung im Scraper                            |
-| P2 | J ohne vorheriges V       | NIEDRIG       | **GELOEST**         | GO §42 schreibt 2 Lesungen vor, kommt praktisch nicht vor     |
-| P3 | N ohne vorheriges V       | NIEDRIG       | **TRACK-AENDERUNG** | IVN zulassen (Punkt 4)                                        |
-| P4 | Y im Pfad                 | NIEDRIG       | **GELOEST**         | Y = Volksentscheid (bestaetigt). Irrelevant fuer `gg-land-parl`. ✅ Mapping entfernt, Kommentare korrigiert. |
-| P5 | K fehlt                   | NIEDRIG       | **GELOEST**         | Prefix-Matching akzeptiert `IVAVJG` als Praefix von `IVAVJGK` |
-| P6 | Kein `gg-land-volk` Track | NIEDRIG       | OFFEN               | Separates Issue                                               |
-| P7 | `sonstig` crasht Backend  | KRITISCH      | OFFEN               | Backend-Bug (`validate.rs:310`), scraper-seitig filtern       |
+| #  | Problem                   | Schwere (alt) | Status nach Review | Loesung                                                                                                     |
+|----|---------------------------|---------------|--------------------|-------------------------------------------------------------------------------------------------------------|
+| P1 | R ohne S                  | KRITISCH      | **GELOEST**        | R → S Umklassifizierung im Scraper                                                                          |
+| P2 | J ohne vorheriges V       | NIEDRIG       | **GELOEST**        | GO §42 schreibt 2 Lesungen vor, kommt praktisch nicht vor                                                   |
+| P3 | N ohne vorheriges V       | NIEDRIG       | **GELOEST**        | GO §43 Abs. 4 verbietet Abstimmung in 1. Lesung. IVN unmoeglich. BY-Track korrekt.                          |
+| P4 | Y im Pfad                 | NIEDRIG       | **GELOEST**        | Y = Volksentscheid (bestaetigt). Irrelevant fuer `gg-land-parl`. ✅ Mapping entfernt, Kommentare korrigiert. |
+| P5 | K fehlt                   | NIEDRIG       | **GELOEST**        | Prefix-Matching akzeptiert `IVAVJG` als Praefix von `IVAVJGK`                                               |
+| P6 | Kein `gg-land-volk` Track | NIEDRIG       | OFFEN              | Separates Issue                                                                                             |
+| P7 | `sonstig` crasht Backend  | KRITISCH      | OFFEN              | Backend-Bug (`validate.rs:310`), scraper-seitig filtern                                                     |
 
 ---
 
-## Vorgeschlagener BW-Track
+## BW-Track: BY-Track unveraendert uebernehmen
 
-### Ausgangspunkt: BY-Track
+### Ergebnis der GO-Analyse (06.04.2026)
 
-```
-((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)
-```
+Die urspruenglich vorgeschlagene Punkt-4-Aenderung (IVN zulassen) ist **nicht noetig**.
+GO §43 Abs. 4 verbietet jede Abstimmung in der 1. Lesung — IVN kann nicht vorkommen.
+Alle 31 Ablehnungen in WP 17 folgen IVAVN. **BW verwendet den BY-Track unveraendert.**
 
-### Schritt 1: Struktur identifizieren
-
-Der innere Teil nach `I` lautet:
-
-```
-I(
-  VA*(Z|VJGK|VN|VA*(Z|VJGK|VN))   ← 1. Lesung + Ausschuss + Alternativen
-  | Z                               ← sofortige Ruecknahme
-)
-```
-
-Nach der 1. Lesung (V) und optionalem Ausschuss (A*) gibt es `VN` als Option —
-das verlangt eine **2. Lesung vor Ablehnung**. Fuer BW soll Ablehnung auch direkt
-nach der 1. Lesung moeglich sein (`IVN`).
-
-### Schritt 2: Einzige Aenderung — N nach 1. Lesung zulassen
-
-```
-I(
-  V(
-    N                               ← NEU: Ablehnung nach 1. Lesung
-    | A*(Z|VJGK|VN|VA*(Z|VJGK|VN)) ← unveraendert: Ausschuss + Alternativen
-  )
-  | Z                               ← sofortige Ruecknahme (unveraendert)
-)
-```
-
-### BW-Track (Ergebnis)
+### BW-Track = BY-Track
 
 ```toml
 [BW]
-gg-land-parl = "((E*R+)?S)?I(V(N|A*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)"
+gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)"
 ```
 
-### Aenderung gegenueber BY
+~~Vorherige Version hatte `I(V(N|A*(...)))` — IVN-Aenderung entfernt.~~
 
-| BY-Track       | BW-Vorschlag      | Begruendung                             |
-|----------------|-------------------|-----------------------------------------|
-| `I((VA*(...))` | `I(V(N\|A*(...))` | Ablehnung nach 1. Lesung zulassen (IVN) |
+### Keine Aenderung gegenueber BY
 
-Alles andere bleibt identisch zum BY-Track.
+| Urspruenglicher Vorschlag | Aktueller Stand | Begruendung                                                   |
+|---------------------------|-----------------|---------------------------------------------------------------|
+| `I(V(N\|A*(...)))`        | **Verworfen**   | GO §43 Abs. 4: keine Abstimmung in 1. Lesung. IVN unmoeglich. |
 
 ### Gueltige Sequenzen (mit R→S Umklassifizierung)
 
@@ -283,12 +265,11 @@ Alles andere bleibt identisch zum BY-Track.
 |------------|--------|---------------------------------------------------------------------------------------------|
 | `SIVAVJG`  | 112    | Regierungsentwurf: S + I(synth) + 1. Lesung + Ausschuss + 2. Lesung + Annahme + Gesetzblatt |
 | `IVAVJG`   | 14     | Fraktionsentwurf: gleicher Pfad ohne vorparlamentarische Phase                              |
-| `IVAVN`    | 11     | Ablehnung nach Ausschuss und 2. Lesung                                                      |
-| `IVN`      | 0*     | Ablehnung nach 1. Lesung (theoretisch moeglich, NEU erlaubt)                                |
+| `IVAVN`    | 31     | Ablehnung nach Ausschuss und 2. Lesung (aktualisiert: 31 im vollen Lauf)                    |
 | `IZ`       | 0*     | Eingereicht, sofort zurueckgezogen                                                          |
 | `SIVAVJGK` | 0*     | Vollstaendiger Zyklus mit Inkrafttreten (theoretisch, nie beobachtet)                       |
 
-\* Nicht im Dev-Lauf beobachtet, aber gueltige Pfade.
+\* Nicht im Scraper-Lauf beobachtet, aber gueltige Pfade.
 
 ---
 
@@ -314,7 +295,7 @@ Legende: `?` = `sonstig` (nicht gemappte Fundstelle). Wird durch Fix 1 geloest.
 1. **Prefix-Matching bestaetigt.** Unvollstaendige Vorgaenge sind gueltig.
 2. **R→S Umklassifizierung umgesetzt.** 112 ehemalige R-ohne-S-Fehler geloest.
 3. **`sonstig` crasht das Backend** — 27 Vorgaenge (108 Panics). Weiterhin Blocker.
-4. **BY-Track passt nach R→S fuer ~98% der Vorgaenge.** Nur IVN-Pfad fehlt.
+4. **BY-Track passt nach R→S fuer 100% der Vorgaenge.** GO-Analyse bestaetigt: IVN ist rechtlich unmoeglich (§43 Abs. 4). Keine Track-Aenderung noetig.
 
 ---
 
@@ -332,20 +313,20 @@ Fix 5 (partielle Sequenzen) aus der Erstanalyse **entfaellt** — Prefix-Matchin
 
 ### Erwartetes Ergebnis nach Fixes
 
-167/171 Vorgaenge matchen den vorgeschlagenen BW-Track.
+167/171 Vorgaenge matchen den BY-Track (= BW-Track, keine Aenderung noetig).
 4 partielle Sequenzen (`S`, `SI`, `SIV`) sind gueltige Praefixe.
 
 ---
 
 ## Abhaengigkeiten
 
-| Abhaengigkeit                                          | Status                                                   |
-|--------------------------------------------------------|----------------------------------------------------------|
-| Backend implementiert BW-Track (nur Punkt-4-Aenderung) | Ausstehend — Issue in parlamentszusammenfasser erstellen |
-| Backend: `sonstig` Panic beheben (`validate.rs:310`)   | Ausstehend — separater Bug-Report                        |
-| `gg-land-volk` Track fuer Volksantraege                | Zu klaeren (Punkt 3)                                     |
-| Klaerung Y/vesja Semantik → enum_mapper Fix            | Bestaetigt: Volksentscheid. Mapping muss korrigiert werden. |
-| Klaerung IVAVVJG Dreifach-Lesung                       | Zu klaeren (Punkt 2)                                     |
+| Abhaengigkeit                                        | Status                                                                                  |
+|------------------------------------------------------|-----------------------------------------------------------------------------------------|
+| ~~Backend implementiert BW-Track~~                   | **Entfaellt** — GO-Analyse zeigt: keine Track-Aenderung noetig. BY-Track passt fuer BW. |
+| Backend: `sonstig` Panic beheben (`validate.rs:310`) | Ausstehend — separater Bug-Report                                                       |
+| `gg-land-volk` Track fuer Volksantraege              | Zu klaeren (Punkt 3)                                                                    |
+| Klaerung Y/vesja Semantik → enum_mapper Fix          | Bestaetigt: Volksentscheid. Mapping muss korrigiert werden.                             |
+| Klaerung IVAVVJG Dreifach-Lesung                     | Zu klaeren (Punkt 2)                                                                    |
 
 ---
 
@@ -406,7 +387,7 @@ zu erstellen, nicht im pazufa-backend. Issue #26 wurde im falschen Repo eroeffne
 1. ~~Dev-Lauf durchfuehren~~ **Erledigt** (04.04.2026)
 2. ~~Review durch Backend-Entwickler~~ **Erledigt** (05.04.2026)
 3. **Scraper-Fixes implementieren:** Fix 1+2 (P0) sofort, Fix 4+5 danach. ~~Fix 3 (R→S)~~ erledigt.
-4. **Issue in parlamentszusammenfasser erstellen:** Minimalen BW-Track vorschlagen (nur Punkt-4-Aenderung), Zu-Klaeren-Punkte 1-3 adressieren
+4. **Issue in parlamentszusammenfasser erstellen:** BY-Track fuer BW bestaetigen (keine Aenderung noetig), Zu-Klaeren-Punkte 1-3 adressieren
 5. **Backend-Bug melden:** Panic bei `validate.rs:310` — `.get()` statt `[]`
 6. **`enum_mapper.py` korrigieren:** Kommentare zu Y/X (Zeile 70-71) und Mapping "Ausfertigung" (Zeile 104) beheben
 7. **Validierungs-Lauf** nach Scraper-Fixes durchfuehren
@@ -423,3 +404,4 @@ zu erstellen, nicht im pazufa-backend. Issue #26 wurde im falschen Repo eroeffne
 - [parlamentszusammenfasser Issues](https://codeberg.org/PaZuFa/parlamentszusammenfasser/issues) — Richtiges Repo fuer Track-Issues
 - `docs/design_decisions.md` — DD-010 (synth. Ablehnung), DD-011 (Whitespace), DD-012 (synth. Initiative)
 - `src/bawue/enum_mapper.py` — Stationstyp-Zuordnungen
+- [GO Landtag BW (PDF)](https://www.landtag-bw.de/resource/blob/210902/1e81d7ad299e11971596f194a6a75a3e/Gesch%C3%A4ftsordnung%2017.%20LT.pdf) — §42-§49 (Beratung von Gesetzentwuerfen), insbesondere §43 Abs. 4
