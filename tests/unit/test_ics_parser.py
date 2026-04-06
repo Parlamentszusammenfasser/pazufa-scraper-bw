@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from bawue.ics_parser import extract_gremium_name, extract_session_number, group_events_by_date, parse_ics_feed
+from bawue.ics_parser import (
+    clean_title,
+    extract_gremium_name,
+    extract_session_number,
+    group_events_by_date,
+    parse_ics_feed,
+)
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -32,6 +38,26 @@ class TestExtractSessionNumber:
 
     def test_haushaltsberatungen_returns_zero(self):
         assert extract_session_number("Haushaltsberatungen: Finanzausschuss") == 0
+
+
+class TestCleanTitle:
+    """Test title cleaning to remove trailing colon artifacts."""
+
+    def test_strips_trailing_colon_space(self):
+        assert clean_title("Plenarsitzung: ") == "Plenarsitzung"
+
+    def test_strips_trailing_colon_no_space(self):
+        assert clean_title("Plenarsitzung:") == "Plenarsitzung"
+
+    def test_preserves_full_title(self):
+        assert clean_title("Plenarsitzung: 142. Sitzung") == "Plenarsitzung: 142. Sitzung"
+
+    def test_preserves_committee_title(self):
+        title = "Fraktions- und Ausschusssitzungen: Ausschuesse"
+        assert clean_title(title) == title
+
+    def test_empty_string(self):
+        assert clean_title("") == ""
 
 
 class TestExtractGremiumName:
@@ -67,8 +93,8 @@ class TestParseIcsFeed:
 
     def test_parses_included_events(self, ics_bytes):
         events = parse_ics_feed(ics_bytes)
-        # 8 total events, 3 excluded (Fraktionen, Prasidium, Wahl) → 5 included
-        assert len(events) == 5
+        # 9 total events, 3 excluded (Fraktionen, Prasidium, Wahl) → 6 included
+        assert len(events) == 6
 
     def test_event_fields(self, ics_bytes):
         events = parse_ics_feed(ics_bytes)
@@ -80,6 +106,13 @@ class TestParseIcsFeed:
         assert evt.nummer == 142
         assert evt.dtstart == datetime(2026, 2, 25, 11, 0)
         assert evt.dtend == datetime(2026, 2, 25, 18, 0)
+
+    def test_trailing_colon_summary_is_cleaned(self, ics_bytes):
+        events = parse_ics_feed(ics_bytes)
+        evt = [e for e in events if e.uid == "evt-plenar-003@landtag-bw.de"]
+        assert len(evt) == 1
+        assert evt[0].summary == "Plenarsitzung"
+        assert evt[0].gremium_name == "Plenum"
 
     def test_ausschuss_event_nummer_is_zero(self, ics_bytes):
         events = parse_ics_feed(ics_bytes)
@@ -120,6 +153,8 @@ class TestGroupEventsByDate:
         assert len(grouped[date(2026, 2, 25)]) == 1
         # 2026-02-26: Plenar 143
         assert len(grouped[date(2026, 2, 26)]) == 1
+        # 2026-02-27: Plenar (trailing colon)
+        assert len(grouped[date(2026, 2, 27)]) == 1
         # 2026-03-03: Haushaltsberatungen
         assert len(grouped[date(2026, 3, 3)]) == 1
 
@@ -130,6 +165,7 @@ class TestGroupEventsByDate:
             date(2026, 2, 24),
             date(2026, 2, 25),
             date(2026, 2, 26),
+            date(2026, 2, 27),
             date(2026, 3, 3),
         }
 

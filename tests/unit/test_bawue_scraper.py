@@ -81,6 +81,7 @@ class TestBuildVorgang:
         assert vorgang.ids is not None
         assert vorgang.ids[0].id == "V-001"
         assert vorgang.ids[0].typ == "vorgnr"
+        assert vorgang.kurztitel == "V-001"
 
     @pytest.mark.asyncio
     async def test_deterministic_api_id(self, scraper_build_vorgang):
@@ -445,6 +446,28 @@ class TestItemExtractor:
         )
 
         result = await scraper.item_extractor("V-900")
+
+        assert result is None
+        assert scraper._skipped == 1
+
+    @pytest.mark.asyncio
+    async def test_skips_vorgang_with_no_stations(self):
+        """Vorgänge where all Fundstellen have unparseable dates produce no stations and are skipped."""
+        scraper = _make_scraper_with_mock_parlis()
+        scraper._raw_cache["V-910"] = _make_raw_vorgang(
+            "V-910",
+            titel="Berichtigung des Gesetzes zur Regelung einer Landesgrundsteuer",
+            fundstellen=[
+                {
+                    "raw": "Berichtigung des Gesetzes  Gesetzblatt 2022 Nr. 37  S. 595",
+                    "datum": "",
+                    "station_typ": "Berichtigung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+
+        result = await scraper.item_extractor("V-910")
 
         assert result is None
         assert scraper._skipped == 1
@@ -1921,7 +1944,7 @@ class TestStationSkippedForUnparseableDate:
                 },
             ],
         )
-        with caplog.at_level(logging.ERROR, logger="bawue.bawue_vorgaenge_scraper"):
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
             vorgang = await scraper_build_vorgang(raw)
 
         assert len(vorgang.stationen) == 0

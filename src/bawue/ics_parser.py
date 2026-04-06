@@ -20,6 +20,15 @@ class ParsedEvent:
     nummer: int = 0
 
 
+def clean_title(summary: str) -> str:
+    """Strip trailing colon and whitespace from ICS summaries.
+
+    The BaWue ICS feed sometimes has entries like "Plenarsitzung: " with nothing
+    after the colon. This cleans them to "Plenarsitzung".
+    """
+    return summary.rstrip().rstrip(":").rstrip()
+
+
 def extract_session_number(summary: str) -> int:
     """Extract session number from ICS SUMMARY. Returns 0 if not present."""
     match = re.search(r"(\d+)\.\s*Sitzung", summary)
@@ -76,7 +85,7 @@ def parse_ics_feed(ics_data: bytes) -> list[ParsedEvent]:
         events.append(
             ParsedEvent(
                 uid=str(component.get("UID", "")),
-                summary=summary,
+                summary=clean_title(summary),
                 dtstart=dtstart,
                 dtend=dtend,
                 gremium_name=gremium_name,

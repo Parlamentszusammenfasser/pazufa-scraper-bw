@@ -2,6 +2,7 @@
 # linearize = false
 collector-uuid = "00000000-0000-0000-0000-000000000001"
 # cycle-time-s = 10800
+max-concurrency = 5
 
 [cache]
 # redis-host = "localhost"

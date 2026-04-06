@@ -198,9 +198,19 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
             vorgang = await self._build_vorgang(raw)
 
+            # Skip Vorgänge where all Fundstellen had unparseable dates → no stations.
+            if not vorgang.stationen:
+                logger.info(
+                    "Skipping Vorgang %s ('%s'): no parseable stations",
+                    vorgang_id,
+                    vorgang.titel[:60],
+                )
+                self._skipped += 1
+                return None
+
             # Skip non-legislative meta-entries (Bekanntmachungen, Berichtigungen, etc.)
             # that only have post-parliamentary stations and no parliamentary process.
-            if vorgang.stationen and all(s.typ in self._POSTPARL_TYPEN for s in vorgang.stationen):
+            if all(s.typ in self._POSTPARL_TYPEN for s in vorgang.stationen):
                 logger.info(
                     "Skipping Vorgang %s ('%s'): only post-parliamentary stations, not a full legislative process",
                     vorgang_id,
@@ -244,9 +254,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
         stationen = await self._collect_stationen(fundstellen_parsed, initiative, vorgang_id)
 
         if fundstellen_parsed and not stationen:
-            logger.error(
+            logger.warning(
                 "Vorgang %s ('%s') has %d Fundstellen but ALL stations were skipped "
-                "(no parseable dates). Submitting with empty station list. "
+                "(no parseable dates). "
                 "Fundstellen: %s",
                 vorgang_id,
                 titel[:80],
@@ -267,6 +277,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         return Vorgang(
             api_id=str(api_id),
             titel=titel,
+            kurztitel=vorgang_id if vorgang_id != "unknown" else None,
             typ=typ,
             wahlperiode=self._wahlperiode,
             verfassungsaendernd=False,
