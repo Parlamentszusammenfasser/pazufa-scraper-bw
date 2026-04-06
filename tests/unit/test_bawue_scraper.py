@@ -1974,6 +1974,7 @@ class TestTrojanergefahr:
         scraper._llm_metrics = LLMMetrics()
         scraper._filter_sonstig = True
         scraper.session = MagicMock()
+        scraper.config = MagicMock()
 
         enriched_dok = Dokument(
             titel="Testgesetz",

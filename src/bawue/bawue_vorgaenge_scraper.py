@@ -24,7 +24,7 @@ from openapi_client.models import (
 )
 from openapi_client.models.doktyp import Doktyp
 
-from bawue.bawue_dok import LLMMetrics
+from bawue.bawue_dok import LLMMetrics, clear_hash_cache
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
 from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
@@ -160,6 +160,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         The framework calls this for each entry in self.listing_urls.
         We use the Vorgangstyp string as the "listing URL".
         """
+        clear_hash_cache()
         date_from = self._wahlperiode_start_date
         date_to = date.today()
 
@@ -642,6 +643,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     model=self._llm_model,
                     max_tokens=self._llm_truncate_tokens,
                     metrics=self._llm_metrics,
+                    cache=self.config.cache,
                 )
                 dok = result.dokument
                 trojanergefahr = result.trojanergefahr

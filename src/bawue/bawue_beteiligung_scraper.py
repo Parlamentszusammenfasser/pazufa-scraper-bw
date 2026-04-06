@@ -24,7 +24,7 @@ from openapi_client.models import (
     Vorgangstyp,
 )
 
-from bawue.bawue_dok import LLMMetrics
+from bawue.bawue_dok import LLMMetrics, clear_hash_cache
 from bawue.beteiligung_client import BASE_URL, BeteiligungClient
 from bawue.beteiligung_parser import (
     RawBeteiligungDetail,
@@ -113,6 +113,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
     async def listing_page_extractor(self, lp_key: str) -> list[str]:
         """Fetch the process list and return slugs for each process."""
+        clear_hash_cache()
         processes = await asyncio.to_thread(self._client.fetch_process_list)
         logger.info("Found %d processes on Beteiligungsportal for %s", len(processes), lp_key)
 
@@ -189,6 +190,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
                         model=self._llm_model,
                         max_tokens=self._llm_truncate_tokens,
                         metrics=self._llm_metrics,
+                        cache=self.config.cache,
                     )
                     dok = result.dokument
                     if result.trojanergefahr is not None:

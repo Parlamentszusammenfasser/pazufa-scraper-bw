@@ -37,6 +37,7 @@ def _make_scraper():
     scraper._llm = None
     scraper._llm_metrics = LLMMetrics()
     scraper.session = MagicMock()
+    scraper.config = MagicMock()
     return scraper
 
 

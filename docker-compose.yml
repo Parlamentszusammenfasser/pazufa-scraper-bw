@@ -17,7 +17,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       CYCLE_TIME_S: 300          # re-run every 5 minutes
-      MAX_CONCURRENCY: 5         # limit parallel extractions to prevent OOM
+      MAX_CONCURRENCY: 3         # limit parallel extractions to prevent OOM
       PYTHONUNBUFFERED: "1"
       LTZF_API_URL: ${LTZF_API_URL:?Set LTZF_API_URL in .env}
       LTZF_API_KEY: ${LTZF_API_KEY:?Set LTZF_API_KEY in .env}
