@@ -59,11 +59,16 @@ def _parse_wmv35_fundstellen(wmv35_raw: str) -> list[dict]:
     Entries are separated by ``<br>``.
     """
     results = []
+    seen: set[str] = set()
     segments = re.split(r"\s*<br>\s*", wmv35_raw, flags=re.IGNORECASE)
     for segment in segments:
         segment = segment.strip()
         if not segment:
             continue
+        # Deduplicate: PARLIS sometimes repeats identical Fundstelle entries
+        if segment in seen:
+            continue
+        seen.add(segment)
         parts = segment.split(" @@ ")
         pdf_url = parts[0].strip() if parts else ""
         description = parts[3] if len(parts) >= 4 else segment

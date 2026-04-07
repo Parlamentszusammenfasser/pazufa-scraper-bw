@@ -192,6 +192,48 @@ class TestParseWmv35Fundstellen:
         result = _parse_wmv35_fundstellen(wmv35)
         assert len(result) == 1
 
+    def test_deduplicates_identical_segments(self):
+        """PARLIS sometimes returns the same Fundstelle entry duplicated 2× or 3×."""
+        wmv35 = (
+            "https://example.com/a.pdf @@ 1 @@ application/pdf"
+            " @@ Gesetzentwurf    CDU  01.01.2026 Drucksache 17/3273   (10 S.) || 100 <br> "
+            "https://example.com/b.pdf @@ 2 @@ application/pdf"
+            " @@ Erste Beratung   Plenarprotokoll 17/141 05.02.2026 || 200 <br> "
+            "https://example.com/a.pdf @@ 1 @@ application/pdf"
+            " @@ Gesetzentwurf    CDU  01.01.2026 Drucksache 17/3273   (10 S.) || 100 <br> "
+            "https://example.com/b.pdf @@ 2 @@ application/pdf"
+            " @@ Erste Beratung   Plenarprotokoll 17/141 05.02.2026 || 200 <br> "
+        )
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert len(result) == 2
+        assert result[0]["drucksache"] == "17/3273"
+        assert result[1]["plenarprotokoll"] == "17/141"
+
+    def test_deduplicates_triple_repetition(self):
+        """Three identical copies → only one remains."""
+        segment = (
+            "https://example.com/a.pdf @@ 1 @@ application/pdf"
+            " @@ Gesetzentwurf    CDU  01.01.2026 Drucksache 17/3273 || 100"
+        )
+        wmv35 = f"{segment} <br> {segment} <br> {segment}"
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert len(result) == 1
+
+    def test_preserves_order_after_dedup(self):
+        """After dedup, the original order of first-seen entries is preserved."""
+        wmv35 = (
+            "https://example.com/c.pdf @@ 3 @@ application/pdf"
+            " @@ Zweite Beratung   Plenarprotokoll 17/155 20.03.2026 || 300 <br> "
+            "https://example.com/a.pdf @@ 1 @@ application/pdf"
+            " @@ Gesetzentwurf    CDU  01.01.2026 Drucksache 17/3273 || 100 <br> "
+            "https://example.com/c.pdf @@ 3 @@ application/pdf"
+            " @@ Zweite Beratung   Plenarprotokoll 17/155 20.03.2026 || 300 <br> "
+        )
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert len(result) == 2
+        assert result[0]["plenarprotokoll"] == "17/155"
+        assert result[1]["drucksache"] == "17/3273"
+
 
 SAMPLE_HTML_RECORD = """<html><body>
 <div class="efxRecordRepeater">
