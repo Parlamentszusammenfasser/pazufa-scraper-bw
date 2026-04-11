@@ -16,6 +16,7 @@ locallogs/
 .coverage
 vendor/
 /.kreuzberg/
+scripts/output/
 
 ## test artifacts
 MagicMock/

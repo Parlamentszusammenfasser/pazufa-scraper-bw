@@ -37,6 +37,7 @@ model = "ollama/gemma4:e4b"
 #   gpt-5.4-nano   $0.20/$1.25   ~$0.0028/doc  (newest nano, best quality/cost)
 #   gpt-4.1-mini   $0.40/$1.60   ~$0.0053/doc  (better reasoning)
 #   gpt-5.4-mini   $0.75/$4.50   ~$0.0104/doc  (best quality in budget tier)
+# truncate-tokens = 12000         # max input tokens for LLM; 0 = no truncation
 
 # BaWue-specific configuration
 [bawue]

@@ -490,6 +490,7 @@ class TestInit:
         mock_config.config_file = str(config_file)
         mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
         mock_config.llm_provider_key = None
+        mock_config.llm_provider_base_url = None
 
         with (
             patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.__init__", return_value=None),
@@ -504,6 +505,7 @@ class TestInit:
         mock_config.config_file = None
         mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
         mock_config.llm_provider_key = None
+        mock_config.llm_provider_base_url = None
 
         with (
             patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.__init__", return_value=None),

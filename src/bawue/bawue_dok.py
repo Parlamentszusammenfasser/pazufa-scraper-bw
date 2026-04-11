@@ -470,10 +470,12 @@ async def extract_semantics(
         {"role": "user", "content": user_message},
     ]
 
+    api_base = getattr(llm, "api_base", None)
     async with _LLM_SEMAPHORE:
         response = await litellm.acompletion(
             model=model,
             api_key=llm.api_key,
+            api_base=api_base,
             messages=messages,
             temperature=llm.temperature,
             timeout=llm.timeout_seconds,
