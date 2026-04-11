@@ -321,6 +321,9 @@ def truncate_text(text: str, max_tokens: int, model: str = "gpt-5-nano") -> str:
     tokens = litellm.encode(model=model, text=text)
     truncated_tokens = tokens[:max_tokens]
     truncated = litellm.decode(model=model, tokens=truncated_tokens)
+    # Token slicing can split a multi-byte UTF-8 character, leaving an orphaned
+    # lead byte that breaks JSON serialization (BadRequestError from OpenAI).
+    truncated = truncated.encode("utf-8", errors="ignore").decode("utf-8")
     logger.info("Truncated text from %d to %d tokens", token_count, max_tokens)
     return truncated
 
