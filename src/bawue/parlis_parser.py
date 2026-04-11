@@ -160,6 +160,13 @@ def parse_fundstelle_text(text: str) -> dict:
             year = de_match.group(3)
             result["datum"] = f"{day}.{month}.{year}"
 
+    if "datum" not in result:
+        # Fallback: extract year from Gesetzblatt reference when no explicit date exists.
+        # "Berichtigung des Gesetzes  Gesetzblatt für Baden-Württemberg 2022 Nr. 37  S. 595"
+        gb_match = re.search(r"Gesetzblatt.*?(\d{4})\s+Nr\.", text)
+        if gb_match:
+            result["datum"] = f"01.01.{gb_match.group(1)}"
+
     # Drucksache number: "Drucksache 17/1234"
     ds_match = re.search(r"Drucksache\s+(\d+/\d+)", text)
     if ds_match:

@@ -496,6 +496,24 @@ class TestParseFundstelleTextGermanDate:
         assert "datum" not in result
 
 
+class TestParseFundstelleGesetzblattYearFallback:
+    def test_extracts_year_from_gesetzblatt_berichtigung(self):
+        text = "Berichtigung des Gesetzes  Gesetzblatt für Baden-Württemberg 2022 Nr. 37     S. 595"
+        result = parse_fundstelle_text(text)
+        assert result["datum"] == "01.01.2022"
+        assert result["station_typ"] == "Berichtigung des Gesetzes"
+
+    def test_explicit_date_takes_precedence_over_gesetzblatt_year(self):
+        text = "Gesetz  vom 16. Dezember 2025 Gesetzblatt für Baden-Württemberg 2025 Nr. 147  S. 1-3"
+        result = parse_fundstelle_text(text)
+        assert result["datum"] == "16.12.2025"
+
+    def test_dd_mm_yyyy_takes_precedence_over_gesetzblatt_year(self):
+        text = "Gesetz  Gesetzblatt für Baden-Württemberg 2026 Nr. 20  S. 1  10.02.2026"
+        result = parse_fundstelle_text(text)
+        assert result["datum"] == "10.02.2026"
+
+
 SAMPLE_HTML_TIME_ELEMENT = """<html><body>
 <div class="efxRecordRepeater">
   <a class="efxZoomShort-Vorgang">Gesetz zur Änderung XY</a>
