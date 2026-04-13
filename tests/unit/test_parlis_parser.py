@@ -192,6 +192,48 @@ class TestParseWmv35Fundstellen:
         result = _parse_wmv35_fundstellen(wmv35)
         assert len(result) == 1
 
+    def test_deduplicates_identical_segments(self):
+        """PARLIS sometimes returns the same Fundstelle entry duplicated 2x or 3x."""
+        wmv35 = (
+            "https://example.com/a.pdf @@ 1 @@ application/pdf"
+            " @@ Gesetzentwurf    CDU  01.01.2026 Drucksache 17/3273   (10 S.) || 100 <br> "
+            "https://example.com/b.pdf @@ 2 @@ application/pdf"
+            " @@ Erste Beratung   Plenarprotokoll 17/141 05.02.2026 || 200 <br> "
+            "https://example.com/a.pdf @@ 1 @@ application/pdf"
+            " @@ Gesetzentwurf    CDU  01.01.2026 Drucksache 17/3273   (10 S.) || 100 <br> "
+            "https://example.com/b.pdf @@ 2 @@ application/pdf"
+            " @@ Erste Beratung   Plenarprotokoll 17/141 05.02.2026 || 200 <br> "
+        )
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert len(result) == 2
+        assert result[0]["drucksache"] == "17/3273"
+        assert result[1]["plenarprotokoll"] == "17/141"
+
+    def test_deduplicates_triple_repetition(self):
+        """Three identical copies → only one remains."""
+        segment = (
+            "https://example.com/a.pdf @@ 1 @@ application/pdf"
+            " @@ Gesetzentwurf    CDU  01.01.2026 Drucksache 17/3273 || 100"
+        )
+        wmv35 = f"{segment} <br> {segment} <br> {segment}"
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert len(result) == 1
+
+    def test_preserves_order_after_dedup(self):
+        """After dedup, the original order of first-seen entries is preserved."""
+        wmv35 = (
+            "https://example.com/c.pdf @@ 3 @@ application/pdf"
+            " @@ Zweite Beratung   Plenarprotokoll 17/155 20.03.2026 || 300 <br> "
+            "https://example.com/a.pdf @@ 1 @@ application/pdf"
+            " @@ Gesetzentwurf    CDU  01.01.2026 Drucksache 17/3273 || 100 <br> "
+            "https://example.com/c.pdf @@ 3 @@ application/pdf"
+            " @@ Zweite Beratung   Plenarprotokoll 17/155 20.03.2026 || 300 <br> "
+        )
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert len(result) == 2
+        assert result[0]["plenarprotokoll"] == "17/155"
+        assert result[1]["drucksache"] == "17/3273"
+
 
 SAMPLE_HTML_RECORD = """<html><body>
 <div class="efxRecordRepeater">
@@ -452,6 +494,24 @@ class TestParseFundstelleTextGermanDate:
     def test_no_date_absent_datum_key(self):
         result = parse_fundstelle_text("Gesetz ohne Datum Gesetzblatt für Baden-Württemberg")
         assert "datum" not in result
+
+
+class TestParseFundstelleGesetzblattYearFallback:
+    def test_extracts_year_from_gesetzblatt_berichtigung(self):
+        text = "Berichtigung des Gesetzes  Gesetzblatt für Baden-Württemberg 2022 Nr. 37     S. 595"
+        result = parse_fundstelle_text(text)
+        assert result["datum"] == "01.01.2022"
+        assert result["station_typ"] == "Berichtigung des Gesetzes"
+
+    def test_explicit_date_takes_precedence_over_gesetzblatt_year(self):
+        text = "Gesetz  vom 16. Dezember 2025 Gesetzblatt für Baden-Württemberg 2025 Nr. 147  S. 1-3"
+        result = parse_fundstelle_text(text)
+        assert result["datum"] == "16.12.2025"
+
+    def test_dd_mm_yyyy_takes_precedence_over_gesetzblatt_year(self):
+        text = "Gesetz  Gesetzblatt für Baden-Württemberg 2026 Nr. 20  S. 1  10.02.2026"
+        result = parse_fundstelle_text(text)
+        assert result["datum"] == "10.02.2026"
 
 
 SAMPLE_HTML_TIME_ELEMENT = """<html><body>

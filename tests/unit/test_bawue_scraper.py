@@ -64,6 +64,7 @@ def scraper_build_vorgang():
     scraper._wahlperiode = 17
     scraper._llm_enabled = False
     scraper._llm = None
+    scraper._filter_sonstig = True
     scraper.session = MagicMock()
     return scraper._build_vorgang
 
@@ -80,6 +81,7 @@ class TestBuildVorgang:
         assert vorgang.ids is not None
         assert vorgang.ids[0].id == "V-001"
         assert vorgang.ids[0].typ == "vorgnr"
+        assert vorgang.kurztitel == "V-001"
 
     @pytest.mark.asyncio
     async def test_deterministic_api_id(self, scraper_build_vorgang):
@@ -116,7 +118,7 @@ class TestBuildVorgang:
         assert vorgang.initiatoren[0].organisation == "Landesregierung"
 
         station = vorgang.stationen[0]
-        assert station.typ == Stationstyp.PREPARL_MINUS_REGENT
+        assert station.typ == Stationstyp.PREPARL_MINUS_REGBSL
         assert station.dokumente[0].actual_instance.typ == Doktyp.PREPARL_MINUS_ENTWURF
         assert station.dokumente[0].actual_instance.drucksnr == "17/11000"
 
@@ -347,6 +349,7 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     scraper._llm_enabled = False
     scraper._llm = None
     scraper._llm_metrics = LLMMetrics()
+    scraper._filter_sonstig = True
     scraper.session = MagicMock()
     return scraper
 
@@ -448,6 +451,28 @@ class TestItemExtractor:
         assert scraper._skipped == 1
 
     @pytest.mark.asyncio
+    async def test_skips_vorgang_with_no_stations(self):
+        """Vorgänge where all Fundstellen have unparseable dates produce no stations and are skipped."""
+        scraper = _make_scraper_with_mock_parlis()
+        scraper._raw_cache["V-910"] = _make_raw_vorgang(
+            "V-910",
+            titel="Berichtigung des Gesetzes zur Regelung einer Landesgrundsteuer",
+            fundstellen=[
+                {
+                    "raw": "Berichtigung des Gesetzes  Gesetzblatt 2022 Nr. 37  S. 595",
+                    "datum": "",
+                    "station_typ": "Berichtigung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+
+        result = await scraper.item_extractor("V-910")
+
+        assert result is None
+        assert scraper._skipped == 1
+
+    @pytest.mark.asyncio
     async def test_does_not_skip_vorgang_with_parliamentary_stations(self):
         """Normal Vorgänge with parliamentary stations are not skipped."""
         scraper = _make_scraper_with_mock_parlis()
@@ -489,6 +514,7 @@ class TestPlaceholderDate:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -582,6 +608,7 @@ class TestDatetimeFallbackWarning:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -608,6 +635,7 @@ class TestDatetimeFallbackWarning:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -1184,6 +1212,7 @@ class TestStellungnahmenAsChildren:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -1491,7 +1520,7 @@ class TestAenderungsantragHandling:
         # Should have 3 stations: preparl-regent + synthetic parl-initiativ + Zweite Beratung
         station_types = [s.typ for s in vorgang.stationen]
         assert station_types == [
-            Stationstyp.PREPARL_MINUS_REGENT,
+            Stationstyp.PREPARL_MINUS_REGBSL,
             Stationstyp.PARL_MINUS_INITIATIV,
             Stationstyp.PARL_MINUS_VOLLVLSGN,
         ]
@@ -1566,6 +1595,7 @@ class TestAenderungsantragHandling:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -1622,6 +1652,109 @@ class TestEntschliessungsantragHandling:
         # Entschließungsantrag document should NOT appear anywhere
         all_drucksnrs = [d.actual_instance.drucksnr for s in vorgang.stationen for d in s.dokumente]
         assert "17/1215" not in all_drucksnrs
+
+
+class TestAntragReclassification:
+    """Issue DD-019: 'Antrag' after Ausschussbericht is an Änderungsantrag, not a new initiative."""
+
+    @pytest.mark.asyncio
+    async def test_antrag_after_ausschussbericht_treated_as_aenderungsantrag(self, scraper_build_vorgang):
+        """An 'Antrag' appearing after a parl-ausschber should be reclassified as
+        Änderungsantrag — its documents attached to the next parl-vollvlsgn station,
+        no second parl-initiativ created."""
+        raw = _make_raw_vorgang(
+            "V-214623",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  26.10.2021 Drucksache 17/1077   (50 S.)",
+                    "datum": "26.10.2021",
+                    "drucksache": "17/1077",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 50,
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/20 11.11.2021",
+                    "datum": "11.11.2021",
+                    "plenarprotokoll": "17/20",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht    Ausschuss für Soziales  22.11.2021 Drucksache 17/1258",
+                    "datum": "22.11.2021",
+                    "drucksache": "17/1258",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Soziales",
+                    "pdf_url": "https://example.com/bericht.pdf",
+                },
+                {
+                    "raw": "Antrag    Fraktion GRÜNE  21.12.2021 Drucksache 17/1512",
+                    "datum": "21.12.2021",
+                    "drucksache": "17/1512",
+                    "station_typ": "Antrag",
+                    "pdf_url": "https://example.com/antrag.pdf",
+                    "autor_text": "Fraktion GRÜNE",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/23 22.12.2021",
+                    "datum": "22.12.2021",
+                    "plenarprotokoll": "17/23",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        station_types = [s.typ for s in vorgang.stationen]
+        # Should NOT contain a second parl-initiativ
+        assert station_types.count(Stationstyp.PARL_MINUS_INITIATIV) == 1
+        assert station_types == [
+            Stationstyp.PREPARL_MINUS_REGBSL,
+            Stationstyp.PARL_MINUS_INITIATIV,
+            Stationstyp.PARL_MINUS_VOLLVLSGN,
+            Stationstyp.PARL_MINUS_AUSSCHBER,
+            Stationstyp.PARL_MINUS_VOLLVLSGN,
+        ]
+
+        # The "Antrag" document (17/1512) should be attached to the Zweite Beratung
+        zweite_beratung = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN][-1]
+        drucksnrs = [d.actual_instance.drucksnr for d in zweite_beratung.dokumente]
+        assert "17/1512" in drucksnrs, "Reclassified Antrag document should be on Zweite Beratung"
+
+    @pytest.mark.asyncio
+    async def test_antrag_before_ausschussbericht_remains_initiativ(self, scraper_build_vorgang):
+        """An 'Antrag' at the start of a Vorgang (before any committee report) should
+        remain mapped as parl-initiativ — the positional heuristic must not fire."""
+        raw = _make_raw_vorgang(
+            "V-900",
+            fundstellen=[
+                {
+                    "raw": "Antrag    Fraktion der SPD  01.03.2023 Drucksache 17/4500   (5 S.)",
+                    "datum": "01.03.2023",
+                    "drucksache": "17/4500",
+                    "station_typ": "Antrag",
+                    "seiten": 5,
+                    "pdf_url": "https://example.com/antrag.pdf",
+                    "autor_text": "Fraktion der SPD",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/50 05.03.2023",
+                    "datum": "05.03.2023",
+                    "plenarprotokoll": "17/50",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        station_types = [s.typ for s in vorgang.stationen]
+        assert Stationstyp.PARL_MINUS_INITIATIV in station_types, (
+            "Antrag before any Ausschussbericht should remain parl-initiativ"
+        )
 
 
 class TestAktuellerStandAblehnung:
@@ -1914,7 +2047,7 @@ class TestStationSkippedForUnparseableDate:
                 },
             ],
         )
-        with caplog.at_level(logging.ERROR, logger="bawue.bawue_vorgaenge_scraper"):
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
             vorgang = await scraper_build_vorgang(raw)
 
         assert len(vorgang.stationen) == 0
@@ -1965,7 +2098,9 @@ class TestTrojanergefahr:
         scraper._llm_model = "gpt-5-nano"
         scraper._llm_truncate_tokens = 12000
         scraper._llm_metrics = LLMMetrics()
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
+        scraper.config = MagicMock()
 
         enriched_dok = Dokument(
             titel="Testgesetz",
@@ -2009,6 +2144,7 @@ class TestTrojanergefahr:
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
+        scraper._filter_sonstig = True
         scraper.session = MagicMock()
 
         raw = _make_raw_vorgang(
@@ -2027,3 +2163,228 @@ class TestTrojanergefahr:
         vorgang = await scraper._build_vorgang(raw)
 
         assert vorgang.stationen[0].trojanergefahr is None
+
+
+class TestFilterSonstigStations:
+    """Tests for configurable sonstig station filtering."""
+
+    @pytest.mark.asyncio
+    async def test_sonstig_station_filtered_when_enabled(self, scraper_build_vorgang):
+        """When filter-sonstig-stations=true, sonstig stations are removed."""
+        raw = _make_raw_vorgang(
+            "V-700",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 13,
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/12345/doc.pdf",
+                },
+                {
+                    "raw": "Mitteilung   Plenarprotokoll 17/141  06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Mitteilung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_MINUS_INITIATIV
+
+    @pytest.mark.asyncio
+    async def test_sonstig_station_kept_when_disabled(self):
+        """When filter-sonstig-stations=false, sonstig stations pass through."""
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+        scraper._llm_enabled = False
+        scraper._llm = None
+        scraper._filter_sonstig = False
+        scraper.session = MagicMock()
+
+        raw = _make_raw_vorgang(
+            "V-701",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 13,
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/12345/doc.pdf",
+                },
+                {
+                    "raw": "Mitteilung   Plenarprotokoll 17/141  06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Mitteilung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper._build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 2
+        assert vorgang.stationen[1].typ == Stationstyp.SONSTIG
+
+    @pytest.mark.asyncio
+    async def test_sonstig_filtering_logs_debug_message(self, scraper_build_vorgang, caplog):
+        """Filtered sonstig stations are logged at DEBUG level."""
+        raw = _make_raw_vorgang(
+            "V-702",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 13,
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/12345/doc.pdf",
+                },
+                {
+                    "raw": "Mitteilung   Plenarprotokoll 17/141  06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Mitteilung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        with caplog.at_level(logging.DEBUG, logger="bawue.bawue_vorgaenge_scraper"):
+            await scraper_build_vorgang(raw)
+
+        assert any("sonstig" in r.message.lower() for r in caplog.records)
+
+
+class TestFilterPostLegislativeStations:
+    """Tests for the WORKAROUND that filters parl-* stations after postparl-* stations (DD-018)."""
+
+    @pytest.mark.asyncio
+    async def test_late_ausschber_after_gesetzblatt_is_filtered(self, scraper_build_vorgang):
+        """A parl-ausschber appearing years after postparl-gsblt must be dropped."""
+        raw = _make_raw_vorgang(
+            "V-800",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  01.01.2023 Drucksache 17/4000   (5 S.)",
+                    "datum": "01.01.2023",
+                    "drucksache": "17/4000",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 5,
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/100 15.01.2023",
+                    "datum": "15.01.2023",
+                    "plenarprotokoll": "17/100",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  01.02.2023 Drucksache 17/4100",
+                    "datum": "01.02.2023",
+                    "drucksache": "17/4100",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/report.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/105 15.02.2023",
+                    "datum": "15.02.2023",
+                    "plenarprotokoll": "17/105",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Gesetz Gesetzblatt 2023 Nr. 10  S. 1  01.03.2023",
+                    "datum": "01.03.2023",
+                    "station_typ": "Gesetz",
+                    "pdf_url": "",
+                },
+                # Late Ausschussbericht — 3 years after Gesetzblatt
+                {
+                    "raw": "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  15.01.2026 Drucksache 17/9000",
+                    "datum": "15.01.2026",
+                    "drucksache": "17/9000",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/late-report.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        station_types = [s.typ for s in vorgang.stationen]
+        # The late parl-ausschber should be filtered — only 1 ausschber remains
+        assert station_types.count(Stationstyp.PARL_MINUS_AUSSCHBER) == 1
+        # The postparl-gsblt must still be present
+        assert Stationstyp.POSTPARL_MINUS_GSBLT in station_types
+
+    @pytest.mark.asyncio
+    async def test_no_postparl_stations_passes_through_unchanged(self, scraper_build_vorgang):
+        """Without any postparl-* station, no filtering occurs."""
+        raw = _make_raw_vorgang(
+            "V-801",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  01.01.2023 Drucksache 17/4000   (5 S.)",
+                    "datum": "01.01.2023",
+                    "drucksache": "17/4000",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 5,
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  01.02.2023 Drucksache 17/4100",
+                    "datum": "01.02.2023",
+                    "drucksache": "17/4100",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/report.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        station_types = [s.typ for s in vorgang.stationen]
+        assert Stationstyp.PARL_MINUS_AUSSCHBER in station_types
+
+    @pytest.mark.asyncio
+    async def test_filtering_logs_warning(self, scraper_build_vorgang, caplog):
+        """Filtered post-legislative stations produce a WARNING log."""
+        raw = _make_raw_vorgang(
+            "V-802",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  01.01.2023 Drucksache 17/4000   (5 S.)",
+                    "datum": "01.01.2023",
+                    "drucksache": "17/4000",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 5,
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+                {
+                    "raw": "Gesetz Gesetzblatt 2023 Nr. 10  S. 1  01.03.2023",
+                    "datum": "01.03.2023",
+                    "station_typ": "Gesetz",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  15.01.2026 Drucksache 17/9000",
+                    "datum": "15.01.2026",
+                    "drucksache": "17/9000",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Wirtschaft",
+                    "pdf_url": "https://example.com/late-report.pdf",
+                },
+            ],
+        )
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
+            await scraper_build_vorgang(raw)
+
+        assert any("workaround" in r.message.lower() for r in caplog.records)
+        assert any("V-802" in r.message for r in caplog.records)

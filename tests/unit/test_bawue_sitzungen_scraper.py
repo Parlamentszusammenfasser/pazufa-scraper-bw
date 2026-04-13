@@ -74,8 +74,9 @@ class TestListingPageExtractor:
         assert "2026-02-24" in date_keys
         assert "2026-02-25" in date_keys
         assert "2026-02-26" in date_keys
+        assert "2026-02-27" in date_keys
         assert "2026-03-03" in date_keys
-        assert len(date_keys) == 4
+        assert len(date_keys) == 5
 
     @pytest.mark.asyncio
     async def test_populates_events_by_date(self):

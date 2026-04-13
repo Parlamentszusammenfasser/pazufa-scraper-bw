@@ -12,13 +12,17 @@ import hashlib
 import json
 import logging
 import re
+import ssl
 import tempfile
 import unicodedata
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import urlparse
 
+import aiohttp
+import certifi
 import litellm
+from collector.scrapercache import ScraperCache
 from collector_core import LLMConnector
 from kreuzberg import ExtractionConfig, OcrConfig, PageConfig, extract_file
 from openapi_client.models.doktyp import Doktyp
@@ -62,12 +66,20 @@ MIN_TEXT_LENGTH = 64
 DEFAULT_TRUNCATE_TOKENS = 12000
 _LLM_SEMAPHORE = asyncio.Semaphore(3)
 
-# In-memory cache: SHA256 hash → LLM semantics dict (per-run deduplication)
-# Keyed on raw-PDF SHA-256, not normalized text.  This is intentional: the hash
-# doubles as a content identifier sent to the backend, and within a single run
-# the extraction + normalization pipeline is deterministic for a given binary.
-# The cache is ephemeral (in-process dict, cleared on restart).
+# Two-tier LLM semantics cache:
+# 1. _hash_cache (in-memory dict): fast intra-cycle deduplication, cleared each cycle
+#    via clear_hash_cache() to prevent unbounded memory growth.
+# 2. Redis (via ScraperCache): persistent cross-cycle deduplication, survives restarts.
+#    Key format: "llm-semantics:{sha256_hash}", value: JSON-serialized semantics dict.
 _hash_cache: dict[str, dict] = {}
+
+_REDIS_CACHE_PREFIX = "llm-semantics:"
+
+
+def clear_hash_cache() -> None:
+    """Clear the in-memory hash cache between scraper cycles."""
+    _hash_cache.clear()
+
 
 # ---------------------------------------------------------------------------
 # LLM Prompts — one per Doktyp group, German, body-only (no header extraction)
@@ -359,7 +371,8 @@ def _extract_relevant_pages(text: str, start_page: int, max_pages: int = 30) -> 
 async def download_pdf(session, url: str) -> Path:
     """Download a PDF to a temporary file via aiohttp session."""
     clean_url = url.split("#")[0] if "#" in url else url
-    async with session.get(clean_url) as response:
+    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+    async with session.get(clean_url, ssl=ssl_ctx, timeout=aiohttp.ClientTimeout(total=60)) as response:
         if response.status != 200:
             logger.warning("PDF download returned HTTP %d: %s", response.status, clean_url)
             raise RuntimeError(f"PDF download failed with status {response.status}: {clean_url}")
@@ -474,6 +487,25 @@ async def extract_semantics(
 
 
 # ---------------------------------------------------------------------------
+# Redis cache helpers
+# ---------------------------------------------------------------------------
+
+
+def _redis_get(cache: ScraperCache | None, doc_hash: str) -> str | None:
+    """Look up LLM semantics in Redis. Returns JSON string or None."""
+    if cache is None:
+        return None
+    return cache.get_raw(f"{_REDIS_CACHE_PREFIX}{doc_hash}", typehint="LLM Semantics")
+
+
+def _redis_set(cache: ScraperCache | None, doc_hash: str, value: str) -> None:
+    """Store LLM semantics in Redis."""
+    if cache is None:
+        return
+    cache.store_raw(f"{_REDIS_CACHE_PREFIX}{doc_hash}", value, typehint="LLM Semantics")
+
+
+# ---------------------------------------------------------------------------
 # Main enrichment entry point
 # ---------------------------------------------------------------------------
 
@@ -485,6 +517,7 @@ async def enrich_dokument(
     model: str = "gpt-5-nano",
     max_tokens: int = DEFAULT_TRUNCATE_TOKENS,
     metrics: LLMMetrics | None = None,
+    cache: ScraperCache | None = None,
 ) -> EnrichmentResult:
     """Enrich a plain Dokument with PDF text extraction and LLM semantics.
 
@@ -511,16 +544,23 @@ async def enrich_dokument(
         full_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint)
         full_text = normalize_volltext(full_text)
 
-        # Try LLM extraction (with hash cache deduplication)
+        # Try LLM extraction (with two-tier cache deduplication)
         try:
             if doc_hash in _hash_cache:
-                logger.info("Hash cache hit for %s, skipping LLM call", doc_hash[:12])
+                logger.info("In-memory cache hit for %s, skipping LLM call", doc_hash[:12])
                 semantics = _hash_cache[doc_hash]
+                if metrics is not None:
+                    metrics.cache_hits += 1
+            elif (cached_json := _redis_get(cache, doc_hash)) is not None:
+                logger.info("Redis cache hit for %s, skipping LLM call", doc_hash[:12])
+                semantics = json.loads(cached_json)
+                _hash_cache[doc_hash] = semantics
                 if metrics is not None:
                     metrics.cache_hits += 1
             else:
                 semantics = await extract_semantics(llm, full_text, dok.typ, model=model, max_tokens=max_tokens)
                 _hash_cache[doc_hash] = semantics
+                _redis_set(cache, doc_hash, json.dumps(semantics))
                 if metrics is not None:
                     metrics.success += 1
 
@@ -545,7 +585,7 @@ async def enrich_dokument(
                 trojanergefahr=semantics.get("trojanergefahr"),
             )
         except Exception:
-            logger.warning("LLM extraction failed for %s, using text-only fallback", dok.link)
+            logger.warning("LLM extraction failed for %s, using text-only fallback", dok.link, exc_info=True)
             if metrics is not None:
                 metrics.failed += 1
             return EnrichmentResult(
@@ -564,7 +604,7 @@ async def enrich_dokument(
             )
 
     except Exception:
-        logger.warning("PDF download/extraction failed for %s, returning original document", dok.link)
+        logger.warning("PDF download/extraction failed for %s, returning original document", dok.link, exc_info=True)
         return EnrichmentResult(dokument=dok)
 
     finally:

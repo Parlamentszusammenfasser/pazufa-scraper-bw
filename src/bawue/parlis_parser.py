@@ -59,11 +59,16 @@ def _parse_wmv35_fundstellen(wmv35_raw: str) -> list[dict]:
     Entries are separated by ``<br>``.
     """
     results = []
+    seen: set[str] = set()
     segments = re.split(r"\s*<br>\s*", wmv35_raw, flags=re.IGNORECASE)
     for segment in segments:
         segment = segment.strip()
         if not segment:
             continue
+        # Deduplicate: PARLIS sometimes repeats identical Fundstelle entries
+        if segment in seen:
+            continue
+        seen.add(segment)
         parts = segment.split(" @@ ")
         pdf_url = parts[0].strip() if parts else ""
         description = parts[3] if len(parts) >= 4 else segment
@@ -154,6 +159,13 @@ def parse_fundstelle_text(text: str) -> dict:
             month = _GERMAN_MONTHS[de_match.group(2)]
             year = de_match.group(3)
             result["datum"] = f"{day}.{month}.{year}"
+
+    if "datum" not in result:
+        # Fallback: extract year from Gesetzblatt reference when no explicit date exists.
+        # "Berichtigung des Gesetzes  Gesetzblatt für Baden-Württemberg 2022 Nr. 37  S. 595"
+        gb_match = re.search(r"Gesetzblatt.*?(\d{4})\s+Nr\.", text)
+        if gb_match:
+            result["datum"] = f"01.01.{gb_match.group(1)}"
 
     # Drucksache number: "Drucksache 17/1234"
     ds_match = re.search(r"Drucksache\s+(\d+/\d+)", text)

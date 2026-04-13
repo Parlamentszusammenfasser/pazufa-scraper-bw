@@ -24,7 +24,7 @@ from openapi_client.models import (
 )
 from openapi_client.models.doktyp import Doktyp
 
-from bawue.bawue_dok import LLMMetrics
+from bawue.bawue_dok import LLMMetrics, clear_hash_cache
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
 from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
@@ -82,6 +82,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # The listing_urls are Vorgangstyp strings — the framework passes them to listing_page_extractor
         listing_urls = bawue_config.get("enabled-vorgangstypen", DEFAULT_ENABLED_VORGANGSTYPEN)
         self._enabled_vorgangstypen: frozenset[str] = frozenset(listing_urls)
+        self._filter_sonstig = bawue_config.get("filter-sonstig-stations", True)
 
         super().__init__(config, uuid.UUID(config.collector_id), listing_urls, session)
 
@@ -159,6 +160,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         The framework calls this for each entry in self.listing_urls.
         We use the Vorgangstyp string as the "listing URL".
         """
+        clear_hash_cache()
         date_from = self._wahlperiode_start_date
         date_to = date.today()
 
@@ -196,9 +198,19 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
             vorgang = await self._build_vorgang(raw)
 
+            # Skip Vorgänge where all Fundstellen had unparseable dates → no stations.
+            if not vorgang.stationen:
+                logger.info(
+                    "Skipping Vorgang %s ('%s'): no parseable stations",
+                    vorgang_id,
+                    vorgang.titel[:60],
+                )
+                self._skipped += 1
+                return None
+
             # Skip non-legislative meta-entries (Bekanntmachungen, Berichtigungen, etc.)
             # that only have post-parliamentary stations and no parliamentary process.
-            if vorgang.stationen and all(s.typ in self._POSTPARL_TYPEN for s in vorgang.stationen):
+            if all(s.typ in self._POSTPARL_TYPEN for s in vorgang.stationen):
                 logger.info(
                     "Skipping Vorgang %s ('%s'): only post-parliamentary stations, not a full legislative process",
                     vorgang_id,
@@ -240,11 +252,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         fundstellen_parsed = raw.get("fundstellen_parsed", [])
         stationen = await self._collect_stationen(fundstellen_parsed, initiative, vorgang_id)
+        stationen = self._filter_post_legislative_stations(stationen, vorgang_id)  # WORKAROUND: DD-018
 
         if fundstellen_parsed and not stationen:
-            logger.error(
+            logger.warning(
                 "Vorgang %s ('%s') has %d Fundstellen but ALL stations were skipped "
-                "(no parseable dates). Submitting with empty station list. "
+                "(no parseable dates). "
                 "Fundstellen: %s",
                 vorgang_id,
                 titel[:80],
@@ -252,7 +265,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 [f.get("raw", "")[:100] for f in fundstellen_parsed],
             )
 
-        self._ensure_initiativ_after_regent(stationen)
+        self._ensure_initiativ_after_regbsl(stationen)
 
         # parse rejections
         aktueller_stand = raw.get("Aktueller Stand", "")
@@ -265,6 +278,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         return Vorgang(
             api_id=str(api_id),
             titel=titel,
+            kurztitel=vorgang_id if vorgang_id != "unknown" else None,
             typ=typ,
             wahlperiode=self._wahlperiode,
             verfassungsaendernd=False,
@@ -294,6 +308,41 @@ class BawueVorgaengeScraper(VorgangsScraper):
             "entschließungsanträge",
         }
     )
+    _AMBIGUOUS_ANTRAG_TYPEN: frozenset[str] = frozenset(
+        {
+            "antrag",
+            "anträge",
+        }
+    )
+
+    # WORKAROUND (Issue 1A / DD-018)
+    # TODO: Remove once backend track regex supports post-enactment stations.
+    def _filter_post_legislative_stations(self, stationen: list[Station], vorgang_id: str) -> list[Station]:
+        """Filter parl-* stations that appear chronologically after any postparl-* station.
+
+        PARLIS appends late Ausschussberichte (Evaluierungsklausel / Berichtspflicht)
+        to already-concluded Vorgänge. The backend track regex rejects these.
+        This workaround drops them until the backend track is extended.
+        """
+        postparl_dates = [s.zp_start for s in stationen if s.typ in self._POSTPARL_TYPEN]
+        if not postparl_dates:
+            return stationen
+
+        earliest_postparl = min(postparl_dates)
+        filtered: list[Station] = []
+        for s in stationen:
+            if s.typ and s.typ.value.startswith("parl-") and s.zp_start > earliest_postparl:
+                logger.warning(
+                    "WORKAROUND (DD-018): Filtering post-legislative %s station "
+                    "(date: %s) after postparl station (date: %s) in %s",
+                    s.typ.value,
+                    s.zp_start.date(),
+                    earliest_postparl.date(),
+                    vorgang_id,
+                )
+                continue
+            filtered.append(s)
+        return filtered
 
     async def _collect_stationen(
         self, fundstellen: list[RawFundstelle], initiative: str, vorgang_id: str
@@ -309,6 +358,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         """
         stationen: list[Station] = []
         pending_aenderungsantraege: list[list[StationDokumenteInner]] = []
+        seen_ausschber = False
         for fund in fundstellen:
             station = await self._build_station(fund, initiative)
             if station is None:
@@ -324,14 +374,42 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     pending_aenderungsantraege.append(station.dokumente)
                 continue
 
+            # Positional heuristic (Issue 1B / DD-019): PARLIS labels
+            # Änderungsanträge as plain "Antrag". After a committee report,
+            # "Antrag" is always an amendment, not a new initiative.
+            if (
+                station.typ == Stationstyp.PARL_MINUS_INITIATIV
+                and typ_lower in self._AMBIGUOUS_ANTRAG_TYPEN
+                and seen_ausschber
+            ):
+                logger.info(
+                    "Reclassifying '%s' as Änderungsantrag (after Ausschussbericht) in %s",
+                    station_typ_str,
+                    vorgang_id,
+                )
+                if station.dokumente:
+                    pending_aenderungsantraege.append(station.dokumente)
+                continue
+
             if self._is_stellungnahme(station, station_typ_str):
                 self._attach_stellungnahme(stationen, station.dokumente, vorgang_id)
+                continue
+
+            if self._filter_sonstig and station.typ == Stationstyp.SONSTIG:
+                logger.debug(
+                    "Filtering sonstig station (Fundstelle: %s) in %s",
+                    fund.get("raw", "?"),
+                    vorgang_id,
+                )
                 continue
 
             if station.dokumente and self._try_merge_station(stationen, station):
                 continue
 
             stationen.append(station)
+
+            if station.typ == Stationstyp.PARL_MINUS_AUSSCHBER:
+                seen_ausschber = True
 
             # Attach any buffered Änderungsanträge to this station if it's a vollvlsgn
             if station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN and pending_aenderungsantraege:
@@ -383,38 +461,38 @@ class BawueVorgaengeScraper(VorgangsScraper):
             vorgang_id,
         )
 
-    def _ensure_initiativ_after_regent(self, stationen: list[Station]) -> None:
-        """Insert a synthetic parl-initiativ station after preparl-regent if missing.
+    def _ensure_initiativ_after_regbsl(self, stationen: list[Station]) -> None:
+        """Insert a synthetic parl-initiativ station after preparl-regbsl if missing.
 
         PARLIS uses a single Fundstelle "Gesetzentwurf" for government bills, which
-        the scraper maps to preparl-regent.  However, the backend track definition
-        requires a parl-initiativ station between the pre-parliamentary phase and
-        the first plenary reading (parl-vollvlsgn).  The parliamentary introduction
-        is implicit in PARLIS data — this method makes it explicit.
+        the scraper maps to preparl-regbsl (Kabinettsbeschluss).  However, the backend
+        track definition requires a parl-initiativ station between the pre-parliamentary
+        phase and the first plenary reading (parl-vollvlsgn).  The parliamentary
+        introduction is implicit in PARLIS data — this method makes it explicit.
         """
         if not stationen:
             return
 
-        # Find the last preparl-regent (there may be several pre-parliamentary stations)
-        regent_idx = None
+        # Find the last preparl-regbsl (there may be several pre-parliamentary stations)
+        regbsl_idx = None
         for i, s in enumerate(stationen):
-            if s.typ == Stationstyp.PREPARL_MINUS_REGENT:
-                regent_idx = i
+            if s.typ == Stationstyp.PREPARL_MINUS_REGBSL:
+                regbsl_idx = i
 
-        if regent_idx is None:
+        if regbsl_idx is None:
             return
 
         # Check if a parl-initiativ already follows
-        next_idx = regent_idx + 1
+        next_idx = regbsl_idx + 1
         if next_idx < len(stationen) and stationen[next_idx].typ == Stationstyp.PARL_MINUS_INITIATIV:
             return
 
-        # Determine the date: use the next station's date if available, else the regent's
-        zp_start = stationen[next_idx].zp_start if next_idx < len(stationen) else stationen[regent_idx].zp_start
+        # Determine the date: use the next station's date if available, else the regbsl's
+        zp_start = stationen[next_idx].zp_start if next_idx < len(stationen) else stationen[regbsl_idx].zp_start
 
         synthetic = Station(
             typ=Stationstyp.PARL_MINUS_INITIATIV,
-            dokumente=stationen[regent_idx].dokumente.copy(),
+            dokumente=stationen[regbsl_idx].dokumente.copy(),
             zp_start=zp_start,
             gremium=Gremium(
                 parlament=Parlament.BW,
@@ -601,7 +679,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         doc_typ = map_dokumententyp(
             mapping_text,
-            is_vorparlamentarisch=(station_typ == Stationstyp.PREPARL_MINUS_REGENT),
+            is_vorparlamentarisch=(station_typ == Stationstyp.PREPARL_MINUS_REGBSL),
         )
         if doc_typ == Doktyp.SONSTIG and fund.get("plenarprotokoll"):
             doc_typ = Doktyp.REDEPROTOKOLL
@@ -633,6 +711,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     model=self._llm_model,
                     max_tokens=self._llm_truncate_tokens,
                     metrics=self._llm_metrics,
+                    cache=self.config.cache,
                 )
                 dok = result.dokument
                 trojanergefahr = result.trojanergefahr

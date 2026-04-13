@@ -32,6 +32,12 @@ UID:evt-haushalt-001@landtag-bw.de
 SUMMARY:Haushaltsberatungen: Finanzausschuss
 END:VEVENT
 BEGIN:VEVENT
+DTSTART:20260227T090000
+DTEND:20260227T180000
+UID:evt-plenar-003@landtag-bw.de
+SUMMARY:Plenarsitzung:
+END:VEVENT
+BEGIN:VEVENT
 DTSTART:20260224T080000
 DTEND:20260224T170000
 UID:evt-fraktion-001@landtag-bw.de

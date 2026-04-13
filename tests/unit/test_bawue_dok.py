@@ -3,10 +3,12 @@
 import hashlib
 import json
 import logging
+import ssl
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 from openapi_client.models.autor import Autor
 from openapi_client.models.doktyp import Doktyp
@@ -22,6 +24,7 @@ from bawue.bawue_dok import (
     _parse_page_hint,
     _prompt_for_doktyp,
     _validate_scores,
+    clear_hash_cache,
     download_pdf,
     enrich_dokument,
     extract_pdf_text,
@@ -198,7 +201,29 @@ class TestDownloadPdf:
 
         path = await download_pdf(session, "https://www.landtag-bw.de/files/plp/17_141.pdf#page=33")
         try:
-            session.get.assert_called_once_with("https://www.landtag-bw.de/files/plp/17_141.pdf")
+            args, _kwargs = session.get.call_args
+            assert args[0] == "https://www.landtag-bw.de/files/plp/17_141.pdf"
+        finally:
+            path.unlink(missing_ok=True)
+
+    @pytest.mark.asyncio
+    async def test_passes_ssl_context_and_timeout(self):
+        """download_pdf should pass an SSL context (certifi) and a 60s timeout."""
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        session = MagicMock()
+        session.get = MagicMock(return_value=mock_response)
+
+        path = await download_pdf(session, "https://example.com/test.pdf")
+        try:
+            _, kwargs = session.get.call_args
+            assert isinstance(kwargs["ssl"], ssl.SSLContext)
+            assert isinstance(kwargs["timeout"], aiohttp.ClientTimeout)
+            assert kwargs["timeout"].total == 60
         finally:
             path.unlink(missing_ok=True)
 
@@ -1284,3 +1309,126 @@ class TestPageHintExtraction:
 
         result = _extract_relevant_pages(text, start_page=50)
         assert result == text
+
+
+# ---------------------------------------------------------------------------
+# TestClearHashCache
+# ---------------------------------------------------------------------------
+
+
+class TestClearHashCache:
+    def test_clear_hash_cache_empties_dict(self):
+        """clear_hash_cache() should empty the module-level _hash_cache."""
+        _hash_cache["test_key"] = {"data": "value"}
+        assert len(_hash_cache) == 1
+        clear_hash_cache()
+        assert len(_hash_cache) == 0
+
+
+# ---------------------------------------------------------------------------
+# TestRedisCacheIntegration
+# ---------------------------------------------------------------------------
+
+
+class TestRedisCacheIntegration:
+    """Tests for two-tier (in-memory + Redis) cache in enrich_dokument."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_redis_cache_stores_on_llm_success(self):
+        """After LLM call, semantics should be stored in Redis."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = _make_llm_mock()
+        cache = MagicMock()
+        cache.get_raw.return_value = None
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
+            await enrich_dokument(session, llm, dok, cache=cache)
+
+        cache.store_raw.assert_called_once()
+        key = cache.store_raw.call_args[0][0]
+        assert key.startswith("llm-semantics:")
+        value = cache.store_raw.call_args[0][1]
+        parsed = json.loads(value)
+        assert "zusammenfassung" in parsed
+
+    @pytest.mark.asyncio
+    async def test_redis_cache_hit_skips_llm(self):
+        """When Redis has cached semantics, LLM should not be called."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = _make_llm_mock()
+        cache = MagicMock()
+        cache.get_raw.return_value = SAMPLE_LLM_RESPONSE_ENTWURF
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp:
+            result = await enrich_dokument(session, llm, dok, cache=cache)
+
+        mock_acomp.assert_not_called()
+        assert result.dokument.zusammenfassung == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
+
+    @pytest.mark.asyncio
+    async def test_in_memory_cache_takes_priority_over_redis(self):
+        """In-memory cache should be checked before Redis."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = _make_llm_mock()
+        cache = MagicMock()
+
+        # Pre-populate in-memory cache
+        _hash_cache[SAMPLE_HASH] = json.loads(SAMPLE_LLM_RESPONSE_ENTWURF)
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp:
+            result = await enrich_dokument(session, llm, dok, cache=cache)
+
+        mock_acomp.assert_not_called()
+        cache.get_raw.assert_not_called()
+        assert result.dokument.zusammenfassung is not None
+
+    @pytest.mark.asyncio
+    async def test_redis_hit_populates_in_memory_cache(self):
+        """Redis cache hit should populate the in-memory cache for fast subsequent lookups."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = _make_llm_mock()
+        cache = MagicMock()
+        cache.get_raw.return_value = SAMPLE_LLM_RESPONSE_ENTWURF
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
+            await enrich_dokument(session, llm, dok, cache=cache)
+
+        assert SAMPLE_HASH in _hash_cache
+
+    @pytest.mark.asyncio
+    async def test_no_cache_parameter_works(self):
+        """enrich_dokument should work without cache parameter (backwards compatible)."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = _make_llm_mock()
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
+            result = await enrich_dokument(session, llm, dok)
+
+        assert result.dokument.zusammenfassung is not None
+
+    @pytest.mark.asyncio
+    async def test_metrics_counts_redis_cache_hit(self):
+        """Redis cache hit should increment metrics.cache_hits."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = _make_llm_mock()
+        cache = MagicMock()
+        cache.get_raw.return_value = SAMPLE_LLM_RESPONSE_ENTWURF
+        metrics = LLMMetrics()
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
+            await enrich_dokument(session, llm, dok, metrics=metrics, cache=cache)
+
+        assert metrics.cache_hits == 1
+        assert metrics.success == 0

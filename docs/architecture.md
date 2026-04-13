@@ -80,14 +80,13 @@ graph LR
 ```mermaid
 flowchart TD
     PREP_REG["preparl-regent\nRegierungsentwurf\n(Beteiligungsportal)"]
-    PREP_BSL["preparl-regbsl\nKabinettsbeschluss\n(STM)"]
+    PREP_BSL["preparl-regbsl\nKabinettsbeschluss\n(PARLIS)"]
     INIT["parl-initiativ\nParlamentarische Initiative\n(PARLIS)"]
     LESUNG1["parl-vollvlsgn\nErste Beratung / Lesung\n(PARLIS)"]
     AUSSCH["parl-ausschber\nAusschussberatung\n(PARLIS)"]
     LESUNG23["parl-vollvlsgn\nWeitere Beratungen\n(PARLIS)"]
     AKZ["parl-akzeptanz\nAnnahme\n(PARLIS)"]
     ABL["parl-ablehnung\nAblehnung\n(PARLIS)"]
-    VESJA["postparl-vesja\nAusfertigung\n(PARLIS)"]
     GSBLT["postparl-gsblt\nGesetzblatt\n(Gesetzblatt BaWue)"]
     KRAFT["postparl-kraft\nInkrafttreten\n(PARLIS)"]
 
@@ -98,8 +97,7 @@ flowchart TD
     AUSSCH --> LESUNG23
     LESUNG23 --> AKZ
     LESUNG23 --> ABL
-    AKZ --> VESJA
-    VESJA --> GSBLT
+    AKZ --> GSBLT
     GSBLT --> KRAFT
 
     style PREP_REG stroke-dasharray: 5 5
@@ -409,7 +407,7 @@ by both paths.
 ### EnumMapper
 
 Maps PARLIS terminology to PaZuFa enum values. Context-aware for Stationstyp (e.g. Gesetzentwurf from Landesregierung
-→ `preparl-regent`, from Fraktion → `parl-initiativ`). Falls back to `sonstig` for unmapped values.
+→ `preparl-regbsl`, from Fraktion → `parl-initiativ`; see DD-003). Falls back to `sonstig` for unmapped values.
 
 ### AdaptiveRateLimiter
 
@@ -551,7 +549,7 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 
 | Fundstelle text pattern                          | PaZuFa `Stationstyp` |
 |--------------------------------------------------|----------------------|
-| Gesetzentwurf (from Landesregierung)             | `preparl-regent`     |
+| Gesetzentwurf (from Landesregierung)             | `preparl-regbsl`     |
 | Gesetzentwurf (from Fraktion/Abgeordnete)        | `parl-initiativ`     |
 | Antrag, Anträge                                  | `parl-initiativ`     |
 | Erste Beratung, Zweite Beratung, Dritte Beratung | `parl-vollvlsgn`     |
@@ -562,7 +560,6 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | Gesetzesbeschluss, Beschluss des Landtags        | `parl-akzeptanz`     |
 | Zustimmung, Annahme                              | `parl-akzeptanz`     |
 | Ablehnung                                        | `parl-ablehnung`     |
-| Ausfertigung                                     | `postparl-vesja`     |
 | Gesetz, Bekanntmachung                           | `postparl-gsblt`     |
 | Gesetzblatt                                      | `postparl-gsblt`     |
 | Inkrafttreten                                    | `postparl-kraft`     |

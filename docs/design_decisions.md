@@ -72,25 +72,34 @@ in `DOKUMENTENTYP_MAP` bleibt davon unberührt.
 
 ## DD-003: Gesetzentwurf — kontextabhängiges Mapping auf Stationstyp
 
-**Datum:** 27.03.2026
+**Datum:** 27.03.2026 | **Aktualisiert:** 05.04.2026
 
 **Kontext:** PARLIS verwendet den gleichen Fundstellentext „Gesetzentwurf" sowohl für
-Regierungsentwürfe (vorparlamentarisch) als auch für parlamentarische Initiativen
-(z. B. Fraktionsentwürfe). Ohne zusätzlichen Kontext würde jeder Gesetzentwurf
-einheitlich als `parl-initiativ` klassifiziert — Regierungsentwürfe gingen als
-vorparlamentarische Phase verloren.
+Regierungsentwürfe als auch für parlamentarische Initiativen (z. B. Fraktionsentwürfe).
+Ohne zusätzlichen Kontext würde jeder Gesetzentwurf einheitlich als `parl-initiativ`
+klassifiziert.
 
 **Entscheidung:** Das Mapping von „Gesetzentwurf" hängt vom Initiator ab:
 
-- Initiator enthält „Landesregierung" → `preparl-regent` (Regierungsentwurf)
+- Initiator enthält „Landesregierung" → `preparl-regbsl` (Kabinettsbeschluss)
 - Sonst → `parl-initiativ` (parlamentarische Initiative)
 
 Analog wird der Dokumententyp kontextabhängig zugeordnet:
 
-- Station ist `preparl-regent` → `preparl-entwurf`
+- Station ist `preparl-regbsl` → `preparl-entwurf`
 - Sonst → `entwurf`
 
 Dies ist das einzige Enum-Mapping, das externen Kontext (den Initiator) benötigt.
+
+**Aktualisierung (05.04.2026):** Ursprünglich wurde „Gesetzentwurf Landesregierung"
+als `preparl-regent` (Regierungsentwurf, R) klassifiziert. Nach Review durch den
+Backend-Entwickler (Issue #26) umklassifiziert zu `preparl-regbsl`
+(Kabinettsbeschluss, S). Begründung: PARLIS zeigt den Entwurf **nach**
+Kabinettsbeschluss — den parlamentarischen Eingang, nicht die Entwurfsphase.
+Die vorparlamentarische Entwurfsphase (`preparl-regent`, R) wird vom
+Beteiligungsportal-Scraper abgedeckt (`bawue_beteiligung_scraper.py`).
+Diese Umklassifizierung ermöglicht die Nutzung des BY-Tracks
+(`((E*R+)?S)?I...`) ohne BW-spezifischen Präfix.
 
 **Implementierung:** `enum_mapper.py`, Funktionen `map_stationstyp()` (Parameter
 `initiator`) und `map_dokumententyp()` (Parameter `is_vorparlamentarisch`).
@@ -304,21 +313,24 @@ dem primären Mapping.
 
 ---
 
-## DD-012: Synthetische `parl-initiativ` nach `preparl-regent`
+## DD-012: Synthetische `parl-initiativ` nach `preparl-regbsl`
 
-**Datum:** 29.03.2026
+**Datum:** 29.03.2026 | **Aktualisiert:** 05.04.2026
 
 **Kontext:** Die Backend-Track-Definition für BaWue-Gesetzgebung verlangt nach
-der vorparlamentarischen Phase (`[RE]*S?`) zwingend eine `parl-initiativ`-Station
+der vorparlamentarischen Phase (`((E*R+)?S)?`) zwingend eine `parl-initiativ`-Station
 (`I`), bevor die parlamentarische Bearbeitung beginnt (`VA*...`). Bei
 Fraktionsentwürfen ist dies unproblematisch — der Fundstellentext „Gesetzentwurf"
 wird direkt als `parl-initiativ` klassifiziert (s. DD-003).
 
 Bei Regierungsentwürfen entsteht eine Lücke: PARLIS verwendet **eine einzige
 Fundstelle** „Gesetzentwurf" für den gesamten Vorgang der Einbringung. Diese
-wird korrekt als `preparl-regent` klassifiziert (DD-003), aber PARLIS liefert
-keine separate Fundstelle für die parlamentarische Einbringung desselben Entwurfs.
-Die nächste Fundstelle ist direkt „Erste Beratung" (`parl-vollvlsgn`).
+wird als `preparl-regbsl` (Kabinettsbeschluss) klassifiziert — PARLIS zeigt den
+Entwurf **nach** dem Kabinettsbeschluss, also den parlamentarischen Eingang.
+Die vorparlamentarische Entwurfsphase (`preparl-regent`, R) wird bereits vom
+Beteiligungsportal-Scraper abgedeckt. PARLIS liefert keine separate Fundstelle
+für die parlamentarische Einbringung; die nächste Fundstelle ist direkt
+„Erste Beratung" (`parl-vollvlsgn`).
 
 **Evidenz:** Überprüfung auf der PARLIS-Website (4 Vorgänge, WP 16 + WP 17)
 bestätigt, dass Regierungsentwürfe durchgängig von „Gesetzentwurf Landesregierung"
@@ -326,16 +338,16 @@ direkt zu „Erste Beratung" springen — ohne Zwischeneintrag. Das Feld „Init
 auf der Detailseite ist ein Metadatenfeld am Vorgang, keine eigene Fundstelle.
 
 **Entscheidung:** Analog zu DD-010 (synthetische Ablehnung) wird eine synthetische
-`parl-initiativ`-Station eingefügt, wenn auf `preparl-regent` nicht bereits eine
+`parl-initiativ`-Station eingefügt, wenn auf `preparl-regbsl` nicht bereits eine
 `parl-initiativ` folgt. Die synthetische Station übernimmt die Dokumente der
-`preparl-regent`-Station (der Gesetzentwurf *ist* die parlamentarische Initiative)
+`preparl-regbsl`-Station (der Gesetzentwurf *ist* die parlamentarische Initiative)
 und erhält als Datum den Zeitpunkt der nächsten Station (typischerweise die Erste
 Beratung). Dies ist semantisch korrekt: Die Einbringung eines Regierungsentwurfs
 in den Landtag stellt gleichzeitig die parlamentarische Initiative dar — PARLIS
 bildet lediglich beide Schritte in einer Fundstelle ab.
 
 **Implementierung:** `bawue_vorgaenge_scraper.py`, Methoden `_build_vorgang()`
-und `_ensure_initiativ_after_regent()`.
+und `_ensure_initiativ_after_regbsl()`.
 
 ---
 
@@ -506,3 +518,131 @@ in denen OCR nicht verfügbar ist oder fehlschlägt.
 - `_paragraph_quality_score()` — Multi-Signal-Bewertung pro Absatz
 - `normalize_volltext()` — Absatzfilterung, NFKC, C1-Stripping,
   CRLF-Normalisierung, Angle-Bracket-Ersetzung
+
+---
+
+## DD-016: Track-Validierung — BW verwendet den BY-Track unverändert
+
+**Datum:** 05.04.2026 | **Aktualisiert:** 06.04.2026
+
+**Kontext:** Mit Backend v0.2.7 werden Vorgänge gegen Track-Definitionen (DFA/Regex)
+validiert. Die Erstanalyse schlug einen eigenen BW-Track vor, der PARLIS-Abweichungen
+durch optionale Elemente (`V?J`, `V?N`) kompensiert. Nach Review durch den
+Backend-Entwickler (Crystalkey) und Analyse der Geschäftsordnung des Landtags BW
+(17. WP, §42–§49) zeigte sich: Alle Abweichungen lassen sich scraper-seitig lösen.
+
+**Entscheidung:** BW verwendet den BY-Track unverändert:
+
+```
+gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)"
+```
+
+**Begründung:**
+
+1. **Tracks bilden parlamentarisches Recht ab**, nicht was der Scraper liefern kann.
+   Abweichungen in PARLIS-Daten sind Scraper-Bugs, kein Grund den Track abzuschwächen.
+2. **R→S Umklassifizierung** (DD-003): PARLIS „Gesetzentwurf Landesregierung" wird
+   als `preparl-regbsl` (S) statt `preparl-regent` (R) klassifiziert. Damit matcht
+   der BY-Präfix `((E*R+)?S)?` korrekt.
+3. **GO §42 schreibt mindestens zwei Lesungen vor** — `VJ` statt `V?J` ist korrekt.
+   126/128 Annahme-Vorgänge bestätigen zwei explizite Lesungen vor Annahme.
+4. **GO §43 Abs. 4 verbietet jede Abstimmung in der 1. Lesung** — `IVN` (Ablehnung
+   nach nur einer Lesung) ist rechtlich unmöglich. Alle 31 Ablehnungen folgen `IVAVN`.
+5. **Prefix-Matching** akzeptiert unvollständige Vorgänge ohnehin — `IVAVJG` ist ein
+   gültiger Präfix von `IVAVJGK`, auch wenn K (Inkrafttreten) nicht gescrapt wurde.
+6. **Y = Volksentscheid** (`postparl-vesja`), nicht Ausfertigung. Irrelevant für den
+   `gg-land-parl`-Track. Volksanträge benötigen ggf. einen eigenen `gg-land-volk`-Track.
+
+**Validierte Sequenzen** (Dev-Lauf 171 Vorgänge, WP 17):
+
+| Sequenz   | Anzahl | Beschreibung                                      |
+|-----------|--------|---------------------------------------------------|
+| `SIVAVJG` | 112    | Regierungsentwurf (nach R→S) + Annahme            |
+| `IVAVJG`  | 14     | Fraktionsentwurf + Annahme                        |
+| `IVAVN`   | 31     | Ablehnung nach Ausschuss und 2. Lesung            |
+| `S`, `SI` | 3      | Unvollständig — gültige Präfixe                   |
+
+Quelle: [Issue #26](https://codeberg.org/PaZuFa/pazufa-backend/issues/26),
+Crystalkey-Review 05.04.2026.
+
+---
+
+## DD-017: Konfigurierbare Filterung von `sonstig`-Stationen
+
+**Datum:** 06.04.2026
+
+**Kontext:** PARLIS liefert Fundstellen wie „Mitteilung" oder „Dokument", die keinem
+spezifischen Stationstyp zugeordnet werden können (s. DD-002). Der `enum_mapper`
+klassifiziert diese als `Stationstyp.SONSTIG`. Das Backend (v0.2.7) löst bei
+`sonstig`-Stationen einen Panic aus (`validate.rs:310`, `.get()` statt `[]`).
+28 Vorgänge im Dev-Lauf waren betroffen.
+
+Das Backend wird diesen Bug voraussichtlich in einer kommenden Version beheben und
+`sonstig`-Stationen akzeptieren.
+
+**Entscheidung:** `sonstig`-Stationen werden in `_collect_stationen()` herausgefiltert,
+gesteuert durch den Konfigurationsparameter `filter-sonstig-stations` (Default: `true`).
+Sobald das Backend `sonstig` akzeptiert, kann der Filter durch Setzen auf `false`
+deaktiviert werden.
+
+Der Filter greift **nach** den Sonderbehandlungen für Stellungnahmen,
+Änderungsanträge und Entschließungsanträge (DD-001, DD-005), da diese ebenfalls
+als `sonstig` klassifiziert werden können, aber als Dokumente an vorhergehende
+Stationen angehängt werden sollen.
+
+**Implementierung:** `bawue_vorgaenge_scraper.py`, Methode `_collect_stationen()`.
+Konfiguration über `[bawue]` → `filter-sonstig-stations` in `config.toml`.
+
+---
+
+## DD-018: WORKAROUND — Nachparlamentarische Ausschussberichte werden gefiltert
+
+**Datum:** 13.04.2026
+
+**Kontext:** PARLIS hängt an bereits abgeschlossene Vorgänge nachträgliche Ausschussberichte
+an, die aus einer **Evaluierungsklausel** oder **Berichtspflicht** des Gesetzes resultieren.
+Diese erscheinen als `parl-ausschber`-Stationen Monate oder Jahre nach der Verkündung
+im Gesetzblatt (`postparl-gsblt`). Die Backend-Track-Regex (`gg-land-parl`, s. DD-016)
+erwartet einen linearen Lebenszyklus und lehnt parlamentarische Stationen nach
+nachparlamentarischen ab. 3 von 168 Vorgängen im Dev-Lauf waren betroffen
+(V-214623, V-223628, V-222724).
+
+Dies sind **keine Datenfehler** — die Ausschussberichte sind legitime parlamentarische
+Nachkontrolle (Kenntnisnahme von Umsetzungsberichten der Landesregierung).
+
+**Entscheidung:** **Temporärer Workaround im Scraper:** `parl-*`-Stationen, die
+chronologisch nach einer `postparl-*`-Station liegen, werden herausgefiltert.
+Jede Filterung wird mit `WARNING`-Level protokolliert. Sobald die Backend-Track-Regex
+optionale nachparlamentarische Ausschussberichte unterstützt (z.B. `...GK?(A*)`),
+soll dieser Workaround entfernt werden.
+
+**Implementierung:** `bawue_vorgaenge_scraper.py`, Methode
+`_filter_post_legislative_stations()`, aufgerufen aus `_build_vorgang()`.
+
+---
+
+## DD-019: Positionsheuristik — „Antrag" nach Ausschussbericht als Änderungsantrag
+
+**Datum:** 13.04.2026
+
+**Kontext:** PARLIS kennzeichnet Änderungsanträge in der Fundstelle-Textzeile als
+schlichtes „Antrag" — nicht als „Änderungsantrag". Der Enum-Mapper bildet „Antrag"
+auf `parl-initiativ` ab, was korrekt ist, wenn der Antrag am Anfang eines Vorgangs
+steht (z. B. ein parlamentarischer Antrag einer Fraktion). Erscheint „Antrag" jedoch
+**nach** einem Ausschussbericht (`parl-ausschber`), handelt es sich ausnahmslos um
+einen Änderungsantrag zur Beschlussempfehlung — kein neuer Initiativantrag. Der
+Dokumenteninhalt bestätigt dies (z. B. „Änderungsantrag der Fraktion GRÜNE und der
+Fraktion der CDU zu der Beschlussempfehlung des Ausschusses …"), dieser Inhalt steht
+jedoch beim Fundstelle-Parsing nicht zur Verfügung (Issue 1B, betroffen: V-214623).
+
+**Entscheidung:** Positionsheuristik in `_collect_stationen()`: Wenn eine Station den
+Typ `parl-initiativ` hat, der Fundstelle-Text „Antrag" oder „Anträge" lautet (die
+mehrdeutigen Labels, nicht „Gesetzentwurf", „Kleine Anfrage" etc.) **und** bereits
+ein `parl-ausschber` in der Stationsliste aufgetreten ist, wird die Station als
+Änderungsantrag umklassifiziert. Ihre Dokumente werden an die nächste
+`parl-vollvlsgn`-Station angehängt — identisch zum bestehenden
+Änderungsantrag-Handling (s. DD-001).
+
+**Implementierung:** `bawue_vorgaenge_scraper.py`, Methode `_collect_stationen()`,
+Klassen-Konstante `_AMBIGUOUS_ANTRAG_TYPEN`, Flag `seen_ausschber`.
+

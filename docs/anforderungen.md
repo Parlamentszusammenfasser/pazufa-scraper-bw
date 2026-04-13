@@ -116,14 +116,13 @@ Enum-Member verwenden die `MINUS`-Namenskonvention (z.B. `Stationstyp.PARL_MINUS
 
 | Wert             | Python-Enum-Member                 | Bedeutung                               |
 |------------------|------------------------------------|-----------------------------------------|
-| `preparl-regent` | `Stationstyp.PREPARL_MINUS_REGENT` | Gesetzentwürfe der Landesregierung      |
-| `preparl-regbsl` | `Stationstyp.PREPARL_MINUS_REGBSL` | Kabinettsbeschlüsse                     |
+| `preparl-regent` | `Stationstyp.PREPARL_MINUS_REGENT` | Regierungsentwürfe (Beteiligungsportal) |
+| `preparl-regbsl` | `Stationstyp.PREPARL_MINUS_REGBSL` | Kabinettsbeschlüsse (PARLIS: Gesetzentwurf Landesregierung) |
 | `parl-initiativ` | `Stationstyp.PARL_MINUS_INITIATIV` | Gesetzentwürfe, Anträge aus dem Landtag |
 | `parl-ausschber` | `Stationstyp.PARL_MINUS_AUSSCHBER` | Beratung in Fachausschüssen             |
 | `parl-vollvlsgn` | `Stationstyp.PARL_MINUS_VOLLVLSGN` | Lesungen im Plenum                      |
 | `parl-akzeptanz` | `Stationstyp.PARL_MINUS_AKZEPTANZ` | Verabschiedung durch den Landtag        |
 | `parl-ablehnung` | `Stationstyp.PARL_MINUS_ABLEHNUNG` | Ablehnung durch den Landtag             |
-| `postparl-vesja` | `Stationstyp.POSTPARL_MINUS_VESJA` | Unterschrift durch Ministerpräsident    |
 | `postparl-gsblt` | `Stationstyp.POSTPARL_MINUS_GSBLT` | Verkündung im Gesetzblatt               |
 | `postparl-kraft` | `Stationstyp.POSTPARL_MINUS_KRAFT` | Gesetz tritt in Kraft                   |
 | `sonstig`        | `Stationstyp.SONSTIG`              | Andere Stationen                        |
