@@ -193,7 +193,7 @@ class TestParseWmv35Fundstellen:
         assert len(result) == 1
 
     def test_deduplicates_identical_segments(self):
-        """PARLIS sometimes returns the same Fundstelle entry duplicated 2× or 3×."""
+        """PARLIS sometimes returns the same Fundstelle entry duplicated 2x or 3x."""
         wmv35 = (
             "https://example.com/a.pdf @@ 1 @@ application/pdf"
             " @@ Gesetzentwurf    CDU  01.01.2026 Drucksache 17/3273   (10 S.) || 100 <br> "
