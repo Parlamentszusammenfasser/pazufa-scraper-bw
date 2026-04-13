@@ -308,6 +308,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
             "entschließungsanträge",
         }
     )
+    _AMBIGUOUS_ANTRAG_TYPEN: frozenset[str] = frozenset(
+        {
+            "antrag",
+            "anträge",
+        }
+    )
 
     # WORKAROUND (Issue 1A / DD-018)
     # TODO: Remove once backend track regex supports post-enactment stations.
@@ -352,6 +358,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         """
         stationen: list[Station] = []
         pending_aenderungsantraege: list[list[StationDokumenteInner]] = []
+        seen_ausschber = False
         for fund in fundstellen:
             station = await self._build_station(fund, initiative)
             if station is None:
@@ -363,6 +370,23 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 continue
 
             if typ_lower in self._AENDERUNGSANTRAG_TYPEN:
+                if station.dokumente:
+                    pending_aenderungsantraege.append(station.dokumente)
+                continue
+
+            # Positional heuristic (Issue 1B / DD-019): PARLIS labels
+            # Änderungsanträge as plain "Antrag". After a committee report,
+            # "Antrag" is always an amendment, not a new initiative.
+            if (
+                station.typ == Stationstyp.PARL_MINUS_INITIATIV
+                and typ_lower in self._AMBIGUOUS_ANTRAG_TYPEN
+                and seen_ausschber
+            ):
+                logger.info(
+                    "Reclassifying '%s' as Änderungsantrag (after Ausschussbericht) in %s",
+                    station_typ_str,
+                    vorgang_id,
+                )
                 if station.dokumente:
                     pending_aenderungsantraege.append(station.dokumente)
                 continue
@@ -383,6 +407,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 continue
 
             stationen.append(station)
+
+            if station.typ == Stationstyp.PARL_MINUS_AUSSCHBER:
+                seen_ausschber = True
 
             # Attach any buffered Änderungsanträge to this station if it's a vollvlsgn
             if station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN and pending_aenderungsantraege:

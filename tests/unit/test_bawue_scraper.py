@@ -1654,6 +1654,109 @@ class TestEntschliessungsantragHandling:
         assert "17/1215" not in all_drucksnrs
 
 
+class TestAntragReclassification:
+    """Issue DD-019: 'Antrag' after Ausschussbericht is an Änderungsantrag, not a new initiative."""
+
+    @pytest.mark.asyncio
+    async def test_antrag_after_ausschussbericht_treated_as_aenderungsantrag(self, scraper_build_vorgang):
+        """An 'Antrag' appearing after a parl-ausschber should be reclassified as
+        Änderungsantrag — its documents attached to the next parl-vollvlsgn station,
+        no second parl-initiativ created."""
+        raw = _make_raw_vorgang(
+            "V-214623",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  26.10.2021 Drucksache 17/1077   (50 S.)",
+                    "datum": "26.10.2021",
+                    "drucksache": "17/1077",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 50,
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/20 11.11.2021",
+                    "datum": "11.11.2021",
+                    "plenarprotokoll": "17/20",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht    Ausschuss für Soziales  22.11.2021 Drucksache 17/1258",
+                    "datum": "22.11.2021",
+                    "drucksache": "17/1258",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Soziales",
+                    "pdf_url": "https://example.com/bericht.pdf",
+                },
+                {
+                    "raw": "Antrag    Fraktion GRÜNE  21.12.2021 Drucksache 17/1512",
+                    "datum": "21.12.2021",
+                    "drucksache": "17/1512",
+                    "station_typ": "Antrag",
+                    "pdf_url": "https://example.com/antrag.pdf",
+                    "autor_text": "Fraktion GRÜNE",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/23 22.12.2021",
+                    "datum": "22.12.2021",
+                    "plenarprotokoll": "17/23",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        station_types = [s.typ for s in vorgang.stationen]
+        # Should NOT contain a second parl-initiativ
+        assert station_types.count(Stationstyp.PARL_MINUS_INITIATIV) == 1
+        assert station_types == [
+            Stationstyp.PREPARL_MINUS_REGBSL,
+            Stationstyp.PARL_MINUS_INITIATIV,
+            Stationstyp.PARL_MINUS_VOLLVLSGN,
+            Stationstyp.PARL_MINUS_AUSSCHBER,
+            Stationstyp.PARL_MINUS_VOLLVLSGN,
+        ]
+
+        # The "Antrag" document (17/1512) should be attached to the Zweite Beratung
+        zweite_beratung = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN][-1]
+        drucksnrs = [d.actual_instance.drucksnr for d in zweite_beratung.dokumente]
+        assert "17/1512" in drucksnrs, "Reclassified Antrag document should be on Zweite Beratung"
+
+    @pytest.mark.asyncio
+    async def test_antrag_before_ausschussbericht_remains_initiativ(self, scraper_build_vorgang):
+        """An 'Antrag' at the start of a Vorgang (before any committee report) should
+        remain mapped as parl-initiativ — the positional heuristic must not fire."""
+        raw = _make_raw_vorgang(
+            "V-900",
+            fundstellen=[
+                {
+                    "raw": "Antrag    Fraktion der SPD  01.03.2023 Drucksache 17/4500   (5 S.)",
+                    "datum": "01.03.2023",
+                    "drucksache": "17/4500",
+                    "station_typ": "Antrag",
+                    "seiten": 5,
+                    "pdf_url": "https://example.com/antrag.pdf",
+                    "autor_text": "Fraktion der SPD",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/50 05.03.2023",
+                    "datum": "05.03.2023",
+                    "plenarprotokoll": "17/50",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        station_types = [s.typ for s in vorgang.stationen]
+        assert Stationstyp.PARL_MINUS_INITIATIV in station_types, (
+            "Antrag before any Ausschussbericht should remain parl-initiativ"
+        )
+
+
 class TestAktuellerStandAblehnung:
     """Tests for synthesizing a parl-ablehnung station from 'Aktueller Stand: Abgelehnt'."""
 
