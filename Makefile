@@ -43,6 +43,9 @@ run: ## Run the scraper
 package: install lint format test ## Vendor collector and build Docker image
 	docker build -t bawue-scraper .
 
+compare-llm: ## Compare OpenAI vs Ollama output on sample documents
+	$(VENV)/python scripts/compare_llm_providers.py
+
 clean: ## Remove .venv, __pycache__, .pytest_cache, locallogs, and MagicMock
 	rm -rf .venv __pycache__ .pytest_cache .kreuzberg locallogs MagicMock vendor
 	find . -type d -name __pycache__ -exec rm -rf {} +

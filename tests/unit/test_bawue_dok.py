@@ -592,6 +592,19 @@ class TestTruncateText:
         result = truncate_text(long_text, max_tokens=0, model="gpt-5-nano")
         assert result == long_text
 
+    def test_truncated_output_is_valid_utf8(self):
+        """Truncation at token boundary must not produce orphaned multi-byte sequences."""
+        # Build text with many multi-byte chars (umlauts, sharp-s) to maximize
+        # the chance of hitting a multi-byte boundary when slicing tokens
+        text = "Änderung des Gesetzes über Maßnahmen für Schülerinnen und Schüler " * 300
+        result = truncate_text(text, max_tokens=100, model="gpt-5-nano")
+        # Re-encode and decode to verify clean UTF-8 round-trip
+        assert result == result.encode("utf-8").decode("utf-8")
+        # Must also survive JSON serialization (the actual failure mode)
+        import json
+
+        json.dumps({"text": result})  # raises on invalid surrogates/sequences
+
 
 # ---------------------------------------------------------------------------
 # TestHashCache

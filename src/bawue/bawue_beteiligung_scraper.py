@@ -64,8 +64,10 @@ class BawueBeteiligungScraper(VorgangsScraper):
         self._failed: int = 0
         self._skipped: int = 0
 
-        # LLM document enrichment (optional, requires LLM_PROVIDER_KEY)
-        self._llm_enabled = bool(getattr(config, "llm_provider_key", None))
+        # LLM document enrichment (optional, requires LLM_PROVIDER_KEY or LLM_PROVIDER_BASE_URL)
+        llm_key = getattr(config, "llm_provider_key", None)
+        llm_base_url = getattr(config, "llm_provider_base_url", None)
+        self._llm_enabled = bool(llm_key) or bool(llm_base_url)
         self._llm = None
         self._llm_metrics = LLMMetrics()
         llm_config = load_toml_section(config, "llm")
@@ -76,7 +78,8 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
             self._llm = LLMConnector(
                 model=config.llm_model,
-                api_key=config.llm_provider_key,
+                api_key=llm_key,
+                api_base=llm_base_url,
                 rate_limit_max_calls=5,
                 rate_limit_window_seconds=60,
             )

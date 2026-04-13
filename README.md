@@ -252,30 +252,81 @@ Run `make help` to list all targets.
 **Always run `make lint` and `make format` after making changes** to ensure CI passes. The Woodpecker CI
 pipeline checks both linting and formatting on every push and pull request.
 
+### LLM Document Enrichment
+
+The scraper optionally enriches documents with LLM-extracted metadata (summary, keywords, short title).
+This works with either a cloud API (OpenAI) or a local Ollama instance.
+
+#### Option A: OpenAI (cloud)
+
+Set the API key in `config.toml` or via environment variable:
+
+```toml
+[llm]
+provider-key = "sk-..."
+model = "gpt-5-nano"              # default; see config.sample.toml for alternatives
+```
+
+#### Option B: Local Ollama (free, no API key)
+
+Run a local model to avoid API costs. Requires [Ollama](https://ollama.com/) installed and running.
+
+```bash
+# Pull the model once
+ollama pull gemma4:e4b
+
+# Ollama serves on http://localhost:11434 by default
+ollama serve
+```
+
+Configure in `config.toml`:
+
+```toml
+[llm]
+provider-base-url = "http://localhost:11434"
+model = "ollama/gemma4:e4b"
+```
+
+Or via environment variables:
+
+```bash
+export LLM_PROVIDER_BASE_URL=http://localhost:11434
+export LLM_MODEL=ollama/gemma4:e4b
+```
+
+The `ollama/` prefix in the model name is required — it tells [LiteLLM](https://docs.litellm.ai/) to route
+to the Ollama provider. Any Ollama-compatible model works (e.g. `ollama/llama3`, `ollama/gemma3`).
+
 ### LLM Integration Tests
 
-The scraper optionally enriches documents with LLM-extracted metadata (summary, keywords, short title). The
-LLM integration tests download a real PDF from the Landtag BW website and call a real LLM API to verify the
-full enrichment pipeline end-to-end.
+The LLM integration tests download a real PDF from the Landtag BW website and call a real LLM API to verify
+the full enrichment pipeline end-to-end.
 
 **Requirements:**
-- An LLM provider API key (e.g. OpenAI)
+- An LLM provider API key (e.g. OpenAI) or a running local Ollama instance
 - Internet access (downloads PDFs from `landtag-bw.de`)
 
-**Run:**
+**Run with OpenAI:**
 
 ```bash
 LLM_PROVIDER_KEY=sk-... pytest -m integration tests/integration/test_llm_extraction.py -s
 ```
 
-Optionally set `LLM_MODEL` to override the default model (`gpt-4o-mini`):
+**Run with local Ollama:**
+
+```bash
+LLM_PROVIDER_BASE_URL=http://localhost:11434 LLM_MODEL=ollama/gemma4:e4b \
+  pytest -m integration tests/integration/test_llm_extraction.py -s
+```
+
+Optionally set `LLM_MODEL` to override the default model:
 
 ```bash
 LLM_PROVIDER_KEY=sk-... LLM_MODEL=gpt-4o pytest -m integration tests/integration/test_llm_extraction.py -s
 ```
 
-The tests are skipped automatically when `LLM_PROVIDER_KEY` is not set, so `make test-integration` and CI
-runs are unaffected.
+The tests are skipped automatically when neither `LLM_PROVIDER_KEY` nor `LLM_PROVIDER_BASE_URL` is set, so
+`make test-integration` and CI runs are unaffected.
 
 ## Running against Staging
 
@@ -287,11 +338,13 @@ cp .env.example .env
 # Edit .env and fill in the real values
 ```
 
-| Variable           | Description                                               |
-|--------------------|-----------------------------------------------------------|
-| `LTZF_API_URL`     | PaZuFa backend URL (e.g. `https://staging.api.pazufa.de`) |
-| `LTZF_API_KEY`     | PaZuFa API key (`ltzf_...`)                               |
-| `LLM_PROVIDER_KEY` | LLM provider API key (e.g. OpenAI `sk-...`)               |
+| Variable                | Description                                               |
+|-------------------------|-----------------------------------------------------------|
+| `LTZF_API_URL`          | PaZuFa backend URL (e.g. `https://staging.api.pazufa.de`) |
+| `LTZF_API_KEY`          | PaZuFa API key (`ltzf_...`)                               |
+| `LLM_PROVIDER_KEY`      | LLM provider API key (e.g. OpenAI `sk-...`)               |
+| `LLM_PROVIDER_BASE_URL` | LLM provider base URL (for local Ollama)                  |
+| `LLM_MODEL`             | LLM model override (e.g. `ollama/gemma4:e4b`)             |
 
 **2. Start the stack:**
 ```bash
@@ -323,7 +376,7 @@ The image includes Tesseract OCR. Redis should be provided as a separate service
 
 4-tier precedence: Defaults → `config.toml` → Environment variables → CLI.
 
-Key env vars: `LTZF_API_KEY`, `LTZF_API_URL`, `COLLECTOR_ID`, `REDIS_HOST`, `LLM_PROVIDER_KEY`
+Key env vars: `LTZF_API_KEY`, `LTZF_API_URL`, `COLLECTOR_ID`, `REDIS_HOST`, `LLM_PROVIDER_KEY`, `LLM_PROVIDER_BASE_URL`, `LLM_MODEL`
 
 See [docs/anforderungen.md — Konfiguration](docs/anforderungen.md#konfiguration) for the full reference.
 
