@@ -403,7 +403,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 )
                 continue
 
-            if station.dokumente and self._try_merge_station(stationen, station):
+            if self._try_merge_station(stationen, station):
                 continue
 
             stationen.append(station)

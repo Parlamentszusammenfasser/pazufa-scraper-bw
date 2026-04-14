@@ -247,11 +247,12 @@ einfach nach der letzten Plenarlesung. Das Abstimmungsergebnis ist nur im
 Plenarprotokoll-PDF und im Metadatenfeld „Aktueller Stand" (Wert: „Abgelehnt")
 der PARLIS-Suchergebnisse dokumentiert.
 
-**Evidenz:** In einem vollständigen Scrape-Lauf (236 Vorgänge, WP 17) wurden
+**Evidenz:** In einem ersten Scrape-Lauf (236 Vorgänge, WP 17) wurden
 462 `parl-akzeptanz`-Stationen, aber **null** `parl-ablehnung`-Stationen
-extrahiert. Das Enum-Mapping für „Ablehnung" → `parl-ablehnung` ist korrekt
-implementiert, wird aber nie ausgelöst, da PARLIS die entsprechende Fundstelle
-nicht liefert.
+extrahiert. Ein späterer vollständiger Staging-Lauf (235 Vorgänge, 13.04.2026)
+zeigte jedoch, dass PARLIS bei einigen Vorgängen durchaus „Ablehnung"-Fundstellen
+liefert — teils sogar doppelt. Die synthetische Station wird daher nur benötigt,
+wenn keine Fundstellen-basierte `parl-ablehnung` vorhanden ist.
 
 **Entscheidung:** Wenn das Metadatenfeld „Aktueller Stand" den Wert „Abgelehnt"
 enthält und noch keine `parl-ablehnung`-Station existiert, wird eine synthetische
