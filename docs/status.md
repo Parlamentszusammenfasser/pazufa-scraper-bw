@@ -6,22 +6,28 @@
 |------------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Pflichtfunktionalität**    | **~85 %** | Core fields complete; `volltext`/`hash` now also filled at scraper level (LLM). `tops=[]` and `nummer=0` for committees outstanding.                                                |
 | **Optionale Funktionalität** | **~50 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. `trojanergefahr` jetzt auf Station-Ebene gesetzt. Zusätzliche Datenquellen fehlen weiterhin. |
+| **Community DoD**            | **~85 %** | Core Completion ✅; Coding-Regeln ✅ (bis auf Einzelfälle s.u.); CI/Tests ✅; offen: Wiki-Mirror der DDs, `verfassungsaendernd`-Konflikt, Gesetzblatt-Quelle.                          |
 
 ### Known Gaps — Required Fields
 
 - `tops` in `Sitzung` always `[]` (Phase 3: Tagesordnungen-PDFs not yet parsed)
 - `nummer` in `Sitzung` always `0` for committee sessions (no regex match in ICS feed)
-- `verfassungsaendernd` always `False` (PARLIS does not expose this attribute)
+- `verfassungsaendernd` always `False` (PARLIS does not expose this attribute) — **conflicts with DoD rule** ("omit
+  objects with unfillable required fields"); decision pending on whether to drop affected Vorgänge or keep the stub and
+  document on wiki
+- DoD "canonical name mapping": explicit normalization of initiator / Fraktion variants not yet verified — audit needed
 
 ### Known Gaps — Optional Fields
 
 Bei aktivem LLM (`[llm]`): `zusammenfassung`, `schlagworte`, `kurztitel` und `meinung` werden auf **Dokument-Ebene**
-gefüllt. `trojanergefahr` wird auf **Station-Ebene** gesetzt (max. Wert über alle Dokumente). Auf **Vorgang-Ebene** bleiben Lücken.
+gefüllt. `trojanergefahr` wird auf **Station-Ebene** gesetzt (max. Wert über alle Dokumente). Auf **Vorgang-Ebene**
+bleiben Lücken.
 
 Missing fields: `kurztitel` (Vorgang — nur Beteiligungsportal), `links` (Vorgang), `lobbyregister`,
 `schlagworte` (Station), `stellungnahmen`, `vorwort`, `zp_modifiziert` (Station), `gremium_federf`
 
-Missing data sources: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse STM
+Missing data sources: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse STM. Both are also DoD scope items for a
+complete legislative-lifecycle capture.
 
 ## Field Status Matrix
 
@@ -59,37 +65,47 @@ Missing data sources: Gesetzblatt BaWue (`postparl-gsblt`), Kabinettsbeschlüsse
 
 ## Feature Status
 
-| Feature                    | Status             | Notes                                                                                                                        |
-|----------------------------|--------------------|------------------------------------------------------------------------------------------------------------------------------|
-| PARLIS search (Vorgänge)   | Working            | Automatic subdivision for large result sets                                                                                  |
-| Vorgang extraction         | Working            | Title, type, initiative, Vorgangs-ID                                                                                         |
-| Station extraction         | Working            | From Fundstellen parsing (date, type, committee, document links)                                                             |
-| Enum mapping               | Working            | PARLIS terms → PaZuFa enumerations (Vorgangs-/Stations-/Dokumententyp)                                                       |
-| Caching                    | Framework (Redis)  | Automatic deduplication via pazufa-collector ScraperCache                                                                    |
-| API submission             | Framework          | Automatic via pazufa-collector API client (httpx)                                                                            |
-| Error tolerance            | Framework          | Single Vorgang failures do not stop the pipeline                                                                             |
-| Scheduling                 | Framework          | Configurable via `cycle-time-s` in config.toml                                                                               |
-| PDF full-text extraction   | Framework pipeline | PyPDF + Kreuzberg/EasyOCR + LLM (via pazufa-collector)                                                                       |
-| Document authors           | Working            | Extracted from Fundstelle text, fallback to Initiative                                                                       |
-| LLM document enrichment    | Working (optional) | PDF text extraction + LLM semantic metadata via `bawue_dok.py`. Enabled via `LLM_PROVIDER_KEY`. 3-tier graceful degradation. |
-| JSON-comment parsing       | Working            | Primary PARLIS parsing path via embedded JSON comments. HTML/XPath as fallback (DD-014).                                     |
-| Synthetic stations         | Working            | `parl-initiativ` after `preparl-regent` (DD-012), `parl-ablehnung` from "Aktueller Stand" (DD-010)                           |
-| Upload throttle            | Working            | Adaptive rate limiting for API uploads with 429 retry (`upload_throttle.py`)                                                 |
-| Beteiligungsportal         | Working            | Pre-parliamentary drafts (`preparl-regent` station with Entwurf PDFs)                                                        |
-| Sitzungskalender Phase 1+2 | Working            | ICS feed parsing; `nummer` extracted for Plenum via regex; `tops=[]`                                                         |
-| PARLIS detail pages        | Not implemented    | Additional metadata from individual Vorgang detail pages                                                                     |
-| Kabinettsbeschlüsse (STM)  | Not implemented    | Signal source for new Regierungsentwürfe                                                                                     |
-| Gesetzblatt publications   | Not implemented    | Post-parliamentary phase (`postparl-gsblt` station)                                                                          |
-| Sitzungskalender Phase 3   | Not implemented    | TOPs from Tagesordnungen-PDFs; requires HTML scraping for blob URLs                                                          |
+| Feature                      | Status             | Notes                                                                                                                        |
+|------------------------------|--------------------|------------------------------------------------------------------------------------------------------------------------------|
+| PARLIS search (Vorgänge)     | Working            | Automatic subdivision for large result sets                                                                                  |
+| Vorgang extraction           | Working            | Title, type, initiative, Vorgangs-ID                                                                                         |
+| Station extraction           | Working            | From Fundstellen parsing (date, type, committee, document links)                                                             |
+| Enum mapping                 | Working            | PARLIS terms → PaZuFa enumerations (Vorgangs-/Stations-/Dokumententyp)                                                       |
+| Caching                      | Framework (Redis)  | Automatic deduplication via pazufa-collector ScraperCache                                                                    |
+| API submission               | Framework          | Automatic via pazufa-collector API client (httpx)                                                                            |
+| Error tolerance              | Framework          | Single Vorgang failures do not stop the pipeline                                                                             |
+| Scheduling                   | Framework          | Configurable via `cycle-time-s` in config.toml                                                                               |
+| PDF full-text extraction     | Framework pipeline | PyPDF + Kreuzberg/EasyOCR + LLM (via pazufa-collector)                                                                       |
+| Document authors             | Working            | Extracted from Fundstelle text, fallback to Initiative                                                                       |
+| LLM document enrichment      | Working (optional) | PDF text extraction + LLM semantic metadata via `bawue_dok.py`. Enabled via `LLM_PROVIDER_KEY`. 3-tier graceful degradation. |
+| JSON-comment parsing         | Working            | Primary PARLIS parsing path via embedded JSON comments. HTML/XPath as fallback (DD-014).                                     |
+| Synthetic stations           | Working            | `parl-initiativ` after `preparl-regent` (DD-012), `parl-ablehnung` from "Aktueller Stand" (DD-010)                           |
+| Upload throttle              | Working            | Adaptive rate limiting for API uploads with 429 retry (`upload_throttle.py`)                                                 |
+| CI enforcement               | Working            | Woodpecker: ruff-lint + ruff-format + pytest + pip-audit. DoD lists "black, ruff" — ruff's formatter is black-compatible.    |
+| Supply-chain pinning         | Working            | `pazufa-collector` + `pazufa-collector-core` pinned to reviewed commits; OpenAPI generator SHA256-verified.                  |
+| Canonical name normalization | ⚠️ Unverified      | DoD requirement — explicit consolidation of initiator/Fraktion variants not yet audited in `enum_mapper.py`.                 |
+| Reserved entity names        | ⚠️ Unverified      | DoD requires `regierung`, `gesetzesblatt`, `plenum` usage — verify against `enum_mapper.py`.                                 |
+| Codeberg hosting             | ❓ Unverified       | DoD requires repo at `codeberg.org/PaZuFa` — confirm via `git remote -v`.                                                    |
+| Wiki documentation           | ⚠️ Partial         | BW chapter on wiki has 3 pages; local `design_decisions.md` (DD-001…DD-019) not fully mirrored.                              |
+| Beteiligungsportal           | Working            | Pre-parliamentary drafts (`preparl-regent` station with Entwurf PDFs)                                                        |
+| Sitzungskalender Phase 1+2   | Working            | ICS feed parsing; `nummer` extracted for Plenum via regex; `tops=[]`                                                         |
+| PARLIS detail pages          | Not implemented    | Additional metadata from individual Vorgang detail pages                                                                     |
+| Kabinettsbeschlüsse (STM)    | Not implemented    | Signal source for new Regierungsentwürfe                                                                                     |
+| Gesetzblatt publications     | Not implemented    | Post-parliamentary phase (`postparl-gsblt` station)                                                                          |
+| Sitzungskalender Phase 3     | Not implemented    | TOPs from Tagesordnungen-PDFs; requires HTML scraping for blob URLs                                                          |
 
 ## Roadmap
 
-| # | Feature                                | Priority          | Description                                                                                                                           |
-|---|----------------------------------------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| 1 | ~~SitzungsScraper (ICS)~~              | ~~High~~          | ~~Phase 1+2 implemented~~ — `BawueSitzungenScraper` parses ICS feed, `nummer` extracted for Plenum                                    |
-| 2 | SitzungsScraper Phase 3 (TOPs)         | Low               | Enrich with Tagesordnungen-PDFs: scrape blob URLs from landtag-bw.de, parse TOPs from PDFs                                            |
-| 3 | ~~Beteiligungsportal~~                 | ~~Supplementary~~ | ~~`BawueBeteiligungScraper` implemented~~ — `preparl-regent` station with Entwurf PDFs                                                |
-| 4 | ~~LLM Document Enrichment~~            | ~~Optional~~      | ~~Implemented~~ — `bawue_dok.py` provides PDF text extraction + LLM semantic metadata (summary, keywords, short title, opinion score) |
-| 5 | ~~JSON-Comment Parsing~~               | ~~Robustness~~    | ~~Implemented~~ — Primary PARLIS parsing via embedded JSON comments; HTML/XPath retained as fallback (DD-014)                         |
-| 6 | Gesetzblatt BaWue                      | Supplementary     | Capture publications (`postparl-gsblt`). Completes the legislative lifecycle after the parliamentary phase                            |
-| 7 | ~~`trojanergefahr` auf Station-Ebene~~ | ~~Medium~~        | ~~Implemented~~ — LLM-extrahierter Wert wird via `EnrichmentResult` an Station übergeben (max. über alle Dokumente)                   |
+| #  | Feature                                              | Priority          | Description                                                                                                                           |
+|----|------------------------------------------------------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| 1  | ~~SitzungsScraper (ICS)~~                            | ~~High~~          | ~~Phase 1+2 implemented~~ — `BawueSitzungenScraper` parses ICS feed, `nummer` extracted for Plenum                                    |
+| 2  | SitzungsScraper Phase 3 (TOPs)                       | Low               | Enrich with Tagesordnungen-PDFs: scrape blob URLs from landtag-bw.de, parse TOPs from PDFs                                            |
+| 3  | ~~Beteiligungsportal~~                               | ~~Supplementary~~ | ~~`BawueBeteiligungScraper` implemented~~ — `preparl-regent` station with Entwurf PDFs                                                |
+| 4  | ~~LLM Document Enrichment~~                          | ~~Optional~~      | ~~Implemented~~ — `bawue_dok.py` provides PDF text extraction + LLM semantic metadata (summary, keywords, short title, opinion score) |
+| 5  | ~~JSON-Comment Parsing~~                             | ~~Robustness~~    | ~~Implemented~~ — Primary PARLIS parsing via embedded JSON comments; HTML/XPath retained as fallback (DD-014)                         |
+| 6  | Gesetzblatt BaWue                                    | Supplementary     | Capture publications (`postparl-gsblt`). Completes the legislative lifecycle after the parliamentary phase                            |
+| 7  | ~~`trojanergefahr` auf Station-Ebene~~               | ~~Medium~~        | ~~Implemented~~ — LLM-extrahierter Wert wird via `EnrichmentResult` an Station übergeben (max. über alle Dokumente)                   |
+| 8  | DoD: Mirror design decisions to wiki                 | Medium            | Publish DD-001…DD-019 in the BW chapter of the Scraperbuch, including `sonstig` filtering rationale                                   |
+| 9  | DoD: Audit station-type test coverage                | Medium            | Enumerate every PARLIS station type observed in production logs; ensure each is exercised by `test_enum_mapper.py`                    |
+| 10 | DoD: Verify reserved names + canonical normalization | Low               | Audit `enum_mapper.py` for `regierung`/`plenum`/`gesetzesblatt`; confirm initiator/Fraktion name consolidation                        |
+| 11 | DoD: Resolve `verfassungsaendernd` policy            | Low               | Decide between omitting affected Vorgänge or keeping the `False` stub with wiki documentation                                         |

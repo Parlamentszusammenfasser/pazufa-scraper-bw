@@ -7,6 +7,10 @@ Collector-Plugin für den **Baden-Württembergischen Landtag** (`BW`) im
 `SitzungsScraper` des [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector)-Frameworks. Das Framework
 übernimmt Scheduling, Redis-Caching, API-Einlieferung und Dokumentenpipeline (PDF/OCR/LLM).
 
+Das Projekt richtet sich nach der
+Community-[Definition of Done](https://wiki.pazufa.de/books/scraper/page/definition-of-done); die daraus folgenden
+Anforderungen sind in den jeweiligen Abschnitten unten integriert.
+
 ## Identifikatoren
 
 | Identifikator         | Format    | Beispiel       | Quelle                                                      |
@@ -39,18 +43,18 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 
 ### Vorgang
 
-| Feld                  | Typ           | Pflicht | BaWue-Hinweise                                           |
-|-----------------------|---------------|---------|----------------------------------------------------------|
-| `api_id`              | UUID          | Ja      | `uuid5(NAMESPACE_URL, vorgangs_id)`                      |
-| `titel`               | string        | Ja      |                                                          |
-| `typ`                 | Vorgangstyp   | Ja      |                                                          |
-| `wahlperiode`         | integer       | Ja      | Aktuell: 17                                              |
-| `verfassungsaendernd` | boolean       | Ja      | Immer `false` (PARLIS liefert diese Information nicht)   |
-| `initiatoren`         | list[Autor]   | Ja      |                                                          |
-| `stationen`           | list[Station] | Ja      |                                                          |
-| `kurztitel`           | string        | Nein    |                                                          |
-| `ids`                 | list[VgIdent] | Nein    | Enthält `VgIdent(id=vorgangs_id, typ=VgIdentTyp.VORGNR)` |
-| `lobbyregister`       | list[...]     | Nein    |                                                          |
+| Feld                  | Typ           | Pflicht | BaWue-Hinweise                                                                                                                                                                                                   |
+|-----------------------|---------------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `api_id`              | UUID          | Ja      | `uuid5(NAMESPACE_URL, vorgangs_id)`                                                                                                                                                                              |
+| `titel`               | string        | Ja      |                                                                                                                                                                                                                  |
+| `typ`                 | Vorgangstyp   | Ja      |                                                                                                                                                                                                                  |
+| `wahlperiode`         | integer       | Ja      | Aktuell: 17                                                                                                                                                                                                      |
+| `verfassungsaendernd` | boolean       | Ja      | Immer `false` (PARLIS liefert diese Information nicht). **DoD-Konflikt:** bei nicht-bestimmbaren Pflichtfeldern ist das Weglassen des Objekts vorgesehen; Entscheidung steht aus (siehe [status.md](status.md)). |
+| `initiatoren`         | list[Autor]   | Ja      |                                                                                                                                                                                                                  |
+| `stationen`           | list[Station] | Ja      |                                                                                                                                                                                                                  |
+| `kurztitel`           | string        | Nein    |                                                                                                                                                                                                                  |
+| `ids`                 | list[VgIdent] | Nein    | Enthält `VgIdent(id=vorgangs_id, typ=VgIdentTyp.VORGNR)`                                                                                                                                                         |
+| `lobbyregister`       | list[...]     | Nein    |                                                                                                                                                                                                                  |
 
 ### Station
 
@@ -84,21 +88,21 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 
 ### Sitzung
 
-| Feld      | Typ       | Pflicht | BaWue-Hinweise                                                                       |
-|-----------|-----------|---------|--------------------------------------------------------------------------------------|
-| `termin`  | datetime  | Ja      |                                                                                      |
-| `gremium` | Gremium   | Ja      |                                                                                      |
-| `nummer`  | integer   | Ja      | Plenarsitzungen: aus SUMMARY extrahiert (`"142. Sitzung"` → `142`). Ausschüsse: `0`. |
-| `tops`    | list[Top] | Ja      | Aktuell `[]` — TOP-Scraping via PDF noch nicht implementiert                         |
-| `public`  | boolean   | Ja      |                                                                                      |
+| Feld      | Typ       | Pflicht | BaWue-Hinweise                                                                                                |
+|-----------|-----------|---------|---------------------------------------------------------------------------------------------------------------|
+| `termin`  | datetime  | Ja      |                                                                                                               |
+| `gremium` | Gremium   | Ja      |                                                                                                               |
+| `nummer`  | integer   | Ja      | Plenarsitzungen: aus SUMMARY extrahiert (`"142. Sitzung"` → `142`). Ausschüsse: `0`. DoD-Gap bei Ausschüssen. |
+| `tops`    | list[Top] | Ja      | Aktuell `[]` — TOP-Scraping via PDF noch nicht implementiert. DoD-Gap: Phase 3 offen.                         |
+| `public`  | boolean   | Ja      |                                                                                                               |
 
 ### Gremium
 
-| Feld          | Typ       | Pflicht | BaWue-Hinweise                                                                      |
-|---------------|-----------|---------|-------------------------------------------------------------------------------------|
-| `parlament`   | Parlament | Ja      | `Parlament.BW` (Enum, kein String)                                                  |
-| `name`        | string    | Ja      | Ausschussname, `"Plenum"` bei Plenarprotokollen, `"Landtag"` als Default            |
-| `wahlperiode` | integer   | Ja      |                                                                                     |
+| Feld          | Typ       | Pflicht | BaWue-Hinweise                                                           |
+|---------------|-----------|---------|--------------------------------------------------------------------------|
+| `parlament`   | Parlament | Ja      | `Parlament.BW` (Enum, kein String)                                       |
+| `name`        | string    | Ja      | Ausschussname, `"Plenum"` bei Plenarprotokollen, `"Landtag"` als Default |
+| `wahlperiode` | integer   | Ja      |                                                                          |
 
 ### Autor / Top / Lobbyregistereintrag
 
@@ -114,18 +118,18 @@ Enum-Member verwenden die `MINUS`-Namenskonvention (z.B. `Stationstyp.PARL_MINUS
 
 ### Stationstypen
 
-| Wert             | Python-Enum-Member                 | Bedeutung                               |
-|------------------|------------------------------------|-----------------------------------------|
-| `preparl-regent` | `Stationstyp.PREPARL_MINUS_REGENT` | Regierungsentwürfe (Beteiligungsportal) |
+| Wert             | Python-Enum-Member                 | Bedeutung                                                   |
+|------------------|------------------------------------|-------------------------------------------------------------|
+| `preparl-regent` | `Stationstyp.PREPARL_MINUS_REGENT` | Regierungsentwürfe (Beteiligungsportal)                     |
 | `preparl-regbsl` | `Stationstyp.PREPARL_MINUS_REGBSL` | Kabinettsbeschlüsse (PARLIS: Gesetzentwurf Landesregierung) |
-| `parl-initiativ` | `Stationstyp.PARL_MINUS_INITIATIV` | Gesetzentwürfe, Anträge aus dem Landtag |
-| `parl-ausschber` | `Stationstyp.PARL_MINUS_AUSSCHBER` | Beratung in Fachausschüssen             |
-| `parl-vollvlsgn` | `Stationstyp.PARL_MINUS_VOLLVLSGN` | Lesungen im Plenum                      |
-| `parl-akzeptanz` | `Stationstyp.PARL_MINUS_AKZEPTANZ` | Verabschiedung durch den Landtag        |
-| `parl-ablehnung` | `Stationstyp.PARL_MINUS_ABLEHNUNG` | Ablehnung durch den Landtag             |
-| `postparl-gsblt` | `Stationstyp.POSTPARL_MINUS_GSBLT` | Verkündung im Gesetzblatt               |
-| `postparl-kraft` | `Stationstyp.POSTPARL_MINUS_KRAFT` | Gesetz tritt in Kraft                   |
-| `sonstig`        | `Stationstyp.SONSTIG`              | Andere Stationen                        |
+| `parl-initiativ` | `Stationstyp.PARL_MINUS_INITIATIV` | Gesetzentwürfe, Anträge aus dem Landtag                     |
+| `parl-ausschber` | `Stationstyp.PARL_MINUS_AUSSCHBER` | Beratung in Fachausschüssen                                 |
+| `parl-vollvlsgn` | `Stationstyp.PARL_MINUS_VOLLVLSGN` | Lesungen im Plenum                                          |
+| `parl-akzeptanz` | `Stationstyp.PARL_MINUS_AKZEPTANZ` | Verabschiedung durch den Landtag                            |
+| `parl-ablehnung` | `Stationstyp.PARL_MINUS_ABLEHNUNG` | Ablehnung durch den Landtag                                 |
+| `postparl-gsblt` | `Stationstyp.POSTPARL_MINUS_GSBLT` | Verkündung im Gesetzblatt                                   |
+| `postparl-kraft` | `Stationstyp.POSTPARL_MINUS_KRAFT` | Gesetz tritt in Kraft                                       |
+| `sonstig`        | `Stationstyp.SONSTIG`              | Andere Stationen                                            |
 
 ### Vorgangstypen
 
@@ -170,7 +174,8 @@ Enum-Member verwenden die `MINUS`-Namenskonvention (z.B. `Stationstyp.PARL_MINUS
 
 ### PARLIS (Primärquelle)
 
-`parlis.landtag-bw.de` — undokumentiert, aber produktiv genutzt von [dokukratie (OKF)](https://github.com/okfde/dokukratie/blob/main/dokukratie/bw.yml).
+`parlis.landtag-bw.de` — undokumentiert, aber produktiv genutzt
+von [dokukratie (OKF)](https://github.com/okfde/dokukratie/blob/main/dokukratie/bw.yml).
 PARLIS bettet strukturierte JSON-Objekte in HTML-Kommentare ein (`<!--{...}-->`). Diese enthalten Felder mit stabilen
 Feldcodes (z.B. `EWBV10` für Titel, `WMV35` für Fundstellen). Der Parser nutzt diese primär; das HTML/XPath-Parsing
 dient als Fallback (DD-014).
@@ -223,11 +228,46 @@ PDFs mit Blob-IDs (`/resource/blob/{id}/...`). Kein REST-API, kein RSS-Feed.
 
 ## Generelle Anforderungen
 
-1. **Idempotenz:** Wiederholtes Ausführen darf keine Duplikate erzeugen (Framework + Backend)
-2. **Fehlertoleranz:** Einzelne fehlgeschlagene Vorgänge dürfen nicht den gesamten Scraper stoppen (Framework)
-3. **Rate-Limiting:** Respektierung der Landtags-Website (konfigurierbare Verzögerung in `[bawue]`)
-4. **Volltext-Extraktion:** PDFs werden über die Framework-Dokumentpipeline oder die BaWue-eigene Extraktion (`bawue_dok.py` + kreuzberg) verarbeitet
-5. **Korrekte Zuordnung:** Enum-Mapping via `enum_mapper.py` mit `sonstig` als Fallback
-6. **Logging:** Nachvollziehbare Logs für Debugging und Monitoring
-7. **Konfigurierbarkeit:** Alle Einstellungen über `config.toml` / Umgebungsvariablen (4-Tier)
-8. **LLM-Anreicherung (optional):** Bei konfiguriertem `[llm]`-Abschnitt extrahiert `bawue_dok.py` semantische Metadaten (Zusammenfassung, Schlagworte, Kurztitel, Meinung) aus Dokumenten. 3-stufige Degradation: Voll (PDF+LLM) → Text-only (PDF ok, LLM fehlt) → Metadaten-only (PDF-Download fehlgeschlagen). Aktivierung via `LLM_PROVIDER_KEY` Umgebungsvariable.
+Das Projekt erfüllt die Community-[Definition of Done](https://wiki.pazufa.de/books/scraper/page/definition-of-done).
+Konkret:
+
+### Core Completion
+
+1. **Vorgänge + Sitzungen** im PaZuFa-Format erzeugen (alle drei Scraper)
+2. **Einlieferung** ans Backend (vollständig über Framework)
+3. **Automatisierung** (Docker-Compose mit `CYCLE_TIME_S`, Cloud-Run-Job, Raspberry-Pi-Cron)
+4. **Abdeckung der aktuellen Wahlperiode** (`wahlperiode = 17`, `wahlperiode-start-date = 2021-04-26`)
+
+### Coding-Regeln
+
+5. **Idempotenz:** Wiederholtes Ausführen erzeugt keine Duplikate (Framework + Backend)
+6. **Fehlertoleranz:** Einzelne fehlgeschlagene Vorgänge stoppen den Scraper nicht (Framework)
+7. **Determinismus:** Gleicher Input erzeugt identisches API-Mapping (Ausnahme: LLM-Ausgaben)
+8. **Fail-loud:** Fehlende/nicht-parsbare Pflichtfelder werden geloggt; `None`/Weglassen vor leeren Defaults
+9. **Kanonische Namen:** Einheitliche Autoren-/Organisationsnamen (Fraktionen, Institutionen)
+10. **Reservierte Entity-Namen:** `regierung`, `gesetzesblatt`, `plenum` entsprechend der Spezifikation verwenden
+11. **Präzise Gremium-Namen** statt generischer Bezeichnungen
+
+### Betrieb
+
+12. **Rate-Limiting:** Konfigurierbare Verzögerung (`[bawue]`, `[beteiligung]`)
+13. **Volltext-Extraktion:** Framework-Pipeline oder `bawue_dok.py` + kreuzberg
+14. **Enum-Mapping:** `enum_mapper.py` mit `sonstig` als dokumentiertem Fallback
+15. **Logging:** Strukturiertes JSON-Logging für Debugging und Monitoring
+16. **Konfigurierbarkeit:** 4-Tier (Defaults → `config.toml` → ENV → CLI)
+17. **Caching:** Redis (2-Wochen-TTL) + LLM-Hash-Cache zur Schonung von Ressourcen/Tokens
+18. **LLM-Anreicherung (optional):** Bei konfiguriertem `[llm]`-Abschnitt extrahiert `bawue_dok.py` semantische
+    Metadaten (Zusammenfassung, Schlagworte, Kurztitel, Meinung) aus Dokumenten. 3-stufige Degradation: Voll (PDF+LLM) →
+    Text-only (PDF ok, LLM fehlt) → Metadaten-only (PDF-Download fehlgeschlagen). Aktivierung via `LLM_PROVIDER_KEY`
+    Umgebungsvariable.
+
+### Qualitätssicherung
+
+19. **Automatisierte Tests:** Unit + Integration (pytest, 578 + 14)
+20. **CI:** ruff-Linting + ruff-Formatter + pytest + `pip-audit` (Woodpecker)
+21. **Testabdeckung aller Stationstypen:** mindestens ein Test pro auftretendem Stationstyp (siehe
+    `test_enum_mapper.py`)
+22. **Drift-Detection:** `verify_fulltext.py`, `wahlperiode_check.py` erkennen zerbrochenes Parsing
+23. **Dokumentation:** Design-Entscheidungen in [design_decisions.md](design_decisions.md) (DD-001…DD-019) und im
+    Wiki-Chapter
+24. **Scope:** Ausschließlich Gesetzgebungsvorgänge des Landes BaWü (`enabled-vorgangstypen` standardmäßig restriktiv)
