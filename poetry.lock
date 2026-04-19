@@ -511,7 +511,7 @@ jsondiff = "^2.2.1"
 jsonschema = "^4.25.1"
 kreuzberg = {version = "^4.0", extras = ["easyocr"]}
 lazy-imports = "^1.2"
-litellm = "^1.81"
+litellm = ">=1.83.0"
 openapi-client = {path = "oapicode"}
 pillow = "^12.1.0"
 pydantic = "^2.9"
@@ -538,7 +538,7 @@ files = []
 develop = true
 
 [package.dependencies]
-litellm = "^1.81.13"
+litellm = ">=1.83.0"
 
 [package.source]
 type = "directory"
@@ -3581,4 +3581,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<4.0"
-content-hash = "6a33ce47630cb20514c5c818d7d6dd50e6547f8d6a6b6ba234bb24ba7a434f25"
+content-hash = "17f1adeeb77fb818eb2243f74bd3a9c8413e057ad58c108ac9f66d9e426d68a6"
