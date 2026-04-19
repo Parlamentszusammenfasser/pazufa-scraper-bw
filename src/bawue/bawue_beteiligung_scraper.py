@@ -32,6 +32,7 @@ from bawue.beteiligung_parser import (
     parse_process_detail,
 )
 from bawue.config_loader import load_toml_section
+from bawue.notifications import send_mattermost_summary
 from bawue.rate_limiter import create_upload_limiter
 from bawue.upload_throttle import upload_vorgang
 
@@ -88,13 +89,14 @@ class BawueBeteiligungScraper(VorgangsScraper):
         finally:
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
-            _print_beteiligung_summary(
+            lines = _print_beteiligung_summary(
                 self._published,
                 self._skipped,
                 self._failed,
                 duration,
                 self._llm_metrics if self._llm_enabled else None,
             )
+            send_mattermost_summary(self.config, "BaWue Beteiligung Run Summary", lines)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
         result = upload_vorgang(
@@ -232,10 +234,9 @@ def _print_beteiligung_summary(
     failed: int,
     duration: float,
     llm_metrics: LLMMetrics | None = None,
-) -> None:
+) -> list[str]:
     discovered = published + skipped + failed
     lines = [
-        "=== BaWue Beteiligung Run Summary ===",
         f"Duration: {duration:.1f}s",
         f"Discovered:  {discovered}",
         f"Published:   {published}",
@@ -244,4 +245,5 @@ def _print_beteiligung_summary(
     ]
     if llm_metrics is not None and llm_metrics.total > 0:
         lines.extend(llm_metrics.format_lines())
-    print("\n".join(lines))
+    print("=== BaWue Beteiligung Run Summary ===\n" + "\n".join(lines))
+    return lines

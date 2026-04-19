@@ -28,6 +28,7 @@ from bawue.bawue_dok import LLMMetrics, clear_hash_cache
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
 from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
+from bawue.notifications import send_mattermost_summary
 from bawue.parlis_client import ParlisClient
 from bawue.rate_limiter import create_upload_limiter
 from bawue.types import RawFundstelle, RawVorgang
@@ -129,7 +130,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         finally:
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
-            _print_vorgaenge_summary(
+            lines = _print_vorgaenge_summary(
                 self._wahlperiode,
                 self._by_type,
                 self._published,
@@ -138,6 +139,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 duration,
                 self._llm_metrics if self._llm_enabled else None,
             )
+            send_mattermost_summary(self.config, "BaWue Vorgänge Run Summary", lines)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
         result = upload_vorgang(
@@ -750,10 +752,9 @@ def _print_vorgaenge_summary(
     failed: int,
     duration: float,
     llm_metrics: LLMMetrics | None = None,
-) -> None:
+) -> list[str]:
     discovered = sum(by_type.values())
     lines = [
-        "=== BaWue Vorgänge Run Summary ===",
         f"Wahlperiode: {wahlperiode} | Duration: {duration:.1f}s",
         f"Discovered:  {discovered}",
         f"Published:   {published}",
@@ -767,7 +768,8 @@ def _print_vorgaenge_summary(
             lines.append(f"  {typ}:  {count}")
     if llm_metrics is not None and llm_metrics.total > 0:
         lines.extend(llm_metrics.format_lines())
-    print("\n".join(lines))
+    print("=== BaWue Vorgänge Run Summary ===\n" + "\n".join(lines))
+    return lines
 
 
 # -- Date parsing helpers ----------------------------------------------------------
