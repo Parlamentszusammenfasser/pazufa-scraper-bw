@@ -61,3 +61,7 @@ ics-url = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkal
 [beteiligung]
 # wahlperiode = 17
 # request-delay-s = 2.0
+
+[notifications]
+mattermost-hook = "https://chat.pazufa.de/hooks/wnubdt65npd5z8jyazjz5yrd8y"
+mattermost-username = "bawue-scraper"

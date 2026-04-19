@@ -1150,8 +1150,8 @@ class TestStationMerging:
         assert vorgang.stationen[1].typ == Stationstyp.PARL_MINUS_VOLLVLSGN
 
     @pytest.mark.asyncio
-    async def test_no_merge_when_no_documents(self, scraper_build_vorgang):
-        """Station without documents (no pdf_url) is not merged but kept as separate station."""
+    async def test_vollvlsgn_not_merged_even_without_documents(self, scraper_build_vorgang):
+        """Plenary readings are never merged, regardless of document presence (DD-004)."""
         raw = _make_raw_vorgang(
             "V-805",
             fundstellen=[
@@ -1827,6 +1827,54 @@ class TestAktuellerStandAblehnung:
                     "raw": "Ablehnung   Plenarprotokoll 17/155 25.01.2026",
                     "datum": "25.01.2026",
                     "plenarprotokoll": "17/155",
+                    "station_typ": "Ablehnung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        raw["Aktueller Stand"] = "Abgelehnt"
+        vorgang = await scraper_build_vorgang(raw)
+
+        ablehnung_count = sum(1 for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_ABLEHNUNG)
+        assert ablehnung_count == 1
+
+    @pytest.mark.asyncio
+    async def test_duplicate_ablehnung_fundstellen_merged(self, scraper_build_vorgang):
+        """Two Ablehnung Fundstellen without documents must be merged into one station.
+
+        Regression: PARLIS occasionally delivers multiple Fundstellen that map to
+        parl-ablehnung (e.g. 'Ablehnung' appearing twice). Without merging, both
+        get appended as separate stations, causing the backend to reject the Vorgang
+        for duplicate stations.  See staging run 2026-04-13 (12 failures).
+        """
+        raw = _make_raw_vorgang(
+            "V-150",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    CDU  01.01.2026 Drucksache 17/10000",
+                    "datum": "01.01.2026",
+                    "drucksache": "17/10000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/155 15.01.2026",
+                    "datum": "15.01.2026",
+                    "plenarprotokoll": "17/155",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Ablehnung   Plenarprotokoll 17/160 25.01.2026",
+                    "datum": "25.01.2026",
+                    "plenarprotokoll": "17/160",
+                    "station_typ": "Ablehnung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Ablehnung   Plenarprotokoll 17/160 25.01.2026",
+                    "datum": "25.01.2026",
+                    "plenarprotokoll": "17/160",
                     "station_typ": "Ablehnung",
                     "pdf_url": "",
                 },

@@ -20,6 +20,7 @@ from openapi_client.models import Gremium, Parlament, Sitzung
 
 from bawue.config_loader import load_toml_section
 from bawue.ics_parser import group_events_by_date, parse_ics_feed
+from bawue.notifications import send_mattermost_summary
 from bawue.rate_limiter import create_upload_limiter
 from bawue.upload_throttle import with_upload_retry
 
@@ -59,9 +60,10 @@ class BawueSitzungenScraper(SitzungsScraper):
         finally:
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
-            _print_sitzungen_summary(
+            lines = _print_sitzungen_summary(
                 self._total_dates, self._published_dates, self._failed_dates, self._published_sitzungen, duration
             )
+            send_mattermost_summary(self.config, "BaWue Sitzungen Run Summary", lines)
 
     async def listing_page_extractor(self, url: str) -> list[str]:
         """Fetch the ICS feed and return ISO date strings as listing keys."""
@@ -165,13 +167,13 @@ def _print_sitzungen_summary(
     failed_dates: int,
     published_sitzungen: int,
     duration: float,
-) -> None:
+) -> list[str]:
     lines = [
-        "=== BaWue Sitzungen Run Summary ===",
         f"Duration: {duration:.1f}s",
         f"Dates found:      {total_dates}",
         f"Dates published:  {published_dates}",
         f"Dates failed:     {failed_dates}",
         f"Total sitzungen:  {published_sitzungen}",
     ]
-    print("\n".join(lines))
+    print("=== BaWue Sitzungen Run Summary ===\n" + "\n".join(lines))
+    return lines
