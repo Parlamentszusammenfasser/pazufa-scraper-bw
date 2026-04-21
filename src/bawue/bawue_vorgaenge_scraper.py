@@ -449,8 +449,14 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return
 
         zp_start = stationen[-1].zp_start
+        # Deterministic api_id so the backend station_merge_candidates query matches
+        # this synthetic station across re-runs (it has no documents, so the only other
+        # merge key — shared document hash — never matches and would insert a duplicate
+        # row on every upload).
+        api_id = uuid5(NAMESPACE_URL, f"bawue-synth-ablehnung-{vorgang_id}")
         stationen.append(
             Station(
+                api_id=str(api_id),
                 typ=Stationstyp.PARL_MINUS_ABLEHNUNG,
                 dokumente=[],
                 zp_start=zp_start,

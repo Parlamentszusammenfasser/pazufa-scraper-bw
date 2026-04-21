@@ -1906,6 +1906,41 @@ class TestAktuellerStandAblehnung:
 
         assert len(vorgang.stationen) == 0
 
+    @pytest.mark.asyncio
+    async def test_synthesized_ablehnung_has_deterministic_api_id(self, scraper_build_vorgang):
+        """Synthesized parl-ablehnung must carry a deterministic api_id so the backend
+        merges re-runs into the same row instead of inserting a duplicate.
+
+        Without this, the backend's station_merge_candidates query only matches by
+        (api_id) or (vg, typ, gremium, shared-document-hash); a synthetic station has
+        neither api_id nor documents, so every re-upload inserts a new ghost row.
+        That broke 30 rejected-bill Vorgänge in the 2026-04-20 dev run.
+        """
+        raw = _make_raw_vorgang("V-222457")
+        raw["Aktueller Stand"] = "Abgelehnt"
+
+        v1 = await scraper_build_vorgang(raw)
+        v2 = await scraper_build_vorgang(raw)
+
+        a1 = v1.stationen[-1]
+        a2 = v2.stationen[-1]
+        assert a1.typ == Stationstyp.PARL_MINUS_ABLEHNUNG
+        assert a1.api_id is not None, "synthesized ablehnung must have a stable api_id"
+        assert a1.api_id == a2.api_id, "api_id must be deterministic across runs"
+
+    @pytest.mark.asyncio
+    async def test_synthesized_ablehnung_api_id_differs_per_vorgang(self, scraper_build_vorgang):
+        """Two different Vorgänge must get different synthesized-ablehnung api_ids."""
+        raw_a = _make_raw_vorgang("V-111")
+        raw_a["Aktueller Stand"] = "Abgelehnt"
+        raw_b = _make_raw_vorgang("V-222")
+        raw_b["Aktueller Stand"] = "Abgelehnt"
+
+        va = await scraper_build_vorgang(raw_a)
+        vb = await scraper_build_vorgang(raw_b)
+
+        assert va.stationen[-1].api_id != vb.stationen[-1].api_id
+
 
 class TestBeschlussDesLandtagsInBeratung:
     """Regression: 'Beschluss des Landtags in Zweiter/Dritter Beratung' must map to
