@@ -146,6 +146,34 @@ class TestStationstypMapping:
                 None,
                 Stationstyp.PARL_MINUS_VOLLVLSGN,
             ),
+            # Gap #2 coverage — STATIONSTYP_MAP keys previously only covered
+            # transitively (e.g. "Antrag" via "Änderungsanträge", "Dritte Beratung"
+            # only within "Beschluss des Landtags in Dritter Beratung").
+            (
+                "Antrag    Fraktion der FDP/DVP  10.01.2026 Drucksache 17/10140",
+                None,
+                Stationstyp.PARL_MINUS_INITIATIV,
+            ),
+            (
+                "Dritte Beratung   Plenarprotokoll 17/145 15.03.2026",
+                None,
+                Stationstyp.PARL_MINUS_VOLLVLSGN,
+            ),
+            (
+                "Ausschussberatung    Ausschuss für Inneres  20.02.2026 Drucksache 17/10180",
+                None,
+                Stationstyp.PARL_MINUS_AUSSCHBER,
+            ),
+            (
+                "Annahme   Plenarprotokoll 17/143 12.02.2026",
+                None,
+                Stationstyp.PARL_MINUS_AKZEPTANZ,
+            ),
+            (
+                "Beschluss des Landtags      05.02.2026 Drucksache 17/10267",
+                None,
+                Stationstyp.PARL_MINUS_AKZEPTANZ,
+            ),
         ],
     )
     def test_known_patterns(self, text, initiator, expected):
@@ -173,6 +201,106 @@ class TestStationstypMapping:
     def test_ueberweisung_maps_to_vollversammlung(self):
         """Committee referral 'Überweisung' maps to PARL_VOLLVLSGN, not sonstig."""
         assert map_stationstyp("Überweisung") == Stationstyp.PARL_MINUS_VOLLVLSGN
+
+
+# PARLIS station-type strings observed in production that intentionally map to
+# SONSTIG at the enum-mapper level. Each entry cites the design decision that
+# justifies why — per community DoD, every SONSTIG fallback must be documented.
+# Kept as a module-level constant so TestStationstypDocumentedSonstig and
+# TestStationstypCoverageAudit share the same canonical list.
+DOCUMENTED_SONSTIG_STATION_TYPES: list[tuple[str, str]] = [
+    ("Mitteilung", "DD-002: sender/timing-dependent, no single mapping is correct"),
+    ("Stellungnahme", "DD-005: scraper attaches as child of preceding station"),
+    ("Antwort", "DD-005: scraper attaches as child of preceding station"),
+    ("Neufassung", "DD-012: postparl-only meta-entry, scraper skips the whole Vorgang"),
+    ("Berichtigung", "DD-012: postparl-only meta-entry, scraper skips the whole Vorgang"),
+    ("Dokument", "DD-017: generic PARLIS label with no parliamentary-process meaning"),
+]
+
+
+class TestStationstypDocumentedSonstig:
+    """Regression guard for PARLIS station types that intentionally fall through to SONSTIG.
+
+    These are input strings observed in PARLIS whose mapping to SONSTIG is a
+    deliberate design choice (not a gap). If any of them starts mapping to a
+    concrete enum, either the mapper grew a matching key or a shorter key now
+    shadows them — both cases need review against the cited DD.
+    """
+
+    @pytest.mark.parametrize("text,reason", DOCUMENTED_SONSTIG_STATION_TYPES)
+    def test_documented_sonstig(self, text, reason):
+        assert map_stationstyp(text) == Stationstyp.SONSTIG, reason
+
+
+# Fundstelle station_typ strings observed in PARLIS (without trailing
+# author/date payload). Current best knowledge derived from
+# `docs/design_decisions.md` and the keys of `STATIONSTYP_MAP`. Reconcile
+# against production log evidence once the staging run completes.
+OBSERVED_STATION_TYPES: list[str] = [
+    # Initiative (parl-initiativ)
+    "Gesetzentwurf",
+    "Antrag",
+    "Anträge",
+    "Änderungsanträge",
+    "Kleine Anfrage",
+    "Große Anfrage",
+    "Mündliche Anfrage",
+    "Volksantrag",
+    # Ausschussberatung (parl-ausschber)
+    "Beschlussempfehlung und Bericht",
+    "Bericht und Empfehlungen",
+    "Ausschussberatung",
+    # Plenarlesungen (parl-vollvlsgn)
+    "Erste Beratung",
+    "Zweite Beratung",
+    "Dritte Beratung",
+    "Beratung",
+    "Überweisung",
+    "Beschluss des Landtags in Zweiter Beratung",
+    "Beschluss des Landtags in Dritter Beratung",
+    # Akzeptanz (parl-akzeptanz)
+    "Gesetzesbeschluss",
+    "Beschluss des Landtags",
+    "Zustimmung",
+    "Annahme",
+    # Ablehnung (parl-ablehnung)
+    "Ablehnung",
+    # Gesetzblatt / Inkrafttreten (postparl-*)
+    "Bekanntmachung",
+    "Gesetzblatt",
+    "Gesetz",
+    "Inkrafttreten",
+    # Documented SONSTIG fallbacks (see DOCUMENTED_SONSTIG_STATION_TYPES)
+    "Mitteilung",
+    "Stellungnahme",
+    "Antwort",
+    "Neufassung",
+    "Berichtigung",
+    "Dokument",
+]
+
+
+class TestStationstypCoverageAudit:
+    """DoD audit (Roadmap #9): every PARLIS station type observed in production
+    must be exercised by this file.
+
+    Each entry in OBSERVED_STATION_TYPES is either:
+      - mapped to a concrete (non-SONSTIG) Stationstyp by the mapper, or
+      - listed in DOCUMENTED_SONSTIG_STATION_TYPES with a DD reference.
+    """
+
+    @pytest.mark.parametrize("station_typ", OBSERVED_STATION_TYPES)
+    def test_every_observed_type_is_handled(self, station_typ):
+        """Every observed PARLIS station type must either map concretely or be
+        on the documented-SONSTIG allow-list."""
+        result = map_stationstyp(station_typ)
+        if result is Stationstyp.SONSTIG:
+            documented = {t for t, _ in DOCUMENTED_SONSTIG_STATION_TYPES}
+            assert station_typ in documented, (
+                f"'{station_typ}' maps to SONSTIG but is not in "
+                f"DOCUMENTED_SONSTIG_STATION_TYPES — either add a STATIONSTYP_MAP "
+                f"entry or document the fallback with a DD reference."
+            )
 
 
 class TestDokumententypMapping:
