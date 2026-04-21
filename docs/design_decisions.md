@@ -596,29 +596,9 @@ Konfiguration über `[bawue]` → `filter-sonstig-stations` in `config.toml`.
 
 ---
 
-## DD-018: WORKAROUND — Nachparlamentarische Ausschussberichte werden gefiltert
+## DD-018: ~~DD-018: WORKAROUND — Nachparlamentarische Ausschussberichte werden gefiltert~~
 
-**Datum:** 13.04.2026
-
-**Kontext:** PARLIS hängt an bereits abgeschlossene Vorgänge nachträgliche Ausschussberichte
-an, die aus einer **Evaluierungsklausel** oder **Berichtspflicht** des Gesetzes resultieren.
-Diese erscheinen als `parl-ausschber`-Stationen Monate oder Jahre nach der Verkündung
-im Gesetzblatt (`postparl-gsblt`). Die Backend-Track-Regex (`gg-land-parl`, s. DD-016)
-erwartet einen linearen Lebenszyklus und lehnt parlamentarische Stationen nach
-nachparlamentarischen ab. 3 von 168 Vorgängen im Dev-Lauf waren betroffen
-(V-214623, V-223628, V-222724).
-
-Dies sind **keine Datenfehler** — die Ausschussberichte sind legitime parlamentarische
-Nachkontrolle (Kenntnisnahme von Umsetzungsberichten der Landesregierung).
-
-**Entscheidung:** **Temporärer Workaround im Scraper:** `parl-*`-Stationen, die
-chronologisch nach einer `postparl-*`-Station liegen, werden herausgefiltert.
-Jede Filterung wird mit `WARNING`-Level protokolliert. Sobald die Backend-Track-Regex
-optionale nachparlamentarische Ausschussberichte unterstützt (z.B. `...GK?(A*)`),
-soll dieser Workaround entfernt werden.
-
-**Implementierung:** `bawue_vorgaenge_scraper.py`, Methode
-`_filter_post_legislative_stations()`, aufgerufen aus `_build_vorgang()`.
+> Removed
 
 ---
 
