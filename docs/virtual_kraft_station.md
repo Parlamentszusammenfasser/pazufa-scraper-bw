@@ -3,7 +3,7 @@
 **Status:** Offen (Roadmap #12, optional) — **nicht implementiert**
 **Zugehöriges Issue:** [parlamentszusammenfasser#40](https://codeberg.org/PaZuFa/parlamentszusammenfasser/issues/40)
 **Verwandte Entscheidungen:** DD-002 (Mitteilungen ≠ `postparl-kraft`), DD-010 (synthetische Ablehnung),
-DD-012 (synthetische `parl-initiativ`), DD-016 (BY-Track), DD-018 (Filter post-parlamentarischer Ausschussberichte).
+DD-012 (synthetische `parl-initiativ`), DD-016 (BY-Track).
 
 Dieses Dokument beschreibt den Vorschlag, fasst die Diskussion zusammen und hält die offenen
 Entscheidungsfragen fest. Es ist **kein Implementierungs-Ticket** — vor einer Umsetzung ist

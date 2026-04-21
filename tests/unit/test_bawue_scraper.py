@@ -1906,6 +1906,41 @@ class TestAktuellerStandAblehnung:
 
         assert len(vorgang.stationen) == 0
 
+    @pytest.mark.asyncio
+    async def test_synthesized_ablehnung_has_deterministic_api_id(self, scraper_build_vorgang):
+        """Synthesized parl-ablehnung must carry a deterministic api_id so the backend
+        merges re-runs into the same row instead of inserting a duplicate.
+
+        Without this, the backend's station_merge_candidates query only matches by
+        (api_id) or (vg, typ, gremium, shared-document-hash); a synthetic station has
+        neither api_id nor documents, so every re-upload inserts a new ghost row.
+        That broke 30 rejected-bill Vorgänge in the 2026-04-20 dev run.
+        """
+        raw = _make_raw_vorgang("V-222457")
+        raw["Aktueller Stand"] = "Abgelehnt"
+
+        v1 = await scraper_build_vorgang(raw)
+        v2 = await scraper_build_vorgang(raw)
+
+        a1 = v1.stationen[-1]
+        a2 = v2.stationen[-1]
+        assert a1.typ == Stationstyp.PARL_MINUS_ABLEHNUNG
+        assert a1.api_id is not None, "synthesized ablehnung must have a stable api_id"
+        assert a1.api_id == a2.api_id, "api_id must be deterministic across runs"
+
+    @pytest.mark.asyncio
+    async def test_synthesized_ablehnung_api_id_differs_per_vorgang(self, scraper_build_vorgang):
+        """Two different Vorgänge must get different synthesized-ablehnung api_ids."""
+        raw_a = _make_raw_vorgang("V-111")
+        raw_a["Aktueller Stand"] = "Abgelehnt"
+        raw_b = _make_raw_vorgang("V-222")
+        raw_b["Aktueller Stand"] = "Abgelehnt"
+
+        va = await scraper_build_vorgang(raw_a)
+        vb = await scraper_build_vorgang(raw_b)
+
+        assert va.stationen[-1].api_id != vb.stationen[-1].api_id
+
 
 class TestBeschlussDesLandtagsInBeratung:
     """Regression: 'Beschluss des Landtags in Zweiter/Dritter Beratung' must map to
@@ -2306,133 +2341,3 @@ class TestFilterSonstigStations:
             await scraper_build_vorgang(raw)
 
         assert any("sonstig" in r.message.lower() for r in caplog.records)
-
-
-class TestFilterPostLegislativeStations:
-    """Tests for the WORKAROUND that filters parl-* stations after postparl-* stations (DD-018)."""
-
-    @pytest.mark.asyncio
-    async def test_late_ausschber_after_gesetzblatt_is_filtered(self, scraper_build_vorgang):
-        """A parl-ausschber appearing years after postparl-gsblt must be dropped."""
-        raw = _make_raw_vorgang(
-            "V-800",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Fraktion GRÜNE  01.01.2023 Drucksache 17/4000   (5 S.)",
-                    "datum": "01.01.2023",
-                    "drucksache": "17/4000",
-                    "station_typ": "Gesetzentwurf",
-                    "seiten": 5,
-                    "pdf_url": "https://example.com/doc.pdf",
-                },
-                {
-                    "raw": "Erste Beratung   Plenarprotokoll 17/100 15.01.2023",
-                    "datum": "15.01.2023",
-                    "plenarprotokoll": "17/100",
-                    "station_typ": "Erste Beratung",
-                    "pdf_url": "",
-                },
-                {
-                    "raw": "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  01.02.2023 Drucksache 17/4100",
-                    "datum": "01.02.2023",
-                    "drucksache": "17/4100",
-                    "station_typ": "Beschlussempfehlung und Bericht",
-                    "ausschuss": "Ausschuss für Wirtschaft",
-                    "pdf_url": "https://example.com/report.pdf",
-                },
-                {
-                    "raw": "Zweite Beratung   Plenarprotokoll 17/105 15.02.2023",
-                    "datum": "15.02.2023",
-                    "plenarprotokoll": "17/105",
-                    "station_typ": "Zweite Beratung",
-                    "pdf_url": "",
-                },
-                {
-                    "raw": "Gesetz Gesetzblatt 2023 Nr. 10  S. 1  01.03.2023",
-                    "datum": "01.03.2023",
-                    "station_typ": "Gesetz",
-                    "pdf_url": "",
-                },
-                # Late Ausschussbericht — 3 years after Gesetzblatt
-                {
-                    "raw": "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  15.01.2026 Drucksache 17/9000",
-                    "datum": "15.01.2026",
-                    "drucksache": "17/9000",
-                    "station_typ": "Beschlussempfehlung und Bericht",
-                    "ausschuss": "Ausschuss für Wirtschaft",
-                    "pdf_url": "https://example.com/late-report.pdf",
-                },
-            ],
-        )
-        vorgang = await scraper_build_vorgang(raw)
-
-        station_types = [s.typ for s in vorgang.stationen]
-        # The late parl-ausschber should be filtered — only 1 ausschber remains
-        assert station_types.count(Stationstyp.PARL_MINUS_AUSSCHBER) == 1
-        # The postparl-gsblt must still be present
-        assert Stationstyp.POSTPARL_MINUS_GSBLT in station_types
-
-    @pytest.mark.asyncio
-    async def test_no_postparl_stations_passes_through_unchanged(self, scraper_build_vorgang):
-        """Without any postparl-* station, no filtering occurs."""
-        raw = _make_raw_vorgang(
-            "V-801",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Fraktion GRÜNE  01.01.2023 Drucksache 17/4000   (5 S.)",
-                    "datum": "01.01.2023",
-                    "drucksache": "17/4000",
-                    "station_typ": "Gesetzentwurf",
-                    "seiten": 5,
-                    "pdf_url": "https://example.com/doc.pdf",
-                },
-                {
-                    "raw": "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  01.02.2023 Drucksache 17/4100",
-                    "datum": "01.02.2023",
-                    "drucksache": "17/4100",
-                    "station_typ": "Beschlussempfehlung und Bericht",
-                    "ausschuss": "Ausschuss für Wirtschaft",
-                    "pdf_url": "https://example.com/report.pdf",
-                },
-            ],
-        )
-        vorgang = await scraper_build_vorgang(raw)
-
-        station_types = [s.typ for s in vorgang.stationen]
-        assert Stationstyp.PARL_MINUS_AUSSCHBER in station_types
-
-    @pytest.mark.asyncio
-    async def test_filtering_logs_warning(self, scraper_build_vorgang, caplog):
-        """Filtered post-legislative stations produce a WARNING log."""
-        raw = _make_raw_vorgang(
-            "V-802",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Fraktion GRÜNE  01.01.2023 Drucksache 17/4000   (5 S.)",
-                    "datum": "01.01.2023",
-                    "drucksache": "17/4000",
-                    "station_typ": "Gesetzentwurf",
-                    "seiten": 5,
-                    "pdf_url": "https://example.com/doc.pdf",
-                },
-                {
-                    "raw": "Gesetz Gesetzblatt 2023 Nr. 10  S. 1  01.03.2023",
-                    "datum": "01.03.2023",
-                    "station_typ": "Gesetz",
-                    "pdf_url": "",
-                },
-                {
-                    "raw": "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  15.01.2026 Drucksache 17/9000",
-                    "datum": "15.01.2026",
-                    "drucksache": "17/9000",
-                    "station_typ": "Beschlussempfehlung und Bericht",
-                    "ausschuss": "Ausschuss für Wirtschaft",
-                    "pdf_url": "https://example.com/late-report.pdf",
-                },
-            ],
-        )
-        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
-            await scraper_build_vorgang(raw)
-
-        assert any("workaround" in r.message.lower() for r in caplog.records)
-        assert any("V-802" in r.message for r in caplog.records)

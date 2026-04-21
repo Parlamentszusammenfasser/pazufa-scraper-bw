@@ -257,7 +257,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         fundstellen_parsed = raw.get("fundstellen_parsed", [])
         stationen = await self._collect_stationen(fundstellen_parsed, initiative, vorgang_id)
-        stationen = self._filter_post_legislative_stations(stationen, vorgang_id)  # WORKAROUND: DD-018
 
         if fundstellen_parsed and not stationen:
             logger.warning(
@@ -319,35 +318,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
             "anträge",
         }
     )
-
-    # WORKAROUND (Issue 1A / DD-018)
-    # TODO: Remove once backend track regex supports post-enactment stations.
-    def _filter_post_legislative_stations(self, stationen: list[Station], vorgang_id: str) -> list[Station]:
-        """Filter parl-* stations that appear chronologically after any postparl-* station.
-
-        PARLIS appends late Ausschussberichte (Evaluierungsklausel / Berichtspflicht)
-        to already-concluded Vorgänge. The backend track regex rejects these.
-        This workaround drops them until the backend track is extended.
-        """
-        postparl_dates = [s.zp_start for s in stationen if s.typ in self._POSTPARL_TYPEN]
-        if not postparl_dates:
-            return stationen
-
-        earliest_postparl = min(postparl_dates)
-        filtered: list[Station] = []
-        for s in stationen:
-            if s.typ and s.typ.value.startswith("parl-") and s.zp_start > earliest_postparl:
-                logger.warning(
-                    "WORKAROUND (DD-018): Filtering post-legislative %s station "
-                    "(date: %s) after postparl station (date: %s) in %s",
-                    s.typ.value,
-                    s.zp_start.date(),
-                    earliest_postparl.date(),
-                    vorgang_id,
-                )
-                continue
-            filtered.append(s)
-        return filtered
 
     async def _collect_stationen(
         self, fundstellen: list[RawFundstelle], initiative: str, vorgang_id: str
@@ -449,8 +419,14 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return
 
         zp_start = stationen[-1].zp_start
+        # Deterministic api_id so the backend station_merge_candidates query matches
+        # this synthetic station across re-runs (it has no documents, so the only other
+        # merge key — shared document hash — never matches and would insert a duplicate
+        # row on every upload).
+        api_id = uuid5(NAMESPACE_URL, f"bawue-synth-ablehnung-{vorgang_id}")
         stationen.append(
             Station(
+                api_id=str(api_id),
                 typ=Stationstyp.PARL_MINUS_ABLEHNUNG,
                 dokumente=[],
                 zp_start=zp_start,

@@ -17,11 +17,13 @@ from openapi_client.models.dokument import Dokument
 from bawue.bawue_dok import (
     EnrichmentResult,
     LLMMetrics,
+    _cache_key,
     _extract_relevant_pages,
     _hash_cache,
     _is_garbled,
     _paragraph_quality_score,
     _parse_page_hint,
+    _prompt_fingerprint,
     _prompt_for_doktyp,
     _validate_scores,
     clear_hash_cache,
@@ -668,6 +670,48 @@ class TestHashCache:
                 await enrich_dokument(session, llm, dok_b)
 
         assert mock_acomp.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_same_pdf_different_doktyp_calls_llm_twice(self):
+        """Same PDF text/hash but different Doktyp → different prompt → must re-call LLM.
+
+        Regression: the cache key used to depend only on the PDF hash, so enriching
+        the same PDF as ENTWURF then as STELLUNGNAHME returned the Entwurf's semantics
+        (with trojanergefahr) instead of running the Stellungnahme prompt (with meinung).
+        """
+        session = MagicMock()
+        llm = _make_llm_mock()
+
+        dok_entwurf = _make_plain_dokument(typ=Doktyp.ENTWURF, link="https://example.com/same.pdf")
+        dok_stln = _make_plain_dokument(typ=Doktyp.STELLUNGNAHME, link="https://example.com/same.pdf")
+
+        with _patch_pdf_pipeline():  # same text + hash for both
+            with _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_entwurf:
+                await enrich_dokument(session, llm, dok_entwurf)
+            assert mock_entwurf.call_count == 1
+
+            with _patch_llm(SAMPLE_LLM_RESPONSE_STELLUNGNAHME) as mock_stln:
+                result = await enrich_dokument(session, llm, dok_stln)
+
+        # Different prompt → fresh LLM call required
+        assert mock_stln.call_count == 1
+        # And Stellungnahme-specific field must come through (not the cached Entwurf answer)
+        assert result.dokument.meinung == 4
+
+    @pytest.mark.asyncio
+    async def test_same_pdf_same_doktyp_hits_cache_on_second_run(self):
+        """Same PDF + same Doktyp across two in-memory runs → exactly one LLM call."""
+        session = MagicMock()
+        llm = _make_llm_mock()
+
+        dok_a = _make_plain_dokument(typ=Doktyp.BESCHLUSSEMPF, link="https://example.com/a.pdf")
+        dok_b = _make_plain_dokument(typ=Doktyp.BESCHLUSSEMPF, link="https://example.com/b.pdf")
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF) as mock_acomp:
+            await enrich_dokument(session, llm, dok_a)
+            await enrich_dokument(session, llm, dok_b)
+
+        assert mock_acomp.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -1394,8 +1438,10 @@ class TestRedisCacheIntegration:
         llm = _make_llm_mock()
         cache = MagicMock()
 
-        # Pre-populate in-memory cache
-        _hash_cache[SAMPLE_HASH] = json.loads(SAMPLE_LLM_RESPONSE_ENTWURF)
+        # Pre-populate in-memory cache with the composite (doc_hash, prompt_hash) key
+        _hash_cache[_cache_key(SAMPLE_HASH, _prompt_fingerprint(Doktyp.ENTWURF))] = json.loads(
+            SAMPLE_LLM_RESPONSE_ENTWURF
+        )
 
         with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp:
             result = await enrich_dokument(session, llm, dok, cache=cache)
@@ -1416,7 +1462,7 @@ class TestRedisCacheIntegration:
         with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
             await enrich_dokument(session, llm, dok, cache=cache)
 
-        assert SAMPLE_HASH in _hash_cache
+        assert _cache_key(SAMPLE_HASH, _prompt_fingerprint(Doktyp.ENTWURF)) in _hash_cache
 
     @pytest.mark.asyncio
     async def test_no_cache_parameter_works(self):

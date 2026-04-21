@@ -66,11 +66,13 @@ MIN_TEXT_LENGTH = 64
 DEFAULT_TRUNCATE_TOKENS = 12000
 _LLM_SEMAPHORE = asyncio.Semaphore(3)
 
-# Two-tier LLM semantics cache:
+# Two-tier LLM semantics cache, keyed by (doc_hash, prompt_hash):
 # 1. _hash_cache (in-memory dict): fast intra-cycle deduplication, cleared each cycle
 #    via clear_hash_cache() to prevent unbounded memory growth.
 # 2. Redis (via ScraperCache): persistent cross-cycle deduplication, survives restarts.
-#    Key format: "llm-semantics:{sha256_hash}", value: JSON-serialized semantics dict.
+#    Key format: "llm-semantics:{doc_hash}:{prompt_hash}".
+# The prompt hash covers the system prompt plus the doktyp-specific body prompt, so
+# different prompts (e.g. ENTWURF vs STELLUNGNAHME) never share a cache entry.
 _hash_cache: dict[str, dict] = {}
 
 _REDIS_CACHE_PREFIX = "llm-semantics:"
@@ -138,6 +140,16 @@ _DOKTYP_PROMPT_MAP: dict[Doktyp, str] = {
 def _prompt_for_doktyp(doktyp: Doktyp) -> str:
     """Return the appropriate LLM prompt for a given document type."""
     return _DOKTYP_PROMPT_MAP.get(doktyp, BODY_PROMPT_GENERIC)
+
+
+def _prompt_fingerprint(doktyp: Doktyp) -> str:
+    """SHA256 over (system prompt + body prompt) for the given doktyp.
+
+    Used as the prompt component of the LLM semantics cache key. Changing the
+    system prompt or any body prompt invalidates only the affected entries.
+    """
+    body = _prompt_for_doktyp(doktyp)
+    return hashlib.sha256(f"{_SYSTEM_PROMPT}\n\n{body}".encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -496,18 +508,23 @@ async def extract_semantics(
 # ---------------------------------------------------------------------------
 
 
-def _redis_get(cache: ScraperCache | None, doc_hash: str) -> str | None:
+def _cache_key(doc_hash: str, prompt_hash: str) -> str:
+    """Composite cache key binding a document to the exact prompt used."""
+    return f"{doc_hash}:{prompt_hash}"
+
+
+def _redis_get(cache: ScraperCache | None, key: str) -> str | None:
     """Look up LLM semantics in Redis. Returns JSON string or None."""
     if cache is None:
         return None
-    return cache.get_raw(f"{_REDIS_CACHE_PREFIX}{doc_hash}", typehint="LLM Semantics")
+    return cache.get_raw(f"{_REDIS_CACHE_PREFIX}{key}", typehint="LLM Semantics")
 
 
-def _redis_set(cache: ScraperCache | None, doc_hash: str, value: str) -> None:
+def _redis_set(cache: ScraperCache | None, key: str, value: str) -> None:
     """Store LLM semantics in Redis."""
     if cache is None:
         return
-    cache.store_raw(f"{_REDIS_CACHE_PREFIX}{doc_hash}", value, typehint="LLM Semantics")
+    cache.store_raw(f"{_REDIS_CACHE_PREFIX}{key}", value, typehint="LLM Semantics")
 
 
 # ---------------------------------------------------------------------------
@@ -549,23 +566,34 @@ async def enrich_dokument(
         full_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint)
         full_text = normalize_volltext(full_text)
 
-        # Try LLM extraction (with two-tier cache deduplication)
+        # Try LLM extraction (with two-tier cache deduplication, keyed by
+        # doc_hash + prompt_hash so different prompts don't collide).
+        prompt_hash = _prompt_fingerprint(dok.typ)
+        cache_key = _cache_key(doc_hash, prompt_hash)
         try:
-            if doc_hash in _hash_cache:
-                logger.info("In-memory cache hit for %s, skipping LLM call", doc_hash[:12])
-                semantics = _hash_cache[doc_hash]
+            if cache_key in _hash_cache:
+                logger.info(
+                    "In-memory cache hit for %s/%s, skipping LLM call",
+                    doc_hash[:12],
+                    prompt_hash[:8],
+                )
+                semantics = _hash_cache[cache_key]
                 if metrics is not None:
                     metrics.cache_hits += 1
-            elif (cached_json := _redis_get(cache, doc_hash)) is not None:
-                logger.info("Redis cache hit for %s, skipping LLM call", doc_hash[:12])
+            elif (cached_json := _redis_get(cache, cache_key)) is not None:
+                logger.info(
+                    "Redis cache hit for %s/%s, skipping LLM call",
+                    doc_hash[:12],
+                    prompt_hash[:8],
+                )
                 semantics = json.loads(cached_json)
-                _hash_cache[doc_hash] = semantics
+                _hash_cache[cache_key] = semantics
                 if metrics is not None:
                     metrics.cache_hits += 1
             else:
                 semantics = await extract_semantics(llm, full_text, dok.typ, model=model, max_tokens=max_tokens)
-                _hash_cache[doc_hash] = semantics
-                _redis_set(cache, doc_hash, json.dumps(semantics))
+                _hash_cache[cache_key] = semantics
+                _redis_set(cache, cache_key, json.dumps(semantics))
                 if metrics is not None:
                     metrics.success += 1
 
