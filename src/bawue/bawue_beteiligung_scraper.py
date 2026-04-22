@@ -34,6 +34,7 @@ from bawue.beteiligung_parser import (
 from bawue.config_loader import load_toml_section
 from bawue.notifications import send_mattermost_summary
 from bawue.rate_limiter import create_upload_limiter
+from bawue.types import ReservedGremium
 from bawue.upload_throttle import upload_vorgang
 
 logger = logging.getLogger(__name__)
@@ -205,7 +206,11 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
             dokumente.append(StationDokumenteInner(dok))
 
-        gremium = Gremium(parlament=Parlament.BW, name="Landesregierung", wahlperiode=self._wahlperiode)
+        gremium = Gremium(
+            parlament=Parlament.BW,
+            name=ReservedGremium.REGIERUNG,
+            wahlperiode=self._wahlperiode,
+        )
 
         station = Station(
             typ=Stationstyp.PREPARL_MINUS_REGENT,

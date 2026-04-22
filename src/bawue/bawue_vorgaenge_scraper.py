@@ -31,7 +31,7 @@ from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.notifications import send_mattermost_summary
 from bawue.parlis_client import ParlisClient
 from bawue.rate_limiter import create_upload_limiter
-from bawue.types import RawFundstelle, RawVorgang
+from bawue.types import RawFundstelle, RawVorgang, ReservedGremium
 from bawue.upload_throttle import upload_vorgang
 from bawue.wahlperiode_check import check_for_newer_wahlperiode
 
@@ -623,12 +623,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
         """Determine which parliamentary body handled this Fundstelle.
 
         Priority: named committee (Ausschuss) > plenary session > generic "Landtag" fallback.
+        Plenary sessions use the canonical reserved Gremium name (DD-021).
         """
         ausschuss = fund.get("ausschuss", "")
         if ausschuss:
-            name = ausschuss
+            name: str = ausschuss
         elif fund.get("plenarprotokoll"):
-            name = "Plenum"
+            name = ReservedGremium.PLENUM
         else:
             name = "Landtag"
         return Gremium(parlament=Parlament.BW, name=name, wahlperiode=self._wahlperiode)

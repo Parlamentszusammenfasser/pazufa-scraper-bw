@@ -367,7 +367,7 @@ Configuration from `[beteiligung]` section.
 | `typ`               | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`          |
 | `initiatoren`       | `[Autor(organisation=ministry)]`                |
 | Station `typ`       | `Stationstyp.PREPARL_MINUS_REGENT`              |
-| Station `gremium`   | `Parlament.BW, "Landesregierung"`               |
+| Station `gremium`   | `Parlament.BW, "regierung"` (reservierter Name) |
 | Station `dokumente` | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF`       |
 | Station `zp_start`  | Comment deadline date                           |
 
@@ -385,7 +385,7 @@ Stateless ICS parsing via the `icalendar` library. Filters events by SUMMARY pre
 
 | SUMMARY prefix                                   | Included? | Gremium name           |
 |--------------------------------------------------|-----------|------------------------|
-| `Plenarsitzung:`                                 | Yes       | `"Plenum"`             |
+| `Plenarsitzung:`                                 | Yes       | `"plenum"` (reserved)  |
 | `Fraktions- und Ausschusssitzungen: Ausschuesse` | Yes       | `"Ausschusssitzungen"` |
 | `Fraktions- und Ausschusssitzungen: FinA`        | Yes       | `"Finanzausschuss"`    |
 | `Haushaltsberatungen: ...`                       | Yes       | extract after `: `     |

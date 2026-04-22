@@ -109,7 +109,7 @@ class TestItemExtractor:
         assert len(sitzungen) == 1
 
         sitzung = sitzungen[0]
-        assert sitzung.gremium.name == "Plenum"
+        assert sitzung.gremium.name == "plenum"
         assert sitzung.gremium.parlament.value == "BW"
         assert sitzung.gremium.wahlperiode == 17
         assert sitzung.nummer == 142

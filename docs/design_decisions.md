@@ -117,8 +117,8 @@ Stationen gleichen Typs und Gremiums zu einer Station zusammengeführt (Merge).
 
 **Entscheidung:** Stationen vom Typ `parl-vollvlsgn` (Plenarlesungen) werden **nie**
 zusammengeführt. Jede Lesung (Erste, Zweite, Dritte Beratung) bleibt eine eigene
-Station — auch wenn sie direkt aufeinander folgen und dasselbe Gremium „Plenum"
-haben. Eine Zweite Beratung ist schlicht eine weitere Station vom Typ
+Station — auch wenn sie direkt aufeinander folgen und dasselbe Gremium `plenum`
+(reservierter Name, s. DD-021) haben. Eine Zweite Beratung ist schlicht eine weitere Station vom Typ
 `parl-vollvlsgn`, kein gesonderter Stationstyp.
 
 Für Ausschussberatungen (`parl-ausschber`) wird zusätzlich rückwärts über die
@@ -164,12 +164,12 @@ im Sinne des PaZuFa-Datenmodells.
 
 **Entscheidung:** Nur folgende Eventtypen werden übernommen:
 
-| SUMMARY-Präfix                                   | Gremium                 |
-|--------------------------------------------------|-------------------------|
-| `Plenarsitzung:`                                 | Plenum                  |
-| `Fraktions- und Ausschusssitzungen: Ausschuesse` | Ausschusssitzungen      |
-| `Fraktions- und Ausschusssitzungen: FinA`        | Finanzausschuss         |
-| `Haushaltsberatungen:`                           | (aus Suffix extrahiert) |
+| SUMMARY-Präfix                                   | Gremium                  |
+|--------------------------------------------------|--------------------------|
+| `Plenarsitzung:`                                 | `plenum` (reserviert)    |
+| `Fraktions- und Ausschusssitzungen: Ausschuesse` | `Ausschusssitzungen`     |
+| `Fraktions- und Ausschusssitzungen: FinA`        | `Finanzausschuss`        |
+| `Haushaltsberatungen:`                           | (aus Suffix extrahiert)  |
 
 Ausgeschlossen werden: **Fraktionen** (parteiinterne Sitzungen),
 **Präsidium** (Verwaltung), **Wahl** (Verfassungsereignis). Diese Events werden
@@ -663,4 +663,60 @@ gespeichert, bis der TTL (2 Wochen) abläuft, und verursachen keine Fehler.
 - `_prompt_fingerprint(doktyp)` — SHA-256-Hash über System- und Body-Prompt des jeweiligen `Doktyp`
 - `_cache_key(doc_hash, prompt_hash)` — Konkatenation zu `{doc_hash}:{prompt_hash}`
 - `enrich_dokument()` — berechnet beide Hashes vor dem Cache-Lookup
+
+---
+
+## DD-021: Reservierte Gremium-Namen (`plenum`, `regierung`)
+
+**Datum:** 22.04.2026
+
+**Kontext:** Die OpenAPI-Spezifikation reserviert bestimmte literale Strings für
+das `Gremium.name`-Feld:
+
+> "Name des betreffenden Gremiums. `'plenum'`, `'regierung'`, `'volk'` sind
+> reservierte namen" (`vendor/pazufa-collector-core/openapi.yaml:1517`)
+
+Das DoD-Wiki führt zusätzlich `gesetzesblatt` als Reserve-Namen auf — dieser
+ist **nicht** im OpenAPI-Schema enthalten. Die Spec ist die maßgebliche Quelle.
+
+**Entscheidung:** Wo der jeweilige Stationskontext eindeutig auf eine reservierte
+Entität abbildet, wird der literale Name verwendet — kein deutschsprachiger
+Klartext-Name:
+
+| Kontext                                                  | Gremium-Name (vorher) | Gremium-Name (jetzt) |
+|----------------------------------------------------------|-----------------------|----------------------|
+| Plenarprotokoll-Fundstelle (PARLIS)                      | `Plenum`              | `plenum`             |
+| Plenarsitzung im ICS-Feed                                | `Plenum`              | `plenum`             |
+| Beteiligungsportal-Station (`preparl-regent`)            | `Landesregierung`     | `regierung`          |
+
+**Bewusst nicht geändert:**
+
+- **Generischer Default `Landtag`** in `_determine_gremium()` für Fundstellen
+  ohne Ausschuss- und ohne Plenarprotokoll-Information. Spec-konform wäre
+  `plenum` als Default — der Wechsel würde jedoch ~1 000 Stationen aus dem WP-17-
+  Lauf umetikettieren und potenziell die Backend-Dedup-Schlüssel
+  (`station_merge_candidates`) brechen. Klärung mit Backend-Team ausstehend.
+- **`gesetzesblatt` für `postparl-gsblt`-Stationen.** Wiki/Spec-Diskrepanz:
+  Wiki nennt diesen Reserve-Namen, Spec nicht. Vor einer Implementation muss
+  geklärt werden, welche Quelle gilt.
+- **Initiator-Strings** (`Autor.organisation = "Landesregierung"` etc.). Die
+  reservierten Namen gelten ausschließlich für `Gremium.name`, nicht für
+  `Autor.organisation`. Der Autor-String wird unverändert aus PARLIS
+  übernommen (Roadmap #10 G2: kanonische Normalisierung steht noch aus).
+
+**Implementierung:** `bawue/types.py` definiert die `StrEnum` `ReservedGremium`
+mit den drei Spec-Werten (`PLENUM`, `REGIERUNG`, `VOLK`). Da `StrEnum`-Member
+echte `str`-Instanzen sind, passieren sie die `StrictStr`-Validierung auf
+`Gremium.name` ohne Konvertierung. Genutzt in:
+
+- `bawue_vorgaenge_scraper.py::_determine_gremium` — `ReservedGremium.PLENUM`
+  bei Plenarprotokoll-Fundstellen.
+- `bawue_beteiligung_scraper.py` (Station-Erstellung) — `ReservedGremium.REGIERUNG`
+  als Gremium der `preparl-regent`-Station.
+- `ics_parser.py::extract_gremium_name` — `ReservedGremium.PLENUM` für
+  Plenarsitzungen aus dem ICS-Feed.
+
+`tests/unit/test_enum_mapper.py::TestReservedGremiumNames` lockt die literalen
+Werte gegen die Spec — schlägt fehl, wenn die Spec einen Reserve-Namen
+hinzufügt oder entfernt.
 

@@ -140,7 +140,7 @@ class TestBuildVorgang:
 
         station = vorgang.stationen[0]
         assert station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN
-        assert station.gremium.name == "Plenum"
+        assert station.gremium.name == "plenum"
         assert station.dokumente == []
 
     @pytest.mark.asyncio

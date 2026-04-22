@@ -7,6 +7,8 @@ from datetime import date, datetime
 
 from icalendar import Calendar
 
+from bawue.types import ReservedGremium
+
 
 @dataclass
 class ParsedEvent:
@@ -41,7 +43,7 @@ def extract_gremium_name(summary: str) -> str | None:
     Returns the gremium name if the event should be included, or None to filter it out.
     """
     if summary.startswith("Plenarsitzung:"):
-        return "Plenum"
+        return ReservedGremium.PLENUM
 
     if summary.startswith("Fraktions- und Ausschusssitzungen:"):
         suffix = summary.split(": ", 1)[1] if ": " in summary else ""

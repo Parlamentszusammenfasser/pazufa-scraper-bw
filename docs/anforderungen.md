@@ -98,11 +98,11 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 
 ### Gremium
 
-| Feld          | Typ       | Pflicht | BaWue-Hinweise                                                           |
-|---------------|-----------|---------|--------------------------------------------------------------------------|
-| `parlament`   | Parlament | Ja      | `Parlament.BW` (Enum, kein String)                                       |
-| `name`        | string    | Ja      | Ausschussname, `"Plenum"` bei Plenarprotokollen, `"Landtag"` als Default |
-| `wahlperiode` | integer   | Ja      |                                                                          |
+| Feld          | Typ       | Pflicht | BaWue-Hinweise                                                                               |
+|---------------|-----------|---------|----------------------------------------------------------------------------------------------|
+| `parlament`   | Parlament | Ja      | `Parlament.BW` (Enum, kein String)                                                           |
+| `name`        | string    | Ja      | Ausschussname, `"plenum"` bei Plenarprotokollen (reservierter Name), `"Landtag"` als Default |
+| `wahlperiode` | integer   | Ja      |                                                                                              |
 
 ### Autor / Top / Lobbyregistereintrag
 

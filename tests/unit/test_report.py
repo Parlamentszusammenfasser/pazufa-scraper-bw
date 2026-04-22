@@ -212,7 +212,7 @@ class TestAnalyzeSitzungen:
                 summary="Plenarsitzung: Tag 1",
                 dtstart=datetime(2026, 2, 20, 9, 0),
                 dtend=datetime(2026, 2, 20, 17, 0),
-                gremium_name="Plenum",
+                gremium_name="plenum",
             ),
             ParsedEvent(
                 uid="2",
@@ -228,7 +228,7 @@ class TestAnalyzeSitzungen:
         assert isinstance(report, SitzungReport)
         assert report.date_key == "2026-02-20"
         assert report.event_count == 2
-        assert "Plenum" in report.gremium_names
+        assert "plenum" in report.gremium_names
         assert "Ausschusssitzungen" in report.gremium_names
 
     def test_empty_events(self):
@@ -316,7 +316,7 @@ class TestBuildSummary:
             ),
         ]
         sitzung_reports = [
-            SitzungReport(date_key="2026-02-20", event_count=3, gremium_names=["Plenum"]),
+            SitzungReport(date_key="2026-02-20", event_count=3, gremium_names=["plenum"]),
         ]
 
         summary = build_summary(

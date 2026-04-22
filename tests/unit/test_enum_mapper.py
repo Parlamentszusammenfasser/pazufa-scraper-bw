@@ -11,6 +11,7 @@ from bawue.enum_mapper import (
     map_stationstyp,
     map_vorgangstyp,
 )
+from bawue.types import ReservedGremium
 
 
 class TestVorgangstypMapping:
@@ -233,33 +234,38 @@ class TestStationstypDocumentedSonstig:
 
 
 # Fundstelle station_typ strings observed in PARLIS (without trailing
-# author/date payload). Current best knowledge derived from
-# `docs/design_decisions.md` and the keys of `STATIONSTYP_MAP`. Reconcile
-# against production log evidence once the staging run completes.
+# author/date payload). Reconciled against the WP 17 full run from
+# 2026-04-21/22 — see docs/observed_station_types.md for the inventory and
+# refresh procedure. Entries marked "(production)" appeared in that run;
+# the others remain as defensive coverage for STATIONSTYP_MAP keys that
+# only fire under non-default Vorgangstyp configurations.
 OBSERVED_STATION_TYPES: list[str] = [
     # Initiative (parl-initiativ)
-    "Gesetzentwurf",
-    "Antrag",
+    "Gesetzentwurf",  # production, 455x
+    "Antrag",  # production, 1x
     "Anträge",
-    "Änderungsanträge",
+    "Änderungsantrag",  # production, 83x — singular variant
+    "Änderungsanträge",  # production, 4x
     "Kleine Anfrage",
     "Große Anfrage",
     "Mündliche Anfrage",
     "Volksantrag",
     # Ausschussberatung (parl-ausschber)
-    "Beschlussempfehlung und Bericht",
+    "Beschlussempfehlung und Bericht",  # production, 265x
     "Bericht und Empfehlungen",
     "Ausschussberatung",
     # Plenarlesungen (parl-vollvlsgn)
-    "Erste Beratung",
-    "Zweite Beratung",
+    "Erste Beratung",  # production, 263x
+    "Zweite Beratung",  # production, 262x
     "Dritte Beratung",
+    "Zweite und Dritte Beratung",  # production, 1x — joint reading variant
     "Beratung",
     "Überweisung",
-    "Beschluss des Landtags in Zweiter Beratung",
+    "Beschluss des Landtags in Zweiter Beratung",  # production, 1x
     "Beschluss des Landtags in Dritter Beratung",
     # Akzeptanz (parl-akzeptanz)
     "Gesetzesbeschluss",
+    "Gesetzesbeschluss des Landtags",  # production, 219x — qualified variant
     "Beschluss des Landtags",
     "Zustimmung",
     "Annahme",
@@ -267,8 +273,11 @@ OBSERVED_STATION_TYPES: list[str] = [
     "Ablehnung",
     # Gesetzblatt / Inkrafttreten (postparl-*)
     "Bekanntmachung",
+    "Bekanntmachung über das Inkrafttreten",  # production, 23x
+    "Bekanntmachung der Neufassung",  # production, 4x
+    "Berichtigung des Gesetzes",  # production, 4x
     "Gesetzblatt",
-    "Gesetz",
+    "Gesetz",  # production, 219x
     "Inkrafttreten",
     # Documented SONSTIG fallbacks (see DOCUMENTED_SONSTIG_STATION_TYPES)
     "Mitteilung",
@@ -392,3 +401,21 @@ class TestEnumValuesExistInFramework:
         }
         framework_values = {m.value for m in Doktyp}
         assert bawue_values == framework_values
+
+
+class TestReservedGremiumNames:
+    """Lock the literal values of ReservedGremium against the OpenAPI spec.
+
+    Source of truth: ``vendor/pazufa-collector-core/openapi.yaml`` —
+    "'plenum', 'regierung', 'volk' sind reservierte namen". If the spec adds
+    or removes a reserved name, this test fails and forces an update.
+    """
+
+    def test_literal_values_match_spec(self):
+        assert {m.value for m in ReservedGremium} == {"plenum", "regierung", "volk"}
+
+    def test_strenum_is_str_subclass(self):
+        # StrEnum members must be str instances so they pass StrictStr validation
+        # on Gremium.name without conversion.
+        assert isinstance(ReservedGremium.PLENUM, str)
+        assert ReservedGremium.PLENUM == "plenum"

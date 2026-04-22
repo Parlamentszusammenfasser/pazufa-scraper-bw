@@ -1,6 +1,22 @@
 """Internal data structures for raw PARLIS data before conversion to framework models."""
 
+from enum import StrEnum
 from typing import TypedDict
+
+
+class ReservedGremium(StrEnum):
+    """Canonical Gremium names reserved by the OpenAPI spec.
+
+    Source: `vendor/pazufa-collector-core/openapi.yaml` field
+    `Gremium.name` — "'plenum', 'regierung', 'volk' sind reservierte namen".
+
+    `StrEnum` members ARE `str` instances, so they pass through pydantic's
+    `StrictStr` validation on `Gremium.name` without conversion.
+    """
+
+    PLENUM = "plenum"
+    REGIERUNG = "regierung"
+    VOLK = "volk"
 
 
 class RawFundstelle(TypedDict, total=False):

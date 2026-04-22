@@ -64,7 +64,7 @@ class TestExtractGremiumName:
     """Test gremium name extraction from SUMMARY strings."""
 
     def test_plenarsitzung(self):
-        assert extract_gremium_name("Plenarsitzung: 142. Sitzung") == "Plenum"
+        assert extract_gremium_name("Plenarsitzung: 142. Sitzung") == "plenum"
 
     def test_ausschusssitzungen(self):
         assert extract_gremium_name("Fraktions- und Ausschusssitzungen: Ausschuesse") == "Ausschusssitzungen"
@@ -102,7 +102,7 @@ class TestParseIcsFeed:
         assert len(plenar) == 1
         evt = plenar[0]
         assert evt.summary == "Plenarsitzung: 142. Sitzung"
-        assert evt.gremium_name == "Plenum"
+        assert evt.gremium_name == "plenum"
         assert evt.nummer == 142
         assert evt.dtstart == datetime(2026, 2, 25, 11, 0)
         assert evt.dtend == datetime(2026, 2, 25, 18, 0)
@@ -112,7 +112,7 @@ class TestParseIcsFeed:
         evt = [e for e in events if e.uid == "evt-plenar-003@landtag-bw.de"]
         assert len(evt) == 1
         assert evt[0].summary == "Plenarsitzung"
-        assert evt[0].gremium_name == "Plenum"
+        assert evt[0].gremium_name == "plenum"
 
     def test_ausschuss_event_nummer_is_zero(self, ics_bytes):
         events = parse_ics_feed(ics_bytes)
