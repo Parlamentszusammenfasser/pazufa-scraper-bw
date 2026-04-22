@@ -141,7 +141,7 @@ class TestBuildVorgang:
 
         gremium = vorgang.stationen[0].gremium
         assert gremium.parlament == Parlament.BW
-        assert gremium.name == "Landesregierung"
+        assert gremium.name == "regierung"
         assert gremium.wahlperiode == 17
 
     @pytest.mark.asyncio

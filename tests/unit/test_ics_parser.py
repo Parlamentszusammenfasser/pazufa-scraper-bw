@@ -64,10 +64,12 @@ class TestExtractGremiumName:
     """Test gremium name extraction from SUMMARY strings."""
 
     def test_plenarsitzung(self):
-        assert extract_gremium_name("Plenarsitzung: 142. Sitzung") == "Plenum"
+        assert extract_gremium_name("Plenarsitzung: 142. Sitzung") == "plenum"
 
-    def test_ausschusssitzungen(self):
-        assert extract_gremium_name("Fraktions- und Ausschusssitzungen: Ausschuesse") == "Ausschusssitzungen"
+    def test_ausschuesse_umbrella_excluded(self):
+        """Generic "Ausschuesse" umbrella entries carry no committee-name signal
+        and must be filtered out per DoD name-specificity (DD-006)."""
+        assert extract_gremium_name("Fraktions- und Ausschusssitzungen: Ausschuesse") is None
 
     def test_finanzausschuss(self):
         assert extract_gremium_name("Fraktions- und Ausschusssitzungen: FinA") == "Finanzausschuss"
@@ -93,8 +95,9 @@ class TestParseIcsFeed:
 
     def test_parses_included_events(self, ics_bytes):
         events = parse_ics_feed(ics_bytes)
-        # 9 total events, 3 excluded (Fraktionen, Prasidium, Wahl) → 6 included
-        assert len(events) == 6
+        # 9 total events, 4 excluded (Ausschuesse umbrella, Fraktionen,
+        # Prasidium, Wahl) → 5 included
+        assert len(events) == 5
 
     def test_event_fields(self, ics_bytes):
         events = parse_ics_feed(ics_bytes)
@@ -102,7 +105,7 @@ class TestParseIcsFeed:
         assert len(plenar) == 1
         evt = plenar[0]
         assert evt.summary == "Plenarsitzung: 142. Sitzung"
-        assert evt.gremium_name == "Plenum"
+        assert evt.gremium_name == "plenum"
         assert evt.nummer == 142
         assert evt.dtstart == datetime(2026, 2, 25, 11, 0)
         assert evt.dtend == datetime(2026, 2, 25, 18, 0)
@@ -112,13 +115,19 @@ class TestParseIcsFeed:
         evt = [e for e in events if e.uid == "evt-plenar-003@landtag-bw.de"]
         assert len(evt) == 1
         assert evt[0].summary == "Plenarsitzung"
-        assert evt[0].gremium_name == "Plenum"
+        assert evt[0].gremium_name == "plenum"
 
-    def test_ausschuss_event_nummer_is_zero(self, ics_bytes):
+    def test_finanzausschuss_event_nummer_is_zero(self, ics_bytes):
+        """Non-plenary events have nummer=0 (no regex match in SUMMARY)."""
         events = parse_ics_feed(ics_bytes)
-        ausschuss = [e for e in events if e.gremium_name == "Ausschusssitzungen"]
-        assert len(ausschuss) >= 1
-        assert ausschuss[0].nummer == 0
+        fina = [e for e in events if e.gremium_name == "Finanzausschuss"]
+        assert len(fina) >= 1
+        assert fina[0].nummer == 0
+
+    def test_excludes_ausschuesse_umbrella(self, ics_bytes):
+        events = parse_ics_feed(ics_bytes)
+        uids = [e.uid for e in events]
+        assert "evt-ausschuss-001@landtag-bw.de" not in uids
 
     def test_excludes_fraktionen(self, ics_bytes):
         events = parse_ics_feed(ics_bytes)
@@ -147,8 +156,8 @@ class TestGroupEventsByDate:
         events = parse_ics_feed(ics_bytes)
         grouped = group_events_by_date(events)
 
-        # 2026-02-24: Ausschuesse + FinA
-        assert len(grouped[date(2026, 2, 24)]) == 2
+        # 2026-02-24: FinA (the "Ausschuesse" umbrella is filtered, DD-006)
+        assert len(grouped[date(2026, 2, 24)]) == 1
         # 2026-02-25: Plenar 142
         assert len(grouped[date(2026, 2, 25)]) == 1
         # 2026-02-26: Plenar 143

@@ -367,7 +367,7 @@ Configuration from `[beteiligung]` section.
 | `typ`               | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`          |
 | `initiatoren`       | `[Autor(organisation=ministry)]`                |
 | Station `typ`       | `Stationstyp.PREPARL_MINUS_REGENT`              |
-| Station `gremium`   | `Parlament.BW, "Landesregierung"`               |
+| Station `gremium`   | `Parlament.BW, "regierung"` (reservierter Name) |
 | Station `dokumente` | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF`       |
 | Station `zp_start`  | Comment deadline date                           |
 
@@ -383,15 +383,15 @@ PDF links/deadline from detail pages. Data classes: `RawBeteiligungProcess`, `Ra
 
 Stateless ICS parsing via the `icalendar` library. Filters events by SUMMARY prefix:
 
-| SUMMARY prefix                                   | Included? | Gremium name           |
-|--------------------------------------------------|-----------|------------------------|
-| `Plenarsitzung:`                                 | Yes       | `"Plenum"`             |
-| `Fraktions- und Ausschusssitzungen: Ausschuesse` | Yes       | `"Ausschusssitzungen"` |
-| `Fraktions- und Ausschusssitzungen: FinA`        | Yes       | `"Finanzausschuss"`    |
-| `Haushaltsberatungen: ...`                       | Yes       | extract after `: `     |
-| `Fraktions- und Ausschusssitzungen: Fraktionen`  | No        | faction-only           |
-| `Prasidium:`                                     | No        | internal               |
-| `Wahl:`                                          | No        | election event         |
+| SUMMARY prefix                                   | Included? | Gremium name              |
+|--------------------------------------------------|-----------|---------------------------|
+| `Plenarsitzung:`                                 | Yes       | `"plenum"` (reserved)     |
+| `Fraktions- und Ausschusssitzungen: FinA`        | Yes       | `"Finanzausschuss"`       |
+| `Haushaltsberatungen: ...`                       | Yes       | extract after `: `        |
+| `Fraktions- und Ausschusssitzungen: Ausschuesse` | No        | name-specificity (DD-006) |
+| `Fraktions- und Ausschusssitzungen: Fraktionen`  | No        | faction-only              |
+| `Prasidium:`                                     | No        | internal                  |
+| `Wahl:`                                          | No        | election event            |
 
 ### ParlisClient / ParlisParser
 
@@ -603,5 +603,5 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | **Enum ambiguity**                    | Incorrect mapping of PARLIS types            | Conservative mapping — `sonstig` as fallback, all unmapped values logged          |
 | **Rate limiting by Landtag**          | IP blocked                                   | Configurable delays, descriptive User-Agent                                       |
 | **Fundstelle text format changes**    | Station parsing breaks                       | Regex-based parsing with fallback, unit tests with known samples                  |
-| **verfassungsaendernd not available** | Required field cannot be determined          | Default to `false` (PARLIS does not expose this field)                            |
+| **verfassungsaendernd not available** | Required field cannot be determined          | Title heuristic (`Änderung der (Landes)?Verfassung` / `Verfassungsänderung`); see DD-023 |
 | **Sync/async coexistence**            | PARLIS uses sync requests in async framework | `asyncio.to_thread()` wraps sync calls in both vorgaenge and beteiligung scrapers |

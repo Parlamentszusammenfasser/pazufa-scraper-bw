@@ -1,0 +1,94 @@
+version = "0.0.1"
+
+stations = {
+    R = "preparl-regent",
+    E = "preparl-eckpup",
+    S = "preparl-regbsl",
+    I = "parl-initiativ",
+    V = "parl-vollvlsgn",
+    J = "parl-akzeptanz",
+    Z = "parl-zurueckgz",
+    N = "parl-ablehnung",
+    A = "parl-ausschber",
+    G = "postparl-gsblt",
+    K = "postparl-kraft",
+
+    B = "preparl-vbegde",
+    W = "parl-ggentwurf",
+    Y = "postparl-vesja",
+    X = "postparl-vesne"
+}
+
+[tracks]
+BT = {
+#    gg-einspruch = "((E*R+)?S)?I((VA*(Z|VJ(<Vermittlungsausschuss>V(JGK|N))GK|VN|VA*(Z|VJGK|VN)))|Z)"
+#   mit "H" als Vermittlungsausschuss, "F" als Formulierungshilfe für Plenarinitiativen
+    gg-einspruch  = "((E*R+)?SF?)?I((VA*(Z|VN|VA*(Z|VJ((GK|N)|(HV(JGK|N)))|VN)))|Z)",
+    gg-zustimmung = "((E*R+)?SF?)?I((VA*(Z|VN|VA*(Z|VJ((GK|N)|(HV(JGK|N)))|VN)))|Z)",
+    ## TODO: wir brauchen wahrscheinlich einen "Antrag stellen" Stationstyp
+    ## TODO 2: wir brauchen einen Vermittlungsausschuss-Typ
+    bw-einsatz = "SVA*VA*V(J|N)" # VV weil 2. Lesung immer 2. und 3. gleichzeitig ist
+}
+
+BR = {
+    # "IVA*<Bundestagszeug>V(J|N<Vermittlungsausschuss>V[JN])"
+    # gg-einspruch  = "IVA*<Bundestagszeug>V(J|N<Vermittlungsausschuss>V[JN])",
+    gg-einspruch  = "I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+    gg-zustimmung = "I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)"
+}
+
+BY = {
+    # largely based on https://www.bayern.landtag.de/parlament/aufgaben-des-landtags/gesetzgebung/
+    # and https://www.gesetze-bayern.de/Content/Document/BayLTGO-53
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+
+BB = {
+    gg-land-parl = "((E*R+)?S)?IA?((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+
+BE = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+HB = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+HE = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+HH = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+MV = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+NI = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+NW = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+RP = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+SL = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+SN = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+TH = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+SH = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}
+# BW: back-port of the trailing-A allowance from spec v0.2.4+v0.0.3 (PR #39).
+# Permits trailing parl-ausschber stations after postparl-gsblt and postparl-kraft
+# (Evaluations-/Folgeberichte to enacted laws). VJGK -> VJGA*KA*.
+BW = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGA*KA*|VN|VA*(Z|VJGA*KA*|VN)))|Z)",
+}
+ST = {
+    gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)",
+}

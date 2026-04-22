@@ -4,8 +4,11 @@ ARG PYTHON_MINOR=3.14
 # ---- Builder stage ----
 FROM python:${PYTHON_VERSION}-slim AS builder
 
+# build-essential provides cc/gcc for building native deps (e.g. python-bidi
+# has no cp314 wheel yet, so it is compiled from Rust source via maturin).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        build-essential \
         tesseract-ocr \
         tesseract-ocr-deu \
         poppler-utils \

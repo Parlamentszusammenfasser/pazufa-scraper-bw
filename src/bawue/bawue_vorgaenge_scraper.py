@@ -31,7 +31,13 @@ from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.notifications import send_mattermost_summary
 from bawue.parlis_client import ParlisClient
 from bawue.rate_limiter import create_upload_limiter
-from bawue.types import RawFundstelle, RawVorgang
+from bawue.types import (
+    RawFundstelle,
+    RawVorgang,
+    ReservedGremium,
+    canonicalize_organisation,
+    is_verfassungsaendernd,
+)
 from bawue.upload_throttle import upload_vorgang
 from bawue.wahlperiode_check import check_for_newer_wahlperiode
 
@@ -48,10 +54,13 @@ def _parse_autoren(text: str) -> list[Autor]:
 
     Uses lookahead splitting to avoid breaking ministry names that contain
     commas (e.g. "Ministerium für Umwelt, Klima und Energiewirtschaft").
+    Known party/government variants are mapped to their canonical form via
+    ``canonicalize_organisation`` (DD-022); unknown organizations pass through
+    unchanged.
     """
     if not text or not text.strip():
         return []
-    return [Autor(organisation=part.strip()) for part in _AUTOR_SPLIT_RE.split(text) if part.strip()]
+    return [Autor(organisation=canonicalize_organisation(part)) for part in _AUTOR_SPLIT_RE.split(text) if part.strip()]
 
 
 DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [
@@ -285,7 +294,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             kurztitel=vorgang_id if vorgang_id != "unknown" else None,
             typ=typ,
             wahlperiode=self._wahlperiode,
-            verfassungsaendernd=False,
+            verfassungsaendernd=is_verfassungsaendernd(titel),
             initiatoren=initiatoren,
             stationen=stationen,
             ids=ids,
@@ -433,7 +442,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 gremium=Gremium(
                     parlament=Parlament.BW,
                     wahlperiode=self._wahlperiode,
-                    name="Landtag",
+                    name=ReservedGremium.PLENUM,
                 ),
             )
         )
@@ -478,7 +487,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             gremium=Gremium(
                 parlament=Parlament.BW,
                 wahlperiode=self._wahlperiode,
-                name="Landtag",
+                name=ReservedGremium.PLENUM,
             ),
         )
         stationen.insert(next_idx, synthetic)
@@ -606,7 +615,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             )
             return None
 
-        gremium = self._determine_gremium(fund)
+        gremium = self._determine_gremium(fund, station_typ)
         dokumente, trojanergefahr = await self._build_dokumente(
             fund, station_typ_str, mapping_text, station_typ, initiative, zp_start
         )
@@ -619,18 +628,23 @@ class BawueVorgaengeScraper(VorgangsScraper):
             trojanergefahr=trojanergefahr,
         )
 
-    def _determine_gremium(self, fund: RawFundstelle) -> Gremium:
-        """Determine which parliamentary body handled this Fundstelle.
+    def _determine_gremium(self, fund: RawFundstelle, station_typ: Stationstyp) -> Gremium:
+        """Determine which parliamentary body handled this Fundstelle (DD-021).
 
-        Priority: named committee (Ausschuss) > plenary session > generic "Landtag" fallback.
+        Priority:
+          1. Named committee (Ausschuss) → use the specific committee name.
+          2. postparl-gsblt stations → reserved name `gesetzesblatt`
+             (wiki + BY-scraper convention, see DD-021).
+          3. Everything else → reserved name `plenum`, which the DoD defines
+             as the default "wenn etwas 'irgendwie passiert'".
         """
         ausschuss = fund.get("ausschuss", "")
         if ausschuss:
-            name = ausschuss
-        elif fund.get("plenarprotokoll"):
-            name = "Plenum"
+            name: str = ausschuss
+        elif station_typ == Stationstyp.POSTPARL_MINUS_GSBLT:
+            name = ReservedGremium.GESETZESBLATT
         else:
-            name = "Landtag"
+            name = ReservedGremium.PLENUM
         return Gremium(parlament=Parlament.BW, name=name, wahlperiode=self._wahlperiode)
 
     async def _build_dokumente(

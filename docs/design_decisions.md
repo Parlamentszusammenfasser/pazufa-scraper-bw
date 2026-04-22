@@ -117,8 +117,8 @@ Stationen gleichen Typs und Gremiums zu einer Station zusammengeführt (Merge).
 
 **Entscheidung:** Stationen vom Typ `parl-vollvlsgn` (Plenarlesungen) werden **nie**
 zusammengeführt. Jede Lesung (Erste, Zweite, Dritte Beratung) bleibt eine eigene
-Station — auch wenn sie direkt aufeinander folgen und dasselbe Gremium „Plenum"
-haben. Eine Zweite Beratung ist schlicht eine weitere Station vom Typ
+Station — auch wenn sie direkt aufeinander folgen und dasselbe Gremium `plenum`
+(reservierter Name, s. DD-021) haben. Eine Zweite Beratung ist schlicht eine weitere Station vom Typ
 `parl-vollvlsgn`, kein gesonderter Stationstyp.
 
 Für Ausschussberatungen (`parl-ausschber`) wird zusätzlich rückwärts über die
@@ -164,16 +164,16 @@ im Sinne des PaZuFa-Datenmodells.
 
 **Entscheidung:** Nur folgende Eventtypen werden übernommen:
 
-| SUMMARY-Präfix                                   | Gremium                 |
-|--------------------------------------------------|-------------------------|
-| `Plenarsitzung:`                                 | Plenum                  |
-| `Fraktions- und Ausschusssitzungen: Ausschuesse` | Ausschusssitzungen      |
-| `Fraktions- und Ausschusssitzungen: FinA`        | Finanzausschuss         |
-| `Haushaltsberatungen:`                           | (aus Suffix extrahiert) |
+| SUMMARY-Präfix                                   | Gremium                  |
+|--------------------------------------------------|--------------------------|
+| `Plenarsitzung:`                                 | `plenum` (reserviert)    |
+| `Fraktions- und Ausschusssitzungen: FinA`        | `Finanzausschuss`        |
+| `Haushaltsberatungen:`                           | (aus Suffix extrahiert)  |
 
-Ausgeschlossen werden: **Fraktionen** (parteiinterne Sitzungen),
-**Präsidium** (Verwaltung), **Wahl** (Verfassungsereignis). Diese Events werden
-still übersprungen.
+Ausgeschlossen werden: **Fraktionen** (parteiinterne Sitzungen), **Ausschuesse**
+(Sammel-Event ohne Ausschuss-Namen — DoD-Regel "Namen MÜSSEN so spezifisch wie
+möglich sein", s. DD-022), **Präsidium** (Verwaltung), **Wahl**
+(Verfassungsereignis). Diese Events werden still übersprungen.
 
 **Implementierung:** `ics_parser.py`, Funktion `_classify_event()`.
 
@@ -663,4 +663,259 @@ gespeichert, bis der TTL (2 Wochen) abläuft, und verursachen keine Fehler.
 - `_prompt_fingerprint(doktyp)` — SHA-256-Hash über System- und Body-Prompt des jeweiligen `Doktyp`
 - `_cache_key(doc_hash, prompt_hash)` — Konkatenation zu `{doc_hash}:{prompt_hash}`
 - `enrich_dokument()` — berechnet beide Hashes vor dem Cache-Lookup
+
+---
+
+## DD-021: Reservierte Gremium-Namen (`plenum`, `regierung`, `gesetzesblatt`)
+
+**Datum:** 22.04.2026 | **Aktualisiert:** 22.04.2026 (Gap G1.4 + G4 aufgelöst)
+
+**Kontext:** Drei Quellen definieren reservierte `Gremium.name`-Werte:
+
+1. **OpenAPI-Spezifikation** (`vendor/pazufa-collector-core/openapi.yaml:1517`):
+   > "Name des betreffenden Gremiums. `'plenum'`, `'regierung'`, `'volk'` sind
+   > reservierte namen"
+2. **Community-DoD-Wiki**: `regierung`, `plenum` (als Default, "wenn etwas
+   'irgendwie passiert'"), **und `gesetzesblatt`** für die Veröffentlichung im
+   Gesetzblatt.
+3. **BY-Referenz-Scraper** (`vendor/pazufa-collector/collector/scrapers/bylt_scraper.py`):
+   emittiert `gesetzesblatt` literal für `postparl-gsblt`-Stationen (Zeile 440)
+   und `plenum` für alle anderen nicht-Ausschuss-Stationen — inkl. synthetisch
+   erzeugte. BY hat **keinen** generischen Fallback wie `"Landtag"`.
+
+**Diskrepanz Spec vs. Wiki**: Die Spec listet `volk`, aber nicht `gesetzesblatt`;
+das Wiki listet `gesetzesblatt`, aber nicht `volk`. Die Spec-Beschreibung
+validiert das Feld nicht schema-seitig — jeder String ist erlaubt. Der BY-Scraper
+nutzt `gesetzesblatt` produktiv ohne Backend-Fehler. Damit wird die
+Spec-Beschreibung als **unvollständig** betrachtet, nicht als exklusiv — das
+Wiki + BY-Convention sind maßgeblich.
+
+**Backend-Verhalten** (`pazufa-backend/src/db/insert.rs:545-609`,
+`migrations/20250302145212_vorgang_setup.sql:9`):
+
+- `gremium` hat `UNIQUE (parl, name, wp)` — jeder unterschiedliche Name erzeugt
+  eine separate Zeile.
+- Beim Insert läuft ein pg_trgm `SIMILARITY(name, $1) > 0.66`-Check, der bei
+  Near-Misses `notify_new_enum_entry(...)` triggert — eine eingebaute Canary
+  für schleichende Namens-Drift.
+- `SIMILARITY('Landtag', 'plenum') ≈ 0` → kein Alert. Ein Wechsel
+  `Landtag → plenum` ist für das Backend unsichtbar (erzeugt eine neue
+  Gremium-Zeile; die alte verwaist, ohne Datenverlust).
+
+**Entscheidung:** Alle Stationen bekommen einen kanonischen Namen — kein
+deutschsprachiger Klartext-Fallback mehr. Das Routing erfolgt im Scraper
+typ-gewahr:
+
+| Kontext / Station-Typ                                    | Gremium-Name       |
+|----------------------------------------------------------|--------------------|
+| Fundstelle mit Ausschuss-Angabe                          | Ausschuss-Name     |
+| `postparl-gsblt` (Gesetz, Bekanntmachung, Gesetzblatt)   | `gesetzesblatt`    |
+| Alle übrigen (parl-*, preparl-regent, synthetische)      | `plenum` (Default) |
+| Beteiligungsportal-Station (`preparl-regent`)            | `regierung`        |
+| ICS-Plenarsitzung                                        | `plenum`           |
+
+**Bewusst nicht geändert:**
+
+- **Initiator-Strings** (`Autor.organisation = "Landesregierung"` etc.). Die
+  reservierten Namen gelten ausschließlich für `Gremium.name`, nicht für
+  `Autor.organisation`. Der Autor-String wird unverändert aus PARLIS
+  übernommen (Roadmap #10 G2: kanonische Normalisierung der Autor-Strings
+  steht noch aus).
+- **`volk`** ist im `ReservedGremium`-Enum definiert, aber nicht eingesetzt —
+  BW kennt derzeit keine `postparl-vesja`/`postparl-vesne`-Stationen im aktiven
+  Vorgangstyp-Filter. Der Wert bleibt für zukünftige Volksantrag-Pfade
+  verfügbar.
+
+**Backend-Koordination für Daten vor dem Roll-out:** Durch den Wechsel
+`"Landtag" → "plenum"` verwaist die bestehende `(BW, Landtag, 17)`-Gremium-Zeile.
+Bereinigung per einmaliger SQL-Operation nach vollem Re-Scrape-Zyklus:
+
+```sql
+UPDATE station SET gr_id =
+  (SELECT id FROM gremium WHERE parl=... AND name='plenum' AND wp=17)
+WHERE gr_id =
+  (SELECT id FROM gremium WHERE parl=... AND name='Landtag' AND wp=17);
+DELETE FROM gremium WHERE parl=... AND name='Landtag' AND wp=17;
+```
+
+Auf Dev/Staging durch DB-Reset trivial. Produktions-Koordination mit
+Backend-Team erforderlich.
+
+**Implementierung:** `bawue/types.py` definiert die `StrEnum` `ReservedGremium`
+mit den vier Werten (`PLENUM`, `REGIERUNG`, `VOLK`, `GESETZESBLATT`). Da
+`StrEnum`-Member echte `str`-Instanzen sind, passieren sie die
+`StrictStr`-Validierung auf `Gremium.name` ohne Konvertierung.
+
+Verwendung:
+
+- `bawue_vorgaenge_scraper.py::_determine_gremium(fund, station_typ)` — typ-
+  abhängige Auswahl: Ausschuss-Name, `gesetzesblatt` bei `postparl-gsblt`,
+  sonst `plenum`.
+- `bawue_vorgaenge_scraper.py::_ensure_ablehnung_station` und
+  `_ensure_initiativ_after_regbsl` — synthetische Stationen nutzen
+  `ReservedGremium.PLENUM` (vorher hartcodiert `"Landtag"`).
+- `bawue_beteiligung_scraper.py` (Station-Erstellung) — `ReservedGremium.REGIERUNG`.
+- `ics_parser.py::extract_gremium_name` — `ReservedGremium.PLENUM` für
+  Plenarsitzungen.
+
+`tests/unit/test_enum_mapper.py::TestReservedGremiumNames` lockt die literalen
+Werte gegen Spec + Wiki + BY-Convention.
+`tests/unit/test_bawue_scraper.py::TestVorgangBuild::test_default_gremium_is_plenum`
+und `test_gsblt_station_uses_gesetzesblatt_gremium` verifizieren das neue
+Routing.
+
+---
+
+## DD-022: Kanonische Namen für `Autor.organisation`
+
+**Datum:** 22.04.2026
+
+**Kontext:** Die Community-DoD fordert (SHOULD):
+
+> "Ihr SOLLTET einen Mechanismus haben um kanonische Namen zu mappen. Der
+> 'Verband der Podologen', 'Podologieverband e.V.', 'Podologie-Verband' und der
+> 'VdPod' könnten zum Beispiel dasselbe meinen"
+
+Hintergrund: Das Backend hat zwar einen pg_trgm-Canary
+(`SIMILARITY(organisation, $2) > 0.66`, s. DD-021), der Near-Misses loggt, aber
+**keine** aktive Namensvereinheitlichung. Zwei Scraper, die dasselbe Gremium
+unterschiedlich benennen, erzeugen zwei `autor`-Zeilen. Produktionsdaten aus
+BY (`vendor/pazufa-collector/collector/tests/bylt_scraper/*.json`) zeigen das
+Problem in der Praxis: dieselbe Person erscheint dort mit drei verschiedenen
+Organisations-Strings (`Alternative für Deutschland (AfD)`, `AfD-Fraktion im
+Bayerischen Landtag`, `AfD-Fraktion`). BY ist somit **nicht** Compliance-Referenz
+für diese Regel.
+
+**Entscheidung:** Der BW-Scraper normalisiert `Autor.organisation` vor dem
+Upload über `canonicalize_organisation(raw)` (in `bawue/types.py`):
+
+- **Geschlossene Menge kanonischer Formen** in der `StrEnum`
+  `CanonicalOrganisation` (aktuell: 5 Landtag-BW-Fraktionen + `Landesregierung`).
+  Die Schreibweise folgt der Landtag-BW-Website — insbesondere `Fraktion GRÜNE`
+  ohne `der`, weil GRÜNE dort als Eigenname geführt wird.
+- **Alias-Tabelle** (`_ORGANISATION_ALIASES`) mapped beobachtete + plausible
+  Varianten (caps-insensitive, Whitespace-normalisiert) auf die kanonische Form.
+- **Offene Menge** (einzelne Ministerien, Verbände, externe Stakeholder) passiert
+  unverändert. Eine Enumeration wäre unpraktisch und ist durch den Backend-Canary
+  auch nicht erforderlich — der Canary meldet schleichende Drift für diese Gruppe.
+
+**Anwendung:**
+
+- `bawue_vorgaenge_scraper.py::_parse_autoren` — wendet `canonicalize_organisation`
+  auf jeden geparsten Autor-String an (betrifft `Vorgang.initiatoren` und
+  `Dokument.autoren`).
+- `bawue_beteiligung_scraper.py` — wendet `canonicalize_organisation` auf die
+  Ministerium-Angabe aus dem Beteiligungsportal an.
+
+**Bewusst nicht normalisiert:**
+
+- **Personen-Namen** (`Autor.person`). Ehrentitel, akademische Grade, Mädchen-/
+  Geburtsnamen usw. sind zu heterogen für eine zuverlässige kanonische Form.
+  Der Backend-Canary bleibt hier der einzige Schutz.
+- **Individuelle Ministerien.** BW-Ministerien werden häufig umbenannt
+  (Koalitionswechsel, Ressortumstrukturierungen); eine starre Liste würde schnell
+  veralten. Die aktuellen Namen sind in sich konsistent; bei beobachteter Drift
+  wird ein einzelner Alias-Eintrag ergänzt.
+
+**Implementierung:** `bawue/types.py`:
+
+- `CanonicalOrganisation(StrEnum)` — 6 Werte.
+- `_ORGANISATION_ALIASES: dict[str, CanonicalOrganisation]` — Varianten-Lookup.
+- `_org_lookup_key(raw) -> str` — Non-Alphanumeric entfernt, lowercase.
+- `canonicalize_organisation(raw) -> str` — gibt Enum-Mitglied oder
+  ursprünglichen String zurück (`StrEnum` ist `str`, passt durch `StrictStr`).
+
+**Tests:** `tests/unit/test_enum_mapper.py::TestCanonicalOrganisation`:
+
+- `OBSERVED_ORGANISATIONS` lockt alle in Production beobachteten Autor-Strings
+  gegen ihre erwartete kanonische Form.
+- `test_enum_values_cover_landtag_bw_fraktionen` — schlägt fehl, wenn die
+  Landtag-BW-Fraktionsliste sich ändert und das Enum nicht mit aktualisiert wurde.
+- `test_idempotent_on_canonical_forms` — kanonische Form bleibt kanonisch.
+- `test_known_variants_map_to_canonical` — Varianten (inkl. BY-Spielarten wie
+  `Alternative für Deutschland (AfD)`) werden aufgelöst.
+- `test_unknown_organisations_pass_through` — Ministerien + externe Verbände
+  bleiben unverändert.
+
+**Refresh-Prozedur:** Analog zu DD-021 (observed_station_types.md): Nach jedem
+vollen Re-Scrape die Autor-Organisations-Strings aus dem JSONL extrahieren:
+
+```bash
+grep -oE "Autor\(person=None, organisation='[^']+'" \
+  locallogs/00000000-0000-0000-0000-000000000001.jsonl \
+  | grep -oE "organisation='[^']+'" | sort | uniq -c | sort -rn
+```
+
+Neue Varianten in `_ORGANISATION_ALIASES` ergänzen; neu beobachtete
+Kanonisierungs-Kandidaten in `OBSERVED_ORGANISATIONS` eintragen.
+
+---
+
+## DD-023: `verfassungsaendernd` — Titel-Heuristik statt „omit object"
+
+**Datum:** 22.04.2026
+
+**Kontext:** Das Pflichtfeld `Vorgang.verfassungsaendernd` existiert im PaZuFa-
+Datenmodell, aber die BaWue-Quellen exponieren es nicht:
+
+- Die PARLIS-Suchmaske kennt keine entsprechende Facette (geprüft am
+  22.04.2026: Wahlperiode, Zeitraum, Stand, Urheber, Deskriptor, Suchbegriff —
+  kein Verfassungsänderungs-Flag).
+- Die Detail-Metadaten liefern das Attribut ebenfalls nicht.
+- Das Beteiligungsportal und das Gesetzblatt führen es nicht in ihren
+  Process-Listen.
+
+Die Community-DoD verlangt, dass Objekte ausgelassen werden müssen, wenn ein
+Pflichtfeld nicht sinnvoll gefüllt werden kann („Wenn nicht-optionale Felder
+aus euren Quellen nicht mit einem sinnvollen Wert gefüllt werden können, muss
+das gesamte Objekt ausgelassen werden"). Wörtlich angewandt würde das für BaWue
+bedeuten, **100 %** aller Vorgänge zu verwerfen, weil PARLIS das Attribut für
+*keinen* Vorgang liefert. Das steht offensichtlich im Widerspruch zum
+Projektziel.
+
+**Entscheidung:** Der Wert wird aus dem `titel` **heuristisch abgeleitet**. Die
+deutsche Gesetzgebungssprache nennt Verfassungsänderungen sehr stringent — Art.
+64 der Landesverfassung BW verlangt eine 2/3-Mehrheit, und die entsprechenden
+Gesetze tragen das im Titel:
+
+| Phrasing                                   | Behandlung |
+|--------------------------------------------|------------|
+| `Änderung der Verfassung` / `Änderung der Landesverfassung` | `True` |
+| `Verfassungsänderung` (nominal compound)   | `True` |
+| alles Übrige                               | `False` |
+
+Die Heuristik ist mit Absicht konservativ: Titel wie „Gesetz zur Stärkung des
+Verfassungsschutzes" oder „Landesverfassungsschutzgesetz" matchen nicht (eine
+Wortgrenze-Guard verhindert das Matching im Inneren von Komposita).
+
+**Implementierung:** `src/bawue/types.py`, Funktion `is_verfassungsaendernd()`.
+Eingebunden in:
+
+- `bawue_vorgaenge_scraper.py` (Vorgang aus PARLIS-Titel)
+- `bawue_beteiligung_scraper.py` (Vorgang aus Beteiligungsportal-Titel)
+
+Ein zukünftiger `bawue_gesetzblatt_scraper.py` sollte die Funktion analog
+anwenden (Gesetzblatt-Titel folgen derselben Konvention).
+
+**Empirische Basis:** WP 17 (Stand 22.04.2026) enthält nach dem vollen
+Scrape keine Titel, die auf die Heuristik treffen — Verfassungsänderungen sind
+in BaWue historisch extrem selten (letzte reguläre Änderung der
+Landesverfassung: 2015, WP 15). Der Default-Pfad bleibt also praktisch
+`False`, und die Heuristik schützt lediglich gegen künftige Fehlklassifikation,
+sollte doch ein Verfassungsänderungs-Vorgang eingebracht werden.
+
+**DoD-Konflikt:** Die Abweichung von der „omit object"-Regel ist hiermit
+dokumentiert (DoD-Regel „Abweichungen MÜSSEN dokumentiert sein"). Wenn das
+Backend-Schema das Feld künftig als optional deklariert oder eine
+`unknown`-Semantik bekommt, ist DD-023 zurückzunehmen und die Heuristik zu
+entfernen.
+
+**Tests:** `tests/unit/test_enum_mapper.py::TestIsVerfassungsaendernd`:
+
+- Positive: kanonische Titel inkl. Groß-/Kleinschreibungs- und
+  Whitespace-Toleranz sowie Nominal-Kompositum.
+- Negative: `Verfassungsschutz`-Kompositum, reguläre Änderungsgesetze
+  ohne Verfassungsbezug, leere/whitespace-only-Strings.
+- `test_returns_bool_not_truthy` — Rückgabewert ist ein echter `bool`
+  (JSON `true`/`false`), kein Match-Object-Proxy.
 

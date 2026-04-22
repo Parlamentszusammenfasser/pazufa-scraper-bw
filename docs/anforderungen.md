@@ -49,7 +49,7 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 | `titel`               | string        | Ja      |                                                                                                                                                                                                                  |
 | `typ`                 | Vorgangstyp   | Ja      |                                                                                                                                                                                                                  |
 | `wahlperiode`         | integer       | Ja      | Aktuell: 17                                                                                                                                                                                                      |
-| `verfassungsaendernd` | boolean       | Ja      | Immer `false` (PARLIS liefert diese Information nicht). **DoD-Konflikt:** bei nicht-bestimmbaren Pflichtfeldern ist das Weglassen des Objekts vorgesehen; Entscheidung steht aus (siehe [status.md](status.md)). |
+| `verfassungsaendernd` | boolean       | Ja      | Titel-Heuristik: `True` bei Match auf `Änderung der (Landes)?Verfassung` oder `Verfassungsänderung`, sonst `False`. PARLIS liefert das Attribut nicht — DoD-Konflikt zur „omit object"-Regel dokumentiert in [DD-023](design_decisions.md).                                                                      |
 | `initiatoren`         | list[Autor]   | Ja      |                                                                                                                                                                                                                  |
 | `stationen`           | list[Station] | Ja      |                                                                                                                                                                                                                  |
 | `kurztitel`           | string        | Nein    |                                                                                                                                                                                                                  |
@@ -98,11 +98,11 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 
 ### Gremium
 
-| Feld          | Typ       | Pflicht | BaWue-Hinweise                                                           |
-|---------------|-----------|---------|--------------------------------------------------------------------------|
-| `parlament`   | Parlament | Ja      | `Parlament.BW` (Enum, kein String)                                       |
-| `name`        | string    | Ja      | Ausschussname, `"Plenum"` bei Plenarprotokollen, `"Landtag"` als Default |
-| `wahlperiode` | integer   | Ja      |                                                                          |
+| Feld          | Typ       | Pflicht | BaWue-Hinweise                                                                               |
+|---------------|-----------|---------|----------------------------------------------------------------------------------------------|
+| `parlament`   | Parlament | Ja      | `Parlament.BW` (Enum, kein String)                                                           |
+| `name`        | string    | Ja      | Ausschussname, `"gesetzesblatt"` bei `postparl-gsblt`, sonst `"plenum"` (reservierte Namen, s. DD-021) |
+| `wahlperiode` | integer   | Ja      |                                                                                              |
 
 ### Autor / Top / Lobbyregistereintrag
 
