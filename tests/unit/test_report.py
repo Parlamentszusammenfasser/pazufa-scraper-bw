@@ -216,10 +216,10 @@ class TestAnalyzeSitzungen:
             ),
             ParsedEvent(
                 uid="2",
-                summary="Fraktions- und Ausschusssitzungen: Ausschuesse",
+                summary="Fraktions- und Ausschusssitzungen: FinA",
                 dtstart=datetime(2026, 2, 20, 14, 0),
                 dtend=datetime(2026, 2, 20, 18, 0),
-                gremium_name="Ausschusssitzungen",
+                gremium_name="Finanzausschuss",
             ),
         ]
 
@@ -229,7 +229,7 @@ class TestAnalyzeSitzungen:
         assert report.date_key == "2026-02-20"
         assert report.event_count == 2
         assert "plenum" in report.gremium_names
-        assert "Ausschusssitzungen" in report.gremium_names
+        assert "Finanzausschuss" in report.gremium_names
 
     def test_empty_events(self):
         report = analyze_sitzungen([], "2026-02-20")

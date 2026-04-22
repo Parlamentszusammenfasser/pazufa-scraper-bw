@@ -1,7 +1,90 @@
 """Internal data structures for raw PARLIS data before conversion to framework models."""
 
+import re
 from enum import StrEnum
 from typing import TypedDict
+
+
+class CanonicalOrganisation(StrEnum):
+    """Canonical form for the well-known finite set of Baden-Württemberg
+    organizations appearing in `Autor.organisation` (DD-022).
+
+    Scope is intentionally limited to entities with a stable, official name:
+    the five Landtag-BW Fraktionen (per https://www.landtag-bw.de/home/fraktionen/)
+    and the state government. Open-set organizations (individual ministries,
+    external stakeholders, expert authors, …) are NOT listed — they pass
+    through `canonicalize_organisation` unchanged, because enumerating them
+    is both impractical and unnecessary: the backend already has a pg_trgm
+    `SIMILARITY` canary on `Autor` inserts that flags near-duplicates.
+
+    Canonical forms match the Landtag's own usage: `Fraktion GRÜNE` has no
+    `der` because GRÜNE is styled as a proper name. This is a quirk, not a
+    bug — aligning to the Landtag's convention avoids inventing a third
+    variant.
+
+    `StrEnum` members ARE `str` instances, so they pass through pydantic's
+    `StrictStr` validation on `Autor.organisation` without conversion.
+    """
+
+    FRAKTION_GRUENE = "Fraktion GRÜNE"
+    FRAKTION_CDU = "Fraktion der CDU"
+    FRAKTION_SPD = "Fraktion der SPD"
+    FRAKTION_FDP_DVP = "Fraktion der FDP/DVP"
+    FRAKTION_AFD = "Fraktion der AfD"
+    LANDESREGIERUNG = "Landesregierung"
+
+
+# Lookup-normalized form (lower-case, non-alphanumeric stripped) → canonical.
+# Each canonical value also appears as its own key so the function is idempotent.
+# Variants are the forms observed in production + plausible alternate spellings
+# seen on Landtag-BW sources; add new rows when a divergent form is observed.
+_ORGANISATION_ALIASES: dict[str, CanonicalOrganisation] = {
+    # GRÜNE — Landtag-BW spelling omits "der"
+    "fraktiongrüne": CanonicalOrganisation.FRAKTION_GRUENE,
+    "fraktiondergrünen": CanonicalOrganisation.FRAKTION_GRUENE,
+    "bündnis90diegrünen": CanonicalOrganisation.FRAKTION_GRUENE,
+    "grünefraktion": CanonicalOrganisation.FRAKTION_GRUENE,
+    # CDU
+    "fraktiondercdu": CanonicalOrganisation.FRAKTION_CDU,
+    "cdufraktion": CanonicalOrganisation.FRAKTION_CDU,
+    # SPD
+    "fraktionderspd": CanonicalOrganisation.FRAKTION_SPD,
+    "spdfraktion": CanonicalOrganisation.FRAKTION_SPD,
+    # FDP/DVP
+    "fraktionderfdpdvp": CanonicalOrganisation.FRAKTION_FDP_DVP,
+    "fdpdvpfraktion": CanonicalOrganisation.FRAKTION_FDP_DVP,
+    "fraktionderfdp": CanonicalOrganisation.FRAKTION_FDP_DVP,  # Bundestag-style short form
+    # AfD
+    "fraktionderafd": CanonicalOrganisation.FRAKTION_AFD,
+    "afdfraktion": CanonicalOrganisation.FRAKTION_AFD,
+    "alternativefürdeutschlandafd": CanonicalOrganisation.FRAKTION_AFD,  # seen in BY data
+    # Landesregierung
+    "landesregierung": CanonicalOrganisation.LANDESREGIERUNG,
+    "landesregierungbadenwürttemberg": CanonicalOrganisation.LANDESREGIERUNG,
+    "badenwürttembergischelandesregierung": CanonicalOrganisation.LANDESREGIERUNG,
+    "regierungbadenwürttemberg": CanonicalOrganisation.LANDESREGIERUNG,
+}
+
+
+_NON_ALNUM_RE = re.compile(r"[^\w]+", re.UNICODE)
+
+
+def _org_lookup_key(raw: str) -> str:
+    """Lowercase + strip non-alphanumeric for variant-tolerant lookup."""
+    return _NON_ALNUM_RE.sub("", raw).lower()
+
+
+def canonicalize_organisation(raw: str) -> str:
+    """Map an organisation string to its canonical form (DD-022).
+
+    Returns a `CanonicalOrganisation` member (a str subclass) when the input
+    matches a known alias, otherwise returns the input string unchanged.
+    Whitespace is always stripped.
+    """
+    stripped = raw.strip()
+    if not stripped:
+        return stripped
+    return _ORGANISATION_ALIASES.get(_org_lookup_key(stripped), stripped)
 
 
 class ReservedGremium(StrEnum):

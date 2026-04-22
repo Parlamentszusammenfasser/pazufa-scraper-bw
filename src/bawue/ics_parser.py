@@ -47,11 +47,12 @@ def extract_gremium_name(summary: str) -> str | None:
 
     if summary.startswith("Fraktions- und Ausschusssitzungen:"):
         suffix = summary.split(": ", 1)[1] if ": " in summary else ""
-        if suffix == "Ausschuesse":
-            return "Ausschusssitzungen"
         if suffix == "FinA":
             return "Finanzausschuss"
-        # Fraktionen and other faction-only entries are excluded
+        # "Ausschuesse" is an umbrella entry covering an unknown set of committees
+        # on a given day — the DoD forbids generic names like "Ausschuss" /
+        # "Ausschusssitzungen" (DD-006 / DoD name-specificity). Filter out
+        # instead. Fraktionen and any other faction-only entries are also excluded.
         return None
 
     if summary.startswith("Haushaltsberatungen:"):

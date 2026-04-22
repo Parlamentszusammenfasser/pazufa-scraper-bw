@@ -383,15 +383,15 @@ PDF links/deadline from detail pages. Data classes: `RawBeteiligungProcess`, `Ra
 
 Stateless ICS parsing via the `icalendar` library. Filters events by SUMMARY prefix:
 
-| SUMMARY prefix                                   | Included? | Gremium name           |
-|--------------------------------------------------|-----------|------------------------|
-| `Plenarsitzung:`                                 | Yes       | `"plenum"` (reserved)  |
-| `Fraktions- und Ausschusssitzungen: Ausschuesse` | Yes       | `"Ausschusssitzungen"` |
-| `Fraktions- und Ausschusssitzungen: FinA`        | Yes       | `"Finanzausschuss"`    |
-| `Haushaltsberatungen: ...`                       | Yes       | extract after `: `     |
-| `Fraktions- und Ausschusssitzungen: Fraktionen`  | No        | faction-only           |
-| `Prasidium:`                                     | No        | internal               |
-| `Wahl:`                                          | No        | election event         |
+| SUMMARY prefix                                   | Included? | Gremium name              |
+|--------------------------------------------------|-----------|---------------------------|
+| `Plenarsitzung:`                                 | Yes       | `"plenum"` (reserved)     |
+| `Fraktions- und Ausschusssitzungen: FinA`        | Yes       | `"Finanzausschuss"`       |
+| `Haushaltsberatungen: ...`                       | Yes       | extract after `: `        |
+| `Fraktions- und Ausschusssitzungen: Ausschuesse` | No        | name-specificity (DD-006) |
+| `Fraktions- und Ausschusssitzungen: Fraktionen`  | No        | faction-only              |
+| `Prasidium:`                                     | No        | internal                  |
+| `Wahl:`                                          | No        | election event            |
 
 ### ParlisClient / ParlisParser
 

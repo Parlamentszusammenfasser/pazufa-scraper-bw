@@ -31,7 +31,7 @@ from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.notifications import send_mattermost_summary
 from bawue.parlis_client import ParlisClient
 from bawue.rate_limiter import create_upload_limiter
-from bawue.types import RawFundstelle, RawVorgang, ReservedGremium
+from bawue.types import RawFundstelle, RawVorgang, ReservedGremium, canonicalize_organisation
 from bawue.upload_throttle import upload_vorgang
 from bawue.wahlperiode_check import check_for_newer_wahlperiode
 
@@ -48,10 +48,13 @@ def _parse_autoren(text: str) -> list[Autor]:
 
     Uses lookahead splitting to avoid breaking ministry names that contain
     commas (e.g. "Ministerium für Umwelt, Klima und Energiewirtschaft").
+    Known party/government variants are mapped to their canonical form via
+    ``canonicalize_organisation`` (DD-022); unknown organizations pass through
+    unchanged.
     """
     if not text or not text.strip():
         return []
-    return [Autor(organisation=part.strip()) for part in _AUTOR_SPLIT_RE.split(text) if part.strip()]
+    return [Autor(organisation=canonicalize_organisation(part)) for part in _AUTOR_SPLIT_RE.split(text) if part.strip()]
 
 
 DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [

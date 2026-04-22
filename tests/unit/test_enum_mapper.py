@@ -11,7 +11,11 @@ from bawue.enum_mapper import (
     map_stationstyp,
     map_vorgangstyp,
 )
-from bawue.types import ReservedGremium
+from bawue.types import (
+    CanonicalOrganisation,
+    ReservedGremium,
+    canonicalize_organisation,
+)
 
 
 class TestVorgangstypMapping:
@@ -429,3 +433,89 @@ class TestReservedGremiumNames:
         # on Gremium.name without conversion.
         assert isinstance(ReservedGremium.PLENUM, str)
         assert ReservedGremium.PLENUM == "plenum"
+
+
+# Autor.organisation strings observed in the WP 17 production run
+# (see docs/observed_station_types.md for the extraction procedure applied
+# to Autor.organisation instead of Dokument.titel). The "expected" column
+# is the canonical form canonicalize_organisation should return.
+OBSERVED_ORGANISATIONS: list[tuple[str, str]] = [
+    ("Landesregierung", "Landesregierung"),
+    ("Fraktion GRÜNE", "Fraktion GRÜNE"),
+    ("Fraktion der CDU", "Fraktion der CDU"),
+    ("Fraktion der SPD", "Fraktion der SPD"),
+    ("Fraktion der FDP/DVP", "Fraktion der FDP/DVP"),
+    ("Fraktion der AfD", "Fraktion der AfD"),
+    # Open-set organizations — pass through unchanged:
+    ("Ständiger Ausschuss", "Ständiger Ausschuss"),
+    (
+        "Ministerium für Soziales, Gesundheit und Integration",
+        "Ministerium für Soziales, Gesundheit und Integration",
+    ),
+    (
+        "Ministerium des Inneren, für Digitalisierung und Kommunen",
+        "Ministerium des Inneren, für Digitalisierung und Kommunen",
+    ),
+]
+
+
+class TestCanonicalOrganisation:
+    """DD-022: canonical-name mapping for Autor.organisation."""
+
+    def test_enum_values_cover_landtag_bw_fraktionen(self):
+        """Lock the finite set of canonical forms. Updating this requires an
+        audit against https://www.landtag-bw.de/home/fraktionen/."""
+        assert {m.value for m in CanonicalOrganisation} == {
+            "Fraktion GRÜNE",
+            "Fraktion der CDU",
+            "Fraktion der SPD",
+            "Fraktion der FDP/DVP",
+            "Fraktion der AfD",
+            "Landesregierung",
+        }
+
+    def test_strenum_is_str_subclass(self):
+        assert isinstance(CanonicalOrganisation.FRAKTION_CDU, str)
+        assert CanonicalOrganisation.FRAKTION_CDU == "Fraktion der CDU"
+
+    @pytest.mark.parametrize("raw,expected", OBSERVED_ORGANISATIONS)
+    def test_observed_organisations_map_to_expected(self, raw, expected):
+        assert canonicalize_organisation(raw) == expected
+
+    def test_idempotent_on_canonical_forms(self):
+        for m in CanonicalOrganisation:
+            assert canonicalize_organisation(m.value) == m.value
+
+    @pytest.mark.parametrize(
+        "variant,canonical",
+        [
+            # Capitalization / whitespace
+            ("FRAKTION GRÜNE", CanonicalOrganisation.FRAKTION_GRUENE),
+            ("  Fraktion der CDU  ", CanonicalOrganisation.FRAKTION_CDU),
+            # Grammatical variant
+            ("Fraktion der Grünen", CanonicalOrganisation.FRAKTION_GRUENE),
+            ("BÜNDNIS 90/DIE GRÜNEN", CanonicalOrganisation.FRAKTION_GRUENE),
+            # "<Partei>-Fraktion" short form (BY-style)
+            ("CDU-Fraktion", CanonicalOrganisation.FRAKTION_CDU),
+            ("SPD-Fraktion", CanonicalOrganisation.FRAKTION_SPD),
+            ("AfD-Fraktion", CanonicalOrganisation.FRAKTION_AFD),
+            ("FDP/DVP-Fraktion", CanonicalOrganisation.FRAKTION_FDP_DVP),
+            # Expanded party name seen in BY fixtures
+            ("Alternative für Deutschland (AfD)", CanonicalOrganisation.FRAKTION_AFD),
+            # Landesregierung variants
+            ("Baden-Württembergische Landesregierung", CanonicalOrganisation.LANDESREGIERUNG),
+            ("Landesregierung Baden-Württemberg", CanonicalOrganisation.LANDESREGIERUNG),
+        ],
+    )
+    def test_known_variants_map_to_canonical(self, variant, canonical):
+        assert canonicalize_organisation(variant) == canonical
+
+    def test_unknown_organisations_pass_through(self):
+        """Open-set entries (ministries, external orgs) stay as-is."""
+        ministry = "Ministerium für Umwelt, Klima und Energiewirtschaft"
+        assert canonicalize_organisation(ministry) == ministry
+        assert canonicalize_organisation("Verband der Podologen") == "Verband der Podologen"
+
+    def test_empty_and_whitespace(self):
+        assert canonicalize_organisation("") == ""
+        assert canonicalize_organisation("   ") == ""

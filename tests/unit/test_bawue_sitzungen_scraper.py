@@ -94,7 +94,8 @@ class TestListingPageExtractor:
 
         # events_by_date should have entries for all included dates
         assert "2026-02-24" in scraper._events_by_date
-        assert len(scraper._events_by_date["2026-02-24"]) == 2  # Ausschuesse + FinA
+        # Only FinA — the generic "Ausschuesse" umbrella is filtered (DD-006).
+        assert len(scraper._events_by_date["2026-02-24"]) == 1
 
 
 class TestItemExtractor:
@@ -137,13 +138,14 @@ class TestItemExtractor:
 
     @pytest.mark.asyncio
     async def test_multiple_sitzungen_per_date(self, ics_scraper_with_events):
+        """On 2026-02-24 the sample feed has FinA + the generic Ausschuesse
+        umbrella. The umbrella is filtered out (DD-006 name-specificity), so
+        only FinA remains."""
         result = await ics_scraper_with_events.item_extractor("2026-02-24")
 
         _termin, sitzungen = result
-        assert len(sitzungen) == 2
-        gremium_names = {s.gremium.name for s in sitzungen}
-        assert "Ausschusssitzungen" in gremium_names
-        assert "Finanzausschuss" in gremium_names
+        assert len(sitzungen) == 1
+        assert sitzungen[0].gremium.name == "Finanzausschuss"
 
     @pytest.mark.asyncio
     async def test_datetimes_are_utc(self, ics_scraper_with_events):
