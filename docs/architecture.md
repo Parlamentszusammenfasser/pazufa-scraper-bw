@@ -603,5 +603,5 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | **Enum ambiguity**                    | Incorrect mapping of PARLIS types            | Conservative mapping — `sonstig` as fallback, all unmapped values logged          |
 | **Rate limiting by Landtag**          | IP blocked                                   | Configurable delays, descriptive User-Agent                                       |
 | **Fundstelle text format changes**    | Station parsing breaks                       | Regex-based parsing with fallback, unit tests with known samples                  |
-| **verfassungsaendernd not available** | Required field cannot be determined          | Default to `false` (PARLIS does not expose this field)                            |
+| **verfassungsaendernd not available** | Required field cannot be determined          | Title heuristic (`Änderung der (Landes)?Verfassung` / `Verfassungsänderung`); see DD-023 |
 | **Sync/async coexistence**            | PARLIS uses sync requests in async framework | `asyncio.to_thread()` wraps sync calls in both vorgaenge and beteiligung scrapers |

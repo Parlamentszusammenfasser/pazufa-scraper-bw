@@ -31,7 +31,13 @@ from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.notifications import send_mattermost_summary
 from bawue.parlis_client import ParlisClient
 from bawue.rate_limiter import create_upload_limiter
-from bawue.types import RawFundstelle, RawVorgang, ReservedGremium, canonicalize_organisation
+from bawue.types import (
+    RawFundstelle,
+    RawVorgang,
+    ReservedGremium,
+    canonicalize_organisation,
+    is_verfassungsaendernd,
+)
 from bawue.upload_throttle import upload_vorgang
 from bawue.wahlperiode_check import check_for_newer_wahlperiode
 
@@ -288,7 +294,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             kurztitel=vorgang_id if vorgang_id != "unknown" else None,
             typ=typ,
             wahlperiode=self._wahlperiode,
-            verfassungsaendernd=False,
+            verfassungsaendernd=is_verfassungsaendernd(titel),
             initiatoren=initiatoren,
             stationen=stationen,
             ids=ids,

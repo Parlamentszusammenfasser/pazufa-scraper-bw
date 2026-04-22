@@ -15,6 +15,7 @@ from bawue.types import (
     CanonicalOrganisation,
     ReservedGremium,
     canonicalize_organisation,
+    is_verfassungsaendernd,
 )
 
 
@@ -519,3 +520,57 @@ class TestCanonicalOrganisation:
     def test_empty_and_whitespace(self):
         assert canonicalize_organisation("") == ""
         assert canonicalize_organisation("   ") == ""
+
+
+class TestIsVerfassungsaendernd:
+    """DD-023: title-based heuristic for the `verfassungsaendernd` flag.
+
+    PARLIS does not expose this attribute, and the community DoD's "omit
+    object" rule cannot apply (would drop 100 % of Vorgänge). The heuristic
+    recognises the two canonical German phrasings used when an Act amends
+    the Landesverfassung: "Änderung der (Landes)?Verfassung" and the
+    nominal compound "Verfassungsänderung". Everything else stays `False`.
+    """
+
+    @pytest.mark.parametrize(
+        "titel",
+        [
+            "Gesetz zur Änderung der Verfassung des Landes Baden-Württemberg",
+            "Zweites Gesetz zur Änderung der Verfassung des Landes Baden-Württemberg",
+            "Gesetz zur Änderung der Landesverfassung",
+            # Case and whitespace tolerance
+            "GESETZ ZUR ÄNDERUNG DER VERFASSUNG DES LANDES BADEN-WÜRTTEMBERG",
+            "  Gesetz zur  Änderung der  Verfassung  ",
+            # Nominal compound form (rare but observed historically)
+            "Gesetz zur Verfassungsänderung",
+        ],
+    )
+    def test_positive_cases(self, titel):
+        assert is_verfassungsaendernd(titel) is True
+
+    @pytest.mark.parametrize(
+        "titel",
+        [
+            # Generic titles with no constitutional reference
+            "Gesetz zum Klimaschutz",
+            "Klimaschutz- und Klimawandelanpassungsgesetz",
+            # "Änderung" alone (ordinary amendment of another Act)
+            "Gesetz zur Änderung des Schulgesetzes",
+            "Drittes Gesetz zur Änderung des Landesbeamtengesetzes",
+            # "Verfassung" as part of a different compound — NOT an amendment
+            # of the Landesverfassung itself.
+            "Gesetz über die Aufgaben des Landesverfassungsschutzes",
+            "Gesetz zur Stärkung des Verfassungsschutzes",
+            # Empty / whitespace
+            "",
+            "   ",
+        ],
+    )
+    def test_negative_cases(self, titel):
+        assert is_verfassungsaendernd(titel) is False
+
+    def test_returns_bool_not_truthy(self):
+        """Output must be a plain `bool` so it serialises as JSON `true/false`."""
+        result = is_verfassungsaendernd("Gesetz zur Änderung der Verfassung")
+        assert result is True
+        assert isinstance(result, bool)

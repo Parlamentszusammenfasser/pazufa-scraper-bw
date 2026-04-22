@@ -87,6 +87,32 @@ def canonicalize_organisation(raw: str) -> str:
     return _ORGANISATION_ALIASES.get(_org_lookup_key(stripped), stripped)
 
 
+# Matches the two canonical German title phrasings for acts that amend the
+# Landesverfassung:
+#   - "Änderung der Verfassung" / "Änderung der Landesverfassung"
+#   - "Verfassungsänderung" (nominal compound)
+# A `(?<!\w)` guard on the compound form avoids matches inside unrelated
+# compounds like "Landesverfassungsschutz" or "Bundesverfassungsgericht".
+_VERFASSUNGSAENDERND_RE = re.compile(
+    r"Änderung\s+der\s+(Landes)?Verfassung|(?<!\w)Verfassungsänderung",
+    re.IGNORECASE,
+)
+
+
+def is_verfassungsaendernd(titel: str) -> bool:
+    """Heuristic: does the Vorgang title indicate a Landesverfassungs-Änderung (DD-023)?
+
+    PARLIS does not expose a `verfassungsaendernd` attribute, so the flag is
+    inferred from the title text. Only the two canonical phrasings match:
+    "Änderung der (Landes-)Verfassung" and the compound "Verfassungsänderung".
+    Everything else returns ``False`` — including titles that merely mention
+    `Verfassungsschutz` or amend non-constitutional acts.
+    """
+    if not titel or not titel.strip():
+        return False
+    return _VERFASSUNGSAENDERND_RE.search(titel) is not None
+
+
 class ReservedGremium(StrEnum):
     """Canonical Gremium names reserved by the community DoD + OpenAPI spec.
 

@@ -3,7 +3,20 @@
 **Status:** Offen (Roadmap #12, optional) — **nicht implementiert**
 **Zugehöriges Issue:** [parlamentszusammenfasser#40](https://codeberg.org/PaZuFa/parlamentszusammenfasser/issues/40)
 **Verwandte Entscheidungen:** DD-002 (Mitteilungen ≠ `postparl-kraft`), DD-010 (synthetische Ablehnung),
-DD-012 (synthetische `parl-initiativ`), DD-016 (BY-Track).
+DD-012 (synthetische `parl-initiativ`), DD-016 (BY-Track), DD-021 (reservierte Gremium-Namen —
+synthetische Station würde `plenum` als Gremium erben).
+
+**Ist-Stand im Code (Stand 22.04.2026):**
+
+- `Stationstyp.POSTPARL_MINUS_KRAFT` und das Mapping `"Inkrafttreten" → POSTPARL_MINUS_KRAFT` sind
+  in `enum_mapper.py` vorhanden (Zeilen 73, 107). PARLIS liefert diesen Text jedoch faktisch kaum.
+- `_POSTPARL_TYPEN` in `bawue_vorgaenge_scraper.py` (Zeile 297) enthält bereits `POSTPARL_MINUS_KRAFT`
+  und wird für den „nur-postparl-Vorgänge überspringen"-Check genutzt — eine virtuelle K-Station
+  würde also nicht dazu führen, dass ein ansonsten vollständiger Vorgang fälschlich übersprungen wird.
+- `_ensure_ablehnung_station` (Zeile 406) und `_ensure_initiativ_after_regbsl` (Zeile 448) sind die
+  existierenden Synthese-Muster, denen ein `_ensure_kraft_station` folgen würde.
+- Weder ein `_ensure_kraft_station` noch eine Config-Option `synthesize-kraft-stations` existieren.
+- `status.md` Zeile 113 defer-t explizit auf Roadmap #6 (Gesetzblatt-Scraper) als präferierte Quelle.
 
 Dieses Dokument beschreibt den Vorschlag, fasst die Diskussion zusammen und hält die offenen
 Entscheidungsfragen fest. Es ist **kein Implementierungs-Ticket** — vor einer Umsetzung ist
@@ -65,7 +78,9 @@ falsch wäre". Ein virtuelles K ohne eindeutiges Signal steht in Spannung zu die
    Rechtsverordnungsbedingungen können Inkrafttreten verzögern oder verhindern.
 3. **Konflikt mit Roadmap #6.** Sobald der Gesetzblatt-Scraper echte K-Daten liefert,
    entstehen Merge-Konflikte zwischen virtueller Station und realer Quelle. Backend-Merge-
-   Verhalten bei abweichenden `zp_start`-Werten ist implementation-defined.
+   Verhalten bei abweichenden `zp_start`-Werten ist implementation-defined (zum Zeitpunkt
+   dieser Analyse nicht gegen `pazufa-backend/src/db/insert.rs` verifiziert — vor Umsetzung
+   nachholen, analog zum DD-021-Check der `gremium`-UNIQUE-/`pg_trgm`-Semantik).
 4. **Kein technischer Backend-Druck.** DD-016 bestätigt: `IVAVJG` ist ein gültiger Prefix
    des BY-Tracks — die Synthese ist nicht erforderlich für Track-Validierung.
 5. **Schwächt den Anreiz für die richtige Lösung** (Gesetzblatt-Scraper, Roadmap #6).
@@ -89,8 +104,14 @@ Daten zu minimieren:
    zukünftiger Gesetzblatt-Scraper die Station sicher erkennen und ersetzen können.
 6. **Feature-Flag:** `[bawue] synthesize-kraft-stations = false` als Default (analog
    DD-017 / `filter-sonstig-stations`). Opt-in only.
-7. **Neue Designentscheidung** (DD-020 o.ä.) mit explizitem TODO: „Synthese entfernen,
-   sobald Roadmap #6 (Gesetzblatt-Scraper) produktiv Daten liefert."
+7. **Neue Designentscheidung** (DD-023 o.ä. — DD-020/021/022 sind vergeben) mit explizitem
+   TODO: „Synthese entfernen, sobald Roadmap #6 (Gesetzblatt-Scraper) produktiv Daten liefert."
+8. **Gremium-Routing:** Die virtuelle Station muss `_determine_gremium(fund, station_typ)`
+   (DD-021) korrekt ansteuern. Da sie keine Fundstelle hat, greift der Default-Zweig. Ergebnis
+   für `postparl-kraft` wäre heute `plenum` — semantisch fragwürdig (Inkrafttreten ist kein
+   Plenums-Akt). Entweder `_determine_gremium` um einen Kraft-Zweig erweitern (`gesetzesblatt`?
+   `regierung`? — eigene Designentscheidung) oder das Gremium beim Synthese-Aufruf explizit
+   übergeben.
 
 **Implementation-Anker:** Die Logik würde nach dem Muster von `_ensure_ablehnung_station()`
 in `bawue_vorgaenge_scraper.py` als `_ensure_kraft_station()` umgesetzt, aufgerufen aus

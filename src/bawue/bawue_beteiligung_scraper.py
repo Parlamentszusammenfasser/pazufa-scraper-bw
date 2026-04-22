@@ -34,7 +34,7 @@ from bawue.beteiligung_parser import (
 from bawue.config_loader import load_toml_section
 from bawue.notifications import send_mattermost_summary
 from bawue.rate_limiter import create_upload_limiter
-from bawue.types import ReservedGremium, canonicalize_organisation
+from bawue.types import ReservedGremium, canonicalize_organisation, is_verfassungsaendernd
 from bawue.upload_throttle import upload_vorgang
 
 logger = logging.getLogger(__name__)
@@ -229,7 +229,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             kurztitel=slug,
             typ=Vorgangstyp.GG_MINUS_LAND_MINUS_PARL,
             wahlperiode=self._wahlperiode,
-            verfassungsaendernd=False,
+            verfassungsaendernd=is_verfassungsaendernd(detail.title),
             initiatoren=[Autor(organisation=canonicalize_organisation(detail.ministry))],
             stationen=[station],
             ids=ids,
