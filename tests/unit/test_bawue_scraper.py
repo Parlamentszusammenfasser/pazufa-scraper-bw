@@ -263,6 +263,54 @@ class TestBuildVorgang:
         assert vorgang.stationen[0].gremium.parlament.value == "BW"
 
     @pytest.mark.asyncio
+    async def test_default_gremium_is_plenum(self, scraper_build_vorgang):
+        """Fundstelle without Ausschuss and without Plenarprotokoll → `plenum`
+        (DD-021: "plenum als default wenn etwas 'irgendwie passiert'")."""
+        raw = _make_raw_vorgang(
+            "V-061",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  01.01.2026 Drucksache 17/1000",
+                    "datum": "01.01.2026",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert vorgang.stationen[0].gremium.name == "plenum"
+
+    @pytest.mark.asyncio
+    async def test_gsblt_station_uses_gesetzesblatt_gremium(self, scraper_build_vorgang):
+        """postparl-gsblt Fundstellen must use the reserved `gesetzesblatt` name
+        (DD-021; matches BY reference scraper)."""
+        raw = _make_raw_vorgang(
+            "V-062",
+            fundstellen=[
+                # Non-postparl station keeps the Vorgang from being skipped
+                # by the "only post-parliamentary stations" rule.
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  01.01.2026 Drucksache 17/1000",
+                    "datum": "01.01.2026",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Gesetz  vom 10. Februar 2026 Gesetzblatt für Baden-Württemberg 2026 Nr. 22",
+                    "datum": "10.02.2026",
+                    "station_typ": "Gesetz",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        gsblt_stations = [s for s in vorgang.stationen if s.typ == Stationstyp.POSTPARL_MINUS_GSBLT]
+        assert len(gsblt_stations) == 1
+        assert gsblt_stations[0].gremium.name == "gesetzesblatt"
+
+    @pytest.mark.asyncio
     async def test_fallback_to_raw_text_when_station_typ_missing(self, scraper_build_vorgang):
         """When regex fails to extract station_typ, raw text is used for enum mapping."""
         raw = _make_raw_vorgang(
@@ -1895,7 +1943,7 @@ class TestAktuellerStandAblehnung:
 
         ablehnung = vorgang.stationen[-1]
         assert ablehnung.typ == Stationstyp.PARL_MINUS_ABLEHNUNG
-        assert ablehnung.gremium.name == "Landtag"
+        assert ablehnung.gremium.name == "plenum"
 
     @pytest.mark.asyncio
     async def test_ablehnung_skipped_with_empty_stationen(self, scraper_build_vorgang):

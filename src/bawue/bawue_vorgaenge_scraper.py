@@ -433,7 +433,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 gremium=Gremium(
                     parlament=Parlament.BW,
                     wahlperiode=self._wahlperiode,
-                    name="Landtag",
+                    name=ReservedGremium.PLENUM,
                 ),
             )
         )
@@ -478,7 +478,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             gremium=Gremium(
                 parlament=Parlament.BW,
                 wahlperiode=self._wahlperiode,
-                name="Landtag",
+                name=ReservedGremium.PLENUM,
             ),
         )
         stationen.insert(next_idx, synthetic)
@@ -606,7 +606,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             )
             return None
 
-        gremium = self._determine_gremium(fund)
+        gremium = self._determine_gremium(fund, station_typ)
         dokumente, trojanergefahr = await self._build_dokumente(
             fund, station_typ_str, mapping_text, station_typ, initiative, zp_start
         )
@@ -619,19 +619,23 @@ class BawueVorgaengeScraper(VorgangsScraper):
             trojanergefahr=trojanergefahr,
         )
 
-    def _determine_gremium(self, fund: RawFundstelle) -> Gremium:
-        """Determine which parliamentary body handled this Fundstelle.
+    def _determine_gremium(self, fund: RawFundstelle, station_typ: Stationstyp) -> Gremium:
+        """Determine which parliamentary body handled this Fundstelle (DD-021).
 
-        Priority: named committee (Ausschuss) > plenary session > generic "Landtag" fallback.
-        Plenary sessions use the canonical reserved Gremium name (DD-021).
+        Priority:
+          1. Named committee (Ausschuss) → use the specific committee name.
+          2. postparl-gsblt stations → reserved name `gesetzesblatt`
+             (wiki + BY-scraper convention, see DD-021).
+          3. Everything else → reserved name `plenum`, which the DoD defines
+             as the default "wenn etwas 'irgendwie passiert'".
         """
         ausschuss = fund.get("ausschuss", "")
         if ausschuss:
             name: str = ausschuss
-        elif fund.get("plenarprotokoll"):
-            name = ReservedGremium.PLENUM
+        elif station_typ == Stationstyp.POSTPARL_MINUS_GSBLT:
+            name = ReservedGremium.GESETZESBLATT
         else:
-            name = "Landtag"
+            name = ReservedGremium.PLENUM
         return Gremium(parlament=Parlament.BW, name=name, wahlperiode=self._wahlperiode)
 
     async def _build_dokumente(

@@ -101,7 +101,7 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 | Feld          | Typ       | Pflicht | BaWue-Hinweise                                                                               |
 |---------------|-----------|---------|----------------------------------------------------------------------------------------------|
 | `parlament`   | Parlament | Ja      | `Parlament.BW` (Enum, kein String)                                                           |
-| `name`        | string    | Ja      | Ausschussname, `"plenum"` bei Plenarprotokollen (reservierter Name), `"Landtag"` als Default |
+| `name`        | string    | Ja      | Ausschussname, `"gesetzesblatt"` bei `postparl-gsblt`, sonst `"plenum"` (reservierte Namen, s. DD-021) |
 | `wahlperiode` | integer   | Ja      |                                                                                              |
 
 ### Autor / Top / Lobbyregistereintrag

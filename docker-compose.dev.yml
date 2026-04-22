@@ -41,6 +41,11 @@ services:
       DATABASE_URL: postgres://ltzf-user:ltzf-pass@postgres:5432/ltzf
       LTZF_KEYADDER_KEY: dev-keyadder-key
       RUST_LOG: debug
+    volumes:
+      # Override the baked-in tracks.toml with a local copy that back-ports
+      # the BW trailing-A fix from spec v0.2.4+v0.0.3 (the upstream backend
+      # cannot consume v0.2.4 yet — see deploy/tracks.toml header comment).
+      - ./deploy/tracks.toml:/app/tracks.toml:ro
     depends_on:
       postgres:
         condition: service_healthy

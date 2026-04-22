@@ -666,57 +666,101 @@ gespeichert, bis der TTL (2 Wochen) abläuft, und verursachen keine Fehler.
 
 ---
 
-## DD-021: Reservierte Gremium-Namen (`plenum`, `regierung`)
+## DD-021: Reservierte Gremium-Namen (`plenum`, `regierung`, `gesetzesblatt`)
 
-**Datum:** 22.04.2026
+**Datum:** 22.04.2026 | **Aktualisiert:** 22.04.2026 (Gap G1.4 + G4 aufgelöst)
 
-**Kontext:** Die OpenAPI-Spezifikation reserviert bestimmte literale Strings für
-das `Gremium.name`-Feld:
+**Kontext:** Drei Quellen definieren reservierte `Gremium.name`-Werte:
 
-> "Name des betreffenden Gremiums. `'plenum'`, `'regierung'`, `'volk'` sind
-> reservierte namen" (`vendor/pazufa-collector-core/openapi.yaml:1517`)
+1. **OpenAPI-Spezifikation** (`vendor/pazufa-collector-core/openapi.yaml:1517`):
+   > "Name des betreffenden Gremiums. `'plenum'`, `'regierung'`, `'volk'` sind
+   > reservierte namen"
+2. **Community-DoD-Wiki**: `regierung`, `plenum` (als Default, "wenn etwas
+   'irgendwie passiert'"), **und `gesetzesblatt`** für die Veröffentlichung im
+   Gesetzblatt.
+3. **BY-Referenz-Scraper** (`vendor/pazufa-collector/collector/scrapers/bylt_scraper.py`):
+   emittiert `gesetzesblatt` literal für `postparl-gsblt`-Stationen (Zeile 440)
+   und `plenum` für alle anderen nicht-Ausschuss-Stationen — inkl. synthetisch
+   erzeugte. BY hat **keinen** generischen Fallback wie `"Landtag"`.
 
-Das DoD-Wiki führt zusätzlich `gesetzesblatt` als Reserve-Namen auf — dieser
-ist **nicht** im OpenAPI-Schema enthalten. Die Spec ist die maßgebliche Quelle.
+**Diskrepanz Spec vs. Wiki**: Die Spec listet `volk`, aber nicht `gesetzesblatt`;
+das Wiki listet `gesetzesblatt`, aber nicht `volk`. Die Spec-Beschreibung
+validiert das Feld nicht schema-seitig — jeder String ist erlaubt. Der BY-Scraper
+nutzt `gesetzesblatt` produktiv ohne Backend-Fehler. Damit wird die
+Spec-Beschreibung als **unvollständig** betrachtet, nicht als exklusiv — das
+Wiki + BY-Convention sind maßgeblich.
 
-**Entscheidung:** Wo der jeweilige Stationskontext eindeutig auf eine reservierte
-Entität abbildet, wird der literale Name verwendet — kein deutschsprachiger
-Klartext-Name:
+**Backend-Verhalten** (`pazufa-backend/src/db/insert.rs:545-609`,
+`migrations/20250302145212_vorgang_setup.sql:9`):
 
-| Kontext                                                  | Gremium-Name (vorher) | Gremium-Name (jetzt) |
-|----------------------------------------------------------|-----------------------|----------------------|
-| Plenarprotokoll-Fundstelle (PARLIS)                      | `Plenum`              | `plenum`             |
-| Plenarsitzung im ICS-Feed                                | `Plenum`              | `plenum`             |
-| Beteiligungsportal-Station (`preparl-regent`)            | `Landesregierung`     | `regierung`          |
+- `gremium` hat `UNIQUE (parl, name, wp)` — jeder unterschiedliche Name erzeugt
+  eine separate Zeile.
+- Beim Insert läuft ein pg_trgm `SIMILARITY(name, $1) > 0.66`-Check, der bei
+  Near-Misses `notify_new_enum_entry(...)` triggert — eine eingebaute Canary
+  für schleichende Namens-Drift.
+- `SIMILARITY('Landtag', 'plenum') ≈ 0` → kein Alert. Ein Wechsel
+  `Landtag → plenum` ist für das Backend unsichtbar (erzeugt eine neue
+  Gremium-Zeile; die alte verwaist, ohne Datenverlust).
+
+**Entscheidung:** Alle Stationen bekommen einen kanonischen Namen — kein
+deutschsprachiger Klartext-Fallback mehr. Das Routing erfolgt im Scraper
+typ-gewahr:
+
+| Kontext / Station-Typ                                    | Gremium-Name       |
+|----------------------------------------------------------|--------------------|
+| Fundstelle mit Ausschuss-Angabe                          | Ausschuss-Name     |
+| `postparl-gsblt` (Gesetz, Bekanntmachung, Gesetzblatt)   | `gesetzesblatt`    |
+| Alle übrigen (parl-*, preparl-regent, synthetische)      | `plenum` (Default) |
+| Beteiligungsportal-Station (`preparl-regent`)            | `regierung`        |
+| ICS-Plenarsitzung                                        | `plenum`           |
 
 **Bewusst nicht geändert:**
 
-- **Generischer Default `Landtag`** in `_determine_gremium()` für Fundstellen
-  ohne Ausschuss- und ohne Plenarprotokoll-Information. Spec-konform wäre
-  `plenum` als Default — der Wechsel würde jedoch ~1 000 Stationen aus dem WP-17-
-  Lauf umetikettieren und potenziell die Backend-Dedup-Schlüssel
-  (`station_merge_candidates`) brechen. Klärung mit Backend-Team ausstehend.
-- **`gesetzesblatt` für `postparl-gsblt`-Stationen.** Wiki/Spec-Diskrepanz:
-  Wiki nennt diesen Reserve-Namen, Spec nicht. Vor einer Implementation muss
-  geklärt werden, welche Quelle gilt.
 - **Initiator-Strings** (`Autor.organisation = "Landesregierung"` etc.). Die
   reservierten Namen gelten ausschließlich für `Gremium.name`, nicht für
   `Autor.organisation`. Der Autor-String wird unverändert aus PARLIS
-  übernommen (Roadmap #10 G2: kanonische Normalisierung steht noch aus).
+  übernommen (Roadmap #10 G2: kanonische Normalisierung der Autor-Strings
+  steht noch aus).
+- **`volk`** ist im `ReservedGremium`-Enum definiert, aber nicht eingesetzt —
+  BW kennt derzeit keine `postparl-vesja`/`postparl-vesne`-Stationen im aktiven
+  Vorgangstyp-Filter. Der Wert bleibt für zukünftige Volksantrag-Pfade
+  verfügbar.
+
+**Backend-Koordination für Daten vor dem Roll-out:** Durch den Wechsel
+`"Landtag" → "plenum"` verwaist die bestehende `(BW, Landtag, 17)`-Gremium-Zeile.
+Bereinigung per einmaliger SQL-Operation nach vollem Re-Scrape-Zyklus:
+
+```sql
+UPDATE station SET gr_id =
+  (SELECT id FROM gremium WHERE parl=... AND name='plenum' AND wp=17)
+WHERE gr_id =
+  (SELECT id FROM gremium WHERE parl=... AND name='Landtag' AND wp=17);
+DELETE FROM gremium WHERE parl=... AND name='Landtag' AND wp=17;
+```
+
+Auf Dev/Staging durch DB-Reset trivial. Produktions-Koordination mit
+Backend-Team erforderlich.
 
 **Implementierung:** `bawue/types.py` definiert die `StrEnum` `ReservedGremium`
-mit den drei Spec-Werten (`PLENUM`, `REGIERUNG`, `VOLK`). Da `StrEnum`-Member
-echte `str`-Instanzen sind, passieren sie die `StrictStr`-Validierung auf
-`Gremium.name` ohne Konvertierung. Genutzt in:
+mit den vier Werten (`PLENUM`, `REGIERUNG`, `VOLK`, `GESETZESBLATT`). Da
+`StrEnum`-Member echte `str`-Instanzen sind, passieren sie die
+`StrictStr`-Validierung auf `Gremium.name` ohne Konvertierung.
 
-- `bawue_vorgaenge_scraper.py::_determine_gremium` — `ReservedGremium.PLENUM`
-  bei Plenarprotokoll-Fundstellen.
-- `bawue_beteiligung_scraper.py` (Station-Erstellung) — `ReservedGremium.REGIERUNG`
-  als Gremium der `preparl-regent`-Station.
+Verwendung:
+
+- `bawue_vorgaenge_scraper.py::_determine_gremium(fund, station_typ)` — typ-
+  abhängige Auswahl: Ausschuss-Name, `gesetzesblatt` bei `postparl-gsblt`,
+  sonst `plenum`.
+- `bawue_vorgaenge_scraper.py::_ensure_ablehnung_station` und
+  `_ensure_initiativ_after_regbsl` — synthetische Stationen nutzen
+  `ReservedGremium.PLENUM` (vorher hartcodiert `"Landtag"`).
+- `bawue_beteiligung_scraper.py` (Station-Erstellung) — `ReservedGremium.REGIERUNG`.
 - `ics_parser.py::extract_gremium_name` — `ReservedGremium.PLENUM` für
-  Plenarsitzungen aus dem ICS-Feed.
+  Plenarsitzungen.
 
 `tests/unit/test_enum_mapper.py::TestReservedGremiumNames` lockt die literalen
-Werte gegen die Spec — schlägt fehl, wenn die Spec einen Reserve-Namen
-hinzufügt oder entfernt.
+Werte gegen Spec + Wiki + BY-Convention.
+`tests/unit/test_bawue_scraper.py::TestVorgangBuild::test_default_gremium_is_plenum`
+und `test_gsblt_station_uses_gesetzesblatt_gremium` verifizieren das neue
+Routing.
 

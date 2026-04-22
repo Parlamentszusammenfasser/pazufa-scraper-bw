@@ -404,15 +404,25 @@ class TestEnumValuesExistInFramework:
 
 
 class TestReservedGremiumNames:
-    """Lock the literal values of ReservedGremium against the OpenAPI spec.
+    """Lock the literal values of ReservedGremium against wiki + spec + BY precedent.
 
-    Source of truth: ``vendor/pazufa-collector-core/openapi.yaml`` —
-    "'plenum', 'regierung', 'volk' sind reservierte namen". If the spec adds
-    or removes a reserved name, this test fails and forces an update.
+    - `plenum`, `regierung`, `volk` come from the OpenAPI spec
+      (`vendor/pazufa-collector-core/openapi.yaml`).
+    - `gesetzesblatt` comes from the community DoD wiki and the BY reference
+      scraper. It is NOT in the spec description, but the spec schema accepts
+      any string, so the wiki/BY convention wins (see DD-021).
+
+    If this set needs to change (spec update, new reserved name), this test
+    fails and forces the audit to be redone.
     """
 
     def test_literal_values_match_spec(self):
-        assert {m.value for m in ReservedGremium} == {"plenum", "regierung", "volk"}
+        assert {m.value for m in ReservedGremium} == {
+            "plenum",
+            "regierung",
+            "volk",
+            "gesetzesblatt",
+        }
 
     def test_strenum_is_str_subclass(self):
         # StrEnum members must be str instances so they pass StrictStr validation
