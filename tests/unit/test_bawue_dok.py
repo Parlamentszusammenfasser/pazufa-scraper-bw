@@ -22,6 +22,7 @@ from bawue.bawue_dok import (
     _hash_cache,
     _is_garbled,
     _paragraph_quality_score,
+    _parse_llm_response,
     _parse_page_hint,
     _prompt_fingerprint,
     _prompt_for_doktyp,
@@ -342,7 +343,7 @@ class TestExtractSemantics:
 
     @pytest.mark.asyncio
     async def test_raises_on_invalid_json_from_provider(self):
-        """If provider returns invalid JSON despite response_format, JSONDecodeError is raised."""
+        """If provider returns truly unrecoverable output, JSONDecodeError is re-raised after repair attempt."""
         llm = _make_llm_mock()
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
@@ -353,6 +354,51 @@ class TestExtractSemantics:
             pytest.raises(json.JSONDecodeError),
         ):
             await extract_semantics(llm, SAMPLE_FULL_TEXT, Doktyp.ENTWURF)
+
+
+# ---------------------------------------------------------------------------
+# TestParseLlmResponse
+# ---------------------------------------------------------------------------
+
+
+class TestParseLlmResponse:
+    """Direct tests for the JSON-parsing helper, no LLM mock needed."""
+
+    def test_parses_valid_json(self):
+        result = _parse_llm_response('{"schlagworte": ["a"], "kurztitel": "x"}')
+        assert result == {"schlagworte": ["a"], "kurztitel": "x"}
+
+    def test_repairs_missing_comma_delimiter(self):
+        # Production-shaped defect: missing comma between two fields.
+        # Mirrors the JSONDecodeError pattern observed in gemma4:e4b output.
+        broken = (
+            '{"schlagworte": ["umwelt", "klimaschutz"]'
+            ' "zusammenfassung": "Kurz gefasst.",'
+            ' "kurztitel": "EEG",'
+            ' "trojanergefahr": 3}'
+        )
+        result = _parse_llm_response(broken)
+        assert result["schlagworte"] == ["umwelt", "klimaschutz"]
+        assert result["kurztitel"] == "EEG"
+        assert result["trojanergefahr"] == 3
+
+    def test_repairs_trailing_comma(self):
+        broken = '{"schlagworte": ["a", "b",], "kurztitel": "y", "trojanergefahr": 1,}'
+        result = _parse_llm_response(broken)
+        assert result["schlagworte"] == ["a", "b"]
+        assert result["trojanergefahr"] == 1
+
+    def test_raises_when_content_is_unrepairable_garbage(self):
+        # json-repair returns "" for pure non-JSON input → non-dict → we re-raise.
+        with pytest.raises(json.JSONDecodeError):
+            _parse_llm_response("not json at all")
+
+    def test_raises_when_repair_returns_non_dict(self):
+        # Array-shaped content: json.loads raises (no outer brackets),
+        # json-repair likely yields a list. A list must not silently pass
+        # through to _validate_scores, which assumes a dict.
+        with pytest.raises(json.JSONDecodeError):
+            _parse_llm_response('"a", "b", "c"')
 
 
 # ---------------------------------------------------------------------------

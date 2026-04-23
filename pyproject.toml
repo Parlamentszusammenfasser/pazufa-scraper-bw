@@ -21,6 +21,7 @@ icalendar = ">=7.0"
 certifi = ">=2026.0"
 python-json-logger = "^3.2"
 litellm = ">=1.83.0"
+json-repair = "^0.59"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0"
