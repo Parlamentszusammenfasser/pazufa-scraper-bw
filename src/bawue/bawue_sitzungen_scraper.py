@@ -22,7 +22,7 @@ from bawue.config_loader import load_toml_section
 from bawue.ics_parser import group_events_by_date, parse_ics_feed
 from bawue.notifications import send_mattermost_summary
 from bawue.rate_limiter import create_upload_limiter
-from bawue.run_report import FailedItem, format_duration, format_failed_section
+from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
 from bawue.upload_throttle import with_upload_retry
 
 logger = logging.getLogger(__name__)
@@ -161,18 +161,15 @@ class BawueSitzungenScraper(SitzungsScraper):
                 elif e.status == 401:
                     logger.critical("Authentication failed. Check your API key.")
                 self._failed_dates += 1
-                reason = f"HTTP {e.status} {e.reason or ''}".rstrip()
-                self._failed_items.append(FailedItem(item_id=item[0].date().isoformat(), titel=None, reason=reason))
+                self._failed_items.append(
+                    FailedItem(item_id=item[0].date().isoformat(), titel=None, reason=api_exception_reason(e))
+                )
                 return None
             except Exception as e:
                 logger.error("Unexpected error sending item to API: %s", e)
                 self._failed_dates += 1
                 self._failed_items.append(
-                    FailedItem(
-                        item_id=item[0].date().isoformat(),
-                        titel=None,
-                        reason=f"{type(e).__name__}: {e}",
-                    )
+                    FailedItem(item_id=item[0].date().isoformat(), titel=None, reason=api_exception_reason(e))
                 )
                 return None
 

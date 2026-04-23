@@ -11,6 +11,7 @@ import openapi_client.api.collector_schnittstellen_api
 from openapi_client.models import Vorgang
 
 from bawue.rate_limiter import AdaptiveRateLimiter
+from bawue.run_report import api_exception_reason
 
 logger = logging.getLogger(__name__)
 
@@ -95,23 +96,13 @@ def upload_vorgang(
         return UploadOutcome(vorgang=item)
     except openapi_client.ApiException as e:
         logger.error("API Exception: %s", e)
-        reason = _api_exception_reason(e)
         if e.status == 422:
             logger.error("Unprocessable Entity for Vorgang '%s'", item.titel)
             if log_item:
                 log_item(item, True)
         elif e.status == 401:
             logger.critical("Authentication failed. Check your API key.")
-        return UploadOutcome(vorgang=None, error=reason)
+        return UploadOutcome(vorgang=None, error=api_exception_reason(e))
     except Exception as e:
         logger.error("Unexpected error sending Vorgang to API: %s", e)
-        return UploadOutcome(vorgang=None, error=f"{type(e).__name__}: {e}")
-
-
-def _api_exception_reason(exc: Exception) -> str:
-    """Build a short ``HTTP <status> <reason>`` tag for a run summary."""
-    status = getattr(exc, "status", None)
-    reason = getattr(exc, "reason", None) or ""
-    if status is None:
-        return f"{type(exc).__name__}: {exc}"
-    return f"HTTP {status} {reason}".rstrip()
+        return UploadOutcome(vorgang=None, error=api_exception_reason(e))

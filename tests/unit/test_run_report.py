@@ -1,6 +1,6 @@
 """Tests for run_report helpers (duration formatting, failed item section)."""
 
-from bawue.run_report import FailedItem, format_duration, format_failed_section
+from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
 
 
 class TestFormatDuration:
@@ -69,3 +69,27 @@ class TestFormatFailedSection:
         items = [FailedItem(item_id="S-01", titel=None, reason="r")]
         lines = format_failed_section(items, header="Failed Sitzung dates")
         assert "Failed Sitzung dates (1):" in lines[1]
+
+
+class TestApiExceptionReason:
+    def test_http_status_with_reason(self):
+        exc = type("FakeApiException", (Exception,), {})()
+        exc.status = 422
+        exc.reason = "Unprocessable Entity"
+        assert api_exception_reason(exc) == "HTTP 422 Unprocessable Entity"
+
+    def test_http_status_without_reason(self):
+        exc = type("FakeApiException", (Exception,), {})()
+        exc.status = 500
+        exc.reason = None
+        assert api_exception_reason(exc) == "HTTP 500"
+
+    def test_http_status_with_empty_reason(self):
+        exc = type("FakeApiException", (Exception,), {})()
+        exc.status = 500
+        exc.reason = ""
+        assert api_exception_reason(exc) == "HTTP 500"
+
+    def test_no_status_falls_back_to_type_and_message(self):
+        exc = ValueError("boom")
+        assert api_exception_reason(exc) == "ValueError: boom"

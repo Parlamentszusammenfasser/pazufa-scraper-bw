@@ -17,6 +17,19 @@ class FailedItem:
     reason: str
 
 
+def api_exception_reason(exc: Exception) -> str:
+    """Build a short ``HTTP <status> <reason>`` tag for a run summary.
+
+    Falls back to ``<ExceptionType>: <message>`` when the exception has
+    no ``status`` attribute (i.e. is not an API exception).
+    """
+    status = getattr(exc, "status", None)
+    reason = getattr(exc, "reason", None) or ""
+    if status is None:
+        return f"{type(exc).__name__}: {exc}"
+    return f"HTTP {status} {reason}".rstrip()
+
+
 def format_duration(seconds: float) -> str:
     """Format a duration in seconds as ``Hh MMm SSs`` or ``MMm SSs``.
 
