@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Callable
+from typing import NamedTuple
 from uuid import UUID
 
 import openapi_client
@@ -10,8 +11,21 @@ import openapi_client.api.collector_schnittstellen_api
 from openapi_client.models import Vorgang
 
 from bawue.rate_limiter import AdaptiveRateLimiter
+from bawue.run_report import api_exception_reason
 
 logger = logging.getLogger(__name__)
+
+
+class UploadOutcome(NamedTuple):
+    """Result of an upload attempt.
+
+    ``vorgang`` is the item on success, None on failure.
+    ``error`` is a short human-readable reason on failure (e.g.
+    ``"HTTP 422"``, ``"ConnectionError: ..."``), used for run reports.
+    """
+
+    vorgang: Vorgang | None
+    error: str | None = None
 
 
 def with_upload_retry[T](
@@ -56,11 +70,12 @@ def upload_vorgang(
     *,
     dry_run: bool = False,
     log_item: Callable | None = None,
-) -> Vorgang | None:
+) -> UploadOutcome:
     """Upload a Vorgang to the PaZuFa API with retry and error handling.
 
-    Returns the item on success, None on failure.
-    Raises nothing — errors are logged and swallowed.
+    Returns an ``UploadOutcome`` with the item on success, or a short
+    error reason on failure. Raises nothing — errors are logged and the
+    reason is returned so the caller can report it.
     """
     logger.info("Sending Vorgang '%s' (id=%s) to API", item.titel, item.api_id)
     if log_item:
@@ -68,7 +83,7 @@ def upload_vorgang(
 
     if dry_run:
         logger.info("[DRY RUN] Would send Vorgang '%s' — skipping API call", item.titel)
-        return item
+        return UploadOutcome(vorgang=item)
 
     try:
         with openapi_client.ApiClient(oapiconfig) as api_client:
@@ -78,7 +93,7 @@ def upload_vorgang(
                 upload_limiter,
                 exception_type=openapi_client.ApiException,
             )
-        return item
+        return UploadOutcome(vorgang=item)
     except openapi_client.ApiException as e:
         logger.error("API Exception: %s", e)
         if e.status == 422:
@@ -87,7 +102,7 @@ def upload_vorgang(
                 log_item(item, True)
         elif e.status == 401:
             logger.critical("Authentication failed. Check your API key.")
-        return None
+        return UploadOutcome(vorgang=None, error=api_exception_reason(e))
     except Exception as e:
         logger.error("Unexpected error sending Vorgang to API: %s", e)
-        return None
+        return UploadOutcome(vorgang=None, error=api_exception_reason(e))

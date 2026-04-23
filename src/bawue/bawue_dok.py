@@ -51,13 +51,15 @@ class LLMMetrics:
         return self.success + self.failed + self.cache_hits
 
     def format_lines(self) -> list[str]:
+        total = self.total
+        ratio_suffix = f" ({self.cache_hits / total:.0%})" if total > 0 else ""
         return [
             "",
             "LLM enrichment:",
             f"  Success:     {self.success}",
             f"  Failed:      {self.failed}",
-            f"  Cache hits:  {self.cache_hits}",
-            f"  Total:       {self.total}",
+            f"  Cache hits:  {self.cache_hits}{ratio_suffix}",
+            f"  Total:       {total}",
         ]
 
 

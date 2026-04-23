@@ -1159,6 +1159,21 @@ class TestLLMMetrics:
         assert any("10" in line for line in lines)
         assert any("cache" in line.lower() for line in lines)
 
+    def test_format_lines_includes_cache_hit_ratio(self):
+        m = LLMMetrics()
+        m.success = 3
+        m.failed = 0
+        m.cache_hits = 1  # 1 / 4 = 25%
+        lines = m.format_lines()
+        cache_line = next(line for line in lines if "Cache hits" in line)
+        assert "25%" in cache_line
+
+    def test_format_lines_ratio_omitted_when_no_calls(self):
+        m = LLMMetrics()
+        lines = m.format_lines()
+        cache_line = next(line for line in lines if "Cache hits" in line)
+        assert "%" not in cache_line
+
     def test_above_threshold_is_garbled(self):
         """Just above the threshold should be flagged."""
         # 80 clean ASCII alpha chars + 20 Latin Extended = 20/100 = 20% (above 5%)

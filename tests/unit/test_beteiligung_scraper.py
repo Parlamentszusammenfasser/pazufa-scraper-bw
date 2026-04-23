@@ -33,6 +33,7 @@ def _make_scraper():
     scraper._published = 0
     scraper._failed = 0
     scraper._skipped = 0
+    scraper._failed_items = []
     scraper._llm_enabled = False
     scraper._llm = None
     scraper._llm_metrics = LLMMetrics()
@@ -451,6 +452,53 @@ class TestRunSummary:
 
         captured = capsys.readouterr()
         assert "=== BaWue Beteiligung Run Summary ===" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_summary_duration_is_human_readable(self, capsys):
+        scraper = _make_scraper()
+
+        with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        duration_line = next(line for line in captured.out.splitlines() if "Duration" in line)
+        assert "Duration: 0m 00s" in duration_line
+
+    @pytest.mark.asyncio
+    async def test_summary_lists_failed_vorgaenge_with_reason(self, capsys):
+        import openapi_client as real_oapi
+
+        scraper = _make_scraper()
+        mock_config = MagicMock()
+        mock_config.dry_run = False
+        scraper.config = mock_config
+        scraper.scraper_id = "test-scraper-id"
+
+        item = MagicMock()
+        item.api_id = "deadbeef"
+        item.kurztitel = "klima-slug"
+        item.titel = "Klimaschutzgesetz"
+
+        with patch("bawue.upload_throttle.openapi_client") as mock_oapi:
+            mock_oapi.ApiException = real_oapi.ApiException
+            mock_oapi.ApiClient.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_oapi.ApiClient.return_value.__exit__ = MagicMock(return_value=False)
+            mock_api_instance = MagicMock()
+            mock_api_instance.vorgang_put.side_effect = real_oapi.ApiException(
+                status=422, reason="Unprocessable Entity"
+            )
+            mock_oapi.api.collector_schnittstellen_api.CollectorSchnittstellenApi.return_value = mock_api_instance
+            await scraper.send_result(item)
+
+        with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Failed Vorgänge" in captured.out
+        failed_block = captured.out.split("Failed Vorgänge", 1)[1]
+        assert "klima-slug" in failed_block
+        assert "Klimaschutzgesetz" in failed_block
+        assert "422" in failed_block
 
 
 class TestRunDurationLog:

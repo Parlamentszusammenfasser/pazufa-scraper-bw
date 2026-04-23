@@ -387,6 +387,7 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     scraper._failed = 0
     scraper._skipped = 0
     scraper._by_type = {}
+    scraper._failed_items = []
     scraper._upload_limiter = AdaptiveRateLimiter(
         initial_delay=0.2, min_delay=0.05, backoff_multiplier=10.0, recovery_factor=0.5
     )
@@ -799,6 +800,56 @@ class TestRunSummary:
         captured = capsys.readouterr()
         assert "=== BaWue Vorgänge Run Summary ===" in captured.out
 
+    @pytest.mark.asyncio
+    async def test_summary_duration_is_human_readable(self, capsys):
+        scraper = _make_scraper_with_mock_parlis()
+
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
+            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+        ):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        # no raw seconds-with-dot format ("23045.7s") in the summary
+        duration_line = next(line for line in captured.out.splitlines() if "Duration" in line)
+        assert "Duration: 0m 00s" in duration_line
+
+    @pytest.mark.asyncio
+    async def test_summary_lists_failed_vorgaenge_with_id_title_and_reason(self, capsys):
+        import openapi_client as real_oapi
+
+        scraper = _make_scraper_with_mock_parlis()
+
+        item = MagicMock()
+        item.api_id = "aabbccdd"
+        item.kurztitel = "V-500"
+        item.titel = "Klimaschutzgesetz 2026"
+
+        with patch("bawue.upload_throttle.openapi_client") as mock_oapi:
+            mock_oapi.ApiException = real_oapi.ApiException
+            mock_oapi.ApiClient.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_oapi.ApiClient.return_value.__exit__ = MagicMock(return_value=False)
+            mock_api_instance = MagicMock()
+            mock_api_instance.vorgang_put.side_effect = real_oapi.ApiException(
+                status=422, reason="Unprocessable Entity"
+            )
+            mock_oapi.api.collector_schnittstellen_api.CollectorSchnittstellenApi.return_value = mock_api_instance
+            await scraper.send_result(item)
+
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
+            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+        ):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Failed Vorgänge" in captured.out
+        failed_block = captured.out.split("Failed Vorgänge", 1)[1]
+        assert "V-500" in failed_block
+        assert "Klimaschutzgesetz 2026" in failed_block
+        assert "422" in failed_block
+
 
 class TestRunDurationLog:
     @pytest.mark.asyncio
@@ -811,6 +862,7 @@ class TestRunDurationLog:
         scraper._failed = 0
         scraper._skipped = 0
         scraper._by_type = {}
+        scraper._failed_items = []
         scraper._llm_enabled = False
         scraper._llm_metrics = LLMMetrics()
 
@@ -833,6 +885,7 @@ class TestRunDurationLog:
         scraper._failed = 0
         scraper._skipped = 0
         scraper._by_type = {}
+        scraper._failed_items = []
         scraper._llm_enabled = False
         scraper._llm_metrics = LLMMetrics()
 
