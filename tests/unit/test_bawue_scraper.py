@@ -1251,8 +1251,13 @@ class TestStationMerging:
         assert vorgang.stationen[1].typ == Stationstyp.PARL_MINUS_VOLLVLSGN
 
     @pytest.mark.asyncio
-    async def test_vollvlsgn_not_merged_even_without_documents(self, scraper_build_vorgang):
-        """Plenary readings are never merged, regardless of document presence (DD-004)."""
+    async def test_vollvlsgn_same_typ_text_different_days_merged(self, scraper_build_vorgang):
+        """Two 'Erste Beratung' fundstellen on different days → 1 station spanning both (DD-024).
+
+        Supersedes earlier DD-004 "never merge" rule for same-round fundstellen.
+        Different reading labels (Erste vs Zweite vs Überweisung) stay separate — see
+        other tests in this class. Same label = same reading round = merge.
+        """
         raw = _make_raw_vorgang(
             "V-805",
             fundstellen=[
@@ -1268,13 +1273,216 @@ class TestStationMerging:
                     "datum": "06.02.2026",
                     "plenarprotokoll": "17/142",
                     "station_typ": "Erste Beratung",
-                    "pdf_url": "",
+                    "pdf_url": "https://example.com/pp142.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        station = vorgang.stationen[0]
+        assert station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+        assert station.zp_start == datetime(2026, 2, 5, tzinfo=UTC)
+        assert station.zp_modifiziert == datetime(2026, 2, 6, tzinfo=UTC)
+        assert len(station.dokumente) == 2
+
+    @pytest.mark.asyncio
+    async def test_vollvlsgn_same_typ_text_same_day_merged(self, scraper_build_vorgang):
+        """Two 'Zweite Beratung' fundstellen on the same day (PARLIS duplicate) → 1 station."""
+        raw = _make_raw_vorgang(
+            "V-812",
+            fundstellen=[
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/160 18.12.2024",
+                    "datum": "18.12.2024",
+                    "plenarprotokoll": "17/160",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/pp160a.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/160 18.12.2024",
+                    "datum": "18.12.2024",
+                    "plenarprotokoll": "17/160",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/pp160b.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        station = vorgang.stationen[0]
+        assert station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+        assert station.zp_start == datetime(2024, 12, 18, tzinfo=UTC)
+        # Same-day merge: zp_modifiziert stays unset (no temporal extension)
+        assert station.zp_modifiziert is None or station.zp_modifiziert == station.zp_start
+        assert len(station.dokumente) == 2
+
+    @pytest.mark.asyncio
+    async def test_vollvlsgn_three_same_typ_merged(self, scraper_build_vorgang):
+        """Three 'Zweite Beratung' fundstellen on consecutive days (budget Einzelplan pattern) → 1 station."""
+        raw = _make_raw_vorgang(
+            "V-813",
+            fundstellen=[
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/150 15.12.2021",
+                    "datum": "15.12.2021",
+                    "plenarprotokoll": "17/150",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/pp150.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/151 16.12.2021",
+                    "datum": "16.12.2021",
+                    "plenarprotokoll": "17/151",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/pp151.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/152 17.12.2021",
+                    "datum": "17.12.2021",
+                    "plenarprotokoll": "17/152",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/pp152.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        station = vorgang.stationen[0]
+        assert station.zp_start == datetime(2021, 12, 15, tzinfo=UTC)
+        assert station.zp_modifiziert == datetime(2021, 12, 17, tzinfo=UTC)
+        assert len(station.dokumente) == 3
+
+    @pytest.mark.asyncio
+    async def test_vollvlsgn_empty_station_typ_not_merged(self, scraper_build_vorgang):
+        """Two VOLLVLSGN fundstellen with empty station_typ → not merged (defensive guard).
+
+        An empty label is not a reliable same-round signal; fall back to the safe default
+        of keeping stations separate (DD-024).
+        """
+        raw = _make_raw_vorgang(
+            "V-814",
+            fundstellen=[
+                {
+                    "raw": "Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "",
+                    "pdf_url": "https://example.com/pp141.pdf",
+                },
+                {
+                    "raw": "Beratung   Plenarprotokoll 17/142 06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/142",
+                    "station_typ": "",
+                    "pdf_url": "https://example.com/pp142.pdf",
                 },
             ],
         )
         vorgang = await scraper_build_vorgang(raw)
 
         assert len(vorgang.stationen) == 2
+        assert all(s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN for s in vorgang.stationen)
+
+    @pytest.mark.asyncio
+    async def test_staatshaushaltsgesetz_consolidation_end_to_end(self, scraper_build_vorgang):
+        """Mirror the staging-run Staatshaushaltsgesetz failure pattern: rounds consolidate to ≤3 V stations.
+
+        Input: 2 Erste, 1 Ausschuss, 3 Zweite (Einzelplan days), 1 Dritte, Gesetzesbeschluss, Gesetzblatt.
+        Expected: Erste (merged) → A → Zweite (merged) → Dritte → J → G — three V stations total,
+        satisfying the gg-land-parl track regex which allows at most V A* V A* V.
+        """
+        raw = _make_raw_vorgang(
+            "V-815",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/140 27.10.2021",
+                    "datum": "27.10.2021",
+                    "plenarprotokoll": "17/140",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/sthg_erste_1.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/142 10.11.2021",
+                    "datum": "10.11.2021",
+                    "plenarprotokoll": "17/142",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/sthg_erste_2.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  03.12.2021 Drucksache 17/1500",
+                    "datum": "03.12.2021",
+                    "drucksache": "17/1500",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/sthg_ausschber.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/150 15.12.2021",
+                    "datum": "15.12.2021",
+                    "plenarprotokoll": "17/150",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/sthg_zweite_1.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/151 16.12.2021",
+                    "datum": "16.12.2021",
+                    "plenarprotokoll": "17/151",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/sthg_zweite_2.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/152 17.12.2021",
+                    "datum": "17.12.2021",
+                    "plenarprotokoll": "17/152",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/sthg_zweite_3.pdf",
+                },
+                {
+                    "raw": "Dritte Beratung   Plenarprotokoll 17/153 22.12.2021",
+                    "datum": "22.12.2021",
+                    "plenarprotokoll": "17/153",
+                    "station_typ": "Dritte Beratung",
+                    "pdf_url": "https://example.com/sthg_dritte.pdf",
+                },
+                {
+                    "raw": "Gesetzesbeschluss des Landtags      22.12.2021 Drucksache 17/1600",
+                    "datum": "22.12.2021",
+                    "drucksache": "17/1600",
+                    "station_typ": "Gesetzesbeschluss",
+                    "pdf_url": "https://example.com/sthg_beschluss.pdf",
+                },
+                {
+                    "raw": "Gesetzblatt   Nr. 1  01.01.2022",
+                    "datum": "01.01.2022",
+                    "station_typ": "Gesetzblatt",
+                    "pdf_url": "https://example.com/sthg_gbl.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        vollvlsgn_stationen = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN]
+        assert len(vollvlsgn_stationen) == 3, (
+            f"Expected exactly 3 plenary-reading stations (Erste/Zweite/Dritte merged per round), "
+            f"got {len(vollvlsgn_stationen)}"
+        )
+        # Erste Beratung: merged across 27.10 and 10.11
+        erste = vollvlsgn_stationen[0]
+        assert erste.zp_start == datetime(2021, 10, 27, tzinfo=UTC)
+        assert erste.zp_modifiziert == datetime(2021, 11, 10, tzinfo=UTC)
+        assert len(erste.dokumente) == 2
+        # Zweite Beratung: merged across 15.-17.12
+        zweite = vollvlsgn_stationen[1]
+        assert zweite.zp_start == datetime(2021, 12, 15, tzinfo=UTC)
+        assert zweite.zp_modifiziert == datetime(2021, 12, 17, tzinfo=UTC)
+        assert len(zweite.dokumente) == 3
+        # Dritte Beratung: single day
+        dritte = vollvlsgn_stationen[2]
+        assert dritte.zp_start == datetime(2021, 12, 22, tzinfo=UTC)
+        assert len(dritte.dokumente) == 1
 
 
 class TestStellungnahmenAsChildren:
