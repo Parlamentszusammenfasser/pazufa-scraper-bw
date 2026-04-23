@@ -353,6 +353,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         stationen: list[Station] = []
         pending_aenderungsantraege: list[list[StationDokumenteInner]] = []
         seen_ausschber = False
+        last_station_typ_str = ""
         for fund in fundstellen:
             station = await self._build_station(fund, initiative)
             if station is None:
@@ -397,10 +398,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 )
                 continue
 
-            if self._try_merge_station(stationen, station):
+            if self._try_merge_station(stationen, station, station_typ_str, last_station_typ_str):
                 continue
 
             stationen.append(station)
+            last_station_typ_str = station_typ_str
 
             if station.typ == Stationstyp.PARL_MINUS_AUSSCHBER:
                 seen_ausschber = True
@@ -524,24 +526,67 @@ class BawueVorgaengeScraper(VorgangsScraper):
             )
 
     @staticmethod
-    def _try_merge_station(stationen: list[Station], station: Station) -> bool:
-        """Try to merge a station into an existing one. Returns True if merged."""
-        if station.typ == Stationstyp.PARL_MINUS_AUSSCHBER:
-            match = BawueVorgaengeScraper._find_matching_ausschuss(stationen, station.gremium.name)
-        elif (
-            stationen
-            and stationen[-1].typ == station.typ
-            and stationen[-1].gremium.name == station.gremium.name
-            and station.typ != Stationstyp.PARL_MINUS_VOLLVLSGN
-        ):
-            match = stationen[-1]
-        else:
-            match = None
+    def _try_merge_station(
+        stationen: list[Station],
+        station: Station,
+        station_typ_str: str,
+        last_station_typ_str: str,
+    ) -> bool:
+        """Merge ``station`` into an existing entry in ``stationen`` if possible.
 
-        if match is not None:
-            match.dokumente.extend(station.dokumente)
-            return True
-        return False
+        Returns True iff a merge happened (caller should skip appending the new
+        station). The merge rules are type-specific — see ``_find_merge_target``
+        for the dispatch.
+        """
+        target = BawueVorgaengeScraper._find_merge_target(stationen, station, station_typ_str, last_station_typ_str)
+        if target is None:
+            return False
+        BawueVorgaengeScraper._merge_into(target, station)
+        return True
+
+    @staticmethod
+    def _find_merge_target(
+        stationen: list[Station],
+        station: Station,
+        station_typ_str: str,
+        last_station_typ_str: str,
+    ) -> Station | None:
+        """Locate the existing Station that ``station`` should merge into, or None.
+
+        Dispatches on ``station.typ``:
+          - PARL_MINUS_AUSSCHBER: scan backwards for same committee, stop at plenary.
+          - PARL_MINUS_VOLLVLSGN: last appended station, but only if its raw PARLIS
+            ``station_typ`` text describes the same reading round (DD-024).
+          - Everything else: last appended station with same ``typ`` + gremium.
+        """
+        if station.typ == Stationstyp.PARL_MINUS_AUSSCHBER:
+            return BawueVorgaengeScraper._find_matching_ausschuss(stationen, station.gremium.name)
+
+        if not stationen:
+            return None
+        last = stationen[-1]
+        if last.typ != station.typ or last.gremium.name != station.gremium.name:
+            return None
+
+        if station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN and not _same_round_label(
+            station_typ_str, last_station_typ_str
+        ):
+            return None
+
+        return last
+
+    @staticmethod
+    def _merge_into(target: Station, station: Station) -> None:
+        """Fold ``station`` into ``target`` in place.
+
+        Always extends ``dokumente``. For plenary-reading consolidation, also
+        widens the temporal span ``[zp_start, zp_modifiziert]`` to cover the new
+        fundstelle's date (DD-024 — supports multi-day reading rounds like the
+        Staatshaushaltsgesetz Einzelplan debates).
+        """
+        target.dokumente.extend(station.dokumente)
+        if target.typ == Stationstyp.PARL_MINUS_VOLLVLSGN:
+            _widen_span(target, station.zp_start)
 
     @staticmethod
     def _find_matching_ausschuss(stationen: list[Station], gremium_name: str) -> Station | None:
@@ -742,6 +787,32 @@ def _dedup_drucks(doks: list[StationDokumenteInner]) -> list[StationDokumenteInn
             seen_drucksnr.add(drucksnr)
         unique.append(d)
     return unique
+
+
+def _same_round_label(a: str, b: str) -> bool:
+    """Two PARLIS ``station_typ`` labels refer to the same reading round (DD-024).
+
+    Comparison is case-insensitive and whitespace-trimmed. An empty label on
+    either side is *not* a reliable round signal and returns False — this is
+    the defensive default that keeps stations separate when the parser could
+    not extract a label.
+    """
+    norm_a = a.strip().casefold()
+    return norm_a != "" and norm_a == b.strip().casefold()
+
+
+def _widen_span(station: Station, new_date: datetime) -> None:
+    """Extend ``station``'s ``[zp_start, zp_modifiziert]`` range to include ``new_date``.
+
+    Used when consolidating multi-day reading rounds into a single Station
+    (DD-024). ``zp_modifiziert`` is set only when ``new_date`` extends the
+    range strictly past the current end; it stays ``None`` for same-day merges.
+    """
+    if new_date < station.zp_start:
+        station.zp_start = new_date
+    current_end = station.zp_modifiziert or station.zp_start
+    if new_date > current_end:
+        station.zp_modifiziert = new_date
 
 
 # -- Run summary ------------------------------------------------------------------
