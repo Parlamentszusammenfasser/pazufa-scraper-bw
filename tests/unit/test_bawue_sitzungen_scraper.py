@@ -35,6 +35,7 @@ def _make_scraper() -> BawueSitzungenScraper:
     scraper._published_dates = 0
     scraper._failed_dates = 0
     scraper._published_sitzungen = 0
+    scraper._failed_items = []
     return scraper
 
 
@@ -293,6 +294,34 @@ class TestSendResult:
         assert any("Authentication failed" in msg for msg in caplog.messages)
 
     @pytest.mark.asyncio
+    async def test_send_result_records_failed_item_with_reason(self):
+        scraper = _make_scraper()
+        scraper.config = MagicMock()
+        scraper.log_item = MagicMock()
+
+        exc = openapi_client.ApiException(status=500, reason="Internal Server Error")
+        mock_api_instance = MagicMock()
+        mock_api_instance.kal_date_put = MagicMock(side_effect=exc)
+
+        with (
+            patch("bawue.bawue_sitzungen_scraper.openapi_client.ApiClient") as mock_client_cls,
+            patch(
+                "bawue.bawue_sitzungen_scraper.openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi",
+                return_value=mock_api_instance,
+            ),
+        ):
+            mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client_cls.return_value)
+            mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+            item = (datetime.datetime(2026, 3, 12, 10, 0, tzinfo=datetime.UTC), [])
+            await scraper.send_result(item)
+
+        assert len(scraper._failed_items) == 1
+        failed = scraper._failed_items[0]
+        assert failed.item_id == "2026-03-12"
+        assert "500" in failed.reason
+
+    @pytest.mark.asyncio
     async def test_send_result_unexpected_exception_returns_none(self, caplog):
         scraper = _make_scraper()
         scraper.config = MagicMock()
@@ -379,6 +408,36 @@ class TestRunSummary:
 
         captured = capsys.readouterr()
         assert "=== BaWue Sitzungen Run Summary ===" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_summary_duration_is_human_readable(self, capsys):
+        scraper = _make_scraper()
+
+        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        duration_line = next(line for line in captured.out.splitlines() if "Duration" in line)
+        assert "Duration: 0m 00s" in duration_line
+
+    @pytest.mark.asyncio
+    async def test_summary_lists_failed_dates_with_reason(self, capsys):
+        from bawue.run_report import FailedItem
+
+        scraper = _make_scraper()
+        scraper._failed_dates = 1
+        scraper._failed_items = [
+            FailedItem(item_id="2026-03-12", titel=None, reason="HTTP 500 Internal Server Error"),
+        ]
+
+        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
+            await scraper.run()
+
+        captured = capsys.readouterr()
+        assert "Failed Sitzung dates" in captured.out
+        failed_block = captured.out.split("Failed Sitzung dates", 1)[1]
+        assert "2026-03-12" in failed_block
+        assert "500" in failed_block
 
 
 class TestRunDurationLog:

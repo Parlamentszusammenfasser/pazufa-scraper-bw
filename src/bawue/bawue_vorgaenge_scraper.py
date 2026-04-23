@@ -31,6 +31,7 @@ from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.notifications import send_mattermost_summary
 from bawue.parlis_client import ParlisClient
 from bawue.rate_limiter import create_upload_limiter
+from bawue.run_report import FailedItem, format_duration, format_failed_section
 from bawue.types import (
     RawFundstelle,
     RawVorgang,
@@ -113,6 +114,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._failed: int = 0
         self._skipped: int = 0
         self._by_type: dict[str, int] = {}
+        self._failed_items: list[FailedItem] = []
 
         # LLM document enrichment (optional, requires LLM_PROVIDER_KEY or LLM_PROVIDER_BASE_URL)
         llm_key = getattr(config, "llm_provider_key", None)
@@ -150,11 +152,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 self._failed,
                 duration,
                 self._llm_metrics if self._llm_enabled else None,
+                self._failed_items,
             )
             send_mattermost_summary(self.config, "BaWue Vorgänge Run Summary", lines)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
-        result = upload_vorgang(
+        outcome = upload_vorgang(
             self.config.oapiconfig,
             self.scraper_id,
             self._upload_limiter,
@@ -162,11 +165,18 @@ class BawueVorgaengeScraper(VorgangsScraper):
             dry_run=self.config.dry_run,
             log_item=self.log_item,
         )
-        if result is not None:
+        if outcome.vorgang is not None:
             self._published += 1
         else:
             self._failed += 1
-        return result
+            self._failed_items.append(
+                FailedItem(
+                    item_id=str(item.kurztitel or item.api_id),
+                    titel=item.titel,
+                    reason=outcome.error or "unknown error",
+                )
+            )
+        return outcome.vorgang
 
     async def listing_page_extractor(self, vorgangstyp: str) -> list[str]:
         """Search PARLIS for a given Vorgangstyp and return vorgang IDs.
@@ -745,10 +755,11 @@ def _print_vorgaenge_summary(
     failed: int,
     duration: float,
     llm_metrics: LLMMetrics | None = None,
+    failed_items: list[FailedItem] | None = None,
 ) -> list[str]:
     discovered = sum(by_type.values())
     lines = [
-        f"Wahlperiode: {wahlperiode} | Duration: {duration:.1f}s",
+        f"Wahlperiode: {wahlperiode} | Duration: {format_duration(duration)}",
         f"Discovered:  {discovered}",
         f"Published:   {published}",
         f"Skipped:     {skipped}",
@@ -761,6 +772,8 @@ def _print_vorgaenge_summary(
             lines.append(f"  {typ}:  {count}")
     if llm_metrics is not None and llm_metrics.total > 0:
         lines.extend(llm_metrics.format_lines())
+    if failed_items:
+        lines.extend(format_failed_section(failed_items, header="Failed Vorgänge"))
     print("=== BaWue Vorgänge Run Summary ===\n" + "\n".join(lines))
     return lines
 

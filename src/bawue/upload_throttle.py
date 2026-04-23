@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Callable
+from typing import NamedTuple
 from uuid import UUID
 
 import openapi_client
@@ -12,6 +13,18 @@ from openapi_client.models import Vorgang
 from bawue.rate_limiter import AdaptiveRateLimiter
 
 logger = logging.getLogger(__name__)
+
+
+class UploadOutcome(NamedTuple):
+    """Result of an upload attempt.
+
+    ``vorgang`` is the item on success, None on failure.
+    ``error`` is a short human-readable reason on failure (e.g.
+    ``"HTTP 422"``, ``"ConnectionError: ..."``), used for run reports.
+    """
+
+    vorgang: Vorgang | None
+    error: str | None = None
 
 
 def with_upload_retry[T](
@@ -56,11 +69,12 @@ def upload_vorgang(
     *,
     dry_run: bool = False,
     log_item: Callable | None = None,
-) -> Vorgang | None:
+) -> UploadOutcome:
     """Upload a Vorgang to the PaZuFa API with retry and error handling.
 
-    Returns the item on success, None on failure.
-    Raises nothing — errors are logged and swallowed.
+    Returns an ``UploadOutcome`` with the item on success, or a short
+    error reason on failure. Raises nothing — errors are logged and the
+    reason is returned so the caller can report it.
     """
     logger.info("Sending Vorgang '%s' (id=%s) to API", item.titel, item.api_id)
     if log_item:
@@ -68,7 +82,7 @@ def upload_vorgang(
 
     if dry_run:
         logger.info("[DRY RUN] Would send Vorgang '%s' — skipping API call", item.titel)
-        return item
+        return UploadOutcome(vorgang=item)
 
     try:
         with openapi_client.ApiClient(oapiconfig) as api_client:
@@ -78,16 +92,26 @@ def upload_vorgang(
                 upload_limiter,
                 exception_type=openapi_client.ApiException,
             )
-        return item
+        return UploadOutcome(vorgang=item)
     except openapi_client.ApiException as e:
         logger.error("API Exception: %s", e)
+        reason = _api_exception_reason(e)
         if e.status == 422:
             logger.error("Unprocessable Entity for Vorgang '%s'", item.titel)
             if log_item:
                 log_item(item, True)
         elif e.status == 401:
             logger.critical("Authentication failed. Check your API key.")
-        return None
+        return UploadOutcome(vorgang=None, error=reason)
     except Exception as e:
         logger.error("Unexpected error sending Vorgang to API: %s", e)
-        return None
+        return UploadOutcome(vorgang=None, error=f"{type(e).__name__}: {e}")
+
+
+def _api_exception_reason(exc: Exception) -> str:
+    """Build a short ``HTTP <status> <reason>`` tag for a run summary."""
+    status = getattr(exc, "status", None)
+    reason = getattr(exc, "reason", None) or ""
+    if status is None:
+        return f"{type(exc).__name__}: {exc}"
+    return f"HTTP {status} {reason}".rstrip()

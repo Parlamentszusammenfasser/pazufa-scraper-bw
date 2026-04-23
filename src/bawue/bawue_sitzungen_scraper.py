@@ -22,6 +22,7 @@ from bawue.config_loader import load_toml_section
 from bawue.ics_parser import group_events_by_date, parse_ics_feed
 from bawue.notifications import send_mattermost_summary
 from bawue.rate_limiter import create_upload_limiter
+from bawue.run_report import FailedItem, format_duration, format_failed_section
 from bawue.upload_throttle import with_upload_retry
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class BawueSitzungenScraper(SitzungsScraper):
         self._published_dates: int = 0
         self._failed_dates: int = 0
         self._published_sitzungen: int = 0
+        self._failed_items: list[FailedItem] = []
 
     async def run(self) -> None:
         start = time.monotonic()
@@ -61,7 +63,12 @@ class BawueSitzungenScraper(SitzungsScraper):
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
             lines = _print_sitzungen_summary(
-                self._total_dates, self._published_dates, self._failed_dates, self._published_sitzungen, duration
+                self._total_dates,
+                self._published_dates,
+                self._failed_dates,
+                self._published_sitzungen,
+                duration,
+                self._failed_items,
             )
             send_mattermost_summary(self.config, "BaWue Sitzungen Run Summary", lines)
 
@@ -154,10 +161,19 @@ class BawueSitzungenScraper(SitzungsScraper):
                 elif e.status == 401:
                     logger.critical("Authentication failed. Check your API key.")
                 self._failed_dates += 1
+                reason = f"HTTP {e.status} {e.reason or ''}".rstrip()
+                self._failed_items.append(FailedItem(item_id=item[0].date().isoformat(), titel=None, reason=reason))
                 return None
             except Exception as e:
                 logger.error("Unexpected error sending item to API: %s", e)
                 self._failed_dates += 1
+                self._failed_items.append(
+                    FailedItem(
+                        item_id=item[0].date().isoformat(),
+                        titel=None,
+                        reason=f"{type(e).__name__}: {e}",
+                    )
+                )
                 return None
 
 
@@ -167,13 +183,16 @@ def _print_sitzungen_summary(
     failed_dates: int,
     published_sitzungen: int,
     duration: float,
+    failed_items: list[FailedItem] | None = None,
 ) -> list[str]:
     lines = [
-        f"Duration: {duration:.1f}s",
+        f"Duration: {format_duration(duration)}",
         f"Dates found:      {total_dates}",
         f"Dates published:  {published_dates}",
         f"Dates failed:     {failed_dates}",
         f"Total sitzungen:  {published_sitzungen}",
     ]
+    if failed_items:
+        lines.extend(format_failed_section(failed_items, header="Failed Sitzung dates"))
     print("=== BaWue Sitzungen Run Summary ===\n" + "\n".join(lines))
     return lines
