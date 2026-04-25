@@ -15,8 +15,9 @@ steps:
     environment:
       DEBIAN_FRONTEND: noninteractive
     commands:
-      - pip install --quiet "pip>=26.0" poetry poetry-plugin-export pip-audit
-      - poetry export -f requirements.txt --without-hashes --only main -o /tmp/requirements.txt
+      - pip install --quiet "pip>=26.0" pip-audit
+      # Parse poetry.lock directly — no need to resolve local path deps
+      - python3 -c "import tomllib; data=tomllib.load(open('poetry.lock','rb')); open('/tmp/requirements.txt','w').write('\n'.join(f\"{p['name']}=={p['version']}\" for p in data.get('package',[]) if p.get('source',{}).get('type')!='directory'))"
       - pip-audit -r /tmp/requirements.txt
 
   - name: ruff-lint
