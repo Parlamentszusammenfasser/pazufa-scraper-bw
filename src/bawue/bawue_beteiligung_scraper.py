@@ -78,7 +78,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         self._llm_model = config.llm_model
         self._llm_truncate_tokens = int(llm_config.get("truncate-tokens", 12000))
         if self._llm_enabled:
-            from collector_core import LLMConnector
+            from corelib.llm import LLMConnector
 
             self._llm = LLMConnector(
                 model=config.llm_model,

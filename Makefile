@@ -1,4 +1,5 @@
 VENV := .venv/bin
+PYTHON := $(shell command -v python3.13 2>/dev/null || echo /opt/homebrew/bin/python3.13)
 
 .PHONY: help install test test-cov test-all test-integration lint lint-fix format run package clean
 
@@ -6,11 +7,17 @@ help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install all dependencies and vendor collector libs
-	python3.14 -m venv .venv
+	$(PYTHON) -m venv .venv
 	$(VENV)/pip install --upgrade pip poetry
 	mkdir -p vendor
-	rsync -a --exclude .git --ignore-existing ../pazufa-collector vendor/
-	rsync -a --exclude .git --ignore-existing ../pazufa-collector-core vendor/
+	rsync -a --exclude .git --exclude __pycache__ --exclude .venv ../pazufa-collector vendor/
+	rsync -a --exclude .git --exclude __pycache__ --exclude .venv ../pazufa-scraper-core vendor/
+	@if [ ! -d "../pazufa-collector/oapicode" ]; then \
+		echo "Generating oapicode from OpenAPI spec..."; \
+		cd ../pazufa-collector && npx --yes @openapitools/openapi-generator-cli generate \
+			-i openapi.yml -g python -o oapicode; \
+	fi
+	$(VENV)/poetry lock --check 2>/dev/null || $(VENV)/poetry lock --regenerate
 	$(VENV)/poetry install
 
 test: ## Run unit tests

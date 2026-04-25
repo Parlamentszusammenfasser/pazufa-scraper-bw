@@ -23,7 +23,7 @@ import aiohttp
 import certifi
 import litellm
 from collector.scrapercache import ScraperCache
-from collector_core import LLMConnector
+from corelib.llm import LLMConnector
 from json_repair import repair_json
 from kreuzberg import ExtractionConfig, OcrConfig, PageConfig, extract_file
 from openapi_client.models.doktyp import Doktyp

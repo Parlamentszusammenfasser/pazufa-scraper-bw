@@ -39,7 +39,7 @@ class TestVorgaengeScraperOllamaInit:
 
         with (
             patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.__init__", return_value=None),
-            patch("collector_core.LLMConnector") as mock_llm_cls,
+            patch("corelib.llm.LLMConnector") as mock_llm_cls,
         ):
             scraper = BawueVorgaengeScraper(config, MagicMock())
 
@@ -61,7 +61,7 @@ class TestVorgaengeScraperOllamaInit:
 
         with (
             patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.__init__", return_value=None),
-            patch("collector_core.LLMConnector") as mock_llm_cls,
+            patch("corelib.llm.LLMConnector") as mock_llm_cls,
         ):
             scraper = BawueVorgaengeScraper(config, MagicMock())
 
@@ -93,7 +93,7 @@ class TestVorgaengeScraperOllamaInit:
 
         with (
             patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.__init__", return_value=None),
-            patch("collector_core.LLMConnector") as mock_llm_cls,
+            patch("corelib.llm.LLMConnector") as mock_llm_cls,
         ):
             scraper = BawueVorgaengeScraper(config, MagicMock())
 
@@ -117,7 +117,7 @@ class TestBeteiligungScraperOllamaInit:
         with (
             patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.__init__", return_value=None),
             patch("bawue.bawue_beteiligung_scraper.BeteiligungClient"),
-            patch("collector_core.LLMConnector") as mock_llm_cls,
+            patch("corelib.llm.LLMConnector") as mock_llm_cls,
         ):
             scraper = BawueBeteiligungScraper(config, MagicMock())
 

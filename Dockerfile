@@ -1,5 +1,5 @@
-ARG PYTHON_VERSION=3.14.3
-ARG PYTHON_MINOR=3.14
+ARG PYTHON_VERSION=3.13.3
+ARG PYTHON_MINOR=3.13
 
 # ---- Builder stage ----
 FROM python:${PYTHON_VERSION}-slim AS builder
@@ -20,14 +20,14 @@ WORKDIR /app
 
 COPY pyproject.toml poetry.lock poetry.toml ./
 COPY vendor/pazufa-collector/ vendor/pazufa-collector/
-COPY vendor/pazufa-collector-core/ vendor/pazufa-collector-core/
+COPY vendor/pazufa-scraper-core/ vendor/pazufa-scraper-core/
 
 # Rewrite local path dependencies from ../ to vendor/
 RUN sed -i 's|path = "\.\./pazufa-collector", develop = true|path = "vendor/pazufa-collector"|' pyproject.toml \
-    && sed -i 's|path = "\.\./pazufa-collector-core", develop = true|path = "vendor/pazufa-collector-core"|' pyproject.toml \
+    && sed -i 's|path = "\.\./pazufa-scraper-core", develop = true|path = "vendor/pazufa-scraper-core"|' pyproject.toml \
     && sed -i 's|path = "\.\./pazufa-collector/oapicode", develop = true|path = "vendor/pazufa-collector/oapicode"|' pyproject.toml \
     && sed -i 's|url = "\.\./pazufa-collector"|url = "vendor/pazufa-collector"|' poetry.lock \
-    && sed -i 's|url = "\.\./pazufa-collector-core"|url = "vendor/pazufa-collector-core"|' poetry.lock \
+    && sed -i 's|url = "\.\./pazufa-scraper-core"|url = "vendor/pazufa-scraper-core"|' poetry.lock \
     && sed -i 's|url = "\.\./pazufa-collector/oapicode"|url = "vendor/pazufa-collector/oapicode"|' poetry.lock
 
 RUN poetry config virtualenvs.create false \
