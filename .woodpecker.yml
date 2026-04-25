@@ -15,7 +15,7 @@ steps:
     environment:
       DEBIAN_FRONTEND: noninteractive
     commands:
-      - pip install --quiet "pip>=26.0" poetry pip-audit
+      - pip install --quiet "pip>=26.0" poetry poetry-plugin-export pip-audit
       - poetry export -f requirements.txt --without-hashes --only main -o /tmp/requirements.txt
       - pip-audit -r /tmp/requirements.txt
 
