@@ -1,0 +1,6 @@
+# pip-audit CVE ignore list
+# Format: <CVE-ID> # <package> <version>: <reason>
+# Review entries when upgrading litellm or its transitive dependencies.
+
+CVE-2025-69872  # diskcache 5.6.3: transitive via litellm, no fix released upstream
+CVE-2026-28684  # python-dotenv 1.0.1: fix is 1.2.2 but litellm pins ==1.0.1
