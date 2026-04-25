@@ -58,6 +58,6 @@ steps:
       - git clone https://codeberg.org/PaZuFa/pazufa-scraper-core.git ../pazufa-scraper-core
       - git -C ../pazufa-scraper-core checkout 846cf8ae53365019a44a6b2d4ad91b0864385a1e
       - pip install --quiet poetry
-      # --frozen fails if lockfile is out of date; poetry.toml enforces no-scripts
-      - poetry install --no-interaction --no-ansi --frozen
+      # poetry.toml enforces no-scripts; install won't modify the lockfile
+      - poetry install --no-interaction --no-ansi
       - poetry run pytest -m 'not integration'
