@@ -8,18 +8,12 @@ when:
 #   openapi-generator-cli: 7.15.0 (SHA256 verified below)
 
 steps:
-  # Audit PyPI dependencies from the lockfile before any package installation.
-  # Uses poetry export so no local path deps need to be present.
+  # Scan poetry.lock for known CVEs before any package installation.
+  # Ignore entries are maintained in .trivyignore at the repo root.
   - name: dependency-audit
-    image: python:3.13-slim
-    environment:
-      DEBIAN_FRONTEND: noninteractive
+    image: aquasec/trivy:0.70.0
     commands:
-      - pip install --quiet "pip>=26.0" pip-audit
-      # Parse poetry.lock directly — no need to resolve local path deps
-      - python3 -c "import tomllib; data=tomllib.load(open('poetry.lock','rb')); open('/tmp/requirements.txt','w').write('\n'.join(f\"{p['name']}=={p['version']}\" for p in data.get('package',[]) if p.get('source',{}).get('type')!='directory'))"
-      # ignore-vuln entries are maintained in .pip-audit-ignore
-      - pip-audit -r /tmp/requirements.txt $(grep -v '^#' .pip-audit-ignore | grep -v '^$' | awk '{print "--ignore-vuln " $1}' | tr '\n' ' ')
+      - trivy fs --scanners vuln --exit-code 1 poetry.lock
 
   - name: ruff-lint
     image: python:3.13-slim
