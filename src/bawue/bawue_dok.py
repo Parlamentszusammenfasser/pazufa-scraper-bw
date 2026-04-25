@@ -23,7 +23,8 @@ import aiohttp
 import certifi
 import litellm
 from collector.scrapercache import ScraperCache
-from collector_core import LLMConnector
+from corelib.llm import LLMConnector
+from json_repair import repair_json
 from kreuzberg import ExtractionConfig, OcrConfig, PageConfig, extract_file
 from openapi_client.models.doktyp import Doktyp
 from openapi_client.models.dokument import Dokument
@@ -459,6 +460,27 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tupl
 # ---------------------------------------------------------------------------
 
 
+def _parse_llm_response(content: str) -> dict:
+    """Parse the LLM's JSON content, falling back to json-repair on malformed output.
+
+    Raises JSONDecodeError if repair produces something unusable (non-dict or empty),
+    so `enrich_dokument`'s text-only fallback kicks in and `metrics.failed` is counted.
+    """
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as e:
+        logger.warning(
+            "LLM returned malformed JSON (%s at col %d); attempting json-repair",
+            e.msg,
+            e.colno,
+        )
+        repaired = repair_json(content, return_objects=True)
+        # repair may return "" / [] / None / {} for inputs it can't rescue
+        if not isinstance(repaired, dict) or not repaired:
+            raise
+        return repaired
+
+
 async def extract_semantics(
     llm: LLMConnector,
     full_text: str,
@@ -471,8 +493,9 @@ async def extract_semantics(
     Returns a dict with keys like schlagworte, zusammenfassung, kurztitel,
     and optionally trojanergefahr/meinung/vorwort depending on doktyp.
 
-    Uses response_format=json_object for guaranteed valid JSON output,
-    and validates score ranges post-extraction.
+    Uses response_format=json_object with a json-repair fallback for models
+    that occasionally emit malformed JSON, and validates score ranges
+    post-extraction.
     """
     text = truncate_text(full_text, max_tokens=max_tokens, model=model)
 
@@ -501,7 +524,7 @@ async def extract_semantics(
         )
 
     content = response.choices[0].message.content
-    data = json.loads(content)
+    data = _parse_llm_response(content)
     return _validate_scores(data)
 
 

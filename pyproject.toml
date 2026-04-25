@@ -4,7 +4,7 @@ version = "0.1.0b1"
 description = "Baden-Württemberg PARLIS scraper for the PaZuFa collector framework"
 authors = [{name = "schneefisch"}]
 readme = "README.md"
-requires-python = ">=3.14,<4.0"
+requires-python = ">=3.13,<3.14"
 dynamic = ["dependencies"]
 
 [tool.poetry]
@@ -12,7 +12,7 @@ packages = [{include = "bawue", from = "src"}]
 
 [tool.poetry.dependencies]
 collector = {path = "../pazufa-collector", develop = true}
-collector-core = {path = "../pazufa-collector-core", develop = true}
+scraper-core = {path = "../pazufa-scraper-core", develop = true}
 openapi-client = {path = "../pazufa-collector/oapicode", develop = true}
 lxml = ">=6.0"
 requests = "^2.32"
@@ -21,6 +21,7 @@ icalendar = ">=7.0"
 certifi = ">=2026.0"
 python-json-logger = "^3.2"
 litellm = ">=1.83.0"
+json-repair = "^0.59"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0"

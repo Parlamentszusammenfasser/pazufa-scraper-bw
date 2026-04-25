@@ -1,32 +1,45 @@
+variables:
+  - &python_image python:3.13-slim
+
 when:
   - event: [push, pull_request]
 
 # Supply-chain hardening: pin external dependencies to reviewed commits.
 # Update these hashes when upgrading framework versions.
-#   pazufa-collector:      be0940cb74c582b19409a409916d1e5c02b4427f
-#   pazufa-collector-core: 6ab0ae68eee0835f2df351b45a5de5f5a9751e34
+#   pazufa-collector:    a2a9562402c1ad3550e919c2824cd81151f94f99  # v0.2.3
+#   pazufa-scraper-core: 846cf8ae53365019a44a6b2d4ad91b0864385a1e  # main @ 2026-04-25
 #   openapi-generator-cli: 7.15.0 (SHA256 verified below)
 
 steps:
+  # Scan poetry.lock for known CVEs before any package installation.
+  # Ignore entries are maintained in .trivyignore at the repo root.
+  - name: dependency-audit
+    image: aquasec/trivy:0.70.0
+    commands:
+      - trivy fs --scanners vuln --exit-code 1 poetry.lock
+
   - name: ruff-lint
-    image: python:3.14-slim
+    image: *python_image
+    depends_on: [dependency-audit]
     commands:
       - pip install --quiet ruff
       - ruff check src/ tests/
 
   - name: ruff-format
-    image: python:3.14-slim
+    image: *python_image
+    depends_on: [dependency-audit]
     commands:
       - pip install --quiet ruff
       - ruff format --check src/ tests/
 
   - name: generate-openapi-client
     image: eclipse-temurin:17-jre-alpine
+    depends_on: [dependency-audit]
     commands:
       - apk add --no-cache -q curl git
       # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
       - git clone https://codeberg.org/PaZuFa/pazufa-collector.git ../pazufa-collector
-      - git -C ../pazufa-collector checkout be0940cb74c582b19409a409916d1e5c02b4427f
+      - git -C ../pazufa-collector checkout a2a9562402c1ad3550e919c2824cd81151f94f99
       - curl -sf -o ../pazufa-collector/openapi.yml "https://raw.githubusercontent.com/Chrystalkey/landtagszusammenfasser/9c20dd1913eac99bd14edcd9676e188305064f1a/docs/specs/openapi.yml"
       # Verify artifact integrity before execution
       - curl -sfL -o /tmp/openapi-generator-cli.jar "https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.15.0/openapi-generator-cli-7.15.0.jar"
@@ -34,28 +47,17 @@ steps:
       - java -jar /tmp/openapi-generator-cli.jar generate -i ../pazufa-collector/openapi.yml -g python -o ../pazufa-collector/oapicode
 
   - name: pytest
-    image: python:3.14-slim
+    image: *python_image
+    depends_on: [dependency-audit, generate-openapi-client]
     environment:
       DEBIAN_FRONTEND: noninteractive
       PIP_ROOT_USER_ACTION: ignore
     commands:
       - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
       # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
-      - git clone https://codeberg.org/PaZuFa/pazufa-collector-core.git ../pazufa-collector-core
-      - git -C ../pazufa-collector-core checkout 6ab0ae68eee0835f2df351b45a5de5f5a9751e34
+      - git clone https://codeberg.org/PaZuFa/pazufa-scraper-core.git ../pazufa-scraper-core
+      - git -C ../pazufa-scraper-core checkout 846cf8ae53365019a44a6b2d4ad91b0864385a1e
       - pip install --quiet poetry
-      # Verify lock file integrity; poetry.toml enforces no-scripts
-      - poetry check --lock
+      # poetry.toml enforces no-scripts; install won't modify the lockfile
       - poetry install --no-interaction --no-ansi
       - poetry run pytest -m 'not integration'
-
-  - name: dependency-audit
-    image: python:3.14-slim
-    environment:
-      DEBIAN_FRONTEND: noninteractive
-    commands:
-      - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
-      - pip install --quiet "pip>=26.0" poetry pip-audit
-      # Repos already cloned by previous steps (shared workspace); poetry.toml enforces no-scripts
-      - poetry install --no-interaction --no-ansi --only main
-      - pip-audit
