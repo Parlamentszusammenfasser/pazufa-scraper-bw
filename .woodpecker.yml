@@ -8,20 +8,34 @@ when:
 #   openapi-generator-cli: 7.15.0 (SHA256 verified below)
 
 steps:
+  # Audit PyPI dependencies from the lockfile before any package installation.
+  # Uses poetry export so no local path deps need to be present.
+  - name: dependency-audit
+    image: python:3.13-slim
+    environment:
+      DEBIAN_FRONTEND: noninteractive
+    commands:
+      - pip install --quiet "pip>=26.0" poetry pip-audit
+      - poetry export -f requirements.txt --without-hashes --only main -o /tmp/requirements.txt
+      - pip-audit -r /tmp/requirements.txt
+
   - name: ruff-lint
-    image: python:3.14-slim
+    image: python:3.13-slim
+    depends_on: [dependency-audit]
     commands:
       - pip install --quiet ruff
       - ruff check src/ tests/
 
   - name: ruff-format
-    image: python:3.14-slim
+    image: python:3.13-slim
+    depends_on: [dependency-audit]
     commands:
       - pip install --quiet ruff
       - ruff format --check src/ tests/
 
   - name: generate-openapi-client
     image: eclipse-temurin:17-jre-alpine
+    depends_on: [dependency-audit]
     commands:
       - apk add --no-cache -q curl git
       # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
@@ -34,7 +48,8 @@ steps:
       - java -jar /tmp/openapi-generator-cli.jar generate -i ../pazufa-collector/openapi.yml -g python -o ../pazufa-collector/oapicode
 
   - name: pytest
-    image: python:3.14-slim
+    image: python:3.13-slim
+    depends_on: [dependency-audit, generate-openapi-client]
     environment:
       DEBIAN_FRONTEND: noninteractive
       PIP_ROOT_USER_ACTION: ignore
@@ -44,18 +59,6 @@ steps:
       - git clone https://codeberg.org/PaZuFa/pazufa-scraper-core.git ../pazufa-scraper-core
       - git -C ../pazufa-scraper-core checkout 846cf8ae53365019a44a6b2d4ad91b0864385a1e
       - pip install --quiet poetry
-      # Verify lock file integrity; poetry.toml enforces no-scripts
-      - poetry check --lock
-      - poetry install --no-interaction --no-ansi
+      # --frozen fails if lockfile is out of date; poetry.toml enforces no-scripts
+      - poetry install --no-interaction --no-ansi --frozen
       - poetry run pytest -m 'not integration'
-
-  - name: dependency-audit
-    image: python:3.14-slim
-    environment:
-      DEBIAN_FRONTEND: noninteractive
-    commands:
-      - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
-      - pip install --quiet "pip>=26.0" poetry pip-audit
-      # Repos already cloned by previous steps (shared workspace); poetry.toml enforces no-scripts
-      - poetry install --no-interaction --no-ansi --only main
-      - pip-audit
