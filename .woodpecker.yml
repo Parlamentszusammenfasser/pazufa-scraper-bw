@@ -1,3 +1,6 @@
+variables:
+  - &python_image python:3.13-slim
+
 when:
   - event: [push, pull_request]
 
@@ -16,14 +19,14 @@ steps:
       - trivy fs --scanners vuln --exit-code 1 poetry.lock
 
   - name: ruff-lint
-    image: python:3.13-slim
+    image: *python_image
     depends_on: [dependency-audit]
     commands:
       - pip install --quiet ruff
       - ruff check src/ tests/
 
   - name: ruff-format
-    image: python:3.13-slim
+    image: *python_image
     depends_on: [dependency-audit]
     commands:
       - pip install --quiet ruff
@@ -44,7 +47,7 @@ steps:
       - java -jar /tmp/openapi-generator-cli.jar generate -i ../pazufa-collector/openapi.yml -g python -o ../pazufa-collector/oapicode
 
   - name: pytest
-    image: python:3.13-slim
+    image: *python_image
     depends_on: [dependency-audit, generate-openapi-client]
     environment:
       DEBIAN_FRONTEND: noninteractive
