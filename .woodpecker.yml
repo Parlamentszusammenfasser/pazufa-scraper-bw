@@ -18,7 +18,9 @@ steps:
       - pip install --quiet "pip>=26.0" pip-audit
       # Parse poetry.lock directly — no need to resolve local path deps
       - python3 -c "import tomllib; data=tomllib.load(open('poetry.lock','rb')); open('/tmp/requirements.txt','w').write('\n'.join(f\"{p['name']}=={p['version']}\" for p in data.get('package',[]) if p.get('source',{}).get('type')!='directory'))"
-      - pip-audit -r /tmp/requirements.txt
+      # CVE-2025-69872 (diskcache):     transitive via litellm, no fix released
+      # CVE-2026-28684 (python-dotenv): transitive via litellm which pins ==1.0.1; fix requires litellm upstream update
+      - pip-audit -r /tmp/requirements.txt --ignore-vuln CVE-2025-69872 --ignore-vuln CVE-2026-28684
 
   - name: ruff-lint
     image: python:3.13-slim
