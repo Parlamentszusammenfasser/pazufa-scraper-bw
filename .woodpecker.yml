@@ -3,8 +3,8 @@ when:
 
 # Supply-chain hardening: pin external dependencies to reviewed commits.
 # Update these hashes when upgrading framework versions.
-#   pazufa-collector:      be0940cb74c582b19409a409916d1e5c02b4427f
-#   pazufa-collector-core: 6ab0ae68eee0835f2df351b45a5de5f5a9751e34
+#   pazufa-collector:    a2a9562402c1ad3550e919c2824cd81151f94f99  # v0.2.3
+#   pazufa-scraper-core: 846cf8ae53365019a44a6b2d4ad91b0864385a1e  # main @ 2026-04-25
 #   openapi-generator-cli: 7.15.0 (SHA256 verified below)
 
 steps:
@@ -26,7 +26,7 @@ steps:
       - apk add --no-cache -q curl git
       # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
       - git clone https://codeberg.org/PaZuFa/pazufa-collector.git ../pazufa-collector
-      - git -C ../pazufa-collector checkout be0940cb74c582b19409a409916d1e5c02b4427f
+      - git -C ../pazufa-collector checkout a2a9562402c1ad3550e919c2824cd81151f94f99
       - curl -sf -o ../pazufa-collector/openapi.yml "https://raw.githubusercontent.com/Chrystalkey/landtagszusammenfasser/9c20dd1913eac99bd14edcd9676e188305064f1a/docs/specs/openapi.yml"
       # Verify artifact integrity before execution
       - curl -sfL -o /tmp/openapi-generator-cli.jar "https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.15.0/openapi-generator-cli-7.15.0.jar"
@@ -41,8 +41,8 @@ steps:
     commands:
       - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
       # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
-      - git clone https://codeberg.org/PaZuFa/pazufa-collector-core.git ../pazufa-collector-core
-      - git -C ../pazufa-collector-core checkout 6ab0ae68eee0835f2df351b45a5de5f5a9751e34
+      - git clone https://codeberg.org/PaZuFa/pazufa-scraper-core.git ../pazufa-scraper-core
+      - git -C ../pazufa-scraper-core checkout 846cf8ae53365019a44a6b2d4ad91b0864385a1e
       - pip install --quiet poetry
       # Verify lock file integrity; poetry.toml enforces no-scripts
       - poetry check --lock
