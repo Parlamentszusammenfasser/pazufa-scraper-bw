@@ -958,14 +958,14 @@ files = [
 
 [[package]]
 name = "fsspec"
-version = "2026.3.0"
+version = "2026.4.0"
 description = "File-system specification"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "fsspec-2026.3.0-py3-none-any.whl", hash = "sha256:d2ceafaad1b3457968ed14efa28798162f1638dbb5d2a6868a2db002a5ee39a4"},
-    {file = "fsspec-2026.3.0.tar.gz", hash = "sha256:1ee6a0e28677557f8c2f994e3eea77db6392b4de9cd1f5d7a9e87a0ae9d01b41"},
+    {file = "fsspec-2026.4.0-py3-none-any.whl", hash = "sha256:11ef7bb35dab8a394fde6e608221d5cf3e8499401c249bebaeaad760a1a8dec2"},
+    {file = "fsspec-2026.4.0.tar.gz", hash = "sha256:301d8ac70ae90ef3ad05dcf94d6c3754a097f9b5fe4667d2787aa359ec7df7e4"},
 ]
 
 [package.extras]
@@ -1096,14 +1096,14 @@ zstd = ["zstandard (>=0.18.0)"]
 
 [[package]]
 name = "huggingface-hub"
-version = "1.12.0"
+version = "1.13.0"
 description = "Client library to download and publish models, datasets and other repos on the huggingface.co hub"
 optional = false
 python-versions = ">=3.10.0"
 groups = ["main"]
 files = [
-    {file = "huggingface_hub-1.12.0-py3-none-any.whl", hash = "sha256:d74939969585ee35748bd66de09baf84099d461bda7287cd9043bfb99b0e424d"},
-    {file = "huggingface_hub-1.12.0.tar.gz", hash = "sha256:7c3fe85e24b652334e5d456d7a812cd9a071e75630fac4365d9165ab5e4a34b6"},
+    {file = "huggingface_hub-1.13.0-py3-none-any.whl", hash = "sha256:e942cb50d6a08dd5306688b1ac05bda157fd2fcc88b63dae405f7bd0d3234005"},
+    {file = "huggingface_hub-1.13.0.tar.gz", hash = "sha256:f6df2dac5abe82ce2fe05873d10d5ff47bc677d616a2f521f4ee26db9415d9d0"},
 ]
 
 [package.dependencies]
@@ -1132,14 +1132,14 @@ typing = ["types-PyYAML", "types-simplejson", "types-toml", "types-tqdm", "types
 
 [[package]]
 name = "icalendar"
-version = "7.0.3"
+version = "7.1.0"
 description = "RFC 5545 compatible parser and generator of iCalendar files"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "icalendar-7.0.3-py3-none-any.whl", hash = "sha256:8c9fea6d3a89671bba8b6938d8565b4d0ec465c6a2796ef0f92790dcb9e627cd"},
-    {file = "icalendar-7.0.3.tar.gz", hash = "sha256:95027ece087ab87184d765f03761f25875821f74cdd18d3b57e9c868216d8fde"},
+    {file = "icalendar-7.1.0-py3-none-any.whl", hash = "sha256:6de875370d22fc4aff172ad7c439b39fb109dc2eab9ce358fcb95e8689ad7b56"},
+    {file = "icalendar-7.1.0.tar.gz", hash = "sha256:10cd223c792fcc43bee4c3ebe3149d4cf32406c85cfef146624df5a0d414260f"},
 ]
 
 [package.dependencies]
@@ -1380,14 +1380,14 @@ files = [
 
 [[package]]
 name = "json-repair"
-version = "0.59.4"
+version = "0.59.5"
 description = "A package to repair broken json strings"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "json_repair-0.59.4-py3-none-any.whl", hash = "sha256:46052e646bc0b0c39db672ebbf732f774f3c1a5bde81a54f0b0e19d3af4f45cd"},
-    {file = "json_repair-0.59.4.tar.gz", hash = "sha256:559ca1828f6f566530663cd96d64bee29f8282b9d2ff0e661e05fa87b4171ab3"},
+    {file = "json_repair-0.59.5-py3-none-any.whl", hash = "sha256:6869965bd1cc1aaaa04dc85865c26fbb76d9a2d83a20010f5eae2563b1567827"},
+    {file = "json_repair-0.59.5.tar.gz", hash = "sha256:bb886ee054e99066be8a337b67a986b6a50d79be9a5ad37ae81966e698990784"},
 ]
 
 [package.extras]
@@ -2115,6 +2115,29 @@ files = [
     {file = "packaging-26.2-py3-none-any.whl", hash = "sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e"},
     {file = "packaging-26.2.tar.gz", hash = "sha256:ff452ff5a3e828ce110190feff1178bb1f2ea2281fa2075aadb987c2fb221661"},
 ]
+
+[[package]]
+name = "pazufa-corelib"
+version = "0.1.0"
+description = "Core library for collecting parliamentary data"
+optional = false
+python-versions = ">=3.12,<3.15"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+instructor = {version = "^1.14.0", extras = ["litellm"]}
+litellm = "^1.81.13"
+numpy = "^2.4.4"
+pydantic = "^2.12"
+pyyaml = "^6.0"
+rapidfuzz = "^3.14.5"
+w3lib = "^2.4.1"
+
+[package.source]
+type = "directory"
+url = "../pazufa-scraper-core"
 
 [[package]]
 name = "pillow"
@@ -3283,28 +3306,6 @@ files = [
 ]
 
 [[package]]
-name = "scraper-core"
-version = "0.1.0"
-description = "Core library for collecting parliamentary data"
-optional = false
-python-versions = ">=3.12,<4.0"
-groups = ["main"]
-files = []
-develop = true
-
-[package.dependencies]
-instructor = {version = "^1.14.0", extras = ["litellm"]}
-litellm = "^1.81.13"
-numpy = "^2.4.4"
-pydantic = ">=2.12"
-rapidfuzz = "^3.14.5"
-w3lib = "^2.4.1"
-
-[package.source]
-type = "directory"
-url = "../pazufa-scraper-core"
-
-[[package]]
 name = "selenium"
 version = "4.43.0"
 description = "Official Python bindings for Selenium WebDriver"
@@ -3893,4 +3894,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<3.14"
-content-hash = "063afff6e56f3544e509f3fc14dddd00dfb48b9860393961867093350164fcc9"
+content-hash = "93fd4ad92b2dee08ca330cd4a7714ea937653f2aeb5701124de7f0671336158b"

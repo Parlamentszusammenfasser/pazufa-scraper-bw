@@ -7,7 +7,7 @@ when:
 # Supply-chain hardening: pin external dependencies to reviewed commits.
 # Update these hashes when upgrading framework versions.
 #   pazufa-collector:    a2a9562402c1ad3550e919c2824cd81151f94f99  # v0.2.3
-#   pazufa-scraper-core: 846cf8ae53365019a44a6b2d4ad91b0864385a1e  # main @ 2026-04-25
+#   pazufa-scraper-core: 3fbebe5affed1d1278013decc61f030074507400  # main @ 2026-05-03 (renamed corelib → pazufa_corelib #77)
 #   openapi-generator-cli: 7.15.0 (SHA256 verified below)
 
 steps:
@@ -56,7 +56,7 @@ steps:
       - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
       # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
       - git clone https://codeberg.org/PaZuFa/pazufa-scraper-core.git ../pazufa-scraper-core
-      - git -C ../pazufa-scraper-core checkout 846cf8ae53365019a44a6b2d4ad91b0864385a1e
+      - git -C ../pazufa-scraper-core checkout 3fbebe5affed1d1278013decc61f030074507400
       - pip install --quiet poetry
       # poetry.toml enforces no-scripts; install won't modify the lockfile
       - poetry install --no-interaction --no-ansi

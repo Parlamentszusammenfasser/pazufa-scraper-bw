@@ -29,6 +29,7 @@ class ParlisClient:
     ) -> None:
         self._wahlperiode = wahlperiode
         self._wahlperiode_start_date = wahlperiode_start_date
+        self._errors: list[str] = []
         self._rate_limiter = AdaptiveRateLimiter(
             initial_delay=request_delay_s,
             min_delay=min(0.1, request_delay_s),
@@ -169,6 +170,14 @@ class ParlisClient:
         if not report_id:
             sources = data.get("sources", {})
             star = sources.get("Star", {})
+            if star.get("error"):
+                msg = (
+                    f"PARLIS Star error {star['error']} for type='{vorgangstyp}': "
+                    f"{star.get('errormsg', 'unknown error')} (status={star.get('status')})"
+                )
+                logger.warning(msg)
+                self._errors.append(msg)
+                return []
             if star.get("status") == "running" and int(star.get("hits", 0)) > 0:
                 logger.warning(
                     "Search too large (%d hits, still running). Subdividing into monthly windows.",
@@ -224,3 +233,8 @@ class ParlisClient:
                 all_results.extend(window_results)
 
         return all_results
+
+    def pop_errors(self) -> list[str]:
+        """Return and clear accumulated PARLIS errors since the last call."""
+        errors, self._errors = self._errors, []
+        return errors

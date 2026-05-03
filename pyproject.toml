@@ -12,7 +12,7 @@ packages = [{include = "bawue", from = "src"}]
 
 [tool.poetry.dependencies]
 collector = {path = "../pazufa-collector", develop = true}
-scraper-core = {path = "../pazufa-scraper-core", develop = true}
+pazufa-corelib = {path = "../pazufa-scraper-core", develop = true}
 openapi-client = {path = "../pazufa-collector/oapicode", develop = true}
 lxml = ">=6.0"
 requests = "^2.32"
