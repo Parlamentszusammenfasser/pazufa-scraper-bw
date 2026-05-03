@@ -388,6 +388,7 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     scraper._skipped = 0
     scraper._by_type = {}
     scraper._failed_items = []
+    scraper._parlis_errors = []
     scraper._upload_limiter = AdaptiveRateLimiter(
         initial_delay=0.2, min_delay=0.05, backoff_multiplier=10.0, recovery_factor=0.5
     )
@@ -863,6 +864,7 @@ class TestRunDurationLog:
         scraper._skipped = 0
         scraper._by_type = {}
         scraper._failed_items = []
+        scraper._parlis_errors = []
         scraper._llm_enabled = False
         scraper._llm_metrics = LLMMetrics()
 
@@ -886,6 +888,7 @@ class TestRunDurationLog:
         scraper._skipped = 0
         scraper._by_type = {}
         scraper._failed_items = []
+        scraper._parlis_errors = []
         scraper._llm_enabled = False
         scraper._llm_metrics = LLMMetrics()
 
@@ -1770,6 +1773,7 @@ class TestEnabledVorgangstypen:
         scraper._raw_cache = {}
         scraper._by_type = {}
         scraper._skipped = 0
+        scraper._parlis_errors = []
         scraper._parlis = MagicMock()
         scraper._parlis.search.return_value = [
             {"vorgangs_id": "V-001", "Vorgangstyp": "Gesetzgebung"},
