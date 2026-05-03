@@ -44,7 +44,7 @@ def _make_test_dokument(typ: Doktyp = Doktyp.ENTWURF) -> Dokument:
 
 
 def _make_llm():
-    from corelib.llm import LLMConnector
+    from pazufa_corelib.llm import LLMConnector
 
     return LLMConnector(
         model=os.environ.get("LLM_MODEL", "gpt-5-nano"),
