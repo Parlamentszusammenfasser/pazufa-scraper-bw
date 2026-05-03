@@ -115,6 +115,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._skipped: int = 0
         self._by_type: dict[str, int] = {}
         self._failed_items: list[FailedItem] = []
+        self._parlis_errors: list[str] = []
 
         # LLM document enrichment (optional, requires LLM_PROVIDER_KEY or LLM_PROVIDER_BASE_URL)
         llm_key = getattr(config, "llm_provider_key", None)
@@ -153,6 +154,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 duration,
                 self._llm_metrics if self._llm_enabled else None,
                 self._failed_items,
+                self._parlis_errors,
             )
             send_mattermost_summary(self.config, "BaWue Vorgänge Run Summary", lines)
 
@@ -190,6 +192,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         # PARLIS uses synchronous requests — offload to a thread to avoid blocking the event loop
         raw_vorgaenge = await asyncio.to_thread(self._parlis.search, vorgangstyp, date_from, date_to)
+        self._parlis_errors.extend(self._parlis.pop_errors())
         logger.info("Found %d Vorgänge for type '%s'", len(raw_vorgaenge), vorgangstyp)
 
         vorgang_ids = []
@@ -827,6 +830,7 @@ def _print_vorgaenge_summary(
     duration: float,
     llm_metrics: LLMMetrics | None = None,
     failed_items: list[FailedItem] | None = None,
+    parlis_errors: list[str] | None = None,
 ) -> list[str]:
     discovered = sum(by_type.values())
     lines = [
@@ -845,6 +849,11 @@ def _print_vorgaenge_summary(
         lines.extend(llm_metrics.format_lines())
     if failed_items:
         lines.extend(format_failed_section(failed_items, header="Failed Vorgänge"))
+    if parlis_errors:
+        lines.append("")
+        lines.append(f":warning: PARLIS errors ({len(parlis_errors)}):")
+        for err in parlis_errors:
+            lines.append(f"  - {err}")
     print("=== BaWue Vorgänge Run Summary ===\n" + "\n".join(lines))
     return lines
 
