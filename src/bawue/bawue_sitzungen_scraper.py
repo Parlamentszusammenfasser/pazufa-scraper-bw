@@ -23,6 +23,7 @@ from bawue.ics_parser import group_events_by_date, parse_ics_feed
 from bawue.notifications import send_mattermost_summary
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
+from bawue.types import none_if_blank
 from bawue.upload_throttle import with_upload_retry
 
 logger = logging.getLogger(__name__)
@@ -114,7 +115,7 @@ class BawueSitzungenScraper(SitzungsScraper):
 
             sitzung = Sitzung(
                 api_id=api_id,
-                titel=event.summary,
+                titel=none_if_blank(event.summary),
                 termin=termin_utc,
                 gremium=gremium,
                 nummer=event.nummer,

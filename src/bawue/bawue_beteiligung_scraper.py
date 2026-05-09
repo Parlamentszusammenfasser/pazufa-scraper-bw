@@ -35,7 +35,13 @@ from bawue.config_loader import load_toml_section
 from bawue.notifications import send_mattermost_summary
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, format_duration, format_failed_section
-from bawue.types import ReservedGremium, canonicalize_organisation, is_verfassungsaendernd
+from bawue.types import (
+    TODO_MARKER,
+    ReservedGremium,
+    canonicalize_organisation,
+    is_verfassungsaendernd,
+    todo_if_blank,
+)
 from bawue.upload_throttle import upload_vorgang
 
 logger = logging.getLogger(__name__)
@@ -180,19 +186,28 @@ class BawueBeteiligungScraper(VorgangsScraper):
             self._skipped += 1
             return None
 
+        # An empty ministry yields no Autor — the new backend rejects
+        # empty organisation strings, so the list stays empty rather than
+        # carrying a placeholder author.
+        ministry_autoren = (
+            [Autor(organisation=canonicalize_organisation(detail.ministry))]
+            if detail.ministry and detail.ministry.strip()
+            else []
+        )
+
         # Build documents
         dokumente: list[StationDokumenteInner] = []
         trojaner_scores: list[int] = []
         for pdf in detail.pdf_links:
             dok = Dokument(
-                titel=pdf["title"],
-                volltext="",
-                hash="",
+                titel=todo_if_blank(pdf["title"]),
+                volltext=TODO_MARKER,
+                hash=TODO_MARKER,
                 typ=Doktyp.PREPARL_MINUS_ENTWURF,
                 zp_modifiziert=zp_start,
                 zp_referenz=zp_start,
                 link=pdf["url"],
-                autoren=[Autor(organisation=canonicalize_organisation(detail.ministry))],
+                autoren=ministry_autoren,
             )
 
             if self._llm_enabled and self._llm is not None:
@@ -235,12 +250,12 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
         return Vorgang(
             api_id=str(api_id),
-            titel=detail.title,
+            titel=todo_if_blank(detail.title),
             kurztitel=slug,
             typ=Vorgangstyp.GG_MINUS_LAND_MINUS_PARL,
             wahlperiode=self._wahlperiode,
             verfassungsaendernd=is_verfassungsaendernd(detail.title),
-            initiatoren=[Autor(organisation=canonicalize_organisation(detail.ministry))],
+            initiatoren=ministry_autoren,
             stationen=[station],
             ids=ids,
         )

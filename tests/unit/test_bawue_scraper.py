@@ -246,6 +246,56 @@ class TestBuildVorgang:
         assert vorgang.initiatoren == []
 
     @pytest.mark.asyncio
+    async def test_empty_vorgang_titel_falls_back_to_todo_marker(self, scraper_build_vorgang):
+        """Backend rejects empty strings on required fields — empty titel becomes TODO."""
+        raw = _make_raw_vorgang("V-053", titel="")
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert vorgang.titel == "TODO"
+
+    @pytest.mark.asyncio
+    async def test_dokument_volltext_and_hash_are_todo_when_llm_disabled(self, scraper_build_vorgang):
+        """Without LLM enrichment, volltext + hash carry the TODO marker (never empty)."""
+        raw = _make_raw_vorgang(
+            "V-054",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        dok = vorgang.stationen[0].dokumente[0].actual_instance
+        assert dok.volltext == "TODO"
+        assert dok.hash == "TODO"
+
+    @pytest.mark.asyncio
+    async def test_empty_drucksnr_becomes_none(self, scraper_build_vorgang):
+        """Optional drucksnr: blank value is dropped (None) rather than sent as empty string."""
+        raw = _make_raw_vorgang(
+            "V-055",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "drucksache": "",
+                    "pdf_url": "https://example.com/pp.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        dok = vorgang.stationen[0].dokumente[0].actual_instance
+        assert dok.drucksnr is None
+
+    @pytest.mark.asyncio
     async def test_gremium_uses_parlament_bw(self, scraper_build_vorgang):
         raw = _make_raw_vorgang(
             "V-060",
@@ -2101,8 +2151,10 @@ class TestAktuellerStandAblehnung:
         assert len(vorgang.stationen) == 3
         ablehnung = vorgang.stationen[-1]
         assert ablehnung.typ == Stationstyp.PARL_MINUS_ABLEHNUNG
-        # Uses the date of the last station (Zweite Beratung)
-        assert ablehnung.zp_start == datetime(2022, 3, 23, tzinfo=UTC)
+        # Same calendar day as the last station (Zweite Beratung), bumped 1h to
+        # avoid sharing zp_start with a different Stationstyp (backend enforces
+        # total ordering across types).
+        assert ablehnung.zp_start == datetime(2022, 3, 23, 1, 0, tzinfo=UTC)
 
     @pytest.mark.asyncio
     async def test_no_ablehnung_when_aktueller_stand_missing(self, scraper_build_vorgang):
@@ -2253,6 +2305,154 @@ class TestAktuellerStandAblehnung:
         vb = await scraper_build_vorgang(raw_b)
 
         assert va.stationen[-1].api_id != vb.stationen[-1].api_id
+
+
+class TestEnforceTotalOrdering:
+    """Tests for the zp_start normalization that keeps different-typed stations
+    from sharing a timestamp.
+
+    The backend's track validation sorts stations by zp_start; two stations of
+    different Stationstyp that share zp_start make the order ambiguous and the
+    upload is rejected. PARLIS dates are date-only, so same-day collisions are
+    common — we bump colliding stations forward by 1h.
+    """
+
+    @pytest.mark.asyncio
+    async def test_lesung_and_ausschuss_same_day_get_separated(self, scraper_build_vorgang):
+        """Erste Beratung followed by Ausschussbericht on the same day: ausschber bumps +1h."""
+        raw = _make_raw_vorgang(
+            "V-900",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/200 12.05.2026",
+                    "datum": "12.05.2026",
+                    "plenarprotokoll": "17/200",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  12.05.2026 Drucksache 17/2000",
+                    "datum": "12.05.2026",
+                    "drucksache": "17/2000",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/ausschber.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert [s.typ for s in vorgang.stationen] == [
+            Stationstyp.PARL_MINUS_VOLLVLSGN,
+            Stationstyp.PARL_MINUS_AUSSCHBER,
+        ]
+        assert vorgang.stationen[0].zp_start == datetime(2026, 5, 12, tzinfo=UTC)
+        assert vorgang.stationen[1].zp_start == datetime(2026, 5, 12, 1, 0, tzinfo=UTC)
+
+    @pytest.mark.asyncio
+    async def test_same_type_stations_keep_identical_zp_start(self, scraper_build_vorgang):
+        """Two parl-vollvlsgn stations on the same day (Erste Beratung + Überweisung):
+        both still PARL_VOLLVLSGN, so the rule allows them to share zp_start."""
+        raw = _make_raw_vorgang(
+            "V-901",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp141.pdf",
+                },
+                {
+                    "raw": "Überweisung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Überweisung",
+                    "pdf_url": "https://example.com/pp141b.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 2
+        assert vorgang.stationen[0].typ == vorgang.stationen[1].typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+        assert vorgang.stationen[0].zp_start == vorgang.stationen[1].zp_start
+
+    @pytest.mark.asyncio
+    async def test_synthetic_initiativ_does_not_collide_with_next_station(self, scraper_build_vorgang):
+        """preparl-regbsl + parl-initiativ (synthesized) + parl-vollvlsgn on the same Beratungstag:
+        each different type gets its own zp_start slot."""
+        raw = _make_raw_vorgang(
+            "V-902",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  10.06.2026 Drucksache 17/12345",
+                    "datum": "10.06.2026",
+                    "drucksache": "17/12345",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/200 10.06.2026",
+                    "datum": "10.06.2026",
+                    "plenarprotokoll": "17/200",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        # Stations: regbsl(10.06 00:00), initiativ(10.06 00:00 → bumped to ?), vollvlsgn(10.06 00:00 → bumped)
+        assert [s.typ for s in vorgang.stationen] == [
+            Stationstyp.PREPARL_MINUS_REGBSL,
+            Stationstyp.PARL_MINUS_INITIATIV,
+            Stationstyp.PARL_MINUS_VOLLVLSGN,
+        ]
+        zp_starts = [s.zp_start for s in vorgang.stationen]
+        # All three types differ → no two may share a timestamp
+        assert len(set(zp_starts)) == 3
+        # Order preserved (collection order is the desired track order)
+        assert zp_starts == sorted(zp_starts)
+        # Same calendar day
+        assert all(zp.date() == datetime(2026, 6, 10).date() for zp in zp_starts)
+
+    @pytest.mark.asyncio
+    async def test_three_distinct_types_same_day_cascade(self, scraper_build_vorgang):
+        """Three different-typed stations on the same day cascade to +1h, +2h."""
+        raw = _make_raw_vorgang(
+            "V-903",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/300 20.07.2026",
+                    "datum": "20.07.2026",
+                    "plenarprotokoll": "17/300",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  20.07.2026 Drucksache 17/3000",
+                    "datum": "20.07.2026",
+                    "drucksache": "17/3000",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/ausschber.pdf",
+                },
+                {
+                    "raw": "Schlussabstimmung   Plenarprotokoll 17/301 20.07.2026",
+                    "datum": "20.07.2026",
+                    "plenarprotokoll": "17/301",
+                    "station_typ": "Schlussabstimmung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        zp_starts = [s.zp_start for s in vorgang.stationen]
+        assert len(set(zp_starts)) == len(zp_starts), "all different-typed stations must have distinct zp_start"
+        assert zp_starts == sorted(zp_starts), "collection order preserved"
 
 
 class TestBeschlussDesLandtagsInBeratung:
