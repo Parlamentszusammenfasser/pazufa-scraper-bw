@@ -301,6 +301,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if aktueller_stand == "Abgelehnt":
             self._ensure_ablehnung_station(stationen, vorgang_id)
 
+        self._ensure_ausschber_after_vollvlsgn(stationen)
         self._enforce_total_ordering(stationen)
 
         # parse vorgangs-id
@@ -511,6 +512,45 @@ class BawueVorgaengeScraper(VorgangsScraper):
             ),
         )
         stationen.insert(next_idx, synthetic)
+
+    @staticmethod
+    def _ensure_ausschber_after_vollvlsgn(stationen: list[Station]) -> None:
+        """Re-time any ``parl-ausschber`` that precedes the first ``parl-vollvlsgn``.
+
+        The BW ``gg-land-parl`` track requires the canonical ordering
+        ``parl-initiativ → parl-vollvlsgn → parl-ausschber``. PARLIS dates the
+        Bericht/Beschlussempfehlung Drucksache by its publication date, which
+        for Haushalt Einzelpläne falls in mid-November — before the first
+        plenary reading in December. The track validator then rejects the
+        ausschber as out-of-order. Pin such ausschber stations to one hour
+        past the first vollvlsgn so the canonical position is preserved
+        without losing the station entirely.
+
+        The list-position of the ausschber is left untouched; the backend
+        sorts by ``zp_start`` before validating, so adjusting the timestamp
+        is sufficient.
+        """
+        if not stationen:
+            return
+
+        first_vollvlsgn_idx: int | None = None
+        for i, s in enumerate(stationen):
+            if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN:
+                first_vollvlsgn_idx = i
+                break
+
+        if first_vollvlsgn_idx is None:
+            return
+
+        anchor_zp_start = stationen[first_vollvlsgn_idx].zp_start
+        bumped_zp_start = anchor_zp_start + timedelta(hours=1)
+
+        for station in stationen[:first_vollvlsgn_idx]:
+            if station.typ != Stationstyp.PARL_MINUS_AUSSCHBER:
+                continue
+            station.zp_start = bumped_zp_start
+            if station.zp_modifiziert is not None and station.zp_modifiziert < bumped_zp_start:
+                station.zp_modifiziert = bumped_zp_start
 
     @staticmethod
     def _enforce_total_ordering(stationen: list[Station]) -> None:
