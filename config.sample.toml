@@ -41,9 +41,11 @@ model = "ollama/gemma4:e4b"
 
 # BaWue-specific configuration
 [bawue]
-wahlperiode = 17
 parlis-request-delay-s = 1.0
-wahlperiode-start-date = "2021-04-26"  # WP 17: Landtag constituted
+# WP 17: Landtag constituted - 2021-04-26
+# WP 18: Landtag constituted - 2026-05-01
+wahlperiode = 17
+wahlperiode-start-date = "2021-04-26"
 # Only scrape Vorgangstypen supported by the backend. Others map to SONSTIG and are rejected.
 # Available values: "Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag", "Antrag",
 #   "Kleine Anfrage", "Große Anfrage", "Anfrage", "Entschließungsantrag", "Dringlicher Antrag",
