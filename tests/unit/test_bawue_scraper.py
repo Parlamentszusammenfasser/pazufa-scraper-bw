@@ -2532,8 +2532,7 @@ class TestEnsureAusschberAfterVollvlsgn:
         assert ausschber.zp_start == first_vollvlsgn.zp_start + timedelta(hours=1)
         # And there is at least one vollvlsgn before it in the chronological order.
         assert any(
-            s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN and s.zp_start < ausschber.zp_start
-            for s in sorted_stations
+            s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN and s.zp_start < ausschber.zp_start for s in sorted_stations
         )
 
     @pytest.mark.asyncio
