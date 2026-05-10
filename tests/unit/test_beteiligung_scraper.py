@@ -135,6 +135,36 @@ class TestBuildVorgang:
         assert vorgang.initiatoren[0].organisation == "Ministerium des Inneren, für Digitalisierung und Kommunen"
 
     @pytest.mark.asyncio
+    async def test_empty_ministry_yields_no_initiatoren(self):
+        """Empty ministry: drop the Autor instead of sending an empty organisation."""
+        scraper = _make_scraper()
+        detail = _make_detail(ministry="")
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
+
+        assert vorgang.initiatoren == []
+        assert vorgang.stationen[0].dokumente[0].actual_instance.autoren == []
+
+    @pytest.mark.asyncio
+    async def test_dokument_volltext_and_hash_are_todo_when_llm_disabled(self):
+        """Without LLM enrichment, volltext + hash carry the TODO marker (never empty)."""
+        scraper = _make_scraper()
+        detail = _make_detail()
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
+
+        dok = vorgang.stationen[0].dokumente[0].actual_instance
+        assert dok.volltext == "TODO"
+        assert dok.hash == "TODO"
+
+    @pytest.mark.asyncio
+    async def test_empty_detail_title_falls_back_to_todo_marker(self):
+        """Empty detail title becomes TODO so the required Vorgang.titel is non-empty."""
+        scraper = _make_scraper()
+        detail = _make_detail(title="")
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
+
+        assert vorgang.titel == "TODO"
+
+    @pytest.mark.asyncio
     async def test_gremium_is_landesregierung(self):
         scraper = _make_scraper()
         detail = _make_detail()

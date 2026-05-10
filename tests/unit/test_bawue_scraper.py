@@ -1,7 +1,7 @@
 """Tests for the BawueVorgaengeScraper item_extractor logic."""
 
 import logging
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -244,6 +244,56 @@ class TestBuildVorgang:
         vorgang = await scraper_build_vorgang(raw)
 
         assert vorgang.initiatoren == []
+
+    @pytest.mark.asyncio
+    async def test_empty_vorgang_titel_falls_back_to_todo_marker(self, scraper_build_vorgang):
+        """Backend rejects empty strings on required fields — empty titel becomes TODO."""
+        raw = _make_raw_vorgang("V-053", titel="")
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert vorgang.titel == "TODO"
+
+    @pytest.mark.asyncio
+    async def test_dokument_volltext_and_hash_are_todo_when_llm_disabled(self, scraper_build_vorgang):
+        """Without LLM enrichment, volltext + hash carry the TODO marker (never empty)."""
+        raw = _make_raw_vorgang(
+            "V-054",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        dok = vorgang.stationen[0].dokumente[0].actual_instance
+        assert dok.volltext == "TODO"
+        assert dok.hash == "TODO"
+
+    @pytest.mark.asyncio
+    async def test_empty_drucksnr_becomes_none(self, scraper_build_vorgang):
+        """Optional drucksnr: blank value is dropped (None) rather than sent as empty string."""
+        raw = _make_raw_vorgang(
+            "V-055",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "drucksache": "",
+                    "pdf_url": "https://example.com/pp.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        dok = vorgang.stationen[0].dokumente[0].actual_instance
+        assert dok.drucksnr is None
 
     @pytest.mark.asyncio
     async def test_gremium_uses_parlament_bw(self, scraper_build_vorgang):
@@ -2101,8 +2151,10 @@ class TestAktuellerStandAblehnung:
         assert len(vorgang.stationen) == 3
         ablehnung = vorgang.stationen[-1]
         assert ablehnung.typ == Stationstyp.PARL_MINUS_ABLEHNUNG
-        # Uses the date of the last station (Zweite Beratung)
-        assert ablehnung.zp_start == datetime(2022, 3, 23, tzinfo=UTC)
+        # Same calendar day as the last station (Zweite Beratung), bumped 1h to
+        # avoid sharing zp_start with a different Stationstyp (backend enforces
+        # total ordering across types).
+        assert ablehnung.zp_start == datetime(2022, 3, 23, 1, 0, tzinfo=UTC)
 
     @pytest.mark.asyncio
     async def test_no_ablehnung_when_aktueller_stand_missing(self, scraper_build_vorgang):
@@ -2253,6 +2305,514 @@ class TestAktuellerStandAblehnung:
         vb = await scraper_build_vorgang(raw_b)
 
         assert va.stationen[-1].api_id != vb.stationen[-1].api_id
+
+
+class TestEnforceTotalOrdering:
+    """Tests for the zp_start normalization that keeps different-typed stations
+    from sharing a timestamp.
+
+    The backend's track validation sorts stations by zp_start; two stations of
+    different Stationstyp that share zp_start make the order ambiguous and the
+    upload is rejected. PARLIS dates are date-only, so same-day collisions are
+    common — we bump colliding stations forward by 1h.
+    """
+
+    @pytest.mark.asyncio
+    async def test_lesung_and_ausschuss_same_day_get_separated(self, scraper_build_vorgang):
+        """Erste Beratung followed by Ausschussbericht on the same day: ausschber bumps +1h."""
+        raw = _make_raw_vorgang(
+            "V-900",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/200 12.05.2026",
+                    "datum": "12.05.2026",
+                    "plenarprotokoll": "17/200",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  12.05.2026 Drucksache 17/2000",
+                    "datum": "12.05.2026",
+                    "drucksache": "17/2000",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/ausschber.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert [s.typ for s in vorgang.stationen] == [
+            Stationstyp.PARL_MINUS_VOLLVLSGN,
+            Stationstyp.PARL_MINUS_AUSSCHBER,
+        ]
+        assert vorgang.stationen[0].zp_start == datetime(2026, 5, 12, tzinfo=UTC)
+        assert vorgang.stationen[1].zp_start == datetime(2026, 5, 12, 1, 0, tzinfo=UTC)
+
+    @pytest.mark.asyncio
+    async def test_same_type_stations_keep_identical_zp_start(self, scraper_build_vorgang):
+        """Two parl-vollvlsgn stations on the same day (Erste Beratung + Überweisung):
+        both still PARL_VOLLVLSGN, so the rule allows them to share zp_start."""
+        raw = _make_raw_vorgang(
+            "V-901",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp141.pdf",
+                },
+                {
+                    "raw": "Überweisung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Überweisung",
+                    "pdf_url": "https://example.com/pp141b.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 2
+        assert vorgang.stationen[0].typ == vorgang.stationen[1].typ == Stationstyp.PARL_MINUS_VOLLVLSGN
+        assert vorgang.stationen[0].zp_start == vorgang.stationen[1].zp_start
+
+    @pytest.mark.asyncio
+    async def test_synthetic_initiativ_does_not_collide_with_next_station(self, scraper_build_vorgang):
+        """preparl-regbsl + parl-initiativ (synthesized) + parl-vollvlsgn on the same Beratungstag:
+        each different type gets its own zp_start slot."""
+        raw = _make_raw_vorgang(
+            "V-902",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  10.06.2026 Drucksache 17/12345",
+                    "datum": "10.06.2026",
+                    "drucksache": "17/12345",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/200 10.06.2026",
+                    "datum": "10.06.2026",
+                    "plenarprotokoll": "17/200",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        # Stations: regbsl(10.06 00:00), initiativ(10.06 00:00 → bumped to ?), vollvlsgn(10.06 00:00 → bumped)
+        assert [s.typ for s in vorgang.stationen] == [
+            Stationstyp.PREPARL_MINUS_REGBSL,
+            Stationstyp.PARL_MINUS_INITIATIV,
+            Stationstyp.PARL_MINUS_VOLLVLSGN,
+        ]
+        zp_starts = [s.zp_start for s in vorgang.stationen]
+        # All three types differ → no two may share a timestamp
+        assert len(set(zp_starts)) == 3
+        # Order preserved (collection order is the desired track order)
+        assert zp_starts == sorted(zp_starts)
+        # Same calendar day
+        assert all(zp.date() == datetime(2026, 6, 10).date() for zp in zp_starts)
+
+    @pytest.mark.asyncio
+    async def test_three_distinct_types_same_day_cascade(self, scraper_build_vorgang):
+        """Three different-typed stations on the same day cascade to +1h, +2h."""
+        raw = _make_raw_vorgang(
+            "V-903",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/300 20.07.2026",
+                    "datum": "20.07.2026",
+                    "plenarprotokoll": "17/300",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  20.07.2026 Drucksache 17/3000",
+                    "datum": "20.07.2026",
+                    "drucksache": "17/3000",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/ausschber.pdf",
+                },
+                {
+                    "raw": "Schlussabstimmung   Plenarprotokoll 17/301 20.07.2026",
+                    "datum": "20.07.2026",
+                    "plenarprotokoll": "17/301",
+                    "station_typ": "Schlussabstimmung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        zp_starts = [s.zp_start for s in vorgang.stationen]
+        assert len(set(zp_starts)) == len(zp_starts), "all different-typed stations must have distinct zp_start"
+        assert zp_starts == sorted(zp_starts), "collection order preserved"
+
+
+class TestEnsureAusschberAfterVollvlsgn:
+    """Tests for retiming parl-ausschber stations that the BW gg-land-parl track
+    would reject because they precede the first parl-vollvlsgn.
+
+    PARLIS dates the Bericht/Beschlussempfehlung Drucksache by its publication
+    date. For Haushalt Einzelpläne the committee Drucksache is published in
+    mid-November while the first plenary reading happens in December — leaving
+    the ausschber chronologically before any vollvlsgn. The track validator
+    rejects that ordering. The fix retimes the offending ausschber to one hour
+    past the first vollvlsgn.
+    """
+
+    @pytest.mark.asyncio
+    async def test_haushalt_einzelplan_ausschber_retimed_after_first_vollvlsgn(self, scraper_build_vorgang):
+        """Haushalt Einzelplan pattern: regbsl, ausschber, vollvlsgn (x3).
+
+        The PARLIS-dated ausschber falls before the first reading. After the fix,
+        its zp_start lands one hour past the first vollvlsgn so the track resolves
+        to: regbsl → initiativ → vollvlsgn → ausschber → vollvlsgn → vollvlsgn.
+        """
+        raw = _make_raw_vorgang(
+            "V-215967",
+            titel="Staatshaushaltsplan 2022 - Einzelplan 01: Landtag",
+            vorgangstyp="Haushaltsgesetzgebung",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  26.10.2021 Drucksache 17/1000",
+                    "datum": "26.10.2021",
+                    "drucksache": "17/1000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  18.11.2021 Drucksache 17/1100",
+                    "datum": "18.11.2021",
+                    "drucksache": "17/1100",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/ausschber.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/30 16.12.2021",
+                    "datum": "16.12.2021",
+                    "plenarprotokoll": "17/30",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/31 17.12.2021",
+                    "datum": "17.12.2021",
+                    "plenarprotokoll": "17/31",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Schlussabstimmung   Plenarprotokoll 17/32 22.12.2021",
+                    "datum": "22.12.2021",
+                    "plenarprotokoll": "17/32",
+                    "station_typ": "Schlussabstimmung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        # Locate the ausschber and the first vollvlsgn (in zp_start order).
+        sorted_stations = sorted(vorgang.stationen, key=lambda s: s.zp_start)
+        ausschber = next(s for s in sorted_stations if s.typ == Stationstyp.PARL_MINUS_AUSSCHBER)
+        first_vollvlsgn = next(s for s in sorted_stations if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN)
+
+        # Ausschber must come strictly after the first vollvlsgn.
+        assert ausschber.zp_start > first_vollvlsgn.zp_start
+        # Specifically: pinned to one hour past the first vollvlsgn.
+        assert ausschber.zp_start == first_vollvlsgn.zp_start + timedelta(hours=1)
+        # And there is at least one vollvlsgn before it in the chronological order.
+        assert any(
+            s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN and s.zp_start < ausschber.zp_start for s in sorted_stations
+        )
+
+    @pytest.mark.asyncio
+    async def test_canonical_order_ausschber_after_vollvlsgn_unchanged(self, scraper_build_vorgang):
+        """When ausschber is already after a vollvlsgn, its date is preserved."""
+        raw = _make_raw_vorgang(
+            "V-CAN",
+            initiative="Fraktion GRÜNE",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  01.03.2026 Drucksache 17/2000",
+                    "datum": "01.03.2026",
+                    "drucksache": "17/2000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/200 10.03.2026",
+                    "datum": "10.03.2026",
+                    "plenarprotokoll": "17/200",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Recht  20.03.2026 Drucksache 17/2100",
+                    "datum": "20.03.2026",
+                    "drucksache": "17/2100",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Recht",
+                    "pdf_url": "https://example.com/ausschber.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/201 25.03.2026",
+                    "datum": "25.03.2026",
+                    "plenarprotokoll": "17/201",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        ausschber = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_AUSSCHBER)
+        # Original PARLIS date preserved (no retiming).
+        assert ausschber.zp_start == datetime(2026, 3, 20, tzinfo=UTC)
+
+    @pytest.mark.asyncio
+    async def test_no_vollvlsgn_means_ausschber_left_alone(self, scraper_build_vorgang):
+        """Without any vollvlsgn anchor, ausschber timestamp stays untouched."""
+        raw = _make_raw_vorgang(
+            "V-NO-LESUNG",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  01.04.2026 Drucksache 17/3000",
+                    "datum": "01.04.2026",
+                    "drucksache": "17/3000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Recht  10.04.2026 Drucksache 17/3100",
+                    "datum": "10.04.2026",
+                    "drucksache": "17/3100",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Recht",
+                    "pdf_url": "https://example.com/ausschber.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        ausschber = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_AUSSCHBER)
+        # Synthetic initiativ shares the date and gets bumped, but the ausschber's
+        # original date holds because there is no vollvlsgn anchor.
+        assert ausschber.zp_start.date() == datetime(2026, 4, 10).date()
+
+    @pytest.mark.asyncio
+    async def test_multiple_ausschber_before_vollvlsgn_all_retimed(self, scraper_build_vorgang):
+        """Two committees both report before the first reading: both get retimed."""
+        raw = _make_raw_vorgang(
+            "V-MULTI",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  01.05.2026 Drucksache 17/4000",
+                    "datum": "01.05.2026",
+                    "drucksache": "17/4000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  10.05.2026 Drucksache 17/4100",
+                    "datum": "10.05.2026",
+                    "drucksache": "17/4100",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/finanz.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Recht  12.05.2026 Drucksache 17/4101",
+                    "datum": "12.05.2026",
+                    "drucksache": "17/4101",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Recht",
+                    "pdf_url": "https://example.com/recht.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/400 20.05.2026",
+                    "datum": "20.05.2026",
+                    "plenarprotokoll": "17/400",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        first_vollvlsgn = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN)
+        ausschber_stations = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_AUSSCHBER]
+
+        assert len(ausschber_stations) == 2
+        for ausschber in ausschber_stations:
+            assert ausschber.zp_start == first_vollvlsgn.zp_start + timedelta(hours=1), (
+                "every ausschber preceding the first vollvlsgn should be pinned to the same anchor+1h"
+            )
+
+    @pytest.mark.asyncio
+    async def test_retimed_ausschber_does_not_collide_with_other_types(self, scraper_build_vorgang):
+        """After retiming, _enforce_total_ordering still produces unique slots
+        for distinct Stationstypen."""
+        raw = _make_raw_vorgang(
+            "V-COLLISION",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  26.10.2021 Drucksache 17/5000",
+                    "datum": "26.10.2021",
+                    "drucksache": "17/5000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  18.11.2021 Drucksache 17/5100",
+                    "datum": "18.11.2021",
+                    "drucksache": "17/5100",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/ausschber.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/30 16.12.2021",
+                    "datum": "16.12.2021",
+                    "plenarprotokoll": "17/30",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        # Group by zp_start: each distinct timestamp must hold only one station type.
+        slots: dict[datetime, set] = {}
+        for s in vorgang.stationen:
+            slots.setdefault(s.zp_start, set()).add(s.typ)
+        for zp, types in slots.items():
+            assert len(types) == 1, f"slot {zp} has multiple types {types}"
+
+    def test_unit_retimes_ausschber_in_place(self):
+        """Direct unit test on the static method, without the rest of _build_vorgang."""
+        from openapi_client.models import Gremium, Parlament, Station
+
+        def _station(typ: Stationstyp, zp_start: datetime, zp_modifiziert: datetime | None = None) -> Station:
+            return Station(
+                typ=typ,
+                dokumente=[],
+                zp_start=zp_start,
+                zp_modifiziert=zp_modifiziert,
+                gremium=Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17),
+            )
+
+        anchor = datetime(2021, 12, 16, tzinfo=UTC)
+        ausschber_zp = datetime(2021, 11, 18, tzinfo=UTC)
+        stationen = [
+            _station(Stationstyp.PREPARL_MINUS_REGBSL, datetime(2021, 10, 26, tzinfo=UTC)),
+            _station(Stationstyp.PARL_MINUS_INITIATIV, ausschber_zp),
+            _station(Stationstyp.PARL_MINUS_AUSSCHBER, ausschber_zp),
+            _station(Stationstyp.PARL_MINUS_VOLLVLSGN, anchor),
+        ]
+
+        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+
+        assert stationen[2].zp_start == anchor + timedelta(hours=1)
+        # Other stations untouched.
+        assert stationen[0].zp_start == datetime(2021, 10, 26, tzinfo=UTC)
+        assert stationen[1].zp_start == ausschber_zp
+        assert stationen[3].zp_start == anchor
+
+    def test_unit_zp_modifiziert_invariant_maintained(self):
+        """If the ausschber has zp_modifiziert set, retiming must keep it >= zp_start."""
+        from openapi_client.models import Gremium, Parlament, Station
+
+        anchor = datetime(2021, 12, 16, tzinfo=UTC)
+        gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
+
+        # zp_modifiziert was originally at the early ausschber date — it is now
+        # before the bumped zp_start, so it must be advanced to match.
+        early_zp = datetime(2021, 11, 18, tzinfo=UTC)
+        ausschber = Station(
+            typ=Stationstyp.PARL_MINUS_AUSSCHBER,
+            dokumente=[],
+            zp_start=early_zp,
+            zp_modifiziert=early_zp,
+            gremium=gremium,
+        )
+        vollvlsgn = Station(
+            typ=Stationstyp.PARL_MINUS_VOLLVLSGN,
+            dokumente=[],
+            zp_start=anchor,
+            gremium=gremium,
+        )
+
+        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn([ausschber, vollvlsgn])
+
+        assert ausschber.zp_start == anchor + timedelta(hours=1)
+        assert ausschber.zp_modifiziert == anchor + timedelta(hours=1)
+
+    def test_unit_zp_modifiziert_only_advanced_when_below_new_start(self):
+        """A zp_modifiziert that is already past the bump target must NOT be lowered."""
+        from openapi_client.models import Gremium, Parlament, Station
+
+        anchor = datetime(2021, 12, 16, tzinfo=UTC)
+        gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
+
+        # An ausschber spanning multiple weeks: modifier is past the future bump.
+        ausschber = Station(
+            typ=Stationstyp.PARL_MINUS_AUSSCHBER,
+            dokumente=[],
+            zp_start=datetime(2021, 11, 18, tzinfo=UTC),
+            zp_modifiziert=datetime(2022, 1, 5, tzinfo=UTC),
+            gremium=gremium,
+        )
+        vollvlsgn = Station(
+            typ=Stationstyp.PARL_MINUS_VOLLVLSGN,
+            dokumente=[],
+            zp_start=anchor,
+            gremium=gremium,
+        )
+
+        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn([ausschber, vollvlsgn])
+
+        assert ausschber.zp_start == anchor + timedelta(hours=1)
+        assert ausschber.zp_modifiziert == datetime(2022, 1, 5, tzinfo=UTC), "must not be reduced"
+
+    def test_unit_no_op_when_no_vollvlsgn(self):
+        """Without a vollvlsgn, ausschber stations are left untouched."""
+        from openapi_client.models import Gremium, Parlament, Station
+
+        gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
+        ausschber_zp = datetime(2021, 11, 18, tzinfo=UTC)
+        ausschber = Station(
+            typ=Stationstyp.PARL_MINUS_AUSSCHBER,
+            dokumente=[],
+            zp_start=ausschber_zp,
+            gremium=gremium,
+        )
+        regbsl = Station(
+            typ=Stationstyp.PREPARL_MINUS_REGBSL,
+            dokumente=[],
+            zp_start=datetime(2021, 10, 26, tzinfo=UTC),
+            gremium=gremium,
+        )
+
+        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn([regbsl, ausschber])
+
+        assert ausschber.zp_start == ausschber_zp
+
+    def test_unit_empty_list_returns_cleanly(self):
+        """Empty stationen must not raise."""
+        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn([])
 
 
 class TestBeschlussDesLandtagsInBeratung:

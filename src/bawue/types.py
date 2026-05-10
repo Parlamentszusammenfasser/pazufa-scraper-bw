@@ -74,6 +74,35 @@ def _org_lookup_key(raw: str) -> str:
     return _NON_ALNUM_RE.sub("", raw).lower()
 
 
+TODO_MARKER = "TODO"
+"""Placeholder for required string fields whose source value is missing
+or empty. The new backend rejects empty strings; required fields must
+carry this marker so a human (or a later enrichment pass) can fill them
+in. Optional fields should use :func:`none_if_blank` instead."""
+
+
+def todo_if_blank(value: str | None) -> str:
+    """Return ``value`` stripped if non-blank, else ``TODO_MARKER``.
+
+    Use for *required* string fields (Pydantic ``StrictStr``) whose source
+    can be empty or whitespace-only.
+    """
+    if value and value.strip():
+        return value
+    return TODO_MARKER
+
+
+def none_if_blank(value: str | None) -> str | None:
+    """Return ``value`` if non-blank, else ``None``.
+
+    Use for *optional* string fields so the JSON payload omits the field
+    entirely instead of sending an empty string.
+    """
+    if value and value.strip():
+        return value
+    return None
+
+
 def canonicalize_organisation(raw: str) -> str:
     """Map an organisation string to its canonical form (DD-022).
 

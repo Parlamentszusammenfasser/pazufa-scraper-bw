@@ -5,7 +5,7 @@ import logging
 import re
 import time
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
@@ -33,11 +33,14 @@ from bawue.parlis_client import ParlisClient
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, format_duration, format_failed_section
 from bawue.types import (
+    TODO_MARKER,
     RawFundstelle,
     RawVorgang,
     ReservedGremium,
     canonicalize_organisation,
     is_verfassungsaendernd,
+    none_if_blank,
+    todo_if_blank,
 )
 from bawue.upload_throttle import upload_vorgang
 from bawue.wahlperiode_check import check_for_newer_wahlperiode
@@ -298,12 +301,15 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if aktueller_stand == "Abgelehnt":
             self._ensure_ablehnung_station(stationen, vorgang_id)
 
+        self._ensure_ausschber_after_vollvlsgn(stationen)
+        self._enforce_total_ordering(stationen)
+
         # parse vorgangs-id
         ids = [VgIdent(id=vorgang_id, typ="vorgnr")] if vorgang_id != "unknown" else None
 
         return Vorgang(
             api_id=str(api_id),
-            titel=titel,
+            titel=todo_if_blank(titel),
             kurztitel=vorgang_id if vorgang_id != "unknown" else None,
             typ=typ,
             wahlperiode=self._wahlperiode,
@@ -506,6 +512,69 @@ class BawueVorgaengeScraper(VorgangsScraper):
             ),
         )
         stationen.insert(next_idx, synthetic)
+
+    @staticmethod
+    def _ensure_ausschber_after_vollvlsgn(stationen: list[Station]) -> None:
+        """Re-time any ``parl-ausschber`` that precedes the first ``parl-vollvlsgn``.
+
+        The BW ``gg-land-parl`` track requires the canonical ordering
+        ``parl-initiativ → parl-vollvlsgn → parl-ausschber``. PARLIS dates the
+        Bericht/Beschlussempfehlung Drucksache by its publication date, which
+        for Haushalt Einzelpläne falls in mid-November — before the first
+        plenary reading in December. The track validator then rejects the
+        ausschber as out-of-order. Pin such ausschber stations to one hour
+        past the first vollvlsgn so the canonical position is preserved
+        without losing the station entirely.
+
+        The list-position of the ausschber is left untouched; the backend
+        sorts by ``zp_start`` before validating, so adjusting the timestamp
+        is sufficient.
+        """
+        if not stationen:
+            return
+
+        first_vollvlsgn_idx: int | None = None
+        for i, s in enumerate(stationen):
+            if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN:
+                first_vollvlsgn_idx = i
+                break
+
+        if first_vollvlsgn_idx is None:
+            return
+
+        anchor_zp_start = stationen[first_vollvlsgn_idx].zp_start
+        bumped_zp_start = anchor_zp_start + timedelta(hours=1)
+
+        for station in stationen[:first_vollvlsgn_idx]:
+            if station.typ != Stationstyp.PARL_MINUS_AUSSCHBER:
+                continue
+            station.zp_start = bumped_zp_start
+            if station.zp_modifiziert is not None and station.zp_modifiziert < bumped_zp_start:
+                station.zp_modifiziert = bumped_zp_start
+
+    @staticmethod
+    def _enforce_total_ordering(stationen: list[Station]) -> None:
+        """Ensure no two different-typed stations share the same ``zp_start``.
+
+        The backend's track validation sorts stations by ``zp_start``; if two
+        stations of different ``Stationstyp`` collide on the same value, the
+        order is ambiguous and the upload is rejected. PARLIS Fundstellen carry
+        only date precision (midnight UTC), so different-typed stations from
+        the same day clash by default — and the synthetic ``parl-initiativ`` /
+        ``parl-ablehnung`` insertions deliberately reuse a neighbor's
+        ``zp_start``. Bumps each colliding station forward in 1-hour steps
+        until its slot is unique to its type. Same-typed stations stay tied,
+        which the backend explicitly permits (e.g. multiple Ausschussberatungen
+        announced on the same date).
+        """
+        seen: dict[datetime, set[Stationstyp]] = {}
+        for station in stationen:
+            while station.zp_start in seen and seen[station.zp_start] - {station.typ}:
+                bumped = station.zp_start + timedelta(hours=1)
+                station.zp_start = bumped
+                if station.zp_modifiziert is not None and station.zp_modifiziert < bumped:
+                    station.zp_modifiziert = bumped
+            seen.setdefault(station.zp_start, set()).add(station.typ)
 
     @staticmethod
     def _attach_pending_aenderungsantraege(
@@ -740,16 +809,19 @@ class BawueVorgaengeScraper(VorgangsScraper):
         autor_text = fund.get("autor_text", "")
         autoren = _parse_autoren(autor_text) if autor_text else _parse_autoren(initiative)
 
+        # volltext + hash carry the TODO marker until LLM enrichment fills
+        # them with extracted PDF text and a content hash. The new backend
+        # rejects empty strings; without LLM, the placeholder remains.
         dok = Dokument(
             titel=station_typ_str or "Dokument",
-            volltext="",
-            hash="",
+            volltext=TODO_MARKER,
+            hash=TODO_MARKER,
             typ=doc_typ,
             zp_modifiziert=zp_start,
             zp_referenz=zp_start,
             link=pdf_url,
             autoren=autoren,
-            drucksnr=fund.get("drucksache"),
+            drucksnr=none_if_blank(fund.get("drucksache")),
         )
 
         trojanergefahr = None
