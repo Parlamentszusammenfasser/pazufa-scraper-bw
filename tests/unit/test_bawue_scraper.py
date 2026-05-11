@@ -17,6 +17,8 @@ from bawue.bawue_vorgaenge_scraper import (
     _fallback_date_from_year,
     _parse_autoren,
     _parse_fundstelle_date,
+    _reading_round,
+    _same_round_label,
 )
 
 
@@ -2907,6 +2909,223 @@ class TestBeschlussDesLandtagsInBeratung:
 
         beschluss_station = vorgang.stationen[1]
         assert beschluss_station.typ == Stationstyp.PARL_MINUS_AKZEPTANZ
+
+
+class TestReadingRoundEquivalence:
+    """Tests for DD-026: 'Beschluss des Landtags in <Ordinal>er Beratung' is the
+    same reading round as '<Ordinal>e Beratung' and merges into one parl-vollvlsgn.
+
+    Motivation: BW Haushalts-Einzelpläne emit four V-mapped Fundstellen per
+    Vorgang (Zweite Beratung + Beschluss in Zweiter + Dritte Beratung + Beschluss
+    in Dritter). DD-024's strict same-text merge keeps them as 4 V stations,
+    overrunning the BW gg-land-parl track regex's 3-V budget.
+    """
+
+    @pytest.mark.asyncio
+    async def test_zweite_and_beschluss_in_zweiter_merged(self, scraper_build_vorgang):
+        """Two consecutive V Fundstellen, 'Zweite Beratung' + 'Beschluss des
+        Landtags in Zweiter Beratung', merge into one V with both documents."""
+        raw = _make_raw_vorgang(
+            "V-DD026-1",
+            fundstellen=[
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/55 14.12.2022",
+                    "datum": "14.12.2022",
+                    "plenarprotokoll": "17/55",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/pp55.pdf",
+                },
+                {
+                    "raw": "Beschluss des Landtags in Zweiter Beratung   16.12.2022 Drucksache 17/3820",
+                    "datum": "16.12.2022",
+                    "drucksache": "17/3820",
+                    "station_typ": "Beschluss des Landtags in Zweiter Beratung",
+                    "pdf_url": "https://example.com/beschluss.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        v_stations = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN]
+        assert len(v_stations) == 1
+        assert v_stations[0].zp_start == datetime(2022, 12, 14, tzinfo=UTC)
+        assert v_stations[0].zp_modifiziert == datetime(2022, 12, 16, tzinfo=UTC)
+        assert len(v_stations[0].dokumente) == 2
+
+    @pytest.mark.asyncio
+    async def test_haushalt_einzelplan_collapses_to_two_v_stations(self, scraper_build_vorgang):
+        """End-to-end V-222745 pattern: Gesetzentwurf, Beschlussempfehlung, four
+        V Fundstellen (Zweite, Beschluss-in-Zweiter, Dritte, Beschluss-in-Dritter).
+
+        After DD-026 merging, exactly 2 V stations remain — fits the BW
+        gg-land-parl track's 3-V budget.
+        """
+        raw = _make_raw_vorgang(
+            "V-222745",
+            titel="Staatshaushaltsplan 2023/2024 - Einzelplan 07",
+            vorgangstyp="Haushaltsgesetzgebung",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  25.10.2022 Drucksache 17/3500",
+                    "datum": "25.10.2022",
+                    "drucksache": "17/3500",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  17.11.2022 Drucksache 17/3707",
+                    "datum": "17.11.2022",
+                    "drucksache": "17/3707",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/ausschber.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/55 14.12.2022",
+                    "datum": "14.12.2022",
+                    "plenarprotokoll": "17/55",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/pp55.pdf",
+                },
+                {
+                    "raw": "Beschluss des Landtags in Zweiter Beratung   16.12.2022 Drucksache 17/3807",
+                    "datum": "16.12.2022",
+                    "drucksache": "17/3807",
+                    "station_typ": "Beschluss des Landtags in Zweiter Beratung",
+                    "pdf_url": "https://example.com/beschluss2.pdf",
+                },
+                {
+                    "raw": "Dritte Beratung   Plenarprotokoll 17/57 21.12.2022",
+                    "datum": "21.12.2022",
+                    "plenarprotokoll": "17/57",
+                    "station_typ": "Dritte Beratung",
+                    "pdf_url": "https://example.com/pp57.pdf",
+                },
+                {
+                    "raw": "Beschluss des Landtags in Dritter Beratung   21.12.2022 Drucksache 17/3842",
+                    "datum": "21.12.2022",
+                    "drucksache": "17/3842",
+                    "station_typ": "Beschluss des Landtags in Dritter Beratung",
+                    "pdf_url": "https://example.com/beschluss3.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        v_stations = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN]
+        assert len(v_stations) == 2, (
+            f"Expected 2 V stations after DD-026 merging (Zweite+Beschluss-in-Zweiter and "
+            f"Dritte+Beschluss-in-Dritter), got {len(v_stations)}"
+        )
+        # First merged V: Zweite + Beschluss in Zweiter, span 14.12 → 16.12, 2 docs.
+        assert v_stations[0].zp_start == datetime(2022, 12, 14, tzinfo=UTC)
+        assert v_stations[0].zp_modifiziert == datetime(2022, 12, 16, tzinfo=UTC)
+        assert len(v_stations[0].dokumente) == 2
+        # Second merged V: Dritte + Beschluss in Dritter, both 21.12, 2 docs.
+        assert v_stations[1].zp_start == datetime(2022, 12, 21, tzinfo=UTC)
+        assert len(v_stations[1].dokumente) == 2
+
+        # Whole sequence must be S, I, V, A, V (sorted by zp_start) — fits regex.
+        sorted_typen = [s.typ for s in sorted(vorgang.stationen, key=lambda s: s.zp_start)]
+        assert sorted_typen == [
+            Stationstyp.PREPARL_MINUS_REGBSL,
+            Stationstyp.PARL_MINUS_INITIATIV,
+            Stationstyp.PARL_MINUS_VOLLVLSGN,
+            Stationstyp.PARL_MINUS_AUSSCHBER,
+            Stationstyp.PARL_MINUS_VOLLVLSGN,
+        ]
+
+    @pytest.mark.asyncio
+    async def test_different_rounds_still_separate(self, scraper_build_vorgang):
+        """Defensive: 'Erste Beratung' and 'Zweite Beratung' are different rounds → not merged.
+        Mirrors the existing test_consecutive_vollvlsgn_not_merged_even_with_documents
+        expectation, ensuring DD-026 didn't over-merge.
+        """
+        raw = _make_raw_vorgang(
+            "V-DD026-2",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp141.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/145 12.02.2026",
+                    "datum": "12.02.2026",
+                    "plenarprotokoll": "17/145",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "https://example.com/pp145.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        v_stations = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN]
+        assert len(v_stations) == 2
+
+    @pytest.mark.asyncio
+    async def test_ueberweisung_not_merged_with_erste_beratung(self, scraper_build_vorgang):
+        """'Überweisung' has no 'Beratung' substring → falls back to exact-match → stays separate."""
+        raw = _make_raw_vorgang(
+            "V-DD026-3",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "https://example.com/pp141.pdf",
+                },
+                {
+                    "raw": "Überweisung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Überweisung",
+                    "pdf_url": "https://example.com/pp141b.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        v_stations = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN]
+        assert len(v_stations) == 2
+
+    def test_unit_reading_round_extracts_from_plain_label(self):
+        assert _reading_round("Erste Beratung") == 1
+        assert _reading_round("Zweite Beratung") == 2
+        assert _reading_round("Dritte Beratung") == 3
+
+    def test_unit_reading_round_extracts_from_beschluss_in_label(self):
+        assert _reading_round("Beschluss des Landtags in Erster Beratung") == 1
+        assert _reading_round("Beschluss des Landtags in Zweiter Beratung") == 2
+        assert _reading_round("Beschluss des Landtags in Dritter Beratung") == 3
+
+    def test_unit_reading_round_returns_none_for_non_round_labels(self):
+        # No 'Beratung' substring → not a round indicator.
+        assert _reading_round("Überweisung") is None
+        assert _reading_round("Schlussabstimmung") is None
+        assert _reading_round("Gesetzesbeschluss des Landtags") is None
+        assert _reading_round("") is None
+
+    def test_unit_same_round_label_treats_zweite_and_beschluss_in_zweiter_equal(self):
+        assert _same_round_label("Zweite Beratung", "Beschluss des Landtags in Zweiter Beratung")
+        assert _same_round_label("Beschluss des Landtags in Dritter Beratung", "Dritte Beratung")
+
+    def test_unit_same_round_label_distinguishes_different_rounds(self):
+        assert not _same_round_label("Erste Beratung", "Zweite Beratung")
+        assert not _same_round_label(
+            "Beschluss des Landtags in Zweiter Beratung",
+            "Beschluss des Landtags in Dritter Beratung",
+        )
+
+    def test_unit_same_round_label_empty_label_is_defensive_false(self):
+        # Defensive default from DD-024 must be preserved even after DD-026.
+        assert not _same_round_label("", "Zweite Beratung")
+        assert not _same_round_label("Zweite Beratung", "")
+        assert not _same_round_label("", "")
 
 
 class TestParseFundstelleDateNone:

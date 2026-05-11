@@ -864,16 +864,55 @@ def _dedup_drucks(doks: list[StationDokumenteInner]) -> list[StationDokumenteInn
     return unique
 
 
+_READING_ROUND_STEMS: dict[str, int] = {
+    "erst": 1,
+    "zweit": 2,
+    "dritt": 3,
+    "viert": 4,
+    "fünft": 5,
+}
+
+
+def _reading_round(label: str) -> int | None:
+    """Return the parliamentary reading-round ordinal for round-bearing labels.
+
+    Recognises ``"<Ordinal>e Beratung"`` (e.g. ``"Zweite Beratung"``) and the
+    drucksache-level vote variant ``"Beschluss des Landtags in <Ordinal>er
+    Beratung"``. Returns ``None`` for labels without ``"Beratung"`` (e.g.
+    ``"Überweisung"``, ``"Schlussabstimmung"``) so they fall back to exact-text
+    equality in :func:`_same_round_label` (DD-026).
+    """
+    norm = label.strip().casefold()
+    if "beratung" not in norm:
+        return None
+    for stem, n in _READING_ROUND_STEMS.items():
+        if stem in norm:
+            return n
+    return None
+
+
 def _same_round_label(a: str, b: str) -> bool:
-    """Two PARLIS ``station_typ`` labels refer to the same reading round (DD-024).
+    """Two PARLIS ``station_typ`` labels refer to the same reading round (DD-024, DD-026).
 
     Comparison is case-insensitive and whitespace-trimmed. An empty label on
     either side is *not* a reliable round signal and returns False — this is
     the defensive default that keeps stations separate when the parser could
     not extract a label.
+
+    DD-026 extension: labels of the form ``"Beschluss des Landtags in <Ordinal>er
+    Beratung"`` are treated as the same reading round as ``"<Ordinal>e
+    Beratung"`` (debate transcript and formal vote of the same plenary
+    reading), so they merge into one ``parl-vollvlsgn`` station.
     """
     norm_a = a.strip().casefold()
-    return norm_a != "" and norm_a == b.strip().casefold()
+    norm_b = b.strip().casefold()
+    if not norm_a or not norm_b:
+        return False
+    if norm_a == norm_b:
+        return True
+    round_a = _reading_round(norm_a)
+    round_b = _reading_round(norm_b)
+    return round_a is not None and round_a == round_b
 
 
 def _widen_span(station: Station, new_date: datetime) -> None:
