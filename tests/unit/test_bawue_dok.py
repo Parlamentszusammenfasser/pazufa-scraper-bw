@@ -26,6 +26,8 @@ from bawue.bawue_dok import (
     _parse_page_hint,
     _prompt_fingerprint,
     _prompt_for_doktyp,
+    _sanitize_llm_strings,
+    _sanitize_llm_text,
     _validate_scores,
     clear_hash_cache,
     download_pdf,
@@ -958,6 +960,103 @@ class TestNormalizeVolltext:
         text = "ausgezeich\ufffdnet"
         result = normalize_volltext(text)
         assert result == "ausgezeichnet"
+
+
+# ---------------------------------------------------------------------------
+# TestSanitizeLlmText (DD-027)
+# ---------------------------------------------------------------------------
+
+
+class TestSanitizeLlmText:
+    """Tests for the LLM-output sanitizer that defends against the backend's
+    XSS validator. Motivated by V-243670 in the staging run 2026-05-10/11:
+    gpt-5-nano sporadically appends artefacts like ``</narrow>`` to its
+    response despite the system prompt forbidding formatting.
+    """
+
+    def test_strips_trailing_narrow_artefact(self):
+        text = "Der Landtag hat das Gesetz beschlossen.</narrow>"
+        assert _sanitize_llm_text(text) == "Der Landtag hat das Gesetz beschlossen."
+
+    def test_strips_inline_html_like_tags(self):
+        text = "Foo <strong>bar</strong> baz"
+        assert _sanitize_llm_text(text) == "Foo bar baz"
+
+    def test_strips_self_closing_tag(self):
+        assert _sanitize_llm_text("Zeile<br/>Umbruch") == "ZeileUmbruch"
+
+    def test_clean_text_unchanged(self):
+        text = "Eine Zusammenfassung ohne jede Formatierung."
+        assert _sanitize_llm_text(text) == text
+
+    def test_lone_brackets_replaced_with_guillemets(self):
+        # Defense in depth: stray < or > that didn't form a tag still get
+        # neutralised so the backend XSS validator never sees raw brackets.
+        assert _sanitize_llm_text("x < 5 und y > 3") == "x \u2039 5 und y \u203a 3"
+
+    def test_empty_input_returns_none(self):
+        # An all-tag input becomes empty after stripping \u2192 return None so the
+        # API client omits the field rather than sending an empty string.
+        assert _sanitize_llm_text("<narrow></narrow>") is None
+        assert _sanitize_llm_text("   ") is None
+
+    def test_none_input_returns_none(self):
+        assert _sanitize_llm_text(None) is None
+
+    def test_pathological_long_tag_left_alone(self):
+        # Tags longer than the 80-char regex cap fall through to the
+        # bracket-substitution path, still neutralising the danger.
+        text = "ok <" + "a" * 200 + "> done"
+        result = _sanitize_llm_text(text)
+        assert "<" not in result
+        assert ">" not in result
+
+    def test_strings_helper_drops_empty_results(self):
+        assert _sanitize_llm_strings(["foo", "<narrow></narrow>", "bar"]) == ["foo", "bar"]
+
+    def test_strings_helper_passes_through_clean_list(self):
+        assert _sanitize_llm_strings(["umwelt", "klimaschutz"]) == ["umwelt", "klimaschutz"]
+
+    def test_strings_helper_handles_none_and_empty(self):
+        assert _sanitize_llm_strings(None) is None
+        assert _sanitize_llm_strings([]) == []
+
+
+class TestEnrichDokumentSanitization:
+    """End-to-end: when the LLM returns </narrow> in zusammenfassung, the
+    Dokument that enrich_dokument hands back must not contain it (DD-027)."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_narrow_artefact_stripped_from_zusammenfassung(self):
+        """Reproduces the V-243670 staging failure: gpt-5-nano response
+        ends with </narrow>, sanitizer removes it before Dokument construction."""
+        polluted_response = json.dumps(
+            {
+                "schlagworte": ["umwelt"],
+                "zusammenfassung": "Der Landtag hat das Gesetz beschlossen.</narrow>",
+                "kurztitel": "Klima",
+                "trojanergefahr": 3,
+                "vorwort": "Ziel: Klimaschutz <hr/>",
+            }
+        )
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = _make_llm_mock()
+
+        with _patch_pdf_pipeline(), _patch_llm(polluted_response):
+            result = await enrich_dokument(session, llm, dok)
+
+        assert result.dokument.zusammenfassung == "Der Landtag hat das Gesetz beschlossen."
+        assert result.dokument.vorwort == "Ziel: Klimaschutz"
+        # No raw brackets reach the API model \u2014 guards against the backend XSS validator.
+        assert "<" not in result.dokument.zusammenfassung
+        assert ">" not in result.dokument.zusammenfassung
 
 
 # ---------------------------------------------------------------------------

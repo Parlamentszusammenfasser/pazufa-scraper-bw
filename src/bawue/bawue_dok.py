@@ -279,6 +279,46 @@ def normalize_volltext(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# LLM-output sanitization
+# ---------------------------------------------------------------------------
+
+# Matches HTML-like tag artefacts (e.g. ``</narrow>``, ``<br/>`` from
+# gpt-5-nano output). Requires a letter immediately after ``<`` (or ``</``)
+# so stray inequalities like ``x < 5 und y > 3`` are NOT treated as a tag —
+# those fall through to the guillemet substitution below. 80-char inner cap
+# prevents pathological backtracking on malformed input.
+_HTML_LIKE_TAG_RE = re.compile(r"</?[a-zA-Z][^<>]{0,80}>")
+
+
+def _sanitize_llm_text(text: str | None) -> str | None:
+    """Strip HTML-like tag artefacts and neutralise stray angle brackets in LLM output (DD-027).
+
+    The backend's XSS validator rejects payloads containing ``<``/``>``. The
+    system prompt forbids formatting (``Füge keine Formatierungen ... hinzu``),
+    so any tag in a string-typed LLM field is by definition an artefact (e.g.
+    gpt-5-nano sporadically appending ``</narrow>``). Matches
+    :func:`normalize_volltext`'s defensive guillemet substitution for any
+    brackets that survive the tag pass. Returns ``None`` for empty / None
+    inputs so the API client omits the field rather than sending an empty
+    string (the backend rejects those).
+    """
+    if not text:
+        return text
+    text = _HTML_LIKE_TAG_RE.sub("", text)
+    text = text.replace("<", "‹").replace(">", "›")
+    text = text.strip()
+    return text or None
+
+
+def _sanitize_llm_strings(values: list[str] | None) -> list[str] | None:
+    """Apply :func:`_sanitize_llm_text` to each list item, dropping empty results."""
+    if not values:
+        return values
+    cleaned = [_sanitize_llm_text(v) for v in values]
+    return [v for v in cleaned if v]
+
+
+# ---------------------------------------------------------------------------
 # Garbled text detection
 # ---------------------------------------------------------------------------
 
@@ -634,11 +674,11 @@ async def enrich_dokument(
                     link=dok.link,
                     autoren=dok.autoren,
                     drucksnr=dok.drucksnr,
-                    zusammenfassung=semantics.get("zusammenfassung"),
-                    schlagworte=semantics.get("schlagworte"),
-                    kurztitel=semantics.get("kurztitel"),
+                    zusammenfassung=_sanitize_llm_text(semantics.get("zusammenfassung")),
+                    schlagworte=_sanitize_llm_strings(semantics.get("schlagworte")),
+                    kurztitel=_sanitize_llm_text(semantics.get("kurztitel")),
                     meinung=semantics.get("meinung"),
-                    vorwort=semantics.get("vorwort"),
+                    vorwort=_sanitize_llm_text(semantics.get("vorwort")),
                 ),
                 trojanergefahr=semantics.get("trojanergefahr"),
             )
