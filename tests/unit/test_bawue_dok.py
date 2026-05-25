@@ -587,6 +587,26 @@ class TestEnrichDokument:
         assert result.trojanergefahr is None
 
     @pytest.mark.asyncio
+    async def test_metadata_only_fallback_on_empty_extracted_text(self):
+        """PDF extracts to empty text → original Dokument returned, LLM not invoked.
+
+        The backend rejects empty ``volltext`` (required StrictStr), so we
+        must not build a Dokument with ``volltext=""`` and must not ask the
+        LLM to hallucinate metadata for nothing.
+        """
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = AsyncMock()
+
+        llm_call = patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock)
+        with _patch_pdf_pipeline(text_and_hash=("", "deadbeef")), llm_call as mock_llm:
+            result = await enrich_dokument(session, llm, dok)
+
+        assert result.dokument is dok
+        assert result.trojanergefahr is None
+        mock_llm.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_tempfile_cleaned_up_after_enrichment(self):
         """Temporary PDF file should be cleaned up after enrichment."""
         import tempfile

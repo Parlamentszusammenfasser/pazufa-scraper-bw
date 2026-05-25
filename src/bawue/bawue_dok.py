@@ -631,6 +631,16 @@ async def enrich_dokument(
         full_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint)
         full_text = normalize_volltext(full_text)
 
+        if not full_text:
+            # Empty volltext is rejected by the backend (required StrictStr).
+            # Fall back to the original Dokument (volltext=TODO_MARKER) rather
+            # than asking the LLM to invent metadata for an empty document.
+            logger.warning(
+                "PDF text extraction yielded empty content for %s, returning original document",
+                dok.link,
+            )
+            return EnrichmentResult(dokument=dok)
+
         # Try LLM extraction (with two-tier cache deduplication, keyed by
         # doc_hash + prompt_hash so different prompts don't collide).
         prompt_hash = _prompt_fingerprint(dok.typ)
