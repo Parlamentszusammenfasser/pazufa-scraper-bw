@@ -1,5 +1,5 @@
 variables:
-  - &python_image python:3.13-slim
+  - &python_image python:3.13-alpine
 
 when:
   - event: [push, pull_request]
@@ -53,7 +53,7 @@ steps:
       DEBIAN_FRONTEND: noninteractive
       PIP_ROOT_USER_ACTION: ignore
     commands:
-      - apt-get update -qq && apt-get install -qqy git --no-install-recommends > /dev/null
+      - apk add --no-cache -q git
       # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
       - git clone https://codeberg.org/PaZuFa/pazufa-scraper-core.git ../pazufa-scraper-core
       - git -C ../pazufa-scraper-core checkout 3fbebe5affed1d1278013decc61f030074507400
