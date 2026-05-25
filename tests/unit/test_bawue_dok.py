@@ -999,6 +999,7 @@ class TestSanitizeLlmText:
         # API client omits the field rather than sending an empty string.
         assert _sanitize_llm_text("<narrow></narrow>") is None
         assert _sanitize_llm_text("   ") is None
+        assert _sanitize_llm_text("") is None
 
     def test_none_input_returns_none(self):
         assert _sanitize_llm_text(None) is None

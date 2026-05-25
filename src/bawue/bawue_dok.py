@@ -303,7 +303,7 @@ def _sanitize_llm_text(text: str | None) -> str | None:
     string (the backend rejects those).
     """
     if not text:
-        return text
+        return None
     text = _HTML_LIKE_TAG_RE.sub("", text)
     text = text.replace("<", "\u2039").replace(">", "\u203a")
     text = text.strip()
