@@ -19,6 +19,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _parse_fundstelle_date,
     _reading_round,
     _same_round_label,
+    _vorgang_kurztitel,
 )
 
 
@@ -83,7 +84,20 @@ class TestBuildVorgang:
         assert vorgang.ids is not None
         assert vorgang.ids[0].id == "V-001"
         assert vorgang.ids[0].typ == "vorgnr"
-        assert vorgang.kurztitel == "V-001"
+        # Issue #25: kurztitel is a semantic summary, not the vgnr. Without LLM
+        # enrichment no kurztitel is available, so it is None (not "V-001").
+        assert vorgang.kurztitel is None
+
+    @pytest.mark.asyncio
+    async def test_kurztitel_from_initiative_document(self, scraper_build_vorgang):
+        """Issue #25: the Vorgang Kurztitel reuses the initiating document's LLM kurztitel."""
+        raw = _make_raw_vorgang("V-001")
+        vorgang = await scraper_build_vorgang(raw)
+
+        # Simulate the enriched initiative document carrying a plain-language title.
+        vorgang.stationen[0].dokumente[0].actual_instance.kurztitel = "Klimaschutzgesetz"
+
+        assert _vorgang_kurztitel(vorgang.stationen) == "Klimaschutzgesetz"
 
     @pytest.mark.asyncio
     async def test_ids_include_initiativdrucksache(self, scraper_build_vorgang):

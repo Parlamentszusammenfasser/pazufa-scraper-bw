@@ -317,7 +317,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         return Vorgang(
             api_id=str(api_id),
             titel=todo_if_blank(titel),
-            kurztitel=vorgang_id if vorgang_id != "unknown" else None,
+            kurztitel=_vorgang_kurztitel(stationen),
             typ=typ,
             wahlperiode=self._wahlperiode,
             verfassungsaendernd=is_verfassungsaendernd(titel),
@@ -898,6 +898,25 @@ def _initiativ_drucksnr(stationen: list[Station]) -> str | None:
             drucksnr = dok.actual_instance.drucksnr
             if drucksnr:
                 return drucksnr
+    return None
+
+
+def _vorgang_kurztitel(stationen: list[Station]) -> str | None:
+    """Return a human-readable Kurztitel for the Vorgang (Issue #25).
+
+    Reuses the LLM-generated, plain-language ``kurztitel`` of the initiating
+    Gesetzentwurf/Antrag, which best summarises the whole process. Falls back to
+    the first document that carries a kurztitel, and finally to None when LLM
+    enrichment is disabled (so the official title remains the only title).
+    """
+    for typen in (_INITIATIV_TYPEN, None):
+        for station in stationen:
+            if typen is not None and station.typ not in typen:
+                continue
+            for dok in station.dokumente:
+                kurztitel = dok.actual_instance.kurztitel
+                if kurztitel:
+                    return kurztitel
     return None
 
 
