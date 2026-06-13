@@ -307,6 +307,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # parse vorgangs-id
         ids = [VgIdent(id=vorgang_id, typ="vorgnr")] if vorgang_id != "unknown" else None
 
+        # Cross-referencing aid (Issue #26): also expose the Initiativdrucksache
+        # so consumers can join on the originating Gesetzentwurf/Antrag number.
+        initiativ_drucks = _initiativ_drucksnr(stationen)
+        if initiativ_drucks:
+            initdrucks_ident = VgIdent(id=initiativ_drucks, typ="initdrucks")
+            ids = [initdrucks_ident] if ids is None else [*ids, initdrucks_ident]
+
         return Vorgang(
             api_id=str(api_id),
             titel=todo_if_blank(titel),
@@ -862,6 +869,36 @@ def _dedup_drucks(doks: list[StationDokumenteInner]) -> list[StationDokumenteInn
             seen_drucksnr.add(drucksnr)
         unique.append(d)
     return unique
+
+
+# Station types whose document carries the Initiativdrucksache: the parliamentary
+# initiative (Gesetzentwurf/Antrag/Anfrage einer Fraktion) and the government bill
+# (Gesetzentwurf der Landesregierung, mapped to preparl-regbsl).
+_INITIATIV_TYPEN: frozenset[Stationstyp] = frozenset(
+    {
+        Stationstyp.PARL_MINUS_INITIATIV,
+        Stationstyp.PREPARL_MINUS_REGBSL,
+    }
+)
+
+
+def _initiativ_drucksnr(stationen: list[Station]) -> str | None:
+    """Return the Drucksache number of the initiating document, if available.
+
+    The Initiativdrucksache is the Drucksache under which the originating
+    Gesetzentwurf/Antrag was published. It lives on the first initiative-type
+    station that carries a document with a Drucksache number. The synthetic
+    parl-initiativ inserted after a government Gesetzentwurf has no document, so
+    the preparl-regbsl Gesetzentwurf is matched in that case.
+    """
+    for station in stationen:
+        if station.typ not in _INITIATIV_TYPEN:
+            continue
+        for dok in station.dokumente:
+            drucksnr = dok.actual_instance.drucksnr
+            if drucksnr:
+                return drucksnr
+    return None
 
 
 _READING_ROUND_STEMS: dict[str, int] = {

@@ -86,6 +86,58 @@ class TestBuildVorgang:
         assert vorgang.kurztitel == "V-001"
 
     @pytest.mark.asyncio
+    async def test_ids_include_initiativdrucksache(self, scraper_build_vorgang):
+        """Issue #26: the originating Gesetzentwurf's Drucksache is exposed as an initdrucks id."""
+        raw = _make_raw_vorgang("V-001")  # default fundstellen: Gesetzentwurf Drucksache 17/10266
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert vorgang.ids is not None
+        idents = {(i.typ, i.id) for i in vorgang.ids}
+        assert ("vorgnr", "V-001") in idents
+        assert ("initdrucks", "17/10266") in idents
+
+    @pytest.mark.asyncio
+    async def test_ids_initiativdrucksache_from_government_bill(self, scraper_build_vorgang):
+        """Government Gesetzentwurf (preparl-regbsl) also yields an initdrucks id."""
+        raw = _make_raw_vorgang(
+            "V-010",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  01.03.2026 Drucksache 17/11000   (5 S.)",
+                    "datum": "01.03.2026",
+                    "drucksache": "17/11000",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 5,
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        idents = {(i.typ, i.id) for i in vorgang.ids}
+        assert ("initdrucks", "17/11000") in idents
+
+    @pytest.mark.asyncio
+    async def test_ids_omit_initiativdrucksache_when_absent(self, scraper_build_vorgang):
+        """No initdrucks id when the initiative has no Drucksache number."""
+        raw = _make_raw_vorgang(
+            "V-020",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert all(i.typ != "initdrucks" for i in vorgang.ids)
+
+    @pytest.mark.asyncio
     async def test_deterministic_api_id(self, scraper_build_vorgang):
         raw = _make_raw_vorgang("V-001")
         v1 = await scraper_build_vorgang(raw)
