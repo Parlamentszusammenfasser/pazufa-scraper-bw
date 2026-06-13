@@ -183,6 +183,18 @@ class TestParseWmv35Fundstellen:
         assert result[0]["pdf_url"] == "https://www.landtag-bw.de/files/plp/17_141.pdf#page=33"
         assert result[0]["plenarprotokoll"] == "17/141"
 
+    def test_handles_empty_pdf_url(self):
+        """Real PARLIS pattern: no document yet, so pdf_url/blob_id/mime are all
+        empty and the separators collapse to "@@ @@ @@ description" (no leading
+        space). The literal "@@" separator must not leak into pdf_url."""
+        wmv35 = "@@ @@ @@ Gesetzentwurf    Fraktion der AfD  03.06.2026 Drucksache 18/75   (4 S.)"
+        result = _parse_wmv35_fundstellen(wmv35)
+        assert len(result) == 1
+        assert "pdf_url" not in result[0]
+        assert result[0]["station_typ"] == "Gesetzentwurf"
+        assert result[0]["datum"] == "03.06.2026"
+        assert result[0]["drucksache"] == "18/75"
+
     def test_returns_empty_for_empty_input(self):
         assert _parse_wmv35_fundstellen("") == []
         assert _parse_wmv35_fundstellen("   ") == []

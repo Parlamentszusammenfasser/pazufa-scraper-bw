@@ -33,7 +33,7 @@ services:
       - ./locallogs:/app/locallogs
     depends_on:
       - redis
-    restart: unless-stopped
+    restart: "no"
 
 volumes:
   redis-data:

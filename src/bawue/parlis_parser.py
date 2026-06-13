@@ -69,7 +69,12 @@ def _parse_wmv35_fundstellen(wmv35_raw: str) -> list[dict]:
         if segment in seen:
             continue
         seen.add(segment)
-        parts = segment.split(" @@ ")
+        # Split on "@@" tolerating collapsed/uneven whitespace. PARLIS pads the
+        # four fields with " @@ ", but when leading fields are empty the padding
+        # collapses (e.g. "@@ @@ @@ description"), and a literal " @@ " split would
+        # mis-assign the "@@" separator to pdf_url. maxsplit=3 keeps any "@@" that
+        # legitimately appears inside the description intact.
+        parts = re.split(r"\s*@@\s*", segment, maxsplit=3)
         pdf_url = parts[0].strip() if parts else ""
         description = parts[3] if len(parts) >= 4 else segment
         # Strip trailing " || internal_id"
