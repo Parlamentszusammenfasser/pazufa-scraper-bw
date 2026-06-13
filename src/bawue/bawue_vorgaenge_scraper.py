@@ -3,12 +3,14 @@
 import asyncio
 import logging
 import re
+import ssl
 import time
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
+import certifi
 from collector.config import CollectorConfiguration
 from collector.interface import VorgangsScraper
 from openapi_client.models import (
@@ -808,7 +810,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
         """
         pdf_url = fund.get("pdf_url", "")
         if not pdf_url:
-            return [], None
+            # PARLIS occasionally omits the document link for very recent
+            # Drucksachen (empty pdf_url in the WMV35 field). Reconstruct it from
+            # the Drucksache number and verify it resolves before using it.
+            pdf_url = await self._fallback_pdf_url(fund.get("drucksache"))
+            if not pdf_url:
+                return [], None
 
         doc_typ = map_dokumententyp(
             mapping_text,
@@ -855,6 +862,60 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 logger.warning("Document enrichment failed for %s", pdf_url)
 
         return [StationDokumenteInner(dok)], trojanergefahr
+
+    async def _fallback_pdf_url(self, drucksache: str | None) -> str | None:
+        """Reconstruct and verify a Landtag-BW PDF URL when PARLIS omits it.
+
+        Returns the deterministic URL only if it actually resolves (HTTP 200
+        after the website's 303 redirect to the blob store); otherwise None, so
+        we never attach a broken link.
+        """
+        candidate = _construct_drucksache_pdf_url(drucksache)
+        if candidate is None:
+            return None
+        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        try:
+            async with self.session.head(
+                candidate,
+                ssl=ssl_ctx,
+                allow_redirects=True,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                if resp.status == 200:
+                    logger.info("Reconstructed missing PDF URL for Drucksache %s: %s", drucksache, candidate)
+                    return candidate
+                logger.warning(
+                    "Reconstructed PDF URL for Drucksache %s did not resolve (HTTP %d): %s",
+                    drucksache,
+                    resp.status,
+                    candidate,
+                )
+        except Exception:
+            logger.warning("Verification of reconstructed PDF URL failed for Drucksache %s: %s", drucksache, candidate)
+        return None
+
+
+_LANDTAG_PDF_BASE = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente"
+_DRUCKSACHE_RE = re.compile(r"(\d+)/(\d+)")
+
+
+def _construct_drucksache_pdf_url(drucksache: str | None) -> str | None:
+    """Build the deterministic Landtag-BW PDF URL for a ``WP/Nummer`` Drucksache.
+
+    The public website hosts every Drucksache at a predictable path that
+    303-redirects to the actual blob store, e.g. Drucksache ``18/75`` →
+    ``…/dokumente/WP18/Drucksachen/0000/18_0075.pdf``. The directory is the
+    thousand-block of the Drucksache number, and the number is zero-padded to
+    four digits. Returns None if the Drucksache is missing or malformed.
+    """
+    if not drucksache:
+        return None
+    match = _DRUCKSACHE_RE.fullmatch(drucksache.strip())
+    if match is None:
+        return None
+    wp, num = int(match.group(1)), int(match.group(2))
+    block = (num // 1000) * 1000
+    return f"{_LANDTAG_PDF_BASE}/WP{wp}/Drucksachen/{block:04d}/{wp}_{num:04d}.pdf"
 
 
 def _dedup_drucks(doks: list[StationDokumenteInner]) -> list[StationDokumenteInner]:

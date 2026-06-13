@@ -15,6 +15,7 @@ from bawue.bawue_vorgaenge_scraper import (
     DEFAULT_WAHLPERIODE,
     BawueVorgaengeScraper,
     _assign_stable_station_ids,
+    _construct_drucksache_pdf_url,
     _fallback_date_from_year,
     _parse_autoren,
     _parse_fundstelle_date,
@@ -3576,3 +3577,104 @@ class TestFilterSonstigStations:
             await scraper_build_vorgang(raw)
 
         assert any("sonstig" in r.message.lower() for r in caplog.records)
+
+
+class TestConstructDrucksachePdfUrl:
+    """Pure URL construction from a Drucksache number (PARLIS PDF-link fallback)."""
+
+    @pytest.mark.parametrize(
+        ("drucksache", "expected_suffix"),
+        [
+            ("18/75", "WP18/Drucksachen/0000/18_0075.pdf"),
+            ("17/8587", "WP17/Drucksachen/8000/17_8587.pdf"),
+            ("18/10266", "WP18/Drucksachen/10000/18_10266.pdf"),
+            (" 18/75 ", "WP18/Drucksachen/0000/18_0075.pdf"),
+        ],
+    )
+    def test_builds_predictable_url(self, drucksache, expected_suffix):
+        url = _construct_drucksache_pdf_url(drucksache)
+        assert url is not None
+        assert url.endswith(expected_suffix)
+
+    @pytest.mark.parametrize("drucksache", [None, "", "garbage", "18-75"])
+    def test_returns_none_for_missing_or_malformed(self, drucksache):
+        assert _construct_drucksache_pdf_url(drucksache) is None
+
+
+def _head_session(status: int) -> MagicMock:
+    """Build a MagicMock aiohttp session whose .head() yields a response with ``status``."""
+    response = MagicMock()
+    response.status = status
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=response)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    session = MagicMock()
+    session.head = MagicMock(return_value=ctx)
+    return session
+
+
+@pytest.fixture()
+def fallback_scraper():
+    """A bare scraper instance exposing _fallback_pdf_url without full init."""
+    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper.session = _head_session(200)
+    return scraper
+
+
+class TestFallbackPdfUrl:
+    """Reconstruct + verify the PDF URL when PARLIS leaves it empty."""
+
+    @pytest.mark.asyncio
+    async def test_returns_url_when_verification_succeeds(self, fallback_scraper):
+        fallback_scraper.session = _head_session(200)
+        url = await fallback_scraper._fallback_pdf_url("18/75")
+        assert url is not None and url.endswith("WP18/Drucksachen/0000/18_0075.pdf")
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_url_does_not_resolve(self, fallback_scraper):
+        fallback_scraper.session = _head_session(404)
+        assert await fallback_scraper._fallback_pdf_url("18/75") is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_without_drucksache(self, fallback_scraper):
+        assert await fallback_scraper._fallback_pdf_url(None) is None
+        # No network call attempted for a missing Drucksache.
+        fallback_scraper.session.head.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_request_exception(self, fallback_scraper):
+        fallback_scraper.session.head = MagicMock(side_effect=RuntimeError("boom"))
+        assert await fallback_scraper._fallback_pdf_url("18/75") is None
+
+
+class TestBuildVorgangPdfFallback:
+    """End-to-end: an empty pdf_url with a Drucksache yields a reconstructed link."""
+
+    @pytest.mark.asyncio
+    async def test_empty_pdf_url_reconstructed_from_drucksache(self):
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 18
+        scraper._llm_enabled = False
+        scraper._llm = None
+        scraper._filter_sonstig = True
+        scraper.session = _head_session(200)
+
+        raw = _make_raw_vorgang(
+            "V-246637",
+            titel="Gesetz zur Änderung des Abgeordnetengesetzes",
+            initiative="Fraktion der AfD",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion der AfD  03.06.2026 Drucksache 18/75   (4 S.)",
+                    "datum": "03.06.2026",
+                    "drucksache": "18/75",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper._build_vorgang(raw)
+
+        docs = vorgang.stationen[0].dokumente
+        assert len(docs) == 1
+        assert docs[0].actual_instance.link.endswith("WP18/Drucksachen/0000/18_0075.pdf")
