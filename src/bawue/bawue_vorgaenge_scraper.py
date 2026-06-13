@@ -304,6 +304,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._ensure_ausschber_after_vollvlsgn(stationen)
         self._enforce_total_ordering(stationen)
 
+        # Stable identity for document-less stations so the backend links and
+        # updates them across re-runs instead of inserting duplicates (DD-028).
+        _assign_stable_station_ids(stationen, vorgang_id)
+
         # parse vorgangs-id
         ids = [VgIdent(id=vorgang_id, typ="vorgnr")] if vorgang_id != "unknown" else None
 
@@ -918,6 +922,30 @@ def _vorgang_kurztitel(stationen: list[Station]) -> str | None:
                 if kurztitel:
                     return kurztitel
     return None
+
+
+def _assign_stable_station_ids(stationen: list[Station], vorgang_id: str) -> None:
+    """Give document-less stations a deterministic api_id (DD-028).
+
+    The backend matches a station against an existing one on re-upload by its
+    api_id or by a shared document hash (the ``station_merge_candidates`` query,
+    see DD-010). A station with no documents has neither key, so on every re-run
+    the backend cannot recognise it and inserts a duplicate — which then breaks
+    the Vorgang track (e.g. two ``parl-initiativ`` stations form an invalid
+    ``II`` sequence). Deriving a stable api_id from (vorgang_id, typ, zp_start)
+    lets the backend link and update the existing row instead.
+
+    Document-bearing stations keep relying on their document hash, and stations
+    that already carry an api_id (the synthetic ablehnung, DD-010) are left
+    untouched.
+    """
+    if vorgang_id == "unknown":
+        return
+    for station in stationen:
+        if station.api_id is not None or station.dokumente:
+            continue
+        key = f"bawue-station-{vorgang_id}-{station.typ.value}-{station.zp_start.isoformat()}"
+        station.api_id = str(uuid5(NAMESPACE_URL, key))
 
 
 _READING_ROUND_STEMS: dict[str, int] = {
