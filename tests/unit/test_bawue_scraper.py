@@ -14,11 +14,14 @@ from bawue.bawue_vorgaenge_scraper import (
     DEFAULT_ENABLED_VORGANGSTYPEN,
     DEFAULT_WAHLPERIODE,
     BawueVorgaengeScraper,
+    _assign_stable_station_ids,
+    _construct_drucksache_pdf_url,
     _fallback_date_from_year,
     _parse_autoren,
     _parse_fundstelle_date,
     _reading_round,
     _same_round_label,
+    _vorgang_kurztitel,
 )
 
 
@@ -83,7 +86,148 @@ class TestBuildVorgang:
         assert vorgang.ids is not None
         assert vorgang.ids[0].id == "V-001"
         assert vorgang.ids[0].typ == "vorgnr"
-        assert vorgang.kurztitel == "V-001"
+        # Issue #25: kurztitel is a semantic summary, not the vgnr. Without LLM
+        # enrichment no kurztitel is available, so it is None (not "V-001").
+        assert vorgang.kurztitel is None
+
+    @pytest.mark.asyncio
+    async def test_kurztitel_from_initiative_document(self, scraper_build_vorgang):
+        """Issue #25: the Vorgang Kurztitel reuses the initiating document's LLM kurztitel."""
+        raw = _make_raw_vorgang("V-001")
+        vorgang = await scraper_build_vorgang(raw)
+
+        # Simulate the enriched initiative document carrying a plain-language title.
+        vorgang.stationen[0].dokumente[0].actual_instance.kurztitel = "Klimaschutzgesetz"
+
+        assert _vorgang_kurztitel(vorgang.stationen) == "Klimaschutzgesetz"
+
+    @pytest.mark.asyncio
+    async def test_documentless_station_gets_stable_api_id(self, scraper_build_vorgang):
+        """DD-028: a document-less station (e.g. Gesetzentwurf without PDF) gets a
+        deterministic api_id so the backend links it across re-runs instead of
+        duplicating it into an invalid 'II' track."""
+        raw = _make_raw_vorgang(
+            "V-246637",
+            initiative="Fraktion der AfD",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion der AfD  03.06.2026 Drucksache 18/75   (4 S.)",
+                    "datum": "03.06.2026",
+                    "drucksache": "18/75",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",  # empty PDF URL -> no document on the station
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        station = vorgang.stationen[0]
+        assert station.typ == Stationstyp.PARL_MINUS_INITIATIV
+        assert station.dokumente == []
+        assert station.api_id is not None
+
+    @pytest.mark.asyncio
+    async def test_stable_station_api_id_is_deterministic(self, scraper_build_vorgang):
+        """The same Vorgang yields the same document-less station api_id on re-runs."""
+        raw = _make_raw_vorgang(
+            "V-246637",
+            initiative="Fraktion der AfD",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion der AfD  03.06.2026 Drucksache 18/75   (4 S.)",
+                    "datum": "03.06.2026",
+                    "drucksache": "18/75",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        v1 = await scraper_build_vorgang(raw)
+        v2 = await scraper_build_vorgang(raw)
+        assert v1.stationen[0].api_id == v2.stationen[0].api_id
+
+    @pytest.mark.asyncio
+    async def test_document_bearing_station_keeps_no_api_id(self, scraper_build_vorgang):
+        """Stations carrying documents are matched by document hash, so they are
+        left without a synthetic api_id (default fundstellen: Gesetzentwurf has a PDF)."""
+        raw = _make_raw_vorgang("V-001")
+        vorgang = await scraper_build_vorgang(raw)
+
+        initiativ = vorgang.stationen[0]
+        assert initiativ.typ == Stationstyp.PARL_MINUS_INITIATIV
+        assert initiativ.dokumente  # has a document
+        assert initiativ.api_id is None
+
+    def test_assign_stable_station_ids_skips_existing_and_documented(self):
+        """Stations with an api_id or with documents are not overwritten."""
+        from datetime import UTC, datetime
+
+        doc_station = MagicMock(api_id=None, dokumente=[object()])
+        preset_station = MagicMock(api_id="preset", dokumente=[])
+        bare_station = MagicMock(
+            api_id=None,
+            dokumente=[],
+            typ=Stationstyp.PARL_MINUS_INITIATIV,
+            zp_start=datetime(2026, 6, 3, tzinfo=UTC),
+        )
+        _assign_stable_station_ids([doc_station, preset_station, bare_station], "V-1")
+
+        assert doc_station.api_id is None
+        assert preset_station.api_id == "preset"
+        assert bare_station.api_id is not None
+
+    @pytest.mark.asyncio
+    async def test_ids_include_initiativdrucksache(self, scraper_build_vorgang):
+        """Issue #26: the originating Gesetzentwurf's Drucksache is exposed as an initdrucks id."""
+        raw = _make_raw_vorgang("V-001")  # default fundstellen: Gesetzentwurf Drucksache 17/10266
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert vorgang.ids is not None
+        idents = {(i.typ, i.id) for i in vorgang.ids}
+        assert ("vorgnr", "V-001") in idents
+        assert ("initdrucks", "17/10266") in idents
+
+    @pytest.mark.asyncio
+    async def test_ids_initiativdrucksache_from_government_bill(self, scraper_build_vorgang):
+        """Government Gesetzentwurf (preparl-regbsl) also yields an initdrucks id."""
+        raw = _make_raw_vorgang(
+            "V-010",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  01.03.2026 Drucksache 17/11000   (5 S.)",
+                    "datum": "01.03.2026",
+                    "drucksache": "17/11000",
+                    "station_typ": "Gesetzentwurf",
+                    "seiten": 5,
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        idents = {(i.typ, i.id) for i in vorgang.ids}
+        assert ("initdrucks", "17/11000") in idents
+
+    @pytest.mark.asyncio
+    async def test_ids_omit_initiativdrucksache_when_absent(self, scraper_build_vorgang):
+        """No initdrucks id when the initiative has no Drucksache number."""
+        raw = _make_raw_vorgang(
+            "V-020",
+            fundstellen=[
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/141 05.02.2026",
+                    "datum": "05.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert all(i.typ != "initdrucks" for i in vorgang.ids)
 
     @pytest.mark.asyncio
     async def test_deterministic_api_id(self, scraper_build_vorgang):
@@ -3433,3 +3577,104 @@ class TestFilterSonstigStations:
             await scraper_build_vorgang(raw)
 
         assert any("sonstig" in r.message.lower() for r in caplog.records)
+
+
+class TestConstructDrucksachePdfUrl:
+    """Pure URL construction from a Drucksache number (PARLIS PDF-link fallback)."""
+
+    @pytest.mark.parametrize(
+        ("drucksache", "expected_suffix"),
+        [
+            ("18/75", "WP18/Drucksachen/0000/18_0075.pdf"),
+            ("17/8587", "WP17/Drucksachen/8000/17_8587.pdf"),
+            ("18/10266", "WP18/Drucksachen/10000/18_10266.pdf"),
+            (" 18/75 ", "WP18/Drucksachen/0000/18_0075.pdf"),
+        ],
+    )
+    def test_builds_predictable_url(self, drucksache, expected_suffix):
+        url = _construct_drucksache_pdf_url(drucksache)
+        assert url is not None
+        assert url.endswith(expected_suffix)
+
+    @pytest.mark.parametrize("drucksache", [None, "", "garbage", "18-75"])
+    def test_returns_none_for_missing_or_malformed(self, drucksache):
+        assert _construct_drucksache_pdf_url(drucksache) is None
+
+
+def _head_session(status: int) -> MagicMock:
+    """Build a MagicMock aiohttp session whose .head() yields a response with ``status``."""
+    response = MagicMock()
+    response.status = status
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=response)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    session = MagicMock()
+    session.head = MagicMock(return_value=ctx)
+    return session
+
+
+@pytest.fixture()
+def fallback_scraper():
+    """A bare scraper instance exposing _fallback_pdf_url without full init."""
+    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper.session = _head_session(200)
+    return scraper
+
+
+class TestFallbackPdfUrl:
+    """Reconstruct + verify the PDF URL when PARLIS leaves it empty."""
+
+    @pytest.mark.asyncio
+    async def test_returns_url_when_verification_succeeds(self, fallback_scraper):
+        fallback_scraper.session = _head_session(200)
+        url = await fallback_scraper._fallback_pdf_url("18/75")
+        assert url is not None and url.endswith("WP18/Drucksachen/0000/18_0075.pdf")
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_url_does_not_resolve(self, fallback_scraper):
+        fallback_scraper.session = _head_session(404)
+        assert await fallback_scraper._fallback_pdf_url("18/75") is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_without_drucksache(self, fallback_scraper):
+        assert await fallback_scraper._fallback_pdf_url(None) is None
+        # No network call attempted for a missing Drucksache.
+        fallback_scraper.session.head.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_request_exception(self, fallback_scraper):
+        fallback_scraper.session.head = MagicMock(side_effect=RuntimeError("boom"))
+        assert await fallback_scraper._fallback_pdf_url("18/75") is None
+
+
+class TestBuildVorgangPdfFallback:
+    """End-to-end: an empty pdf_url with a Drucksache yields a reconstructed link."""
+
+    @pytest.mark.asyncio
+    async def test_empty_pdf_url_reconstructed_from_drucksache(self):
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 18
+        scraper._llm_enabled = False
+        scraper._llm = None
+        scraper._filter_sonstig = True
+        scraper.session = _head_session(200)
+
+        raw = _make_raw_vorgang(
+            "V-246637",
+            titel="Gesetz zur Änderung des Abgeordnetengesetzes",
+            initiative="Fraktion der AfD",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion der AfD  03.06.2026 Drucksache 18/75   (4 S.)",
+                    "datum": "03.06.2026",
+                    "drucksache": "18/75",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper._build_vorgang(raw)
+
+        docs = vorgang.stationen[0].dokumente
+        assert len(docs) == 1
+        assert docs[0].actual_instance.link.endswith("WP18/Drucksachen/0000/18_0075.pdf")

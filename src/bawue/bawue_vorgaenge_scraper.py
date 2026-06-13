@@ -3,12 +3,14 @@
 import asyncio
 import logging
 import re
+import ssl
 import time
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
+import certifi
 from collector.config import CollectorConfiguration
 from collector.interface import VorgangsScraper
 from openapi_client.models import (
@@ -304,13 +306,24 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._ensure_ausschber_after_vollvlsgn(stationen)
         self._enforce_total_ordering(stationen)
 
+        # Stable identity for document-less stations so the backend links and
+        # updates them across re-runs instead of inserting duplicates (DD-028).
+        _assign_stable_station_ids(stationen, vorgang_id)
+
         # parse vorgangs-id
         ids = [VgIdent(id=vorgang_id, typ="vorgnr")] if vorgang_id != "unknown" else None
+
+        # Cross-referencing aid (Issue #26): also expose the Initiativdrucksache
+        # so consumers can join on the originating Gesetzentwurf/Antrag number.
+        initiativ_drucks = _initiativ_drucksnr(stationen)
+        if initiativ_drucks:
+            initdrucks_ident = VgIdent(id=initiativ_drucks, typ="initdrucks")
+            ids = [initdrucks_ident] if ids is None else [*ids, initdrucks_ident]
 
         return Vorgang(
             api_id=str(api_id),
             titel=todo_if_blank(titel),
-            kurztitel=vorgang_id if vorgang_id != "unknown" else None,
+            kurztitel=_vorgang_kurztitel(stationen),
             typ=typ,
             wahlperiode=self._wahlperiode,
             verfassungsaendernd=is_verfassungsaendernd(titel),
@@ -797,7 +810,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
         """
         pdf_url = fund.get("pdf_url", "")
         if not pdf_url:
-            return [], None
+            # PARLIS occasionally omits the document link for very recent
+            # Drucksachen (empty pdf_url in the WMV35 field). Reconstruct it from
+            # the Drucksache number and verify it resolves before using it.
+            pdf_url = await self._fallback_pdf_url(fund.get("drucksache"))
+            if not pdf_url:
+                return [], None
 
         doc_typ = map_dokumententyp(
             mapping_text,
@@ -845,6 +863,60 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         return [StationDokumenteInner(dok)], trojanergefahr
 
+    async def _fallback_pdf_url(self, drucksache: str | None) -> str | None:
+        """Reconstruct and verify a Landtag-BW PDF URL when PARLIS omits it.
+
+        Returns the deterministic URL only if it actually resolves (HTTP 200
+        after the website's 303 redirect to the blob store); otherwise None, so
+        we never attach a broken link.
+        """
+        candidate = _construct_drucksache_pdf_url(drucksache)
+        if candidate is None:
+            return None
+        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        try:
+            async with self.session.head(
+                candidate,
+                ssl=ssl_ctx,
+                allow_redirects=True,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                if resp.status == 200:
+                    logger.info("Reconstructed missing PDF URL for Drucksache %s: %s", drucksache, candidate)
+                    return candidate
+                logger.warning(
+                    "Reconstructed PDF URL for Drucksache %s did not resolve (HTTP %d): %s",
+                    drucksache,
+                    resp.status,
+                    candidate,
+                )
+        except Exception:
+            logger.warning("Verification of reconstructed PDF URL failed for Drucksache %s: %s", drucksache, candidate)
+        return None
+
+
+_LANDTAG_PDF_BASE = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente"
+_DRUCKSACHE_RE = re.compile(r"(\d+)/(\d+)")
+
+
+def _construct_drucksache_pdf_url(drucksache: str | None) -> str | None:
+    """Build the deterministic Landtag-BW PDF URL for a ``WP/Nummer`` Drucksache.
+
+    The public website hosts every Drucksache at a predictable path that
+    303-redirects to the actual blob store, e.g. Drucksache ``18/75`` →
+    ``…/dokumente/WP18/Drucksachen/0000/18_0075.pdf``. The directory is the
+    thousand-block of the Drucksache number, and the number is zero-padded to
+    four digits. Returns None if the Drucksache is missing or malformed.
+    """
+    if not drucksache:
+        return None
+    match = _DRUCKSACHE_RE.fullmatch(drucksache.strip())
+    if match is None:
+        return None
+    wp, num = int(match.group(1)), int(match.group(2))
+    block = (num // 1000) * 1000
+    return f"{_LANDTAG_PDF_BASE}/WP{wp}/Drucksachen/{block:04d}/{wp}_{num:04d}.pdf"
+
 
 def _dedup_drucks(doks: list[StationDokumenteInner]) -> list[StationDokumenteInner]:
     """Remove duplicate documents with the same Drucksache number.
@@ -862,6 +934,79 @@ def _dedup_drucks(doks: list[StationDokumenteInner]) -> list[StationDokumenteInn
             seen_drucksnr.add(drucksnr)
         unique.append(d)
     return unique
+
+
+# Station types whose document carries the Initiativdrucksache: the parliamentary
+# initiative (Gesetzentwurf/Antrag/Anfrage einer Fraktion) and the government bill
+# (Gesetzentwurf der Landesregierung, mapped to preparl-regbsl).
+_INITIATIV_TYPEN: frozenset[Stationstyp] = frozenset(
+    {
+        Stationstyp.PARL_MINUS_INITIATIV,
+        Stationstyp.PREPARL_MINUS_REGBSL,
+    }
+)
+
+
+def _initiativ_drucksnr(stationen: list[Station]) -> str | None:
+    """Return the Drucksache number of the initiating document, if available.
+
+    The Initiativdrucksache is the Drucksache under which the originating
+    Gesetzentwurf/Antrag was published. It lives on the first initiative-type
+    station that carries a document with a Drucksache number. The synthetic
+    parl-initiativ inserted after a government Gesetzentwurf has no document, so
+    the preparl-regbsl Gesetzentwurf is matched in that case.
+    """
+    for station in stationen:
+        if station.typ not in _INITIATIV_TYPEN:
+            continue
+        for dok in station.dokumente:
+            drucksnr = dok.actual_instance.drucksnr
+            if drucksnr:
+                return drucksnr
+    return None
+
+
+def _vorgang_kurztitel(stationen: list[Station]) -> str | None:
+    """Return a human-readable Kurztitel for the Vorgang (Issue #25).
+
+    Reuses the LLM-generated, plain-language ``kurztitel`` of the initiating
+    Gesetzentwurf/Antrag, which best summarises the whole process. Falls back to
+    the first document that carries a kurztitel, and finally to None when LLM
+    enrichment is disabled (so the official title remains the only title).
+    """
+    for typen in (_INITIATIV_TYPEN, None):
+        for station in stationen:
+            if typen is not None and station.typ not in typen:
+                continue
+            for dok in station.dokumente:
+                kurztitel = dok.actual_instance.kurztitel
+                if kurztitel:
+                    return kurztitel
+    return None
+
+
+def _assign_stable_station_ids(stationen: list[Station], vorgang_id: str) -> None:
+    """Give document-less stations a deterministic api_id (DD-028).
+
+    The backend matches a station against an existing one on re-upload by its
+    api_id or by a shared document hash (the ``station_merge_candidates`` query,
+    see DD-010). A station with no documents has neither key, so on every re-run
+    the backend cannot recognise it and inserts a duplicate — which then breaks
+    the Vorgang track (e.g. two ``parl-initiativ`` stations form an invalid
+    ``II`` sequence). Deriving a stable api_id from (vorgang_id, typ, zp_start)
+    lets the backend link and update the existing row instead.
+
+    Document-bearing stations keep relying on their document hash, and stations
+    that already carry an api_id (the synthetic ablehnung, DD-010) are left
+    untouched.
+    """
+    if vorgang_id == "unknown":
+        return
+    for station in stationen:
+        if station.api_id is not None or station.dokumente:
+            continue
+        key = f"bawue-station-{vorgang_id}-{station.typ.value}-{station.zp_start.isoformat()}"
+        station.api_id = str(uuid5(NAMESPACE_URL, key))
 
 
 _READING_ROUND_STEMS: dict[str, int] = {

@@ -3,8 +3,8 @@
 Collector plugin for the Baden-Württemberg state parliament ([Landtag BW](https://www.landtag-bw.de/)) for the
 [Parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser) (PaZuFa) platform.
 
-Scrapes legislative proceedings (Vorgänge) from PARLIS, pre-parliamentary drafts from the Beteiligungsportal, and
-parliamentary sessions (Sitzungen) from the ICS calendar feed. Runs as a **framework-managed plugin** — the
+Scrapes legislative proceedings (Vorgänge) from PARLIS, pre-parliamentary drafts from the Beteiligungsportal, 
+and parliamentary sessions (Sitzungen) from the ICS calendar feed. Runs as a **framework-managed plugin** — the
 [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) framework handles scheduling, caching (Redis), API
 submission, and error tolerance automatically.
 

@@ -4,6 +4,7 @@ import time
 from unittest.mock import patch
 
 import pytest
+import requests
 import responses
 
 from bawue.beteiligung_client import BeteiligungClient
@@ -70,6 +71,22 @@ class TestFetchProcessList:
 
         assert len(processes) == 1
         assert processes[0].slug == "test-gesetz"
+
+    @responses.activate
+    def test_returns_empty_on_404(self):
+        """A missing index page (new Wahlperiode, no consultations) is empty, not an error."""
+        client = BeteiligungClient(wahlperiode=18, request_delay_s=0.0)
+        lp18_url = f"{BASE_URL}/de/mitmachen/lp-18"
+        responses.add(responses.GET, lp18_url, status=404)
+
+        assert client.fetch_process_list() == []
+
+    @responses.activate
+    def test_reraises_non_404_errors(self, client):
+        responses.add(responses.GET, LP17_URL, status=500)
+
+        with pytest.raises(requests.HTTPError):
+            client.fetch_process_list()
 
     @responses.activate
     def test_uses_correct_url_for_wahlperiode(self):
