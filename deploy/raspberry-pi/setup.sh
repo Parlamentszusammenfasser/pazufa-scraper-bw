@@ -25,15 +25,22 @@ else
   echo ".env already exists, skipping copy."
 fi
 
-# 3. Build the scraper image
-echo "Building scraper image..."
-docker compose -f "${SCRIPT_DIR}/docker-compose.yml" build scraper
+# 3. Check DOCKER_IMAGE is set (fail early with a clear message)
+if ! grep -q '^DOCKER_IMAGE=' "${SCRIPT_DIR}/.env" 2>/dev/null; then
+  echo "ERROR: DOCKER_IMAGE is not set in ${SCRIPT_DIR}/.env"
+  echo "Add a line like: DOCKER_IMAGE=froeser/pazufa-scraper-bw:latest"
+  exit 1
+fi
 
-# 4. Start Redis
+# 4. Pull the scraper image from Docker Hub
+echo "Pulling scraper image..."
+docker compose -f "${SCRIPT_DIR}/docker-compose.yml" pull scraper
+
+# 5. Start Redis
 echo "Starting Redis..."
 docker compose -f "${SCRIPT_DIR}/docker-compose.yml" up -d redis
 
-# 5. Add crontab entry (idempotent)
+# 6. Add crontab entry (idempotent)
 if crontab -l 2>/dev/null | grep -qF "${SCRIPT_DIR}"; then
   echo "Crontab entry already present, skipping."
 else

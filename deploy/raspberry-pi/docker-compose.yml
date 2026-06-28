@@ -6,7 +6,7 @@ services:
       - redis-data:/data
 
   scraper:
-    build: ../..
+    image: ${DOCKER_IMAGE:?Set DOCKER_IMAGE in .env, e.g. johndoe/pazufa-bawue-scraper:latest}
     env_file: .env
     environment:
       REDIS_HOST: redis

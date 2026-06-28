@@ -9,6 +9,7 @@ FROM python:${PYTHON_VERSION}-slim AS builder
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
+        libffi-dev \
         tesseract-ocr \
         tesseract-ocr-deu \
         poppler-utils \
@@ -19,19 +20,19 @@ RUN pip install --no-cache-dir poetry==2.3.2
 WORKDIR /app
 
 COPY pyproject.toml poetry.lock poetry.toml ./
-COPY vendor/pazufa-collector/ vendor/pazufa-collector/
-COPY vendor/pazufa-scraper-core/ vendor/pazufa-scraper-core/
 
-# Rewrite local path dependencies from ../ to vendor/
-RUN sed -i 's|path = "\.\./pazufa-collector", develop = true|path = "vendor/pazufa-collector"|' pyproject.toml \
-    && sed -i 's|path = "\.\./pazufa-scraper-core", develop = true|path = "vendor/pazufa-scraper-core"|' pyproject.toml \
-    && sed -i 's|path = "\.\./pazufa-collector/oapicode", develop = true|path = "vendor/pazufa-collector/oapicode"|' pyproject.toml \
-    && sed -i 's|url = "\.\./pazufa-collector"|url = "vendor/pazufa-collector"|' poetry.lock \
-    && sed -i 's|url = "\.\./pazufa-scraper-core"|url = "vendor/pazufa-scraper-core"|' poetry.lock \
-    && sed -i 's|url = "\.\./pazufa-collector/oapicode"|url = "vendor/pazufa-collector/oapicode"|' poetry.lock
+# Place vendor packages at the sibling paths pyproject.toml already references:
+#   ../pazufa-collector     →  /pazufa-collector     (from WORKDIR /app)
+#   ../pazufa-scraper-core  →  /pazufa-scraper-core
+#
+# This avoids modifying pyproject.toml/poetry.lock, which would invalidate the
+# content-hash and force poetry to re-solve — which fails because
+# pazufa-collector's own pyproject.toml uses a PEP 508 "openapi_client @ oapicode"
+# dep that poetry lock --regenerate cannot reconcile with our direct dep on it.
+COPY vendor/pazufa-collector/ /pazufa-collector/
+COPY vendor/pazufa-scraper-core/ /pazufa-scraper-core/
 
 RUN poetry config virtualenvs.create false \
-    && poetry lock --regenerate \
     && poetry install --no-interaction --no-ansi --only main --no-root
 
 # ---- Runtime stage ----
@@ -54,6 +55,11 @@ WORKDIR /app
 # Copy installed Python packages from builder
 COPY --from=builder /usr/local/lib/python${PYTHON_MINOR}/site-packages /usr/local/lib/python${PYTHON_MINOR}/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Vendor sources must be present at the same paths because pyproject.toml uses
+# develop = true (editable installs), so .pth files in site-packages point here.
+COPY --from=builder /pazufa-collector /pazufa-collector
+COPY --from=builder /pazufa-scraper-core /pazufa-scraper-core
 
 COPY src/ src/
 COPY config.sample.toml config.toml
