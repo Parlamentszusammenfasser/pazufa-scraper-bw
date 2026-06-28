@@ -363,6 +363,49 @@ docker-compose logs -f scraper
 docker-compose build scraper && docker-compose up -d scraper
 ```
 
+## Deploy on Raspberry Pi
+
+Requires **Raspberry Pi OS 64-bit** (default since 2023). The pre-built image supports `linux/arm64` (Pi 3B and later). 32-bit Pi OS (`arm/v7`) is not supported.
+
+**1. Install Docker:**
+
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+**2. Clone the repository:**
+
+```bash
+git clone <repo-url> scraper-bawue && cd scraper-bawue
+```
+
+**3. Set up credentials:**
+
+```bash
+cp .env.example .env
+# Edit .env: fill in LTZF_API_URL, LTZF_API_KEY, LLM_PROVIDER_KEY
+```
+
+See the [LLM Document Enrichment](#llm-document-enrichment) section if you want to use a local Ollama instance instead of an OpenAI key (requires editing `docker-compose.yml` to replace `LLM_PROVIDER_KEY` with `LLM_PROVIDER_BASE_URL`/`LLM_MODEL`).
+
+**4. Update the image in `docker-compose.yml`:**
+
+```diff
+-    image: bawue-scraper:latest
++    image: froeser/pazufa-scraper-bw:main-00dba883
+```
+
+**5. Start:**
+
+```bash
+docker compose up -d
+docker compose logs -f scraper
+```
+
+**To update:** Change the image tag in `docker-compose.yml`, then `docker compose pull && docker compose up -d`.
+
 ## Docker
 
 ```bash
