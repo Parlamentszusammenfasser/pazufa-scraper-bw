@@ -36,6 +36,19 @@ ruff = "^0.15"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.semantic_release]
+# Compute the next version from Conventional Commits on main, bump the
+# `version` field above, then tag and push. Tags are bare semver (0.2.2),
+# matching the existing 0.2.0 / 0.2.1 tags. The current version is taken from
+# the latest matching git tag, not from the file.
+version_toml = ["pyproject.toml:project.version"]
+tag_format = "{version}"
+allow_zero_version = true   # stay in 0.x; fix→patch, feat→minor (PSR 10 defaults this to false)
+build_command = ""          # the Docker pipeline builds artifacts, not PSR
+
+[tool.semantic_release.branches.main]
+match = "main"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

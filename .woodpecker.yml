@@ -16,15 +16,19 @@ when:
 # cryptography, pillow) has no arm/v7 wheels and takes hours to compile under
 # QEMU. The Pi 3B supports 64-bit; use Raspberry Pi OS 64-bit (default since 2023).
 #
-# Docker Hub secrets (set in Codeberg repo → Settings → Secrets):
+# Secrets (set in Codeberg repo → Settings → Secrets):
 #   docker_username  – your Docker Hub username
 #   docker_password  – Docker Hub access token (not account password)
 #   docker_repo      – full image path, e.g. johndoe/pazufa-bawue-scraper
+#   codeberg_token   – Codeberg access token with repo read+write, used by
+#                      semantic-release to push the version bump + git tag
 #
-# Release workflow (trunk-based):
-#   git tag v1.2.3 && git push origin v1.2.3
-#   → CI builds and pushes :1.2.3 :1.2 :1 :latest
-#   Main branch pushes → :main :main-<sha8>
+# Release workflow (trunk-based, automated semantic versioning):
+#   Merge to main → semantic-release reads Conventional Commits since the last
+#   tag, computes the next version (feat→minor, fix→patch), bumps pyproject,
+#   and pushes a bare semver tag (e.g. 0.2.2).
+#   → that tag push triggers docker-release, which pushes :0.2.2 :0.2 :latest
+#   Main branch pushes also produce snapshot tags → :main :main-<sha8>
 #   Feature branch pushes → :dev-<sha8>
 
 steps:
@@ -78,6 +82,31 @@ steps:
       - poetry install --no-interaction --no-ansi
       - poetry run pytest -m 'not integration'
 
+  # Automated semantic versioning: on a merge to main, compute the next version
+  # from Conventional Commits, bump pyproject, and push a bare semver git tag.
+  # The tag push then triggers the docker-release step below (separate run).
+  # The release commit is `chore(release): …`, which is not a releasable type,
+  # so the follow-up push does not produce another tag (no loop).
+  - name: semantic-release
+    image: *python_image
+    depends_on: [pytest, ruff-lint, ruff-format]
+    environment:
+      GIT_TOKEN:
+        from_secret: codeberg_token
+    commands:
+      - git config --global --add safe.directory "$CI_WORKSPACE"
+      # PSR needs full history + tags to find the last release and parse commits.
+      - git fetch --tags --unshallow || git fetch --tags
+      - git checkout main
+      - git config user.name "Woodpecker CI"
+      - git config user.email "ci@pazufa.local"
+      - git remote set-url origin "https://$GIT_TOKEN@codeberg.org/${CI_REPO}.git"
+      - pip install --quiet "python-semantic-release==10.5.3"
+      - semantic-release version --push --no-vcs-release
+    when:
+      - event: push
+        branch: main
+
   # Copy vendored dependencies into the workspace so the Docker build context has them.
   # The generate-openapi-client step already produced ../pazufa-collector/oapicode;
   # the pytest step produced ../pazufa-scraper-core — mirror both into vendor/.
@@ -95,7 +124,7 @@ steps:
   # --- Docker publish steps (one per event class) ---
   # All three depend on vendor-prep completing successfully.
 
-  # Semver release: git tag v1.2.3 → Docker tags 1.2.3, 1.2, 1, latest
+  # Semver release: git tag 0.2.2 → Docker tags 0.2.2, 0.2, latest
   - name: docker-release
     image: woodpeckerci/plugin-docker-buildx:6
     depends_on: [vendor-prep]
@@ -110,7 +139,7 @@ steps:
         from_secret: docker_password
     when:
       - event: tag
-        ref: refs/tags/v[0-9]*
+        ref: refs/tags/[0-9]*
 
   # Main branch snapshot → Docker tags main, main-<sha8>
   - name: docker-main
