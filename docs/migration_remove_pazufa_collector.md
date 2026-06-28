@@ -7,19 +7,19 @@
 
 > Updated 2026-06-28. Branch: `core-lib`.
 
-- **Phase 0 — Preconditions:** coding/docs **done** (commit `f386d09`); 3 gates **open** (see below). 800 unit tests green.
-- **Phase 1 — OpenAPI client swap:** not started (blocked on Phase 0 gates).
+- **Phase 0 — Preconditions:** ✅ **complete** — coding/docs (commit `f386d09`) plus all 3 gates cleared 2026-06-28 (see below). 800 unit tests green.
+- **Phase 1 — OpenAPI client swap:** not started (**unblocked** — all Phase 0 gates cleared).
 - **Phase 2 — Local config/cache/pipeline:** not started.
 - **Phase 3 — Infrastructure:** not started.
 - **Phase 4 — Cleanup:** not started.
 
-**Open gates blocking Phase 1 start** (all need human/production input — see §5 Phase 0):
+**Phase 1 gates — RESOLVED 2026-06-28** (evidence in `docs/phase0_audits.md` §0.2):
 
-1. ⬜ **0.2 Backend version parity** — confirm prod backend OpenAPI ≥ v0.2.3.
-2. ⬜ **corelib pin** — target is `v0.1.2` (§4), but the vendored tree is `0.1.1rc5`; update the dev env to the real `v0.1.2` tag and confirm it bundles spec v0.2.3.
-3. ⬜ **0.1 reviewer sign-off** on `docs/openapi_v022_to_v023_diff.md`.
+1. ✅ **0.2 Backend version parity** — staging serves OpenAPI spec **0.2.3** (app `v0.2.12`); 11/12 carried models byte-identical, the lone `Station.trojanergefahr` delta is migration-neutral (the collector v0.2.2 client already sends it to the same backend). Residual: confirm the **production** URL tracks staging before prod cutover (prod URL not in repo).
+2. ✅ **corelib pin `v0.1.2`** — tag exists, `pyproject` `0.1.2`, bundles spec `0.2.3`; its `api_client` + `llm` trees (the only corelib surface BaWue imports) are byte-identical to the rc5 dev tree, so the Phase 3.1 pin is a no-op for Phase 1.
+3. ✅ **0.1 reviewer sign-off** on `docs/openapi_v022_to_v023_diff.md` — approved by maintainer 2026-06-28.
 
-**Next step when gates clear:** Phase 1.1 — flip the alias block in `src/bawue/types.py` to `pazufa_corelib.api_client.models.*`, then land the 1.2a status shim (`src/bawue/api.py`) before touching `upload_throttle.py`.
+**Phase 1 is unblocked.** Next step: Phase 1.1 — flip the alias block in `src/bawue/types.py` to `pazufa_corelib.api_client.models.*`, then land the 1.2a status shim (`src/bawue/api.py`) before touching `upload_throttle.py`.
 
 ## 0. Revision History
 
@@ -238,18 +238,21 @@ shipped in small reviewable steps.
 **Must complete before Phase 1 starts.**
 
 0.1. ✅ **Spec diff artifact** (R14) — **DONE** (commit `f386d09`),
-⬜ reviewer sign-off still pending. Produce `docs/openapi_v022_to_v023_diff.md`
+✅ reviewer sign-off **APPROVED 2026-06-28**. Produce `docs/openapi_v022_to_v023_diff.md`
 listing every model class with renamed fields, added required fields,
 removed fields, and enum value changes between collector's spec v0.2.2 and
 scraper-core's spec v0.2.3. Confirmed renames so far: `TouchedByInner` →
 `TouchedByItem`. Reviewer signs off before Phase 1.
 
-0.2. ⬜ **Backend version parity** (R15) — **OPEN, needs production access**
-(see `docs/phase0_audits.md` §0.2; vendored corelib is `0.1.1rc5`, plan
-pins `v0.1.2`). Verify the **production** backend's
-OpenAPI version is ≥0.2.3. If not, coordinate the backend deploy first —
-shipping v0.2.3 calls against a v0.2.2 backend will produce a 422 storm.
-This is a precondition, not an open decision.
+0.2. ✅ **Backend version parity** (R15) — **VERIFIED 2026-06-28**
+(see `docs/phase0_audits.md` §0.2). Staging serves OpenAPI spec **0.2.3**
+(`/openapi.json`; app version `0.2.12` via `/status`), matching the corelib
+v0.1.2 client. Request-body schema parity confirmed for 11/12 carried models;
+the lone `Station.trojanergefahr` delta is migration-neutral (the current
+collector v0.2.2 client already sends it to the same backend). corelib `v0.1.2`
+verified to bundle spec 0.2.3 with an api_client/llm surface byte-identical to
+the rc5 dev tree. **Residual:** confirm the **production** URL (not in repo)
+tracks staging before the prod cutover — not a Phase-1 blocker.
 
 0.3. ✅ **Type alias adapter** (R4) — **DONE** (commit `f386d09`). All
 generated model/enum imports now route through `src/bawue/types.py`; no

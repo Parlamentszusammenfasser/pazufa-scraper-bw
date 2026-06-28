@@ -60,27 +60,61 @@ Phase 3 / Phase 4.
   (`rust-axum` generator). Unrelated to the BaWue client. Leave untouched.
 - `cloudbuild.yaml`: no collector references found.
 
-## 0.2 — Backend version parity gate (OPEN — must verify before Phase 1)
+## 0.2 — Backend version parity gate (VERIFIED 2026-06-28)
 
-**Status: cannot verify from this workspace — production access required.**
+**Status: GATE CLEARED.** Staging backend confirmed; one informational residual
+(production URL) noted below.
 
-The plan (§5 Phase 0.2, Risk #8) requires confirming the **production** backend
-serves OpenAPI **≥ v0.2.3** before any v0.2.3 client traffic is sent, or a 422
-storm results on cutover.
+Verified live against the staging backend (`https://staging.api.pazufa.de` — the
+target in `.env.example`) on 2026-06-28:
 
-Action owner must, before Phase 1 starts:
-1. Hit the production backend's version/health endpoint (or check the deployed
-   backend image tag) and record the served OpenAPI version here.
-2. If `< 0.2.3`, coordinate the backend deploy first; this is a precondition,
-   not a parallel task.
+| Probe | Result |
+| ----- | ------ |
+| `GET /status` (app/release version) | `version: 0.2.12`, commit `2a02910c`, `track_version: 0.0.5`, up since 2026-06-27 |
+| `GET /openapi.json` → `info.version` (served **OpenAPI spec** version) | **`0.2.3`** — exactly the corelib v0.1.2 client target |
+| OpenAPI document format | backend `openapi: 3.1.0` vs corelib `3.0.0` — expression format only, not API surface |
 
-> Related caveat from the spec diff: the **vendored** `pazufa-corelib` is
-> `0.1.1rc5` (pre-release), not the `v0.1.2` the plan pins. Confirm the pinned
-> tag's bundled spec version matches the backend before Phase 1. See
-> [openapi_v022_to_v023_diff.md](openapi_v022_to_v023_diff.md) §sources.
+The two numbers are **different schemes**: `0.2.12` is the backend *application*
+release; `0.2.3` is the *OpenAPI spec* it serves. The gate (spec ≥ 0.2.3) holds:
+served spec == client spec == `0.2.3`. The original failure mode (backend
+*behind* v0.2.3 → 422 storm, Risk #8) is therefore ruled out.
+
+**Request-body schema parity** (backend served 0.2.3 vs corelib v0.1.2 bundled
+`openapi.yaml`, normalising PascalCase↔snake_case schema names): **11 of the 12**
+models the scraper carries are byte-identical on required fields, properties, and
+enum values — `Vorgang, Sitzung, Dokument, Autor, Gremium, Parlament, VgIdent,
+Doktyp, Stationstyp, Vorgangstyp, Top` all **OK**.
+
+**One delta — `Station.trojanergefahr`:** the corelib v0.1.2 client carries an
+optional `trojanergefahr` integer (1–10) on `Station`; the backend's served
+0.2.3 spec omits it. The BaWue scraper actively populates this field (LLM
+"hidden-purpose" score; `bawue_vorgaenge_scraper.py:766`,
+`bawue_beteiligung_scraper.py:243`). **This is migration-neutral:** the
+collector **v0.2.2** client in use *today* already carries and sends
+`trojanergefahr` to the *same* backend (`vendor/pazufa-collector/openapi.yml:1667`),
+so accept/ignore behaviour is unchanged by the client swap — Phase 1 adds no new
+422 risk here. The backend's `Station` does not set `additionalProperties: false`,
+so an unknown property is spec-legal to ignore.
+> Informational (not a Phase-1 blocker): confirm the backend actually *persists*
+> `trojanergefahr`. If it silently drops it, that is a pre-existing data-loss
+> issue independent of this migration — file separately.
+
+**corelib pin (v0.1.2)** — verified from the sibling repo
+(`../pazufa-scraper-core`, remote `codeberg.org/PaZuFa/pazufa-scraper-core`):
+- tag `v0.1.2` exists (commit `aac0953c`, 2026-06-16), `pyproject` version
+  `0.1.2`, bundles `openapi.yaml` `info.version: 0.2.3`.
+- The dev env path-installs the `0.1.1rc5` tree (HEAD `3e25ecd`). The
+  `pazufa_corelib/api_client/` and `pazufa_corelib/llm/` trees — **the only
+  corelib surface BaWue imports** (api_client models + `LLMConnector`) — are
+  **byte-identical** between that rc5 tree and `v0.1.2`; `git diff HEAD v0.1.2`
+  shows changes only under `normalization/`, tests, tooling, and the lockfile.
+  BaWue imports nothing from `pazufa_corelib.normalization`, so pinning prod to
+  `v0.1.2` (Phase 3.1) is a no-op for the Phase-1 surface and needs no dev-env
+  re-checkout to start Phase 1.
 
 | Gate | Status |
 | ---- | ------ |
-| Backend OpenAPI ≥ v0.2.3 (prod) | ⬜ **PENDING verification** |
-| `pazufa-corelib` pinned tag spec == backend spec | ⬜ **PENDING** (vendored tree is `0.1.1rc5`) |
-| Reviewer sign-off on `openapi_v022_to_v023_diff.md` | ⬜ **PENDING** |
+| Backend OpenAPI ≥ v0.2.3 (staging) | ✅ **VERIFIED** — served spec `0.2.3`, app `0.2.12` |
+| Backend OpenAPI ≥ v0.2.3 (**production** URL) | ⬜ residual — prod URL not in repo; confirm it tracks staging before prod cutover |
+| `pazufa-corelib` v0.1.2 spec == backend spec | ✅ **VERIFIED** — both `0.2.3`; api_client + llm identical to dev tree |
+| Reviewer sign-off on `openapi_v022_to_v023_diff.md` | ✅ **APPROVED** 2026-06-28 (maintainer) |
