@@ -3,6 +3,24 @@
 > Status: **Draft v3 / Updated** — incorporates corelib v0.1.1 and v0.1.2 release changes.
 > Author: change-doc generated 2026-05-25, revised 2026-05-25 after architect review, revised 2026-06-28 after corelib releases.
 
+## Progress Tracker
+
+> Updated 2026-06-28. Branch: `core-lib`.
+
+- **Phase 0 — Preconditions:** coding/docs **done** (commit `f386d09`); 3 gates **open** (see below). 800 unit tests green.
+- **Phase 1 — OpenAPI client swap:** not started (blocked on Phase 0 gates).
+- **Phase 2 — Local config/cache/pipeline:** not started.
+- **Phase 3 — Infrastructure:** not started.
+- **Phase 4 — Cleanup:** not started.
+
+**Open gates blocking Phase 1 start** (all need human/production input — see §5 Phase 0):
+
+1. ⬜ **0.2 Backend version parity** — confirm prod backend OpenAPI ≥ v0.2.3.
+2. ⬜ **corelib pin** — target is `v0.1.2` (§4), but the vendored tree is `0.1.1rc5`; update the dev env to the real `v0.1.2` tag and confirm it bundles spec v0.2.3.
+3. ⬜ **0.1 reviewer sign-off** on `docs/openapi_v022_to_v023_diff.md`.
+
+**Next step when gates clear:** Phase 1.1 — flip the alias block in `src/bawue/types.py` to `pazufa_corelib.api_client.models.*`, then land the 1.2a status shim (`src/bawue/api.py`) before touching `upload_throttle.py`.
+
 ## 0. Revision History
 
 - **v1 (2026-05-25)** — Initial analysis.
@@ -219,18 +237,24 @@ shipped in small reviewable steps.
 
 **Must complete before Phase 1 starts.**
 
-0.1. **Spec diff artifact** (R14). Produce `docs/openapi_v022_to_v023_diff.md`
+0.1. ✅ **Spec diff artifact** (R14) — **DONE** (commit `f386d09`),
+⬜ reviewer sign-off still pending. Produce `docs/openapi_v022_to_v023_diff.md`
 listing every model class with renamed fields, added required fields,
 removed fields, and enum value changes between collector's spec v0.2.2 and
 scraper-core's spec v0.2.3. Confirmed renames so far: `TouchedByInner` →
 `TouchedByItem`. Reviewer signs off before Phase 1.
 
-0.2. **Backend version parity** (R15). Verify the **production** backend's
+0.2. ⬜ **Backend version parity** (R15) — **OPEN, needs production access**
+(see `docs/phase0_audits.md` §0.2; vendored corelib is `0.1.1rc5`, plan
+pins `v0.1.2`). Verify the **production** backend's
 OpenAPI version is ≥0.2.3. If not, coordinate the backend deploy first —
 shipping v0.2.3 calls against a v0.2.2 backend will produce a 422 storm.
 This is a precondition, not an open decision.
 
-0.3. **Type alias adapter** (R4). Land a small, mechanical commit:
+0.3. ✅ **Type alias adapter** (R4) — **DONE** (commit `f386d09`). All
+generated model/enum imports now route through `src/bawue/types.py`; no
+`from openapi_client.models import` remains outside that file. Land a small,
+mechanical commit:
 
 ```python
 # src/bawue/types.py — add at top, behind a feature flag
@@ -245,13 +269,16 @@ Gremium, Parlament, Station, StationDokumenteInner, VgIdent, Doktyp,
 Stationstyp, Vorgangstyp). This lets Phase 1.1 flip the alias **once**
 instead of touching 14 files; rollback is one revert.
 
-0.4. **`make_vorgang(**kw)` test helper** (D4 in original draft). Same
+0.4. ✅ **`make_vorgang(**kw)` test helper** (D4 in original draft) — **DONE**
+(commit `f386d09`, `tests/conftest.py:18`). Same
 rationale: hide the constructor flavour behind a helper so the test sweep
 becomes a search-and-replace, not a rewrite.
 
-0.5. **Direct-dep audit** (R12). Run `rg 'kreuzberg|tesseract|selenium|pypdf|pillow|dotenv' src/ tests/` and decide for each: drop or add as direct dep. Confirmed today: `kreuzberg` is imported by `bawue_dok.py` (keep); `tesseract` is invoked by kreuzberg's OCR path (keep in Docker); `selenium`/`pypdf`/`pillow` have no BaWue call sites (drop from runtime image).
+0.5. ✅ **Direct-dep audit** (R12) — **DONE** (commit `f386d09`,
+`docs/phase0_audits.md` §0.5). Run `rg 'kreuzberg|tesseract|selenium|pypdf|pillow|dotenv' src/ tests/` and decide for each: drop or add as direct dep. Confirmed today: `kreuzberg` is imported by `bawue_dok.py` (keep); `tesseract` is invoked by kreuzberg's OCR path (keep in Docker); `selenium`/`pypdf`/`pillow` have no BaWue call sites (drop from runtime image). **Deviation flagged:** `python-dotenv` (§4 lists it as a direct dep) has no `import dotenv` call site — recommend not adding it until the new `__main__` introduces one.
 
-0.6. **Manifest audit** (part of R13). Grep deploy code now for the string
+0.6. ✅ **Manifest audit** (part of R13) — **DONE** (commit `f386d09`,
+`docs/phase0_audits.md` §0.6). Grep deploy code now for the string
 `collector` and `python -m collector` (Cloud Build, Woodpecker,
 docker-compose, README, k8s, cron, `.env`). Produce a one-page list of
 call-sites to update in Phase 3 so nothing is missed at cutover.
