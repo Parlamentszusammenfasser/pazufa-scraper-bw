@@ -1,7 +1,7 @@
 # Change Proposal: Remove `pazufa-collector` Dependency
 
-> Status: **Draft v2 / Reviewed** — incorporates architect-review recommendations (R1–R15).
-> Author: change-doc generated 2026-05-25, revised 2026-05-25 after architect review.
+> Status: **Draft v3 / Updated** — incorporates corelib v0.1.1 and v0.1.2 release changes.
+> Author: change-doc generated 2026-05-25, revised 2026-05-25 after architect review, revised 2026-06-28 after corelib releases.
 
 ## 0. Revision History
 
@@ -20,6 +20,12 @@
   - Added direct-dep audit step (R12) and Docker image deprecation timeline (R13).
   - Spec v0.2.2 → v0.2.3 diff promoted to Phase 0 deliverable (R14).
   - Backend version parity promoted to Phase 0 gate (R15).
+- **v3 (2026-06-28)** — Corelib release updates folded in. Material changes:
+  - §4 dependency pin updated to `v0.1.2` tag (first stable-tagged release).
+  - §3 LLM enrichment row: noted `ZusammenfassungResult` validator changes in v0.1.2 (min-length floor, prompt-echo rejection).
+  - §3 Normalization row: noted `AuthorResolver` / `OrganizationResolver` added in v0.1.1; `normalize_volltext` NUL fix in v0.1.2.
+  - §6 D3: updated to call out `OrganizationResolver` as the drop-in for BaWue's `canonicalize_organisation`.
+  - §7 Risk #10: added v0.1.2 behavioral note.
 
 ## 1. Motivation
 
@@ -125,11 +131,11 @@ overridden by BaWue (`upload_vorgang`, custom `send_result` for sitzungen).
 
 | Capability                  | Module                                       | Notes                                                                                              |
 | --------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| LLM enrichment              | `pazufa_corelib.llm`                         | `LLMConnector` + result models + prompts. Already imported by BaWue.                               |
+| LLM enrichment              | `pazufa_corelib.llm`                         | `LLMConnector` + result models + prompts. Already imported by BaWue. **v0.1.2**: `ZusammenfassungResult` now enforces min-length (50 chars) and rejects prompt-echo output via Instructor retry — behavioral change already live for BaWue, no migration work required. |
 | HTTP API client             | `pazufa_corelib.api_client` (`AuthenticatedClient`, `Client`) | httpx, attrs, spec v0.2.3. **Not yet used by BaWue.**                                |
 | Generated API models        | `pazufa_corelib.api_client.models.*`         | `Vorgang`, `Sitzung`, `Dokument`, `Autor`, `Gremium`, `Parlament`, `Station`, `VgIdent`, `Doktyp`, `Stationstyp`, `Vorgangstyp`, `Top`, `Lobbyregeintrag`, etc. |
 | Header helpers              | `pazufa_corelib.api_helpers`                 | `format_if_modified_since` (replaces ad-hoc `If-Modified-Since` formatting).                       |
-| Normalisation               | `pazufa_corelib.normalization`               | `hash`, `names`, `schlagworte`, `text`, `urls`, fuzzy matching. Currently unused — opportunity.    |
+| Normalisation               | `pazufa_corelib.normalization`               | `hash`, `names`, `schlagworte`, `text`, `urls`, fuzzy matching. Currently unused — opportunity. **v0.1.1**: added `AuthorResolver` and `OrganizationResolver` (YAML-backed, fuzzy) — direct replacement candidates for BaWue's `canonicalize_organisation` (see §6 D3). **v0.1.2**: `normalize_volltext` now strips C0 control chars including NUL, preventing PostgreSQL `text` insert failures from stray `\x00` in scraped PDFs.    |
 | Schlagworte / names models  | `pazufa_corelib.schlagworte_model`, `names_model` | Pydantic models for shared taxonomy.                                                          |
 | API helper data model       | `pazufa_corelib.api_model`                   | Alternative datamodel-codegen Pydantic v2 models (parallel to `api_client.models`).                |
 
@@ -175,8 +181,9 @@ Dependencies after migration:
 ```toml
 [tool.poetry.dependencies]
 python                = ">=3.13,<3.14"
-# Pinned to a git SHA or published wheel — NOT a path install in prod (D5).
-pazufa-corelib        = {git = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git", rev = "<SHA>"}
+# Pinned to a git tag / published wheel — NOT a path install in prod (D5).
+# v0.1.2 is the first stable-tagged release that post-dates this migration plan.
+pazufa-corelib        = {git = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git", rev = "v0.1.2"}
 httpx                 = ">=0.28"   # via corelib transitively, but pin explicitly
 redis                 = "^7.4"
 lxml                  = ">=6.0"
@@ -492,8 +499,11 @@ These should be settled before starting Phase 1:
 
 - **D3. Re-use of `pazufa_corelib.normalization`**: BaWue currently
   hand-rolls organisation canonicalisation (`canonicalize_organisation` in
-  `types.py`). The shared lib already has `normalization.names`,
-  `normalization.text`. **Opportunity** to delete BaWue code by switching
+  `types.py`). As of v0.1.1, the shared lib now ships `OrganizationResolver`
+  (YAML-backed, cosine-similarity fuzzy matching) and `AuthorResolver` — both
+  direct replacement candidates for BaWue's manual canonicalisation.
+  `normalization.text` / `normalization.urls` / `SchlagwortResolver` also cover
+  further opportunities. **Opportunity** to delete BaWue code by switching
   over, but out of scope for this migration — track separately.
 
 - **D4. → Phase 0.4.** The `make_vorgang(**kw)` test helper is no longer
@@ -516,7 +526,7 @@ These should be settled before starting Phase 1:
 | 7 | `kreuzberg` / `tesseract` were transitively provided by collector; missing at runtime. | Medium     | Medium | Phase 0.5 direct-dep audit; verify in CI Docker build.                                              |
 | 8 | Production backend on spec v0.2.2 — v0.2.3 calls 422 on cutover.                       | Medium     | Critical | Phase 0.2 gate: refuse Phase 1 until backend version is verified ≥0.2.3.                          |
 | 9 | path-install of corelib in prod means a broken upstream push breaks BaWue's image build. | Medium  | High   | §6 D5 mandatory: pin to git SHA / wheel. §10 C6 verifies it.                                       |
-| 10| LLM enrichment relies on `collector.llm_connector` constructor signature.             | Low        | Low    | Verified: BaWue already imports `from pazufa_corelib.llm import LLMConnector`. No work here.        |
+| 10| LLM enrichment relies on `collector.llm_connector` constructor signature.             | Low        | Low    | Verified: BaWue already imports `from pazufa_corelib.llm import LLMConnector`. No work here. **v0.1.2 note**: `ZusammenfassungResult` now rejects summaries <50 chars and prompt-echo output (Instructor retries). This is already live and purely beneficial — expect marginally more LLM retries on degenerate model output. |
 
 ## 8. Out of Scope
 
