@@ -12,11 +12,11 @@ cron (host, daily 03:00)
         → LLM API             [summarization]
 ```
 
-The CI pipeline builds a multi-platform image (`linux/amd64`, `linux/arm/v7`, `linux/arm64`) and pushes it to Docker Hub. The Pi pulls the pre-built image — no build toolchain needed on the device.
+The CI pipeline builds a multi-platform image (`linux/amd64`, `linux/arm64`) and pushes it to Docker Hub. The Pi 3B must run 64-bit Pi OS to use the `arm64` image — this is the default since 2023. The Pi pulls the pre-built image — no build toolchain needed on the device.
 
 ## Prerequisites
 
-- Raspberry Pi 3B (armv7) or newer with Docker installed
+- Raspberry Pi 3B **running 64-bit Pi OS** (arm64) or newer with Docker installed
 - Docker Compose plugin (ships with modern Docker installs)
 
 Install Docker on the Pi:

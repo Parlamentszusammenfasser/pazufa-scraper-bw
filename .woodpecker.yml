@@ -11,6 +11,11 @@ when:
 #   openapi-generator-cli: 7.15.0 (SHA256 verified below)
 #   plugin-docker-buildx: 6 (update when upgrading)
 #
+# Platforms: linux/amd64 (Mac/CI) + linux/arm64 (Pi 3B on 64-bit Pi OS).
+# arm/v7 (32-bit) is excluded: the dependency stack (tiktoken, tokenizers,
+# cryptography, pillow) has no arm/v7 wheels and takes hours to compile under
+# QEMU. The Pi 3B supports 64-bit; use Raspberry Pi OS 64-bit (default since 2023).
+#
 # Docker Hub secrets (set in Codeberg repo → Settings → Secrets):
 #   docker_username  – your Docker Hub username
 #   docker_password  – Docker Hub access token (not account password)
@@ -95,7 +100,7 @@ steps:
     image: woodpeckerci/plugin-docker-buildx:6
     depends_on: [vendor-prep]
     settings:
-      platforms: linux/amd64,linux/arm/v7,linux/arm64
+      platforms: linux/amd64,linux/arm64
       repo:
         from_secret: docker_repo
       auto_tag: true
@@ -112,7 +117,7 @@ steps:
     image: woodpeckerci/plugin-docker-buildx:6
     depends_on: [vendor-prep]
     settings:
-      platforms: linux/amd64,linux/arm/v7,linux/arm64
+      platforms: linux/amd64,linux/arm64
       repo:
         from_secret: docker_repo
       tags:
@@ -131,7 +136,7 @@ steps:
     image: woodpeckerci/plugin-docker-buildx:6
     depends_on: [vendor-prep]
     settings:
-      platforms: linux/amd64,linux/arm/v7,linux/arm64
+      platforms: linux/amd64,linux/arm64
       repo:
         from_secret: docker_repo
       tags:
