@@ -25,9 +25,9 @@ import litellm
 from collector.scrapercache import ScraperCache
 from json_repair import repair_json
 from kreuzberg import ExtractionConfig, OcrConfig, PageConfig, extract_file
-from openapi_client.models.doktyp import Doktyp
-from openapi_client.models.dokument import Dokument
 from pazufa_corelib.llm import LLMConnector
+
+from bawue.types import Doktyp, Dokument
 
 logger = logging.getLogger(__name__)
 

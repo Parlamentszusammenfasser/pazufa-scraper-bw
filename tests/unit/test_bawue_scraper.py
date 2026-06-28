@@ -5,9 +5,6 @@ from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from openapi_client.models.doktyp import Doktyp
-from openapi_client.models.stationstyp import Stationstyp
-from openapi_client.models.vorgangstyp import Vorgangstyp
 
 from bawue.bawue_dok import LLMMetrics
 from bawue.bawue_vorgaenge_scraper import (
@@ -23,6 +20,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _same_round_label,
     _vorgang_kurztitel,
 )
+from bawue.types import Doktyp, Stationstyp, Vorgangstyp
 
 
 def _make_raw_vorgang(
@@ -2849,7 +2847,7 @@ class TestEnsureAusschberAfterVollvlsgn:
 
     def test_unit_retimes_ausschber_in_place(self):
         """Direct unit test on the static method, without the rest of _build_vorgang."""
-        from openapi_client.models import Gremium, Parlament, Station
+        from bawue.types import Gremium, Parlament, Station
 
         def _station(typ: Stationstyp, zp_start: datetime, zp_modifiziert: datetime | None = None) -> Station:
             return Station(
@@ -2879,7 +2877,7 @@ class TestEnsureAusschberAfterVollvlsgn:
 
     def test_unit_zp_modifiziert_invariant_maintained(self):
         """If the ausschber has zp_modifiziert set, retiming must keep it >= zp_start."""
-        from openapi_client.models import Gremium, Parlament, Station
+        from bawue.types import Gremium, Parlament, Station
 
         anchor = datetime(2021, 12, 16, tzinfo=UTC)
         gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
@@ -2908,7 +2906,7 @@ class TestEnsureAusschberAfterVollvlsgn:
 
     def test_unit_zp_modifiziert_only_advanced_when_below_new_start(self):
         """A zp_modifiziert that is already past the bump target must NOT be lowered."""
-        from openapi_client.models import Gremium, Parlament, Station
+        from bawue.types import Gremium, Parlament, Station
 
         anchor = datetime(2021, 12, 16, tzinfo=UTC)
         gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
@@ -2935,7 +2933,7 @@ class TestEnsureAusschberAfterVollvlsgn:
 
     def test_unit_no_op_when_no_vollvlsgn(self):
         """Without a vollvlsgn, ausschber stations are left untouched."""
-        from openapi_client.models import Gremium, Parlament, Station
+        from bawue.types import Gremium, Parlament, Station
 
         gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
         ausschber_zp = datetime(2021, 11, 18, tzinfo=UTC)
@@ -3405,10 +3403,8 @@ class TestTrojanergefahr:
         """LLM returns trojanergefahr → Station gets the value."""
         from unittest.mock import AsyncMock
 
-        from openapi_client.models.autor import Autor
-        from openapi_client.models.dokument import Dokument
-
         from bawue.bawue_dok import EnrichmentResult
+        from bawue.types import Autor, Dokument
 
         scraper = object.__new__(BawueVorgaengeScraper)
         scraper._wahlperiode = 17

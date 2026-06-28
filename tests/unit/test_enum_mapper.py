@@ -1,9 +1,6 @@
 """Tests for the PARLIS→PaZuFa enum mapper."""
 
 import pytest
-from openapi_client.models.doktyp import Doktyp
-from openapi_client.models.stationstyp import Stationstyp
-from openapi_client.models.vorgangstyp import Vorgangstyp
 
 from bawue.enum_mapper import (
     VORGANGSTYP_MAP,
@@ -13,7 +10,10 @@ from bawue.enum_mapper import (
 )
 from bawue.types import (
     CanonicalOrganisation,
+    Doktyp,
     ReservedGremium,
+    Stationstyp,
+    Vorgangstyp,
     canonicalize_organisation,
     is_verfassungsaendernd,
 )

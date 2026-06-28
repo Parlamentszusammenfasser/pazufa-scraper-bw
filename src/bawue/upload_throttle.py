@@ -8,10 +8,10 @@ from uuid import UUID
 import openapi_client
 import openapi_client.api
 import openapi_client.api.collector_schnittstellen_api
-from openapi_client.models import Vorgang
 
 from bawue.rate_limiter import AdaptiveRateLimiter
 from bawue.run_report import api_exception_reason
+from bawue.types import Vorgang
 
 logger = logging.getLogger(__name__)
 

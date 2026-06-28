@@ -13,18 +13,6 @@ import aiohttp
 import certifi
 from collector.config import CollectorConfiguration
 from collector.interface import VorgangsScraper
-from openapi_client.models import (
-    Autor,
-    Dokument,
-    Gremium,
-    Parlament,
-    Station,
-    StationDokumenteInner,
-    Stationstyp,
-    VgIdent,
-    Vorgang,
-)
-from openapi_client.models.doktyp import Doktyp
 
 from bawue.bawue_dok import LLMMetrics, clear_hash_cache
 from bawue.config_loader import load_toml_section
@@ -36,9 +24,19 @@ from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, format_duration, format_failed_section
 from bawue.types import (
     TODO_MARKER,
+    Autor,
+    Doktyp,
+    Dokument,
+    Gremium,
+    Parlament,
     RawFundstelle,
     RawVorgang,
     ReservedGremium,
+    Station,
+    StationDokumenteInner,
+    Stationstyp,
+    VgIdent,
+    Vorgang,
     canonicalize_organisation,
     is_verfassungsaendernd,
     none_if_blank,

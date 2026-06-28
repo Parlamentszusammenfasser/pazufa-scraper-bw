@@ -4,6 +4,60 @@ import re
 from enum import StrEnum
 from typing import TypedDict
 
+# ---------------------------------------------------------------------------
+# OpenAPI model/enum import surface (migration Phase 0.3 — type-alias adapter).
+#
+# All BaWue code imports the generated API models/enums from *here* rather than
+# directly from `openapi_client.models`. This makes the Phase 1 client swap a
+# single edit in this file instead of a 14-file sweep.
+#
+#   PHASE 0 (now):  re-export from `openapi_client.models`  (spec v0.2.2)
+#   PHASE 1 (flip): re-export from `pazufa_corelib.api_client.models.*` (v0.2.3)
+#
+# Caveats the flip does NOT cover (see docs/openapi_v022_to_v023_diff.md):
+#   - Enum *member* references still say `*_MINUS_*` and must be renamed.
+#   - `StationDokumenteInner` does not exist in the new client (→ `Dokument | str`).
+#   - `Dokument(hash=...)` becomes `Dokument(hash_=...)`.
+# ---------------------------------------------------------------------------
+from openapi_client.models import (
+    Autor,
+    Doktyp,
+    Dokument,
+    Gremium,
+    Parlament,
+    Sitzung,
+    Station,
+    StationDokumenteInner,
+    Stationstyp,
+    VgIdent,
+    Vorgang,
+    Vorgangstyp,
+)
+
+__all__ = [
+    "TODO_MARKER",
+    "Autor",
+    "CanonicalOrganisation",
+    "Doktyp",
+    "Dokument",
+    "Gremium",
+    "Parlament",
+    "RawFundstelle",
+    "RawVorgang",
+    "ReservedGremium",
+    "Sitzung",
+    "Station",
+    "StationDokumenteInner",
+    "Stationstyp",
+    "VgIdent",
+    "Vorgang",
+    "Vorgangstyp",
+    "canonicalize_organisation",
+    "is_verfassungsaendernd",
+    "none_if_blank",
+    "todo_if_blank",
+]
+
 
 class CanonicalOrganisation(StrEnum):
     """Canonical form for the well-known finite set of Baden-Württemberg

@@ -7,14 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import NAMESPACE_URL, uuid5
 
 import pytest
-from openapi_client.models.doktyp import Doktyp
-from openapi_client.models.parlament import Parlament
-from openapi_client.models.stationstyp import Stationstyp
-from openapi_client.models.vorgangstyp import Vorgangstyp
 
 from bawue.bawue_beteiligung_scraper import DEFAULT_WAHLPERIODE, BawueBeteiligungScraper
 from bawue.bawue_dok import LLMMetrics
 from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
+from bawue.types import Doktyp, Parlament, Stationstyp, Vorgangstyp
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
 
@@ -257,8 +254,7 @@ class TestBuildVorgang:
 
 def _make_enriched_dok(url: str = "https://example.com/test.pdf"):
     """Create a Dokument suitable for EnrichmentResult (passes Pydantic validation)."""
-    from openapi_client.models.autor import Autor
-    from openapi_client.models.dokument import Dokument
+    from bawue.types import Autor, Dokument
 
     return Dokument(
         titel="Enriched",

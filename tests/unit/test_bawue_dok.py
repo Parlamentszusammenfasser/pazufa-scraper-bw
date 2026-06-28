@@ -10,9 +10,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
-from openapi_client.models.autor import Autor
-from openapi_client.models.doktyp import Doktyp
-from openapi_client.models.dokument import Dokument
 
 from bawue.bawue_dok import (
     EnrichmentResult,
@@ -37,6 +34,7 @@ from bawue.bawue_dok import (
     normalize_volltext,
     truncate_text,
 )
+from bawue.types import Autor, Doktyp, Dokument
 
 # ---------------------------------------------------------------------------
 # Fixtures

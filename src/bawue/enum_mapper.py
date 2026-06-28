@@ -6,9 +6,7 @@ The matching functions use case-insensitive substring matching against dictionar
 
 import re
 
-from openapi_client.models.doktyp import Doktyp
-from openapi_client.models.stationstyp import Stationstyp
-from openapi_client.models.vorgangstyp import Vorgangstyp
+from bawue.types import Doktyp, Stationstyp, Vorgangstyp
 
 # ---------------------------------------------------------------------------
 # Vorgangstyp mapping: PARLIS Vorgangstyp string → PaZuFa Vorgangstyp

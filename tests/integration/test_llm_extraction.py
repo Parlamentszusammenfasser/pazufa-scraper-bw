@@ -12,11 +12,9 @@ from datetime import UTC, datetime
 
 import aiohttp
 import pytest
-from openapi_client.models.autor import Autor
-from openapi_client.models.doktyp import Doktyp
-from openapi_client.models.dokument import Dokument
 
 from bawue.bawue_dok import enrich_dokument
+from bawue.types import Autor, Doktyp, Dokument
 
 pytestmark = pytest.mark.integration
 

@@ -230,7 +230,7 @@ class TestSendResult:
 
             call_kwargs = mock_api_instance.kal_date_put.call_args
             # Verify Parlament.BW is used, not BY
-            from openapi_client.models import Parlament
+            from bawue.types import Parlament
 
             assert call_kwargs.kwargs.get("parlament") or call_kwargs[1].get("parlament")
             # Check the actual value

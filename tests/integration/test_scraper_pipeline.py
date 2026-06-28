@@ -10,10 +10,9 @@ from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 import responses
-from openapi_client.models.stationstyp import Stationstyp
-from openapi_client.models.vorgangstyp import Vorgangstyp
 
 from bawue.parlis_client import BASE_URL, BROWSE_URL, REPORT_URL
+from bawue.types import Stationstyp, Vorgangstyp
 
 pytestmark = pytest.mark.integration
 

@@ -10,19 +10,6 @@ from uuid import NAMESPACE_URL, uuid5
 import aiohttp
 from collector.config import CollectorConfiguration
 from collector.interface import VorgangsScraper
-from openapi_client.models import (
-    Autor,
-    Doktyp,
-    Dokument,
-    Gremium,
-    Parlament,
-    Station,
-    StationDokumenteInner,
-    Stationstyp,
-    VgIdent,
-    Vorgang,
-    Vorgangstyp,
-)
 
 from bawue.bawue_dok import LLMMetrics, clear_hash_cache
 from bawue.beteiligung_client import BASE_URL, BeteiligungClient
@@ -37,7 +24,18 @@ from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, format_duration, format_failed_section
 from bawue.types import (
     TODO_MARKER,
+    Autor,
+    Doktyp,
+    Dokument,
+    Gremium,
+    Parlament,
     ReservedGremium,
+    Station,
+    StationDokumenteInner,
+    Stationstyp,
+    VgIdent,
+    Vorgang,
+    Vorgangstyp,
     canonicalize_organisation,
     is_verfassungsaendernd,
     todo_if_blank,

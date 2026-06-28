@@ -16,14 +16,13 @@ import openapi_client.api
 import openapi_client.api.collector_schnittstellen_api
 from collector.config import CollectorConfiguration
 from collector.interface import SitzungsScraper
-from openapi_client.models import Gremium, Parlament, Sitzung
 
 from bawue.config_loader import load_toml_section
 from bawue.ics_parser import group_events_by_date, parse_ics_feed
 from bawue.notifications import send_mattermost_summary
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
-from bawue.types import none_if_blank
+from bawue.types import Gremium, Parlament, Sitzung, none_if_blank
 from bawue.upload_throttle import with_upload_retry
 
 logger = logging.getLogger(__name__)
