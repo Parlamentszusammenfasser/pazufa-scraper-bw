@@ -2,13 +2,25 @@ variables:
   - &python_image python:3.13
 
 when:
-  - event: [push, pull_request]
+  - event: [push, pull_request, tag]
 
 # Supply-chain hardening: pin external dependencies to reviewed commits.
 # Update these hashes when upgrading framework versions.
 #   pazufa-collector:    a2a9562402c1ad3550e919c2824cd81151f94f99  # v0.2.3
 #   pazufa-scraper-core: 3fbebe5affed1d1278013decc61f030074507400  # main @ 2026-05-03 (renamed corelib → pazufa_corelib #77)
 #   openapi-generator-cli: 7.15.0 (SHA256 verified below)
+#   plugin-docker-buildx: 6 (update when upgrading)
+#
+# Docker Hub secrets (set in Codeberg repo → Settings → Secrets):
+#   docker_username  – your Docker Hub username
+#   docker_password  – Docker Hub access token (not account password)
+#   docker_repo      – full image path, e.g. johndoe/pazufa-bawue-scraper
+#
+# Release workflow (trunk-based):
+#   git tag v1.2.3 && git push origin v1.2.3
+#   → CI builds and pushes :1.2.3 :1.2 :1 :latest
+#   Main branch pushes → :main :main-<sha8>
+#   Feature branch pushes → :dev-<sha8>
 
 steps:
   # Scan poetry.lock for known CVEs before any package installation.
@@ -60,3 +72,75 @@ steps:
       # poetry.toml enforces no-scripts; install won't modify the lockfile
       - poetry install --no-interaction --no-ansi
       - poetry run pytest -m 'not integration'
+
+  # Copy vendored dependencies into the workspace so the Docker build context has them.
+  # The generate-openapi-client step already produced ../pazufa-collector/oapicode;
+  # the pytest step produced ../pazufa-scraper-core — mirror both into vendor/.
+  - name: vendor-prep
+    image: alpine
+    depends_on: [pytest, ruff-lint, ruff-format]
+    commands:
+      - apk add --no-cache rsync
+      - mkdir -p vendor
+      - rsync -a --exclude .git --exclude __pycache__ ../pazufa-collector/ vendor/pazufa-collector/
+      - rsync -a --exclude .git --exclude __pycache__ ../pazufa-scraper-core/ vendor/pazufa-scraper-core/
+    when:
+      - event: [push, tag]
+
+  # --- Docker publish steps (one per event class) ---
+  # All three depend on vendor-prep completing successfully.
+
+  # Semver release: git tag v1.2.3 → Docker tags 1.2.3, 1.2, 1, latest
+  - name: docker-release
+    image: woodpeckerci/plugin-docker-buildx:6
+    depends_on: [vendor-prep]
+    settings:
+      platforms: linux/amd64,linux/arm/v7,linux/arm64
+      repo:
+        from_secret: docker_repo
+      auto_tag: true
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+    when:
+      - event: tag
+        ref: refs/tags/v[0-9]*
+
+  # Main branch snapshot → Docker tags main, main-<sha8>
+  - name: docker-main
+    image: woodpeckerci/plugin-docker-buildx:6
+    depends_on: [vendor-prep]
+    settings:
+      platforms: linux/amd64,linux/arm/v7,linux/arm64
+      repo:
+        from_secret: docker_repo
+      tags:
+        - main
+        - main-${CI_COMMIT_SHA:0:8}
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+    when:
+      - event: push
+        branch: main
+
+  # Feature branch snapshot → Docker tag dev-<sha8>
+  - name: docker-feature
+    image: woodpeckerci/plugin-docker-buildx:6
+    depends_on: [vendor-prep]
+    settings:
+      platforms: linux/amd64,linux/arm/v7,linux/arm64
+      repo:
+        from_secret: docker_repo
+      tags:
+        - dev-${CI_COMMIT_SHA:0:8}
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+    when:
+      - event: push
+        branch:
+          exclude: main
