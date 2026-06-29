@@ -5,13 +5,27 @@
 
 ## Progress Tracker
 
-> Updated 2026-06-28. Branch: `core-lib`.
+> Updated 2026-06-29. Branch: `core-lib`.
 
 - **Phase 0 — Preconditions:** ✅ **complete** — coding/docs (commit `f386d09`) plus all 3 gates cleared 2026-06-28 (see below). 800 unit tests green.
-- **Phase 1 — OpenAPI client swap:** not started (**unblocked** — all Phase 0 gates cleared).
-- **Phase 2 — Local config/cache/pipeline:** not started.
+- **Phase 1 — OpenAPI client swap:** ✅ **complete 2026-06-29** — `src/bawue` now talks only to `pazufa_corelib.api_client`; the old `openapi_client` is gone from runtime code (remaining mentions are doc comments). **822 unit tests green, ruff lint + format clean.** See "Phase 1 — landed" below.
+- **Phase 2 — Local config/cache/pipeline:** not started (scrapers still subclass `collector.interface.*` and read `CollectorConfiguration`; that coupling is what Phase 2 removes).
 - **Phase 3 — Infrastructure:** not started.
 - **Phase 4 — Cleanup:** not started.
+
+**Phase 1 — landed 2026-06-29** (all on branch `core-lib`):
+
+- **1.1 Models** — `src/bawue/types.py` re-exports flipped to `pazufa_corelib.api_client.models.*`. Enum members renamed `*_MINUS_*` → `*_*` (openapi-python-client mangling; identical wire values). `Dokument(hash=…)` → `hash_=…`. `StationDokumenteInner` dropped: `Station.dokumente` is `list[Dokument | str]`, items appended directly and read without `.actual_instance`. `UNSET`/`Unset` re-exported from `bawue.types`.
+- **1.2 / 1.2a API client + status shim** — new `src/bawue/api.py`: `build_client()` (X-API-Key, no prefix), `put_vorgang`/`put_kalender`, and `BawueApiError(.status)`. The corelib client defaults to `raise_on_unexpected_status=False` (silent `parsed=None` on 4xx/5xx, Risk #1), so the shim raises on any non-201 (vorgang) / non-201|204 (kalender). `upload_throttle` and `bawue_sitzungen_scraper` now catch `BawueApiError`; `kal_date_put` is called with `(parlament, datum.date())` positional + `body=` plural. Each scraper builds one `AuthenticatedClient` in `__init__`.
+- **1.3 Cache value format** — both Vorgang scrapers override `get_cached_result`/`store_extracted_result` to round-trip the attrs `to_dict()` under a versioned **`vg2:`** key, bypassing the collector cache's Pydantic `store_vorgang`/`from_json`. Old `vg:` entries are ignored → one-time re-fetch on first cycle after deploy.
+- **1.4 Tests** — `tests/unit/test_api.py` added (status shim per code: 200/4xx/5xx → `BawueApiError`, 201/204 success, positional-vs-kwarg call shape). Existing suites updated for `UNSET`-vs-`None`, `hash_`, and `put_vorgang`/`put_kalender` mocking. **822 passing.**
+- **Known UNSET semantics handled:** optional model fields the scraper never sets now default to `UNSET` (not `None`). Guarded the three runtime-affecting sites in `bawue_vorgaenge_scraper.py` (`zp_modifiziert` bumps → `isinstance(..., datetime)`; `stellungnahmen` init; `api_id` presence in `_assign_stable_station_ids`). Passing `None` explicitly is preserved (serde treats JSON `null` == omitted for `Option<T>`); truthiness checks (`if drucksnr:`) are `UNSET`-safe.
+
+**Residuals (not Phase-1 blockers, tracked for later phases):**
+
+- **Integration tests** (`tests/integration/conftest.py`) still construct the old `openapi_client.Configuration` / `config.oapiconfig`. They are deselected by default (need a backend) and import cleanly. Rewrite belongs with Phase 4.2 + the §10 C3 cutover-parity harness (build both code paths against `mock_pazufa_server.py` and assert byte-equal request bodies).
+- **§1.1 round-trip key-set fixture** (assert a fully-populated `Vorgang.to_dict()` matches a fixture captured from the old client) — not added; superseded in practice by the C3 parity harness. Worth doing before staging cutover to catch any `UNSET`-dropped field (Risk #3).
+- **`null` vs omit:** blank optionals (`none_if_blank` → `None`) now serialise as JSON `null` rather than being omitted as the old `exclude_none=True` client did. Functionally serde-equivalent for `Option<T>`; revisit only if the C3 byte-parity harness flags it.
 
 **Phase 1 gates — RESOLVED 2026-06-28** (evidence in `docs/phase0_audits.md` §0.2):
 
@@ -19,7 +33,7 @@
 2. ✅ **corelib pin `v0.1.2`** — tag exists, `pyproject` `0.1.2`, bundles spec `0.2.3`; its `api_client` + `llm` trees (the only corelib surface BaWue imports) are byte-identical to the rc5 dev tree, so the Phase 3.1 pin is a no-op for Phase 1.
 3. ✅ **0.1 reviewer sign-off** on `docs/openapi_v022_to_v023_diff.md` — approved by maintainer 2026-06-28.
 
-**Phase 1 is unblocked.** Next step: Phase 1.1 — flip the alias block in `src/bawue/types.py` to `pazufa_corelib.api_client.models.*`, then land the 1.2a status shim (`src/bawue/api.py`) before touching `upload_throttle.py`.
+**Phase 1 is complete** (see "Phase 1 — landed" above). Next step: Phase 2 — replace `CollectorConfiguration`, `ScraperCache`, and the `collector.interface.*` base classes with local `bawue.config` / `bawue.cache` / `bawue.pipeline` so `src/bawue` no longer imports `collector`.
 
 ## 0. Revision History
 

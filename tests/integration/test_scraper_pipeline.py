@@ -68,7 +68,7 @@ class TestGesetzgebungFullLifecycle:
         expected_api_id = str(uuid5(NAMESPACE_URL, "V-98001"))
         assert vg["api_id"] == expected_api_id
         assert vg["titel"] == "Gesetz zur Förderung erneuerbarer Energien"
-        assert vg["typ"] == Vorgangstyp.GG_MINUS_LAND_MINUS_PARL.value
+        assert vg["typ"] == Vorgangstyp.GG_LAND_PARL.value
         assert vg["wahlperiode"] == 17
         assert vg["verfassungsaendernd"] is False
 
@@ -100,10 +100,10 @@ class TestGesetzgebungFullLifecycle:
         stations = mock_backend.vorgaenge[0]["stationen"]
         station_types = [s["typ"] for s in stations]
 
-        assert station_types[0] == Stationstyp.PARL_MINUS_INITIATIV.value  # Gesetzentwurf
-        assert station_types[1] == Stationstyp.PARL_MINUS_VOLLVLSGN.value  # Erste Beratung
-        assert station_types[2] == Stationstyp.PARL_MINUS_AUSSCHBER.value  # Beschlussempfehlung und Bericht
-        assert station_types[3] == Stationstyp.PARL_MINUS_AKZEPTANZ.value  # Zustimmung
+        assert station_types[0] == Stationstyp.PARL_INITIATIV.value  # Gesetzentwurf
+        assert station_types[1] == Stationstyp.PARL_VOLLVLSGN.value  # Erste Beratung
+        assert station_types[2] == Stationstyp.PARL_AUSSCHBER.value  # Beschlussempfehlung und Bericht
+        assert station_types[3] == Stationstyp.PARL_AKZEPTANZ.value  # Zustimmung
 
     @responses.activate
     @pytest.mark.asyncio
@@ -126,7 +126,7 @@ class TestGesetzgebungFullLifecycle:
         assert vg["initiatoren"][0]["organisation"] == "Landesregierung"
 
         station = vg["stationen"][0]
-        assert station["typ"] == Stationstyp.PREPARL_MINUS_REGBSL.value
+        assert station["typ"] == Stationstyp.PREPARL_REGBSL.value
 
 
 # ===================================================================
@@ -207,7 +207,7 @@ class TestAntrag:
 
         # Second station should be Ausschuss
         ausschuss_station = vg["stationen"][1]
-        assert ausschuss_station["typ"] == Stationstyp.PARL_MINUS_AUSSCHBER.value
+        assert ausschuss_station["typ"] == Stationstyp.PARL_AUSSCHBER.value
         assert "Ausschuss" in ausschuss_station["gremium"]["name"]
 
 
@@ -261,7 +261,7 @@ class TestPipelineBehavior:
         assert mock_backend.call_count == 3
 
         typen = sorted(vg["typ"] for vg in mock_backend.vorgaenge)
-        assert typen.count(Vorgangstyp.GG_MINUS_LAND_MINUS_PARL.value) == 1
+        assert typen.count(Vorgangstyp.GG_LAND_PARL.value) == 1
         assert typen.count(Vorgangstyp.SONSTIG.value) == 2  # Kleine Anfrage + Antrag
 
     @responses.activate

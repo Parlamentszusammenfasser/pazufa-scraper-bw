@@ -24,6 +24,7 @@ def _make_scraper():
     scraper._wahlperiode = 17
     scraper._raw_cache = {}
     scraper._client = MagicMock()
+    scraper._api_client = MagicMock()
     scraper._upload_limiter = AdaptiveRateLimiter(
         initial_delay=0.2, min_delay=0.05, backoff_multiplier=10.0, recovery_factor=0.5
     )
@@ -86,7 +87,7 @@ class TestBuildVorgang:
 
         assert vorgang is not None
         assert len(vorgang.stationen) == 1
-        assert vorgang.stationen[0].typ == Stationstyp.PREPARL_MINUS_REGENT
+        assert vorgang.stationen[0].typ == Stationstyp.PREPARL_REGENT
 
     @pytest.mark.asyncio
     async def test_deterministic_api_id(self):
@@ -119,8 +120,8 @@ class TestBuildVorgang:
 
         station = vorgang.stationen[0]
         assert len(station.dokumente) == 1
-        doc = station.dokumente[0].actual_instance
-        assert doc.typ == Doktyp.PREPARL_MINUS_ENTWURF
+        doc = station.dokumente[0]
+        assert doc.typ == Doktyp.PREPARL_ENTWURF
 
     @pytest.mark.asyncio
     async def test_ministry_as_initiator(self):
@@ -139,7 +140,7 @@ class TestBuildVorgang:
         vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
         assert vorgang.initiatoren == []
-        assert vorgang.stationen[0].dokumente[0].actual_instance.autoren == []
+        assert vorgang.stationen[0].dokumente[0].autoren == []
 
     @pytest.mark.asyncio
     async def test_dokument_volltext_and_hash_are_todo_when_llm_disabled(self):
@@ -148,9 +149,9 @@ class TestBuildVorgang:
         detail = _make_detail()
         vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
-        dok = vorgang.stationen[0].dokumente[0].actual_instance
+        dok = vorgang.stationen[0].dokumente[0]
         assert dok.volltext == "TODO"
-        assert dok.hash == "TODO"
+        assert dok.hash_ == "TODO"
 
     @pytest.mark.asyncio
     async def test_empty_detail_title_falls_back_to_todo_marker(self):
@@ -177,7 +178,7 @@ class TestBuildVorgang:
         scraper = _make_scraper()
         detail = _make_detail()
         vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
-        assert vorgang.typ == Vorgangstyp.GG_MINUS_LAND_MINUS_PARL
+        assert vorgang.typ == Vorgangstyp.GG_LAND_PARL
 
     @pytest.mark.asyncio
     async def test_kurztitel_is_slug(self):
@@ -228,7 +229,7 @@ class TestBuildVorgang:
         detail = _make_detail(comment_deadline="13.11.2025")
         vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
-        doc = vorgang.stationen[0].dokumente[0].actual_instance
+        doc = vorgang.stationen[0].dokumente[0]
         assert doc.zp_modifiziert.tzinfo is not None
         assert doc.zp_referenz.tzinfo is not None
 
@@ -259,8 +260,8 @@ def _make_enriched_dok(url: str = "https://example.com/test.pdf"):
     return Dokument(
         titel="Enriched",
         volltext="text",
-        hash="abc",
-        typ=Doktyp.PREPARL_MINUS_ENTWURF,
+        hash_="abc",
+        typ=Doktyp.PREPARL_ENTWURF,
         zp_modifiziert=datetime(2025, 11, 13, tzinfo=UTC),
         zp_referenz=datetime(2025, 11, 13, tzinfo=UTC),
         link=url,
@@ -404,10 +405,7 @@ class TestRunSummary:
         scraper.config = mock_config
         scraper.scraper_id = "test-scraper-id"
 
-        with patch("bawue.upload_throttle.openapi_client") as mock_oapi:
-            mock_oapi.ApiClient.return_value.__enter__ = MagicMock(return_value=MagicMock())
-            mock_oapi.ApiClient.return_value.__exit__ = MagicMock(return_value=False)
-            mock_oapi.api.collector_schnittstellen_api.CollectorSchnittstellenApi.return_value = MagicMock()
+        with patch("bawue.upload_throttle.put_vorgang"):
             await scraper.send_result(mock_vorgang)
             await scraper.send_result(mock_vorgang)
 
@@ -439,7 +437,7 @@ class TestRunSummary:
 
     @pytest.mark.asyncio
     async def test_summary_shows_failed_count(self, capsys):
-        import openapi_client as real_oapi
+        from bawue.api import BawueApiError
 
         scraper = _make_scraper()
         mock_config = MagicMock()
@@ -447,15 +445,10 @@ class TestRunSummary:
         scraper.config = mock_config
         scraper.scraper_id = "test-scraper-id"
 
-        with patch("bawue.upload_throttle.openapi_client") as mock_oapi:
-            mock_oapi.ApiException = real_oapi.ApiException
-            mock_oapi.ApiClient.return_value.__enter__ = MagicMock(return_value=MagicMock())
-            mock_oapi.ApiClient.return_value.__exit__ = MagicMock(return_value=False)
-            mock_api_instance = MagicMock()
-            mock_api_instance.vorgang_put.side_effect = real_oapi.ApiException(
-                status=500, reason="Internal Server Error"
-            )
-            mock_oapi.api.collector_schnittstellen_api.CollectorSchnittstellenApi.return_value = mock_api_instance
+        with patch(
+            "bawue.upload_throttle.put_vorgang",
+            side_effect=BawueApiError(500, b"Internal Server Error", "vorgang_put"),
+        ):
             await scraper.send_result(MagicMock())
 
         with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):
@@ -492,7 +485,7 @@ class TestRunSummary:
 
     @pytest.mark.asyncio
     async def test_summary_lists_failed_vorgaenge_with_reason(self, capsys):
-        import openapi_client as real_oapi
+        from bawue.api import BawueApiError
 
         scraper = _make_scraper()
         mock_config = MagicMock()
@@ -505,15 +498,10 @@ class TestRunSummary:
         item.kurztitel = "klima-slug"
         item.titel = "Klimaschutzgesetz"
 
-        with patch("bawue.upload_throttle.openapi_client") as mock_oapi:
-            mock_oapi.ApiException = real_oapi.ApiException
-            mock_oapi.ApiClient.return_value.__enter__ = MagicMock(return_value=MagicMock())
-            mock_oapi.ApiClient.return_value.__exit__ = MagicMock(return_value=False)
-            mock_api_instance = MagicMock()
-            mock_api_instance.vorgang_put.side_effect = real_oapi.ApiException(
-                status=422, reason="Unprocessable Entity"
-            )
-            mock_oapi.api.collector_schnittstellen_api.CollectorSchnittstellenApi.return_value = mock_api_instance
+        with patch(
+            "bawue.upload_throttle.put_vorgang",
+            side_effect=BawueApiError(422, b"Unprocessable Entity", "vorgang_put"),
+        ):
             await scraper.send_result(item)
 
         with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):

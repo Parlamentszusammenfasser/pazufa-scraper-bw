@@ -8,34 +8,35 @@ from typing import TypedDict
 # OpenAPI model/enum import surface (migration Phase 0.3 — type-alias adapter).
 #
 # All BaWue code imports the generated API models/enums from *here* rather than
-# directly from `openapi_client.models`. This makes the Phase 1 client swap a
-# single edit in this file instead of a 14-file sweep.
+# directly from the generated client. Phase 1 flipped this single re-export from
+# the collector's `openapi_client.models` (openapi-generator-cli, Pydantic v2,
+# spec v0.2.2) to `pazufa_corelib.api_client.models.*` (openapi-python-client,
+# attrs, spec v0.2.3).
 #
-#   PHASE 0 (now):  re-export from `openapi_client.models`  (spec v0.2.2)
-#   PHASE 1 (flip): re-export from `pazufa_corelib.api_client.models.*` (v0.2.3)
-#
-# Caveats the flip does NOT cover (see docs/openapi_v022_to_v023_diff.md):
-#   - Enum *member* references still say `*_MINUS_*` and must be renamed.
-#   - `StationDokumenteInner` does not exist in the new client (→ `Dokument | str`).
-#   - `Dokument(hash=...)` becomes `Dokument(hash_=...)`.
+# Consequences of the new (attrs) client, handled across the call sites:
+#   - Optional fields default to `UNSET` (not `None`); `UNSET` is omitted from
+#     `to_dict()` output, a bare `None` is serialised as JSON null.
+#   - `StationDokumenteInner` no longer exists: `Station.dokumente` is now a
+#     plain `list[Dokument | str]` (append the `Dokument` directly, no wrapper;
+#     read attributes off the item, not off a `.actual_instance` accessor).
+#   - `Dokument(hash=...)` is now `Dokument(hash_=...)`.
 # ---------------------------------------------------------------------------
-from openapi_client.models import (
-    Autor,
-    Doktyp,
-    Dokument,
-    Gremium,
-    Parlament,
-    Sitzung,
-    Station,
-    StationDokumenteInner,
-    Stationstyp,
-    VgIdent,
-    Vorgang,
-    Vorgangstyp,
-)
+from pazufa_corelib.api_client.models.autor import Autor
+from pazufa_corelib.api_client.models.doktyp import Doktyp
+from pazufa_corelib.api_client.models.dokument import Dokument
+from pazufa_corelib.api_client.models.gremium import Gremium
+from pazufa_corelib.api_client.models.parlament import Parlament
+from pazufa_corelib.api_client.models.sitzung import Sitzung
+from pazufa_corelib.api_client.models.station import Station
+from pazufa_corelib.api_client.models.stationstyp import Stationstyp
+from pazufa_corelib.api_client.models.vg_ident import VgIdent
+from pazufa_corelib.api_client.models.vorgang import Vorgang
+from pazufa_corelib.api_client.models.vorgangstyp import Vorgangstyp
+from pazufa_corelib.api_client.types import UNSET, Unset
 
 __all__ = [
     "TODO_MARKER",
+    "UNSET",
     "Autor",
     "CanonicalOrganisation",
     "Doktyp",
@@ -47,8 +48,8 @@ __all__ = [
     "ReservedGremium",
     "Sitzung",
     "Station",
-    "StationDokumenteInner",
     "Stationstyp",
+    "Unset",
     "VgIdent",
     "Vorgang",
     "Vorgangstyp",

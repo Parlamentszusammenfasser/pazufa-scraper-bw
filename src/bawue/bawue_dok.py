@@ -134,7 +134,7 @@ Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
 
 _DOKTYP_PROMPT_MAP: dict[Doktyp, str] = {
     Doktyp.ENTWURF: BODY_PROMPT_ENTWURF,
-    Doktyp.PREPARL_MINUS_ENTWURF: BODY_PROMPT_ENTWURF,
+    Doktyp.PREPARL_ENTWURF: BODY_PROMPT_ENTWURF,
     Doktyp.STELLUNGNAHME: BODY_PROMPT_STELLUNGNAHME,
     Doktyp.BESCHLUSSEMPF: BODY_PROMPT_BESCHLUSSEMPF,
 }
@@ -676,7 +676,7 @@ async def enrich_dokument(
                 dokument=Dokument(
                     titel=dok.titel,
                     volltext=full_text,
-                    hash=doc_hash,
+                    hash_=doc_hash,
                     typ=dok.typ,
                     zp_modifiziert=dok.zp_modifiziert,
                     zp_referenz=dok.zp_referenz,
@@ -700,7 +700,7 @@ async def enrich_dokument(
                 dokument=Dokument(
                     titel=dok.titel,
                     volltext=full_text,
-                    hash=doc_hash,
+                    hash_=doc_hash,
                     typ=dok.typ,
                     zp_modifiziert=dok.zp_modifiziert,
                     zp_referenz=dok.zp_referenz,

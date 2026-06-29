@@ -34,7 +34,7 @@ from bawue.bawue_dok import (
     normalize_volltext,
     truncate_text,
 )
-from bawue.types import Autor, Doktyp, Dokument
+from bawue.types import UNSET, Autor, Doktyp, Dokument
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -91,7 +91,7 @@ def _make_plain_dokument(
     return Dokument(
         titel=titel,
         volltext="",
-        hash="",
+        hash_="",
         typ=typ,
         zp_modifiziert=datetime(2026, 1, 15, tzinfo=UTC),
         zp_referenz=datetime(2026, 1, 15, tzinfo=UTC),
@@ -412,7 +412,7 @@ class TestPromptForDoktyp:
         assert "trojanergefahr" in prompt.lower() or "Trojanergefahr" in prompt
 
     def test_preparl_entwurf_uses_entwurf_prompt(self):
-        assert _prompt_for_doktyp(Doktyp.PREPARL_MINUS_ENTWURF) == _prompt_for_doktyp(Doktyp.ENTWURF)
+        assert _prompt_for_doktyp(Doktyp.PREPARL_ENTWURF) == _prompt_for_doktyp(Doktyp.ENTWURF)
 
     def test_stellungnahme_prompt_has_meinung(self):
         prompt = _prompt_for_doktyp(Doktyp.STELLUNGNAHME)
@@ -458,7 +458,7 @@ class TestEnrichDokument:
 
         assert isinstance(result, EnrichmentResult)
         assert result.dokument.volltext == SAMPLE_FULL_TEXT
-        assert result.dokument.hash == SAMPLE_HASH
+        assert result.dokument.hash_ == SAMPLE_HASH
         assert result.dokument.zusammenfassung == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
         assert result.dokument.schlagworte == ["umwelt", "klimaschutz", "energie"]
         assert result.dokument.kurztitel == "Erneuerbare-Energien-Gesetz"
@@ -532,10 +532,10 @@ class TestEnrichDokument:
 
         # Text-only: volltext and hash populated
         assert result.dokument.volltext == SAMPLE_FULL_TEXT
-        assert result.dokument.hash == SAMPLE_HASH
+        assert result.dokument.hash_ == SAMPLE_HASH
         # No LLM fields
-        assert result.dokument.zusammenfassung is None
-        assert result.dokument.schlagworte is None
+        assert result.dokument.zusammenfassung is UNSET
+        assert result.dokument.schlagworte is UNSET
         assert result.trojanergefahr is None
 
     @pytest.mark.asyncio
@@ -580,8 +580,8 @@ class TestEnrichDokument:
 
         # Original document returned unchanged
         assert result.dokument.volltext == ""
-        assert result.dokument.hash == ""
-        assert result.dokument.zusammenfassung is None
+        assert result.dokument.hash_ == ""
+        assert result.dokument.zusammenfassung is UNSET
         assert result.trojanergefahr is None
 
     @pytest.mark.asyncio
@@ -1147,7 +1147,7 @@ class TestVorwortExtraction:
         assert "vorwort" in prompt.lower() or "Vorwort" in prompt
 
     def test_preparl_entwurf_prompt_has_vorwort(self):
-        prompt = _prompt_for_doktyp(Doktyp.PREPARL_MINUS_ENTWURF)
+        prompt = _prompt_for_doktyp(Doktyp.PREPARL_ENTWURF)
         assert "vorwort" in prompt.lower() or "Vorwort" in prompt
 
     def test_stellungnahme_prompt_has_no_vorwort(self):

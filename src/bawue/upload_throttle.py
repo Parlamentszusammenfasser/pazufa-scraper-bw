@@ -5,10 +5,9 @@ from collections.abc import Callable
 from typing import NamedTuple
 from uuid import UUID
 
-import openapi_client
-import openapi_client.api
-import openapi_client.api.collector_schnittstellen_api
+from pazufa_corelib.api_client import AuthenticatedClient
 
+from bawue.api import BawueApiError, put_vorgang
 from bawue.rate_limiter import AdaptiveRateLimiter
 from bawue.run_report import api_exception_reason
 from bawue.types import Vorgang
@@ -63,7 +62,7 @@ def with_upload_retry[T](
 
 
 def upload_vorgang(
-    oapiconfig: openapi_client.Configuration,
+    client: AuthenticatedClient,
     scraper_id: UUID,
     upload_limiter: AdaptiveRateLimiter,
     item: Vorgang,
@@ -86,16 +85,14 @@ def upload_vorgang(
         return UploadOutcome(vorgang=item)
 
     try:
-        with openapi_client.ApiClient(oapiconfig) as api_client:
-            api_instance = openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi(api_client)
-            with_upload_retry(
-                lambda: api_instance.vorgang_put(str(scraper_id), item),
-                upload_limiter,
-                exception_type=openapi_client.ApiException,
-            )
+        with_upload_retry(
+            lambda: put_vorgang(client, scraper_id, item),
+            upload_limiter,
+            exception_type=BawueApiError,
+        )
         return UploadOutcome(vorgang=item)
-    except openapi_client.ApiException as e:
-        logger.error("API Exception: %s", e)
+    except BawueApiError as e:
+        logger.error("API Error: %s", e)
         if e.status == 422:
             logger.error("Unprocessable Entity for Vorgang '%s'", item.titel)
             if log_item:
