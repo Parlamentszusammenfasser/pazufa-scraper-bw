@@ -22,11 +22,11 @@ from urllib.parse import urlparse
 import aiohttp
 import certifi
 import litellm
-from collector.scrapercache import ScraperCache
 from json_repair import repair_json
 from kreuzberg import ExtractionConfig, OcrConfig, PageConfig, extract_file
 from pazufa_corelib.llm import LLMConnector
 
+from bawue.cache import BawueCache
 from bawue.types import Doktyp, Dokument
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ _LLM_SEMAPHORE = asyncio.Semaphore(3)
 # Two-tier LLM semantics cache, keyed by (doc_hash, prompt_hash):
 # 1. _hash_cache (in-memory dict): fast intra-cycle deduplication, cleared each cycle
 #    via clear_hash_cache() to prevent unbounded memory growth.
-# 2. Redis (via ScraperCache): persistent cross-cycle deduplication, survives restarts.
+# 2. Redis (via BawueCache): persistent cross-cycle deduplication, survives restarts.
 #    Key format: "llm-semantics:{doc_hash}:{prompt_hash}".
 # The prompt hash covers the system prompt plus the doktyp-specific body prompt, so
 # different prompts (e.g. ENTWURF vs STELLUNGNAHME) never share a cache entry.
@@ -578,14 +578,14 @@ def _cache_key(doc_hash: str, prompt_hash: str) -> str:
     return f"{doc_hash}:{prompt_hash}"
 
 
-def _redis_get(cache: ScraperCache | None, key: str) -> str | None:
+def _redis_get(cache: BawueCache | None, key: str) -> str | None:
     """Look up LLM semantics in Redis. Returns JSON string or None."""
     if cache is None:
         return None
     return cache.get_raw(f"{_REDIS_CACHE_PREFIX}{key}", typehint="LLM Semantics")
 
 
-def _redis_set(cache: ScraperCache | None, key: str, value: str) -> None:
+def _redis_set(cache: BawueCache | None, key: str, value: str) -> None:
     """Store LLM semantics in Redis."""
     if cache is None:
         return
@@ -604,7 +604,7 @@ async def enrich_dokument(
     model: str = "gpt-5-nano",
     max_tokens: int = DEFAULT_TRUNCATE_TOKENS,
     metrics: LLMMetrics | None = None,
-    cache: ScraperCache | None = None,
+    cache: BawueCache | None = None,
 ) -> EnrichmentResult:
     """Enrich a plain Dokument with PDF text extraction and LLM semantics.
 

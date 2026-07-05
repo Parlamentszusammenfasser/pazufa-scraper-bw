@@ -5,13 +5,23 @@
 
 ## Progress Tracker
 
-> Updated 2026-06-29. Branch: `core-lib`.
+> Updated 2026-07-05. Branch: `core-lib`.
 
 - **Phase 0 — Preconditions:** ✅ **complete** — coding/docs (commit `f386d09`) plus all 3 gates cleared 2026-06-28 (see below). 800 unit tests green.
 - **Phase 1 — OpenAPI client swap:** ✅ **complete 2026-06-29** — `src/bawue` now talks only to `pazufa_corelib.api_client`; the old `openapi_client` is gone from runtime code (remaining mentions are doc comments). **822 unit tests green, ruff lint + format clean.** See "Phase 1 — landed" below.
-- **Phase 2 — Local config/cache/pipeline:** not started (scrapers still subclass `collector.interface.*` and read `CollectorConfiguration`; that coupling is what Phase 2 removes).
+- **Phase 2 — Local config/cache/pipeline:** ✅ **complete 2026-07-05** — `src/bawue` no longer imports `collector` anywhere (only `tests/integration/conftest.py` still does, tracked for Phase 4.2). **822 unit tests green, ruff lint + format clean.** See "Phase 2 — landed" below.
 - **Phase 3 — Infrastructure:** not started.
 - **Phase 4 — Cleanup:** not started.
+
+**Phase 2 — landed 2026-07-05** (all on branch `core-lib`, chose D1 option **6.1a**: shared base class over inlining):
+
+- **2.1 `src/bawue/config.py`** — `BawueConfig` replaces `CollectorConfiguration`, ported mechanically (same `ConfigProp` mechanism, same TOML/env/CLI precedence). Dropped `scrapers_dir` (replaced by the static registry in `bawue.__main__`), `oapiconfig` (replaced by `bawue.api.build_client`, already called directly by each scraper) and `llm_connector` (unused — scrapers build their own `LLMConnector`). **Bug fixed in passing** (approved by user): `llm.provider-base-url` / `LLM_PROVIDER_BASE_URL` was read by the scrapers via `getattr(config, "llm_provider_base_url", None)` but the old `CollectorConfiguration` never parsed it — Ollama-only (no API key) setups silently never enabled LLM enrichment. Also dropped `llm_provider_key`'s `required=True`, which would otherwise have made config loading hard-exit whenever no key was set, defeating the base-url-only path entirely.
+- **2.2 `src/bawue/cache.py`** — `BawueCache` replaces `ScraperCache`, but only ports `get_raw`/`store_raw`: a full grep showed `get_vorgang`/`store_vorgang`/`get_html`/`store_html`/`store_dokument`/`get_dokument`/`clear` have zero call sites anywhere in `src/bawue` or `tests`.
+- **2.3 `src/bawue/pipeline.py`** — `Scraper`/`VorgangsScraper`/`SitzungsScraper` replace `collector.interface.*`, keeping the same `process_lpurls → process_items → process_results → run` orchestration. Dropped the openapi-bound default `send_result` implementations (dead code — all three concrete scrapers already override `send_result`). Lifted the identical `vg2:`-prefixed `get_cached_result`/`store_extracted_result` override, previously duplicated verbatim in both `BawueVorgaengeScraper` and `BawueBeteiligungScraper`, into the shared `VorgangsScraper` base — this is the payoff of choosing 6.1a over inlining. Kept the class-level `None`/`[]` defaults on `Scraper` (`config`, `session`, `scraper_id`, `listing_urls`) since several unit tests build scrapers via `object.__new__()` bypassing `__init__` and read `.config` before it would otherwise be set.
+- **2.4 `src/bawue/__main__.py`** — replaces `python -m collector`. Static `SCRAPERS` registry instead of `importlib` directory auto-discovery (only 3 scrapers exist); same case-insensitive prefix filter semantics against `config.scrapers` (`--run`), same cycle/`--once` loop, same `load_dotenv()` / LiteLLM logger setup.
+- Updated `bawue_vorgaenge_scraper.py`, `bawue_beteiligung_scraper.py`, `bawue_sitzungen_scraper.py`, `config_loader.py`, `notifications.py`, `bawue_dok.py` to import from `bawue.config` / `bawue.cache` / `bawue.pipeline` instead of `collector.*`.
+- **Not touched (deliberately out of scope):** `pyproject.toml` (still declares `collector`/`openapi-client` deps; `redis`/`toml`/`python-dotenv` are available transitively for now — direct pins are Phase 3.1), `Makefile`/`Dockerfile`/`docker-compose.yml` (still invoke `python -m collector` — Phase 3.2/3.3), `tests/integration/conftest.py` (still builds the old `CollectorConfiguration`/`ScraperCache` — Phase 4.2, deselected by default).
+- Verified manually: `python -m bawue --help`, `BawueConfig().load()` against `config.dev.toml` with `--dry-run --once`, and `load_scrapers()` instantiating all three scrapers end-to-end.
 
 **Phase 1 — landed 2026-06-29** (all on branch `core-lib`):
 
@@ -33,7 +43,7 @@
 2. ✅ **corelib pin `v0.1.2`** — tag exists, `pyproject` `0.1.2`, bundles spec `0.2.3`; its `api_client` + `llm` trees (the only corelib surface BaWue imports) are byte-identical to the rc5 dev tree, so the Phase 3.1 pin is a no-op for Phase 1.
 3. ✅ **0.1 reviewer sign-off** on `docs/openapi_v022_to_v023_diff.md` — approved by maintainer 2026-06-28.
 
-**Phase 1 is complete** (see "Phase 1 — landed" above). Next step: Phase 2 — replace `CollectorConfiguration`, `ScraperCache`, and the `collector.interface.*` base classes with local `bawue.config` / `bawue.cache` / `bawue.pipeline` so `src/bawue` no longer imports `collector`.
+**Phase 2 is complete** (see "Phase 2 — landed" above). Next step: Phase 3 — update infrastructure (`pyproject.toml` dependency pins, `Makefile`, `Dockerfile`/`docker-compose.yml`, `README.md`) to stop referencing `collector`/`openapi-client` and run `python -m bawue` instead of `python -m collector`.
 
 ## 0. Revision History
 

@@ -1,7 +1,6 @@
 """BaWue Vorgänge scraper: VorgangsScraper subclass for Baden-Württemberg PARLIS."""
 
 import asyncio
-import json
 import logging
 import re
 import ssl
@@ -12,16 +11,16 @@ from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
 import certifi
-from collector.config import CollectorConfiguration
-from collector.interface import VorgangsScraper
 
 from bawue.api import build_client
 from bawue.bawue_dok import LLMMetrics, clear_hash_cache
+from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
 from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.notifications import send_mattermost_summary
 from bawue.parlis_client import ParlisClient
+from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, format_duration, format_failed_section
 from bawue.types import (
@@ -87,7 +86,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
     wrapped in the async framework contract.
     """
 
-    def __init__(self, config: CollectorConfiguration, session: aiohttp.ClientSession) -> None:
+    def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         # Load BaWue-specific config from TOML
         bawue_config = load_toml_section(config, "bawue")
         self._wahlperiode = bawue_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
@@ -185,20 +184,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 )
             )
         return outcome.vorgang
-
-    # --- Vorgang cache hooks (migration Phase 1.3) ---------------------------
-    # The collector base class caches Vorgänge via `cache.store_vorgang`, which
-    # serialises with the *old* client's Pydantic `sanitize_for_serialization`
-    # and reads back with `openapi_client.models.Vorgang.from_json`. Neither
-    # understands the new attrs models, so we override the two hooks to round-
-    # trip via the attrs `to_dict()` under a versioned `vg2:` key prefix. Old
-    # `vg:` entries are simply ignored, triggering a one-time re-fetch on the
-    # first cycle after deploy.
-    async def get_cached_result(self, item_key: str) -> str | None:
-        return self.config.cache.get_raw(f"vg2:{item_key}", "Vorgang")
-
-    async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
-        self.config.cache.store_raw(f"vg2:{item_key}", json.dumps(result.to_dict()), "Vorgang")
 
     async def listing_page_extractor(self, vorgangstyp: str) -> list[str]:
         """Search PARLIS for a given Vorgangstyp and return vorgang IDs.

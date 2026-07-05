@@ -11,13 +11,13 @@ from zoneinfo import ZoneInfo
 
 import aiohttp
 import certifi
-from collector.config import CollectorConfiguration
-from collector.interface import SitzungsScraper
 
 from bawue.api import BawueApiError, build_client, put_kalender
+from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.ics_parser import group_events_by_date, parse_ics_feed
 from bawue.notifications import send_mattermost_summary
+from bawue.pipeline import SitzungsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
 from bawue.types import Gremium, Parlament, Sitzung, none_if_blank
@@ -36,7 +36,7 @@ class BawueSitzungenScraper(SitzungsScraper):
     Auto-discovered by the framework when placed in the scrapers directory.
     """
 
-    def __init__(self, config: CollectorConfiguration, session: aiohttp.ClientSession) -> None:
+    def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         bawue_config = load_toml_section(config, "bawue")
         self._wahlperiode = bawue_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
         ics_url = bawue_config.get("ics-url", DEFAULT_ICS_URL)

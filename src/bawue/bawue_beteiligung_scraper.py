@@ -1,7 +1,6 @@
 """BaWue Beteiligung scraper: VorgangsScraper subclass for Beteiligungsportal Baden-Württemberg."""
 
 import asyncio
-import json
 import logging
 import time
 import uuid
@@ -9,8 +8,6 @@ from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
-from collector.config import CollectorConfiguration
-from collector.interface import VorgangsScraper
 
 from bawue.api import build_client
 from bawue.bawue_dok import LLMMetrics, clear_hash_cache
@@ -20,8 +17,10 @@ from bawue.beteiligung_parser import (
     RawBeteiligungProcess,
     parse_process_detail,
 )
+from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.notifications import send_mattermost_summary
+from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, format_duration, format_failed_section
 from bawue.types import (
@@ -55,7 +54,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
     Auto-discovered by the framework when placed in the scrapers directory.
     """
 
-    def __init__(self, config: CollectorConfiguration, session: aiohttp.ClientSession) -> None:
+    def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         beteiligung_config = load_toml_section(config, "beteiligung")
         self._wahlperiode = beteiligung_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
         delay = beteiligung_config.get("request-delay-s", DEFAULT_BETEILIGUNG_DELAY)
@@ -132,15 +131,6 @@ class BawueBeteiligungScraper(VorgangsScraper):
                 )
             )
         return outcome.vorgang
-
-    # --- Vorgang cache hooks (migration Phase 1.3) ---------------------------
-    # See BawueVorgaengeScraper: round-trip the attrs model via `to_dict()` under
-    # a versioned `vg2:` key instead of the collector's Pydantic-bound cache.
-    async def get_cached_result(self, item_key: str) -> str | None:
-        return self.config.cache.get_raw(f"vg2:{item_key}", "Vorgang")
-
-    async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
-        self.config.cache.store_raw(f"vg2:{item_key}", json.dumps(result.to_dict()), "Vorgang")
 
     async def listing_page_extractor(self, lp_key: str) -> list[str]:
         """Fetch the process list and return slugs for each process."""
