@@ -137,10 +137,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
             self._llm = LLMConnector(
                 model=config.llm_model,
                 api_key=llm_key,
-                api_base=llm_base_url,
                 rate_limit_max_calls=5,
                 rate_limit_window_seconds=60,
             )
+            # corelib v0.1.2 LLMConnector takes no api_base kwarg; bawue_dok reads
+            # it off the instance (getattr) and passes it to litellm at call time.
+            self._llm.api_base = llm_base_url
 
     async def run(self) -> None:
         check_for_newer_wahlperiode(self._wahlperiode)
