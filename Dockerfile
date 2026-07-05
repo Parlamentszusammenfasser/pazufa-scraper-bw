@@ -10,6 +10,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         libffi-dev \
+        git \
         tesseract-ocr \
         tesseract-ocr-deu \
         poppler-utils \
@@ -21,17 +22,9 @@ WORKDIR /app
 
 COPY pyproject.toml poetry.lock poetry.toml ./
 
-# Place vendor packages at the sibling paths pyproject.toml already references:
-#   ../pazufa-collector     →  /pazufa-collector     (from WORKDIR /app)
-#   ../pazufa-scraper-core  →  /pazufa-scraper-core
-#
-# This avoids modifying pyproject.toml/poetry.lock, which would invalidate the
-# content-hash and force poetry to re-solve — which fails because
-# pazufa-collector's own pyproject.toml uses a PEP 508 "openapi_client @ oapicode"
-# dep that poetry lock --regenerate cannot reconcile with our direct dep on it.
-COPY vendor/pazufa-collector/ /pazufa-collector/
-COPY vendor/pazufa-scraper-core/ /pazufa-scraper-core/
-
+# pazufa-corelib is a git-pinned dependency (see pyproject.toml), so poetry
+# fetches it over the network at install time — hence `git` in the apt list
+# above. No vendored sibling packages are copied any more.
 RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --only main --no-root
 
@@ -52,14 +45,11 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Copy installed Python packages from builder
+# Copy installed Python packages from builder (corelib is a regular installed
+# package now — the git dependency is not an editable install, so no vendored
+# sources need to be present at runtime).
 COPY --from=builder /usr/local/lib/python${PYTHON_MINOR}/site-packages /usr/local/lib/python${PYTHON_MINOR}/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
-
-# Vendor sources must be present at the same paths because pyproject.toml uses
-# develop = true (editable installs), so .pth files in site-packages point here.
-COPY --from=builder /pazufa-collector /pazufa-collector
-COPY --from=builder /pazufa-scraper-core /pazufa-scraper-core
 
 COPY src/ src/
 COPY config.sample.toml config.toml
@@ -68,4 +58,4 @@ ENV PYTHONPATH=/app/src
 RUN chown -R app:app /app
 USER app
 
-ENTRYPOINT ["python", "-m", "collector", "--config-file", "config.toml", "--once"]
+ENTRYPOINT ["python", "-m", "bawue", "--config-file", "config.toml", "--once"]

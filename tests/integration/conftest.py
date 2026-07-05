@@ -7,11 +7,14 @@ from pathlib import Path
 import aiohttp
 import pytest
 import responses
-from collector.config import CollectorConfiguration
-from collector.scrapercache import ScraperCache
-from openapi_client import Configuration
 from werkzeug.wrappers import Response as WerkzeugResponse
 
+# NOTE: `collector` / `openapi_client` are no longer runtime deps (removed in the
+# Phase 3 migration). They are imported lazily inside the fixtures that still use
+# them so that unit-test *collection* (which imports every conftest) does not fail
+# once those packages are gone. The full rewrite onto bawue.config / bawue.cache is
+# tracked as Phase 4.2; until then these integration tests still require the old
+# packages to be installed to actually run (they are deselected by default).
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.parlis_client import BASE_URL, BROWSE_URL, REPORT_URL
 
@@ -98,6 +101,10 @@ def mock_backend(httpserver):
 @pytest.fixture()
 def collector_config(mock_backend, httpserver):
     """Build a CollectorConfiguration that talks to the httpserver mock."""
+    from collector.config import CollectorConfiguration
+    from collector.scrapercache import ScraperCache
+    from openapi_client import Configuration
+
     config = object.__new__(CollectorConfiguration)
     config.collector_id = FIXED_COLLECTOR_ID
     config.linearize = True

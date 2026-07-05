@@ -2,10 +2,12 @@
 
 ## 1. System Overview
 
-The BaWue Scraper is a **scraper plugin** for the
-[pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) framework. It implements `VorgangsScraper` and
-`SitzungsScraper` base classes, which the framework auto-discovers and orchestrates. The framework handles all
-cross-cutting concerns — scheduling, Redis caching, API submission, document processing, and error tolerance.
+The BaWue Scraper is a **self-contained scraper**. It owns its own entry point (`bawue.__main__`), config
+loader (`bawue.config`), Redis cache (`bawue.cache`), and scraping loop (`bawue.pipeline`). Its three scrapers
+subclass the local `VorgangsScraper` / `SitzungsScraper` base classes and are run from a static registry — there
+is no external framework. It depends only on
+[pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core) (the shared library providing the httpx
+API client, LLM enrichment, and normalisation) plus standard Python packages.
 
 Three data sources are covered:
 
@@ -23,14 +25,14 @@ graph LR
         LLMProvider["LLM Provider<br/>(via litellm)"]
     end
 
-    subgraph "pazufa-collector Framework"
-        Runner["Runner / Scheduler"]
-        Cache["Redis ScraperCache"]
-        APIClient["httpx API Client<br/>(auto-generated)"]
-        DocPipeline["Document Pipeline<br/>(PyPDF + OCR + LLM)"]
+    subgraph "BaWue Runtime (bawue.*)"
+        Runner["__main__ Loop / Registry"]
+        Cache["Redis BawueCache"]
+        APIClient["httpx API Client<br/>(pazufa-scraper-core)"]
+        DocPipeline["Document Pipeline<br/>(kreuzberg + OCR + LLM)"]
     end
 
-    subgraph "BaWue Scraper Plugin"
+    subgraph "BaWue Scrapers"
         BVS["BawueVorgaengeScraper<br/>(VorgangsScraper)"]
         BBS["BawueBeteiligungScraper<br/>(VorgangsScraper)"]
         BSS["BawueSitzungenScraper<br/>(SitzungsScraper)"]
@@ -109,27 +111,26 @@ Dashed lines mark stages not yet implemented. See [status.md](status.md) for imp
 
 **Key characteristics:**
 - Parliament code: `BW`, Wahlperiode: 17
-- Authentication: `X-API-Key` header with `collector` scope (framework-managed)
-- Caching: Redis ScraperCache with 2-week TTL (framework-managed)
-- Models: Auto-generated from OpenAPI specification — no hand-written models
+- Authentication: `X-API-Key` header with `collector` scope (see `bawue.api`)
+- Caching: Redis `BawueCache` with 2-week TTL (see `bawue.cache`)
+- Models: Generated from the OpenAPI spec by `pazufa-scraper-core` — no hand-written models
 - The PaZuFa backend handles deduplication/merging — the scraper does not need to
 
 ## 2. Dependencies
 
-| Dependency       | Purpose                                                         | Owned by                          |
-|------------------|-----------------------------------------------------------------|-----------------------------------|
-| `requests`       | PARLIS + Beteiligungsportal HTTP sessions (synchronous)         | BaWue scraper                     |
-| `lxml`           | HTML parsing of PARLIS and Beteiligungsportal pages             | BaWue scraper                     |
-| `icalendar`      | ICS calendar feed parsing for Sitzungen                         | BaWue scraper                     |
-| `aiohttp`        | Async HTTP sessions for framework                               | Framework                         |
-| `httpx`          | Auto-generated PaZuFa API client                                | Framework                         |
-| `openapi-client` | Auto-generated Pydantic models from OpenAPI spec                | Framework                         |
-| `kreuzberg`      | PDF text extraction (normal + OCR fallback)                     | BaWue scraper                     |
-| `redis`          | Caching of processed Vorgänge/Dokumente                         | Framework                         |
-| `litellm`        | LLM integration: token counting/truncation + framework pipeline | Framework + BaWue scraper         |
-| `collector-core` | LLMConnector base class for LLM calls                           | Framework (used by BaWue scraper) |
+| Dependency            | Purpose                                                         | Owned by      |
+|-----------------------|-----------------------------------------------------------------|---------------|
+| `requests`            | PARLIS + Beteiligungsportal HTTP sessions (synchronous)         | BaWue scraper |
+| `lxml`                | HTML parsing of PARLIS and Beteiligungsportal pages             | BaWue scraper |
+| `icalendar`           | ICS calendar feed parsing for Sitzungen                         | BaWue scraper |
+| `aiohttp`             | Async HTTP sessions for the scraping loop                       | BaWue scraper |
+| `httpx`               | Transport for the PaZuFa API client                             | scraper-core  |
+| `pazufa-scraper-core` | API client + models (spec v0.2.3), `LLMConnector`, normalisation | Shared library |
+| `kreuzberg`           | PDF text extraction (normal + OCR fallback)                     | BaWue scraper |
+| `redis`               | Caching of processed Vorgänge/Dokumente (`bawue.cache`)         | BaWue scraper |
+| `litellm`             | LLM integration: token counting/truncation + LLM calls          | BaWue + scraper-core |
 
-## 3. Framework Integration
+## 3. Scraper Pipeline (`bawue.pipeline`)
 
 ```mermaid
 classDiagram
@@ -139,7 +140,7 @@ classDiagram
         +listing_page_extractor(url) list[Any]
         +item_extractor(item) Vorgang
         +send_result(result)
-        +cache: ScraperCache
+        +cache: BawueCache
     }
 
     class SitzungsScraper {
@@ -249,7 +250,7 @@ classDiagram
 All three scrapers follow the same two-phase pattern:
 
 1. `listing_page_extractor(key)` — fetches the source and returns item identifiers; stores raw data in `_raw_cache`
-2. `item_extractor(id)` — looks up `_raw_cache`, builds and returns the framework model
+2. `item_extractor(id)` — looks up `_raw_cache`, builds and returns the API model
 
 | Scraper                   | `listing_urls` values                                    | `listing_page_extractor` returns | `item_extractor` returns    | `send_result` override   |
 |---------------------------|----------------------------------------------------------|----------------------------------|-----------------------------|--------------------------|
@@ -259,33 +260,33 @@ All three scrapers follow the same two-phase pattern:
 
 **PARLIS listing URL pattern:** PARLIS has no traditional listing URLs. `listing_urls` contains the enabled Vorgangstyp
 strings. By default these are the 3 types with full PaZuFa model support: `"Gesetzgebung"`, `"Haushaltsgesetzgebung"`,
-and `"Volksantrag"` (configurable via `enabled-vorgangstypen` in `config.toml`). The framework calls
+and `"Volksantrag"` (configurable via `enabled-vorgangstypen` in `config.toml`). The pipeline calls
 `listing_page_extractor()` for each one, which searches PARLIS, stores raw results in `_raw_cache`, and returns vorgang
 IDs. Items whose `Vorgangstyp` field doesn't match the enabled set are dropped defensively even if PARLIS returns them.
 
-### Framework-Provided Capabilities
+### Runtime-Provided Capabilities
 
-| Capability          | What the framework does                                  |
+| Capability          | Provided by                                              |
 |---------------------|----------------------------------------------------------|
-| Scheduling          | Repeats scraping cycles at configurable intervals        |
-| Redis caching       | 2-week TTL, multi-level (vorgang, dokument, HTML)        |
-| API client          | Auto-generated httpx client with retry logic             |
-| Models              | Auto-generated Pydantic models from OpenAPI spec         |
-| Document processing | PyPDF + Kreuzberg/EasyOCR + LLM pipeline                 |
-| Error tolerance     | Per-item error handling, doesn't stop on single failures |
-| Config              | 4-tier: Defaults → TOML → env vars → CLI                 |
+| Scheduling          | `bawue.__main__` cycle loop at configurable intervals    |
+| Redis caching       | `bawue.cache` — 2-week TTL, `vg2:`/`sz:` keys           |
+| API client          | `pazufa-scraper-core` httpx client + `bawue.upload_throttle` retry |
+| Models              | `pazufa-scraper-core` models generated from OpenAPI spec |
+| Document processing | Kreuzberg/OCR + LLM pipeline (`bawue.bawue_dok`)         |
+| Error tolerance     | `bawue.pipeline` — per-item handling, doesn't stop on single failures |
+| Config              | `bawue.config` — 4-tier: Defaults → TOML → env vars → CLI |
 
 ## 4. Data Flow
 
 ```mermaid
 sequenceDiagram
-    participant FW as Framework Runner
+    participant FW as __main__ / pipeline
     participant BVS as BawueVorgaengeScraper
     participant PC as ParlisClient
     participant PP as ParlisParser
     participant EM as EnumMapper
     participant BDK as BawueDok
-    participant Cache as Redis ScraperCache
+    participant Cache as Redis BawueCache
     participant API as PaZuFa API Client
 
     FW->>BVS: listing_page_extractor("Gesetzgebung")
@@ -328,7 +329,7 @@ sequenceDiagram
 
 ### BawueVorgaengeScraper
 
-Subclass of `VorgangsScraper`. Searches PARLIS by Vorgangstyp, converts raw HTML data into framework `Vorgang` models.
+Subclass of `VorgangsScraper`. Searches PARLIS by Vorgangstyp, converts raw HTML data into API `Vorgang` models.
 Uses `_raw_cache` to bridge the listing/item phases. Configuration from `[bawue]` section.
 
 Only the Vorgangstypen listed under `enabled-vorgangstypen` in `config.toml` are scraped (default: `Gesetzgebung`,
@@ -584,13 +585,13 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 
 | Concern                         | Handled by        | Behavior                                                    |
 |---------------------------------|-------------------|-------------------------------------------------------------|
-| Per-item failures               | Framework         | Logs error, continues with next Vorgang                     |
-| API submission retries          | Framework         | Automatic retry with backoff                                |
-| Cache failures                  | Framework         | Graceful degradation (continues without caching)            |
+| Per-item failures               | `bawue.pipeline`  | Logs error, continues with next Vorgang                     |
+| API submission retries          | `bawue.upload_throttle` | Automatic retry with backoff                          |
+| Cache failures                  | `bawue.cache`     | Graceful degradation (continues without caching)            |
 | PARLIS session expiry           | ParlisClient      | Re-establishes session before each search cycle             |
 | Large result sets               | ParlisClient      | Automatic date subdivision into monthly windows             |
-| PARLIS HTTP errors              | ParlisClient      | `raise_for_status()`, propagated to framework error handler |
-| Beteiligungsportal HTTP errors  | BeteiligungClient | `raise_for_status()`, propagated to framework error handler |
+| PARLIS HTTP errors              | ParlisClient      | `raise_for_status()`, propagated to the pipeline error handler |
+| Beteiligungsportal HTTP errors  | BeteiligungClient | `raise_for_status()`, propagated to the pipeline error handler |
 | Beteiligungsportal HTML changes | BeteiligungParser | Unit tests with HTML fixtures detect regressions            |
 
 ## 9. Risks
@@ -604,4 +605,4 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | **Rate limiting by Landtag**          | IP blocked                                   | Configurable delays, descriptive User-Agent                                       |
 | **Fundstelle text format changes**    | Station parsing breaks                       | Regex-based parsing with fallback, unit tests with known samples                  |
 | **verfassungsaendernd not available** | Required field cannot be determined          | Title heuristic (`Änderung der (Landes)?Verfassung` / `Verfassungsänderung`); see DD-023 |
-| **Sync/async coexistence**            | PARLIS uses sync requests in async framework | `asyncio.to_thread()` wraps sync calls in both vorgaenge and beteiligung scrapers |
+| **Sync/async coexistence**            | PARLIS uses sync requests in an async pipeline | `asyncio.to_thread()` wraps sync calls in both vorgaenge and beteiligung scrapers |

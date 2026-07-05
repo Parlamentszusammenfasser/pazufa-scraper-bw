@@ -4,11 +4,9 @@ variables:
 when:
   - event: [push, pull_request, tag]
 
-# Supply-chain hardening: pin external dependencies to reviewed commits.
-# Update these hashes when upgrading framework versions.
-#   pazufa-collector:    a2a9562402c1ad3550e919c2824cd81151f94f99  # v0.2.3
-#   pazufa-scraper-core: 3fbebe5affed1d1278013decc61f030074507400  # main @ 2026-05-03 (renamed corelib → pazufa_corelib #77)
-#   openapi-generator-cli: 7.15.0 (SHA256 verified below)
+# Supply-chain hardening: pin external dependencies to reviewed refs.
+#   pazufa-scraper-core: pinned in pyproject.toml as a git tag (rev = "v0.1.2");
+#                        poetry fetches it during `poetry install`.
 #   plugin-docker-buildx: 6 (update when upgrading)
 #
 # Platforms: linux/amd64 (Mac/CI) + linux/arm64 (Pi 3B on 64-bit Pi OS).
@@ -53,32 +51,16 @@ steps:
       - pip install --quiet ruff
       - ruff format --check src/ tests/
 
-  - name: generate-openapi-client
-    image: eclipse-temurin:17-jre-alpine
-    depends_on: [dependency-audit]
-    commands:
-      - apk add --no-cache -q curl git
-      # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
-      - git clone https://codeberg.org/PaZuFa/pazufa-collector.git ../pazufa-collector
-      - git -C ../pazufa-collector checkout a2a9562402c1ad3550e919c2824cd81151f94f99
-      - curl -sf -o ../pazufa-collector/openapi.yml "https://raw.githubusercontent.com/Chrystalkey/landtagszusammenfasser/9c20dd1913eac99bd14edcd9676e188305064f1a/docs/specs/openapi.yml"
-      # Verify artifact integrity before execution
-      - curl -sfL -o /tmp/openapi-generator-cli.jar "https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.15.0/openapi-generator-cli-7.15.0.jar"
-      - echo "4da1a7cdb78c3a43b1eab0648891135e8c3547d2eedba0dd69daf377f865f366  /tmp/openapi-generator-cli.jar" | sha256sum -c -
-      - java -jar /tmp/openapi-generator-cli.jar generate -i ../pazufa-collector/openapi.yml -g python -o ../pazufa-collector/oapicode
-
   - name: pytest
     image: *python_image
-    depends_on: [dependency-audit, generate-openapi-client]
+    depends_on: [dependency-audit]
     environment:
       DEBIAN_FRONTEND: noninteractive
       PIP_ROOT_USER_ACTION: ignore
     commands:
-      # Pin to reviewed commit to prevent supply-chain attacks via upstream repo compromise
-      - git clone https://codeberg.org/PaZuFa/pazufa-scraper-core.git ../pazufa-scraper-core
-      - git -C ../pazufa-scraper-core checkout 3fbebe5affed1d1278013decc61f030074507400
       - pip install --quiet poetry
-      # poetry.toml enforces no-scripts; install won't modify the lockfile
+      # poetry.toml enforces no-scripts; install won't modify the lockfile.
+      # pazufa-corelib is fetched from its pinned git tag (see pyproject.toml).
       - poetry install --no-interaction --no-ansi
       - poetry run pytest -m 'not integration'
 
@@ -107,27 +89,14 @@ steps:
       - event: push
         branch: main
 
-  # Copy vendored dependencies into the workspace so the Docker build context has them.
-  # The generate-openapi-client step already produced ../pazufa-collector/oapicode;
-  # the pytest step produced ../pazufa-scraper-core — mirror both into vendor/.
-  - name: vendor-prep
-    image: alpine
-    depends_on: [pytest, ruff-lint, ruff-format]
-    commands:
-      - apk add --no-cache rsync
-      - mkdir -p vendor
-      - rsync -a --exclude .git --exclude __pycache__ ../pazufa-collector/ vendor/pazufa-collector/
-      - rsync -a --exclude .git --exclude __pycache__ ../pazufa-scraper-core/ vendor/pazufa-scraper-core/
-    when:
-      - event: [push, tag]
-
   # --- Docker publish steps (one per event class) ---
-  # All three depend on vendor-prep completing successfully.
+  # The Dockerfile fetches pazufa-corelib from its pinned git tag during the
+  # image build, so no vendored sources need to be staged beforehand.
 
   # Semver release: git tag 0.2.2 → Docker tags 0.2.2, 0.2, latest
   - name: docker-release
     image: woodpeckerci/plugin-docker-buildx:6
-    depends_on: [vendor-prep]
+    depends_on: [pytest, ruff-lint, ruff-format]
     settings:
       platforms: linux/amd64,linux/arm64
       repo:
@@ -144,7 +113,7 @@ steps:
   # Main branch snapshot → Docker tags main, main-<sha8>
   - name: docker-main
     image: woodpeckerci/plugin-docker-buildx:6
-    depends_on: [vendor-prep]
+    depends_on: [pytest, ruff-lint, ruff-format]
     settings:
       platforms: linux/amd64,linux/arm64
       repo:
@@ -163,7 +132,7 @@ steps:
   # Feature branch snapshot → Docker tag dev-<sha8>
   - name: docker-feature
     image: woodpeckerci/plugin-docker-buildx:6
-    depends_on: [vendor-prep]
+    depends_on: [pytest, ruff-lint, ruff-format]
     settings:
       platforms: linux/amd64,linux/arm64
       repo:

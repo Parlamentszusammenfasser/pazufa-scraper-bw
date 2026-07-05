@@ -1,7 +1,7 @@
 [project]
 name = "pazufa-bawue-scraper"
 version = "0.1.0b1"
-description = "Baden-Württemberg PARLIS scraper for the PaZuFa collector framework"
+description = "Baden-Württemberg PARLIS scraper for the PaZuFa platform"
 authors = [{name = "schneefisch"}]
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
@@ -11,9 +11,15 @@ dynamic = ["dependencies"]
 packages = [{include = "bawue", from = "src"}]
 
 [tool.poetry.dependencies]
-collector = {path = "../pazufa-collector", develop = true}
-pazufa-corelib = {path = "../pazufa-scraper-core", develop = true}
-openapi-client = {path = "../pazufa-collector/oapicode", develop = true}
+# Pinned to a git tag (not a path install) so a broken upstream push cannot
+# break this image build — see migration doc §6 D5 / success criterion C6.
+# For local iteration against a sibling checkout, uncomment the dev-group
+# override below.
+pazufa-corelib = {git = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git", rev = "v0.1.2"}
+httpx = ">=0.28"          # via corelib transitively; pinned explicitly (used by bawue.api)
+redis = ">=7.4"           # was transitively provided by collector; used by bawue.cache
+python-dotenv = ">=1.0"   # was transitively provided by collector; used by bawue.__main__
+kreuzberg = ">=4.7"       # was transitively provided by collector; used by bawue_dok
 lxml = ">=6.0"
 requests = "^2.32"
 toml = ">=0.10"
@@ -24,6 +30,9 @@ litellm = ">=1.83.0"
 json-repair = "^0.59"
 
 [tool.poetry.group.dev.dependencies]
+# For local iteration, install corelib from a sibling checkout instead of the
+# pinned git tag by uncommenting the next line (path installs are dev-only):
+# pazufa-corelib = {path = "../pazufa-scraper-core", develop = true}
 pytest = "^9.0"
 pytest-cov = "^7.0"
 pytest-mock = "^3.15"
