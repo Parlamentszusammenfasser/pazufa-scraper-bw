@@ -9,17 +9,27 @@ import pytest
 import responses
 from werkzeug.wrappers import Response as WerkzeugResponse
 
-# NOTE: `collector` / `openapi_client` are no longer runtime deps (removed in the
-# Phase 3 migration). They are imported lazily inside the fixtures that still use
-# them so that unit-test *collection* (which imports every conftest) does not fail
-# once those packages are gone. The full rewrite onto bawue.config / bawue.cache is
-# tracked as Phase 4.2; until then these integration tests still require the old
-# packages to be installed to actually run (they are deselected by default).
+from bawue.api import build_client
+from bawue.bawue_dok import LLMMetrics
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
-from bawue.parlis_client import BASE_URL, BROWSE_URL, REPORT_URL
+from bawue.cache import BawueCache
+from bawue.config import BawueConfig
+from bawue.parlis_client import BASE_URL, BROWSE_URL, REPORT_URL, ParlisClient
+from bawue.rate_limiter import create_upload_limiter
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "parlis"
 FIXED_COLLECTOR_ID = "00000000-0000-0000-0000-000000000099"
+
+
+@pytest.fixture(autouse=True)
+def _no_wahlperiode_probe(monkeypatch):
+    """Neutralize the Wahlperiode update check.
+
+    BawueVorgaengeScraper.run() probes the Beteiligungsportal for a newer
+    Wahlperiode via a bare requests.get — an unrelated startup side-effect that
+    would otherwise hit (and pollute) the `responses` mock registry.
+    """
+    monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode", lambda *a, **kw: None)
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +89,9 @@ def mock_backend(httpserver):
     def _handler(request):
         body = json.loads(request.data)
         received.append(body)
-        return WerkzeugResponse(status=200, content_type="application/json", response=json.dumps(body))
+        # The backend returns 201 Created on a successful vorgang PUT; bawue.api.put_vorgang
+        # treats anything other than 201 as a BawueApiError, so the mock must match.
+        return WerkzeugResponse(status=201, content_type="application/json", response=json.dumps(body))
 
     httpserver.expect_request("/api/v2/vorgang", method="PUT").respond_with_handler(_handler)
 
@@ -96,26 +108,26 @@ def mock_backend(httpserver):
 
 
 # ---------------------------------------------------------------------------
-# CollectorConfiguration stub
+# BawueConfig stub
 # ---------------------------------------------------------------------------
 @pytest.fixture()
-def collector_config(mock_backend, httpserver):
-    """Build a CollectorConfiguration that talks to the httpserver mock."""
-    from collector.config import CollectorConfiguration
-    from collector.scrapercache import ScraperCache
-    from openapi_client import Configuration
+def bawue_config(mock_backend, httpserver):
+    """Build a BawueConfig (via __new__) that talks to the httpserver mock.
 
-    config = object.__new__(CollectorConfiguration)
+    Only the attributes the scraper/pipeline actually read at runtime are set:
+    the config loader (`BawueConfig.load`) needs a TOML file we don't have here.
+    """
+    config = object.__new__(BawueConfig)
     config.collector_id = FIXED_COLLECTOR_ID
     config.linearize = True
     config.config_file = None
     config.api_obj_log = None
     config.dry_run = False
-    config.cache = ScraperCache(redis_host=None, redis_port=None, disabled=True)
+    config.cache = BawueCache(redis_host=None, redis_port=None, disabled=True)
 
-    # Point the OpenAPI client at the local httpserver
-    config.oapiconfig = Configuration(host=httpserver.url_for(""))
-    config.oapiconfig.api_key = {"apiKey": "test-api-key"}
+    # Point the API client at the local httpserver mock (bawue.api.build_client).
+    config.database_url = httpserver.url_for("").rstrip("/")
+    config.api_key = "test-api-key"
 
     return config
 
@@ -124,35 +136,50 @@ def collector_config(mock_backend, httpserver):
 # Scraper instance (with reduced listing_urls)
 # ---------------------------------------------------------------------------
 @pytest.fixture()
-def scraper(collector_config):
+def scraper(bawue_config):
     """Create a BawueVorgaengeScraper wired to mock infrastructure.
 
-    The scraper is created via __new__ to bypass the __init__ which requires
-    a TOML config file and aiohttp session. We manually set all required attributes.
+    The scraper is created via __new__ to bypass __init__ (which loads a TOML
+    config file and builds an aiohttp session). We set exactly the instance
+    attributes BawueVorgaengeScraper.__init__ would, LLM enrichment disabled.
     """
 
-    async def _make_scraper(listing_urls: list[str], lookback_days: int = 7) -> BawueVorgaengeScraper:
+    async def _make_scraper(listing_urls: list[str], *, filter_sonstig: bool = True) -> BawueVorgaengeScraper:
         session = aiohttp.ClientSession()
         s = object.__new__(BawueVorgaengeScraper)
 
-        # Framework base class attributes (Scraper.__init__)
-        s.config = collector_config
+        # Scraper base class attributes (Scraper.__init__)
+        s.config = bawue_config
         s.scraper_id = uuid.UUID(FIXED_COLLECTOR_ID)
         s.listing_urls = listing_urls
         s.session = session
-        s.session_headers = {}
         s.item_count = 0
         s.items_done = 0
 
         # BawueVorgaengeScraper-specific attributes
-        from bawue.parlis_client import ParlisClient
-
         s._wahlperiode = 17
-        s._lookback_days = lookback_days
+        s._wahlperiode_start_date = None
+        s._enabled_vorgangstypen = frozenset(listing_urls)
+        s._filter_sonstig = filter_sonstig
         s._parlis = ParlisClient(wahlperiode=17, request_delay_s=0.0)
         s._raw_cache = {}
+        s._upload_limiter = create_upload_limiter()
+        s._client = build_client(bawue_config.database_url, bawue_config.api_key)
+
+        # Run-report counters
+        s._published = 0
+        s._failed = 0
+        s._skipped = 0
+        s._by_type = {}
+        s._failed_items = []
+        s._parlis_errors = []
+
+        # LLM enrichment (disabled in tests)
         s._llm_enabled = False
         s._llm = None
+        s._llm_metrics = LLMMetrics()
+        s._llm_model = "gpt-5-nano"
+        s._llm_truncate_tokens = 12000
 
         return s
 

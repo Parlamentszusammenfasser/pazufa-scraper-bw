@@ -72,9 +72,10 @@ class TestGesetzgebungFullLifecycle:
         assert vg["wahlperiode"] == 17
         assert vg["verfassungsaendernd"] is False
 
-        # Initiatoren
-        assert len(vg["initiatoren"]) == 1
-        assert vg["initiatoren"][0]["organisation"] == "Fraktion GRÜNE, Fraktion CDU"
+        # Initiatoren — a comma-separated Fraktion list is parsed into separate authors
+        assert len(vg["initiatoren"]) == 2
+        assert vg["initiatoren"][0]["organisation"] == "Fraktion GRÜNE"
+        assert vg["initiatoren"][1]["organisation"] == "Fraktion CDU"
 
         # 4 stations from fundstellen
         assert len(vg["stationen"]) == 4
@@ -158,10 +159,15 @@ class TestKleineAnfrage:
     @responses.activate
     @pytest.mark.asyncio
     async def test_kleine_anfrage_with_answer(self, scraper, mock_backend, parlis_fixtures):
-        """Anfrage + Antwort fundstellen produce 2 stations with documents."""
+        """Anfrage + Antwort fundstellen produce 2 stations with documents.
+
+        The Antwort maps to a SONSTIG station, which the default
+        filter-sonstig-stations would drop; disable it here so this test can
+        verify that both fundstellen are extracted into stations.
+        """
         fx = parlis_fixtures("kleine_anfrage")
         _mock_parlis_for_types({"Kleine Anfrage": (fx["search_json"], fx["results_html"])})
-        s = await scraper(["Kleine Anfrage"])
+        s = await scraper(["Kleine Anfrage"], filter_sonstig=False)
         try:
             with patch("bawue.bawue_vorgaenge_scraper.date") as mock_date:
                 mock_date.today.return_value = date(2026, 1, 31)
@@ -331,6 +337,9 @@ class TestPipelineBehavior:
         assert doc["drucksnr"] == "17/12001"
         assert doc["link"] == "https://www.landtag-bw.de/files/gg1-entwurf.pdf"
 
-        # Station 1: Erste Beratung — no PDF (empty href)
+        # Station 1: Erste Beratung — carries a Redeprotokoll placeholder document
+        # (the fundstelle references a Plenarprotokoll; volltext/hash are filled by
+        # later LLM enrichment, which is disabled in this test).
         erste_beratung = stations[1]
-        assert len(erste_beratung["dokumente"]) == 0
+        assert len(erste_beratung["dokumente"]) == 1
+        assert erste_beratung["dokumente"][0]["typ"] == "redeprotokoll"

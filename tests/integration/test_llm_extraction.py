@@ -58,7 +58,8 @@ class TestEntwurfEnrichment:
         llm = _make_llm()
 
         async with aiohttp.ClientSession() as session:
-            enriched = await enrich_dokument(session, llm, dok)
+            result = await enrich_dokument(session, llm, dok)
+        enriched = result.dokument
 
         # Text extraction worked
         assert len(enriched.volltext) > 100, "volltext should contain substantial text"
@@ -93,7 +94,8 @@ class TestEntwurfEnrichment:
         llm = _make_llm()
 
         async with aiohttp.ClientSession() as session:
-            enriched = await enrich_dokument(session, llm, dok)
+            result = await enrich_dokument(session, llm, dok)
+        enriched = result.dokument
 
         assert enriched.titel == (
             "Gesetz über einen Ausgleich im Zusammenhang mit Coronasoforthilfen des Landes Baden-Württemberg"
@@ -114,4 +116,4 @@ class TestEntwurfEnrichment:
             e1 = await enrich_dokument(session, llm, dok)
             e2 = await enrich_dokument(session, llm, dok)
 
-        assert e1.hash_ == e2.hash_
+        assert e1.dokument.hash_ == e2.dokument.hash_
