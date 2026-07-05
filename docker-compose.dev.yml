@@ -2,11 +2,9 @@
 #
 # Usage: see README.md → "Running against Local Backend"
 #
-# Prerequisites: ../pazufa-backend must be cloned alongside this repo
-#   git clone https://codeberg.org/PaZuFa/pazufa-backend.git ../pazufa-backend
-#
-# NOTE: First build compiles the Rust backend and generates OpenAPI code
-# (downloads spec from Codeberg). This takes several minutes.
+# The backend runs from the prebuilt Docker Hub image (pazufa/backend), so no
+# ../pazufa-backend clone or Rust build is needed — `up -d` just pulls the image.
+# Bump the image tag below to test against a newer backend release.
 
 services:
 
@@ -32,25 +30,22 @@ services:
       - "6379:6379"
 
   pazufa-backend:
-    build:
-      context: ../pazufa-backend
-      dockerfile: ../pazufa-bawue-scraper/Dockerfile.backend-dev
+    image: pazufa/backend:0.2.12
     ports:
-      - "8090:80"
+      - "8090:8080"
     environment:
       DATABASE_URL: postgres://ltzf-user:ltzf-pass@postgres:5432/ltzf
-      LTZF_KEYADDER_KEY: dev-keyadder-key
-      RUST_LOG: debug
-    volumes:
-      # Override the baked-in tracks.toml with a local copy that back-ports
-      # the BW trailing-A fix from spec v0.2.4+v0.0.3 (the upstream backend
-      # cannot consume v0.2.4 yet — see deploy/tracks.toml header comment).
-      - ./deploy/tracks.toml:/app/tracks.toml:ro
+      PAZUFA_PORT: "8080"
+      # Dev-only keyadder key (public example from the pazufa-backend docs) used
+      # to mint collector API keys — see README step 3. Must pass the backend's
+      # key-format sanity check.
+      PAZUFA_KEYADDER_KEY: "pazufa-ABRAKADABRAHEXEN-DRACHENSCHUPPENHAARFAERBEMITTELVERORDNUNGSBLATTFASERSTRUKTURWASSERMINDESTAUFNAHMESTEMPELGESETZ1A6a3671b9"
+      RUST_LOG: info,pazufa_backend=info
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ping > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/status > /dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       start_period: 10s

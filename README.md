@@ -125,39 +125,36 @@ lines). Returns HTTP 201 for all valid requests; 401 if `X-API-Key` is missing.
 
 ## Running against Local Backend
 
-For full end-to-end testing with a real backend and persistent data. Requires
-`pazufa-backend` cloned alongside this repo (use the `dev-0.2.7` branch for
-compatibility with OpenAPI spec v0.2.3):
+For full end-to-end testing with a real backend and persistent data. The stack
+runs the prebuilt `pazufa/backend` image from Docker Hub, so no `pazufa-backend`
+clone or Rust build is required. To test against a newer backend, bump the image
+tag in `docker-compose.dev.yml`.
+
+**1. Start the dev stack** (first run just pulls the images):
 
 ```bash
-git clone https://codeberg.org/PaZuFa/pazufa-backend.git ../pazufa-backend
-cd ../pazufa-backend && git checkout dev-0.2.7 && cd -
-```
-
-**1. Start the dev stack** (first run compiles Rust + generates OpenAPI code — takes several minutes):
-
-```bash
-docker-compose -f docker-compose.dev.yml up -d --build
+docker-compose -f docker-compose.dev.yml up -d
 ```
 
 **2. Wait for the backend to be ready:**
 
 ```bash
 docker-compose -f docker-compose.dev.yml logs -f pazufa-backend
-# Ready when you see the backend accepting connections on port 80
-# Or poll: curl -s http://127.0.0.1:8090/ping
+# Ready when you see "Starting Server on 0.0.0.0:8080"
+# Or poll: curl -s http://127.0.0.1:8090/status
 ```
 
-**3. Create a collector API key** using the keyadder key (`dev-keyadder-key`):
+**3. Create a collector API key** using the keyadder key (the dev key baked into
+`docker-compose.dev.yml`):
 
 ```bash
 curl -s -X POST http://127.0.0.1:8090/api/v2/auth \
-  -H "X-API-Key: dev-keyadder-key" \
+  -H "X-API-Key: pazufa-ABRAKADABRAHEXEN-DRACHENSCHUPPENHAARFAERBEMITTELVERORDNUNGSBLATTFASERSTRUKTURWASSERMINDESTAUFNAHMESTEMPELGESETZ1A6a3671b9" \
   -H "Content-Type: application/json" \
-  -d '{"scope": "collector"}' | jq .
+  -d '{"scope": "collector"}'
 ```
 
-Copy the returned API key value (starts with `ltzf_`).
+Copy the returned API key value (starts with `pazufa-`).
 
 **4. Configure the scraper:**
 
@@ -224,16 +221,16 @@ docker-compose -f docker-compose.dev.yml down -v
 
 ```bash
 docker-compose -f docker-compose.dev.yml down -v
-docker-compose -f docker-compose.dev.yml up -d --build
+docker-compose -f docker-compose.dev.yml up -d
 # Then re-create the collector API key (step 3)
 ```
 
 | Service      | URL                   | Notes                             |
 |--------------|-----------------------|-----------------------------------|
-| Backend API  | http://127.0.0.1:8090 | REST API + `/ping`, `/status`     |
+| Backend API  | http://127.0.0.1:8090 | REST API + `/status` (health)     |
 | PostgreSQL   | localhost:5432        | ltzf-user / ltzf-pass / ltzf      |
 | Redis        | localhost:6379        | Cache for the scraper             |
-| Keyadder key | `dev-keyadder-key`    | Used to create collector API keys |
+| Keyadder key | see `docker-compose.dev.yml` | Used to create collector API keys |
 
 ## Development
 
