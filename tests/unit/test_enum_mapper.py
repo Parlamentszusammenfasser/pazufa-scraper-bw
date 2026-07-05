@@ -411,8 +411,7 @@ class TestEnumValuesExistInFramework:
 class TestReservedGremiumNames:
     """Lock the literal values of ReservedGremium against wiki + spec + BY precedent.
 
-    - `plenum`, `regierung`, `volk` come from the OpenAPI spec
-      (`vendor/pazufa-collector-core/openapi.yaml`).
+    - `plenum`, `regierung`, `volk` come from the PaZuFa OpenAPI spec (v0.2.3).
     - `gesetzesblatt` comes from the community DoD wiki and the BY reference
       scraper. It is NOT in the spec description, but the spec schema accepts
       any string, so the wiki/BY convention wins (see DD-021).

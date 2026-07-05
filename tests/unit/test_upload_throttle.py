@@ -12,7 +12,7 @@ _logger = logging.getLogger("test")
 
 
 class FakeApiException(Exception):
-    """Minimal stand-in for openapi_client.ApiException."""
+    """Minimal stand-in for a status-carrying API error (like bawue.api.BawueApiError)."""
 
     def __init__(self, status: int):
         self.status = status

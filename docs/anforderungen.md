@@ -2,10 +2,13 @@
 
 ## Übersicht
 
-Collector-Plugin für den **Baden-Württembergischen Landtag** (`BW`) im
-[PaZuFa](https://codeberg.org/PaZuFa/parlamentszusammenfasser)-System. Implementiert `VorgangsScraper` und
-`SitzungsScraper` des [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector)-Frameworks. Das Framework
-übernimmt Scheduling, Redis-Caching, API-Einlieferung und Dokumentenpipeline (PDF/OCR/LLM).
+Eigenständiger Scraper für den **Baden-Württembergischen Landtag** (`BW`) im
+[PaZuFa](https://codeberg.org/PaZuFa/parlamentszusammenfasser)-System. Der Scraper bringt Einstiegspunkt,
+Konfigurationslader, Redis-Cache und Scraping-Loop selbst mit (`bawue.__main__` / `config` / `cache` /
+`pipeline`) und hängt nur von [pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core)
+(API-Client, LLM, Normalisierung) plus Standard-Python-Paketen ab. Die drei Scraper leiten von den lokalen
+`VorgangsScraper`- / `SitzungsScraper`-Basisklassen ab; Scheduling, Redis-Caching, API-Einlieferung und
+Dokumentenpipeline (PDF/OCR/LLM) laufen im Scraper selbst.
 
 Das Projekt richtet sich nach der
 Community-[Definition of Done](https://wiki.pazufa.de/books/scraper/page/definition-of-done); die daraus folgenden
@@ -22,9 +25,10 @@ Anforderungen sind in den jeweiligen Abschnitten unten integriert.
 
 ## Backend-API
 
-Datenlieferung erfolgt vollständig durch das Framework. Der Scraper erzeugt nur `Vorgang`- und `Sitzung`-Objekte.
+Der Scraper erzeugt `Vorgang`- und `Sitzung`-Objekte und liefert sie selbst über `bawue.api`
+(httpx-Client aus `pazufa-scraper-core`) ein.
 
-**Schreib-Endpunkte (Framework, Scope `collector`):**
+**Schreib-Endpunkte (Scope `collector`):**
 
 | Endpunkt                               | Methode | Beschreibung                                               |
 |----------------------------------------|---------|------------------------------------------------------------|
@@ -34,7 +38,7 @@ Datenlieferung erfolgt vollständig durch das Framework. Der Scraper erzeugt nur
 **Authentifizierung:** Header `X-API-Key`, 64-Zeichen-Key mit Präfix `ltzf_`.
 Konfiguration via `config.toml` (`[backend] ltzf-api-key`) oder `LTZF_API_KEY`.
 
-**Deduplizierung:** PUT-Requests sind idempotent. Backend übernimmt Merging. Framework cacht via Redis (2-Wochen-TTL).
+**Deduplizierung:** PUT-Requests sind idempotent. Backend übernimmt Merging. Der Scraper cacht via Redis (`bawue.cache`, 2-Wochen-TTL).
 Der Scraper muss sich **nicht** um Deduplizierung kümmern, soll aber einheitliche Autoren-/Organisationsnamen liefern.
 
 ## Datenmodelle
@@ -73,8 +77,8 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 | Feld              | Typ           | Pflicht | BaWue-Hinweise                                                                                                                                          |
 |-------------------|---------------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `titel`           | string        | Ja      |                                                                                                                                                         |
-| `volltext`        | string        | Ja      | Initial leer — Framework füllt via Dokumentpipeline. Bei aktivem LLM (`[llm]`) füllt `bawue_dok.py` den Volltext direkt via PDF-Extraktion (kreuzberg). |
-| `hash`            | string        | Ja      | Initial leer — Framework füllt via Dokumentpipeline. Bei aktivem LLM (`[llm]`) berechnet `bawue_dok.py` den SHA256-Hash.                                |
+| `volltext`        | string        | Ja      | Initial `TODO`-Platzhalter. Bei aktivem LLM (`[llm]`) füllt `bawue_dok.py` den Volltext direkt via PDF-Extraktion (kreuzberg). |
+| `hash`            | string        | Ja      | Initial `TODO`-Platzhalter. Bei aktivem LLM (`[llm]`) berechnet `bawue_dok.py` den SHA256-Hash.                               |
 | `typ`             | Doktyp        | Ja      |                                                                                                                                                         |
 | `zp_modifiziert`  | datetime      | Ja      | Fundstellen-Datum                                                                                                                                       |
 | `zp_referenz`     | datetime      | Ja      | Fundstellen-Datum                                                                                                                                       |
@@ -165,7 +169,7 @@ Enum-Member verwenden die `MINUS`-Namenskonvention (z.B. `Stationstyp.PARL_MINUS
 | Quelle                   | Typ                       | Priorität | Liefert                                                                                             |
 |--------------------------|---------------------------|-----------|-----------------------------------------------------------------------------------------------------|
 | **PARLIS JSON-Endpunkt** | Undokumentierte API       | Primär    | `Vorgang` + `Station` (Gesetzgebungsvorgänge)                                                       |
-| **landtag-bw.de PDFs**   | Download + Textextraktion | Primär    | `Dokument` (via Framework-Dokumentpipeline)                                                         |
+| **landtag-bw.de PDFs**   | Download + Textextraktion | Primär    | `Dokument` (via `bawue_dok.py` bei aktivem LLM)                                                     |
 | **ICS-Kalender**         | ICS-Feed                  | Primär    | `Sitzung` (implementiert in `BawueSitzungenScraper`)                                                |
 | **Beteiligungsportal**   | Web-Scraping              | Ergänzend | `preparl-regent`-Stationen, vorparlamentarische Entwürfe                                            |
 | **Gesetzblatt BaWue**    | Web-Suche                 | Ergänzend | `postparl-gsblt`-Stationen                                                                          |
@@ -218,7 +222,7 @@ PDFs mit Blob-IDs (`/resource/blob/{id}/...`). Kein REST-API, kein RSS-Feed.
 | `[llm]`         | `provider-key`           |                                                            | Nein    | API-Key für LLM-Provider (via `LLM_PROVIDER_KEY` Umgebungsvariable) |
 | `[llm]`         | `model`                  | *(gpt-5-nano)*                                             | Nein    | LLM-Modellname (z.B. `gpt-5-nano`, `gpt-4.1-nano`)                  |
 | `[llm]`         | `truncate-tokens`        | 12000                                                      | Nein    | Max. Token-Anzahl für LLM-Input; 0 = keine Kürzung (DD-013)         |
-| `[bawue]`       | `enabled-vorgangstypen`  | `["Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag"]` | Nein    | PARLIS-Vorgangstypen die gescrapt werden (Framework `listing_urls`) |
+| `[bawue]`       | `enabled-vorgangstypen`  | `["Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag"]` | Nein    | PARLIS-Vorgangstypen die gescrapt werden (`listing_urls` der Pipeline) |
 | `[bawue]`       | `wahlperiode`            | 17                                                         | Nein    | Aktuelle Wahlperiode                                                |
 | `[bawue]`       | `parlis-request-delay-s` | 1.0                                                        | Nein    | Verzögerung zwischen PARLIS-Anfragen (s)                            |
 | `[bawue]`       | `wahlperiode-start-date` | `"2021-04-26"`                                             | Nein    | Startdatum der Wahlperiode (Suchbereich)                            |
@@ -234,14 +238,14 @@ Konkret:
 ### Core Completion
 
 1. **Vorgänge + Sitzungen** im PaZuFa-Format erzeugen (alle drei Scraper)
-2. **Einlieferung** ans Backend (vollständig über Framework)
+2. **Einlieferung** ans Backend (über `bawue.api`)
 3. **Automatisierung** (Docker-Compose mit `CYCLE_TIME_S`, Cloud-Run-Job, Raspberry-Pi-Cron)
 4. **Abdeckung der aktuellen Wahlperiode** (`wahlperiode = 17`, `wahlperiode-start-date = 2021-04-26`)
 
 ### Coding-Regeln
 
-5. **Idempotenz:** Wiederholtes Ausführen erzeugt keine Duplikate (Framework + Backend)
-6. **Fehlertoleranz:** Einzelne fehlgeschlagene Vorgänge stoppen den Scraper nicht (Framework)
+5. **Idempotenz:** Wiederholtes Ausführen erzeugt keine Duplikate (Scraper + Backend)
+6. **Fehlertoleranz:** Einzelne fehlgeschlagene Vorgänge stoppen den Scraper nicht (`bawue.pipeline`)
 7. **Determinismus:** Gleicher Input erzeugt identisches API-Mapping (Ausnahme: LLM-Ausgaben)
 8. **Fail-loud:** Fehlende/nicht-parsbare Pflichtfelder werden geloggt; `None`/Weglassen vor leeren Defaults
 9. **Kanonische Namen:** Einheitliche Autoren-/Organisationsnamen (Fraktionen, Institutionen)
@@ -251,7 +255,7 @@ Konkret:
 ### Betrieb
 
 12. **Rate-Limiting:** Konfigurierbare Verzögerung (`[bawue]`, `[beteiligung]`)
-13. **Volltext-Extraktion:** Framework-Pipeline oder `bawue_dok.py` + kreuzberg
+13. **Volltext-Extraktion:** `bawue_dok.py` + kreuzberg (bei aktivem LLM)
 14. **Enum-Mapping:** `enum_mapper.py` mit `sonstig` als dokumentiertem Fallback
 15. **Logging:** Strukturiertes JSON-Logging für Debugging und Monitoring
 16. **Konfigurierbarkeit:** 4-Tier (Defaults → `config.toml` → ENV → CLI)
