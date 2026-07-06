@@ -14,7 +14,6 @@ import logging
 import re
 import ssl
 import tempfile
-import unicodedata
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import urlparse
@@ -25,6 +24,7 @@ import litellm
 from json_repair import repair_json
 from kreuzberg import ExtractionConfig, OcrConfig, PageConfig, extract_file
 from pazufa_corelib.llm import LLMConnector
+from pazufa_corelib.normalization import normalize_volltext as _core_normalize_volltext
 
 from bawue.cache import BawueCache
 from bawue.types import Doktyp, Dokument
@@ -190,8 +190,14 @@ def _validate_scores(data: dict) -> dict:
 # Text normalization
 # ---------------------------------------------------------------------------
 
-_C1_CONTROL_RE = re.compile(r"[\x80-\x9f]")
-_TRAILING_WHITESPACE_RE = re.compile(r"[ \t]+$", re.MULTILINE)
+# Line-break hyphenation (issue #20). German words split across a line break
+# carry a hyphen ("abzu-senken", "Lebens-jahr"). Kreuzberg strips the newline
+# but keeps the hyphen, so the artefact survives as an *inline* hyphen that
+# corelib's "-\n" rejoin never sees. We remove the hyphen only when it sits
+# between two lowercase letters (an optional lone newline covers backends that
+# preserve the break). Genuine compound hyphens continue with an uppercase
+# letter ("Baden-Württemberg", "E-Mail") and are left untouched.
+_LINEBREAK_HYPHEN_RE = re.compile(r"(?<=[a-zäöüß])-\n?(?=[a-zäöüß])")
 
 
 def _paragraph_quality_score(text: str) -> float:
@@ -240,42 +246,36 @@ def _paragraph_quality_score(text: str) -> float:
 
 
 def normalize_volltext(text: str) -> str:
-    """Normalize extracted PDF text: fix encoding, strip garbled sections, escape XSS.
+    r"""Normalize extracted PDF text: fix encoding, strip garbled sections, escape XSS.
+
+    Delegates the shared cleaning pipeline (NFKC, invisible/control-char and
+    HTML-entity stripping, garbled-paragraph removal, ``-\n`` line-break
+    rejoining, guillemet XSS neutralization) to ``pazufa_corelib`` so the bulk
+    of the logic lives in one place. Two BaWue-specific passes are layered on
+    top of it:
+
+    1. A second garbled-paragraph filter using :func:`_paragraph_quality_score`.
+       corelib gates its uppercase penalty behind a ≥4-word minimum, so a
+       broken-font paragraph that collapses to a single token after control-char
+       stripping (the ASCII-shift pattern in BW PDFs) slips through corelib's
+       scorer; the local scorer has no word-count gate and catches it.
+    2. Issue #20: kreuzberg joins a hyphenated line break but keeps the hyphen,
+       leaving an *inline* artefact (``abzu-senken``) that corelib's ``-\n``
+       rule never sees.
 
     Applied after PDF text extraction, before LLM and API submission.
     """
     if not text:
         return text
 
-    # 1. Unicode NFKC normalization (e.g. ﬁ ligature → fi)
-    text = unicodedata.normalize("NFKC", text)
+    text = _core_normalize_volltext(text)
 
-    # 2. Join soft-hyphenated words: PARLIS PDFs use U+0002 (STX) as soft hyphen
-    # e.g. "ausgezeich\u0002net" -> "ausgezeichnet"
-    text = text.replace("\x02", "")
+    # Pass 1: drop garbled paragraphs corelib's word-gated scorer misses.
+    paragraphs = text.split("\n\n")
+    text = "\n\n".join(p for p in paragraphs if _paragraph_quality_score(p) >= 0.5)
 
-    # 2.5. Remove U+FFFD replacement characters (encoding failures)
-    text = text.replace("\ufffd", "")
-
-    # 3. Strip C1 control characters (0x80-0x9F)
-    text = _C1_CONTROL_RE.sub("", text)
-
-    # 4. Normalize line endings: \r\n → \n, lone \r → \n
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-
-    # 5. Remove garbled paragraphs (split on double-newline, score each).
-    #    Also collapses excessive blank lines: split on \n\n+ and rejoin with \n\n.
-    paragraphs = re.split(r"\n\n+", text)
-    clean_paragraphs = [p for p in paragraphs if _paragraph_quality_score(p) >= 0.5]
-    text = "\n\n".join(clean_paragraphs)
-
-    # 6. Strip trailing whitespace per line
-    text = _TRAILING_WHITESPACE_RE.sub("", text)
-
-    # 7. Neutralize angle brackets (XSS prevention): < and > to guillemets
-    text = text.replace("<", "\u2039").replace(">", "\u203a")
-
-    return text.strip()
+    # Pass 2 (issue #20): reassemble words the extractor left hyphenated.
+    return _LINEBREAK_HYPHEN_RE.sub("", text)
 
 
 # ---------------------------------------------------------------------------

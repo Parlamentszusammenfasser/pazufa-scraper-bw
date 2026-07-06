@@ -909,10 +909,12 @@ class TestNormalizeVolltext:
         result = normalize_volltext(text)
         assert result == "Absatz eins\n\nAbsatz zwei"
 
-    def test_trailing_whitespace_stripped(self):
+    def test_trailing_whitespace_collapsed(self):
+        """corelib collapses runs of spaces to one and strips the document ends
+        (a single interior trailing space before a newline may remain)."""
         text = "Zeile mit Leerzeichen   \nNächste Zeile  "
         result = normalize_volltext(text)
-        assert result == "Zeile mit Leerzeichen\nNächste Zeile"
+        assert result == "Zeile mit Leerzeichen \nNächste Zeile"
 
     def test_angle_brackets_replaced_with_guillemets(self):
         text = "Kontakt: <poststelle@sm.bwl.de> für Anfragen"
@@ -978,6 +980,34 @@ class TestNormalizeVolltext:
         text = "ausgezeich\ufffdnet"
         result = normalize_volltext(text)
         assert result == "ausgezeichnet"
+
+    # --- Line-break hyphenation (issue #20) -------------------------------
+
+    def test_linebreak_hyphen_inline_removed(self):
+        """Kreuzberg joins hyphenated line breaks but keeps the hyphen:
+        'abzu-senken' must become 'abzusenken'."""
+        text = "auf 16 Jahre abzu-senken. Damit"
+        assert normalize_volltext(text) == "auf 16 Jahre abzusenken. Damit"
+
+    def test_linebreak_hyphen_across_newline_removed(self):
+        """Classic dehyphenation: 'abzu-\\nsenken' \u2192 'abzusenken'."""
+        text = "auf 16 Jahre abzu-\nsenken."
+        assert normalize_volltext(text) == "auf 16 Jahre abzusenken."
+
+    def test_compound_hyphen_preserved(self):
+        """Genuine compound hyphens (uppercase continuation) stay intact."""
+        text = "das Land Baden-W\u00fcrttemberg"
+        assert normalize_volltext(text) == "das Land Baden-W\u00fcrttemberg"
+
+    def test_umlaut_hyphenation_removed(self):
+        """Hyphenation split before an umlaut continuation, e.g. '\u00c4n-derung'."""
+        text = "die \u00c4n-derung"
+        assert normalize_volltext(text) == "die \u00c4nderung"
+
+    def test_hyphen_before_uppercase_preserved(self):
+        """A hyphen followed by an uppercase letter is never a hyphenation
+        break (e.g. 'E-Mail', 'Baden-W\u00fcrttemberg')."""
+        assert normalize_volltext("per E-Mail") == "per E-Mail"
 
 
 # ---------------------------------------------------------------------------
