@@ -2,7 +2,7 @@
 
 Verifies that scrapers correctly enable LLM when a base URL is configured
 (e.g. for local Ollama) even without an API key, and that the api_base
-parameter is passed through to the LLMConnector and litellm calls.
+value is set on the LLMConnector instance and passed through to litellm calls.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -47,10 +47,10 @@ class TestVorgaengeScraperOllamaInit:
         mock_llm_cls.assert_called_once_with(
             model="ollama/gemma4:e4b",
             api_key=None,
-            api_base="http://localhost:11434",
             rate_limit_max_calls=5,
             rate_limit_window_seconds=60,
         )
+        assert mock_llm_cls.return_value.api_base == "http://localhost:11434"
 
     def test_llm_enabled_with_api_key_only(self):
         """LLM should still work with just an API key (OpenAI-style)."""
@@ -69,10 +69,10 @@ class TestVorgaengeScraperOllamaInit:
         mock_llm_cls.assert_called_once_with(
             model="gpt-5-nano",
             api_key="sk-test",
-            api_base=None,
             rate_limit_max_calls=5,
             rate_limit_window_seconds=60,
         )
+        assert mock_llm_cls.return_value.api_base is None
 
     def test_llm_disabled_without_key_or_base_url(self):
         """LLM should be disabled when neither key nor base URL is set."""
@@ -101,10 +101,10 @@ class TestVorgaengeScraperOllamaInit:
         mock_llm_cls.assert_called_once_with(
             model="ollama/gemma4:e4b",
             api_key="sk-test",
-            api_base="http://localhost:11434",
             rate_limit_max_calls=5,
             rate_limit_window_seconds=60,
         )
+        assert mock_llm_cls.return_value.api_base == "http://localhost:11434"
 
 
 class TestBeteiligungScraperOllamaInit:
@@ -125,10 +125,10 @@ class TestBeteiligungScraperOllamaInit:
         mock_llm_cls.assert_called_once_with(
             model="ollama/gemma4:e4b",
             api_key=None,
-            api_base="http://localhost:11434",
             rate_limit_max_calls=5,
             rate_limit_window_seconds=60,
         )
+        assert mock_llm_cls.return_value.api_base == "http://localhost:11434"
 
     def test_llm_disabled_without_key_or_base_url(self):
         """LLM should be disabled when neither key nor base URL is set."""

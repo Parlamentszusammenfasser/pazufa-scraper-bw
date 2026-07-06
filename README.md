@@ -1,50 +1,51 @@
 # BaWue Scraper
 
-Collector plugin for the Baden-Württemberg state parliament ([Landtag BW](https://www.landtag-bw.de/)) for the
-[Parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser) (PaZuFa) platform.
+Standalone scraper for the Baden-Württemberg state parliament ([Landtag BW](https://www.landtag-bw.de/)),
+submitting to the [Parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser) (PaZuFa) platform.
 
 Scrapes legislative proceedings (Vorgänge) from PARLIS, pre-parliamentary drafts from the Beteiligungsportal, 
-and parliamentary sessions (Sitzungen) from the ICS calendar feed. Runs as a **framework-managed plugin** — the
-[pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) framework handles scheduling, caching (Redis), API
-submission, and error tolerance automatically.
+and parliamentary sessions (Sitzungen) from the ICS calendar feed. It is **self-contained** — it owns its own
+entry point, config loader, Redis cache, and scraping loop, and depends only on
+[pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core) (the shared library) plus standard
+Python packages.
 
 ## Prerequisites
 
-- Python 3.14+
-- [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) cloned alongside this project
+- Python 3.13
 - Redis (for local dev: `docker-compose up -d`)
-- Tesseract OCR with German language pack (for PDF extraction via framework pipeline)
+- Tesseract OCR with German language pack (for PDF text extraction)
 
 ## Setup
 
 ```bash
 git clone <repo-url> pazufa-bawue-scraper
-git clone https://codeberg.org/PaZuFa/pazufa-collector.git
 
 cd pazufa-bawue-scraper
-python3.14 -m venv .venv
+python3.13 -m venv .venv
 make install
 
 cp config.sample.toml config.toml
 # Edit config.toml: set ltzf-api-url, ltzf-api-key, collector-uuid...
 ```
 
+`make install` fetches `pazufa-scraper-core` from its pinned git tag — no sibling clone is required.
+
 ## Build
 
 ### Application
 
-After setup, install all dependencies and vendor the collector libraries:
+After setup, install all dependencies:
 
 ```bash
 make install
 ```
 
-This creates the virtual environment, installs Poetry, vendors `pazufa-collector` and `pazufa-collector-core` from
-sibling directories, and runs `poetry install`.
+This creates the virtual environment, installs Poetry, and runs `poetry install` — which fetches
+`pazufa-scraper-core` from its pinned git tag.
 
 ### Docker Image
 
-Build the Docker image with all dependencies vendored and tests passing:
+Build the Docker image with tests passing:
 
 ```bash
 make package
@@ -59,8 +60,8 @@ To build the Docker image directly (skipping lint/test):
 docker build -t bawue-scraper .
 ```
 
-The image uses a multi-stage build (Python 3.14-slim) — the builder stage installs dependencies, and the runtime
-stage copies only the installed packages and source code.
+The image uses a multi-stage build (Python 3.13-slim) — the builder stage installs dependencies (fetching
+`pazufa-scraper-core` from git), and the runtime stage copies only the installed packages and source code.
 
 ## Usage
 
@@ -68,7 +69,7 @@ stage copies only the installed packages and source code.
 
 ```bash
 make run
-# or: .venv/bin/python -m collector --config-file config.toml
+# or: .venv/bin/python -m bawue --config-file config.toml
 ```
 
 ### Dry Run (no API or Redis required)
@@ -124,39 +125,36 @@ lines). Returns HTTP 201 for all valid requests; 401 if `X-API-Key` is missing.
 
 ## Running against Local Backend
 
-For full end-to-end testing with a real backend and persistent data. Requires
-`pazufa-backend` cloned alongside this repo (use the `dev-0.2.7` branch for
-compatibility with OpenAPI spec v0.2.3):
+For full end-to-end testing with a real backend and persistent data. The stack
+runs the prebuilt `pazufa/backend` image from Docker Hub, so no `pazufa-backend`
+clone or Rust build is required. To test against a newer backend, bump the image
+tag in `docker-compose.dev.yml`.
+
+**1. Start the dev stack** (first run just pulls the images):
 
 ```bash
-git clone https://codeberg.org/PaZuFa/pazufa-backend.git ../pazufa-backend
-cd ../pazufa-backend && git checkout dev-0.2.7 && cd -
-```
-
-**1. Start the dev stack** (first run compiles Rust + generates OpenAPI code — takes several minutes):
-
-```bash
-docker-compose -f docker-compose.dev.yml up -d --build
+docker-compose -f docker-compose.dev.yml up -d
 ```
 
 **2. Wait for the backend to be ready:**
 
 ```bash
 docker-compose -f docker-compose.dev.yml logs -f pazufa-backend
-# Ready when you see the backend accepting connections on port 80
-# Or poll: curl -s http://127.0.0.1:8090/ping
+# Ready when you see "Starting Server on 0.0.0.0:8080"
+# Or poll: curl -s http://127.0.0.1:8090/status
 ```
 
-**3. Create a collector API key** using the keyadder key (`dev-keyadder-key`):
+**3. Create a collector API key** using the keyadder key (the dev key baked into
+`docker-compose.dev.yml`):
 
 ```bash
 curl -s -X POST http://127.0.0.1:8090/api/v2/auth \
-  -H "X-API-Key: dev-keyadder-key" \
+  -H "X-API-Key: pazufa-ABRAKADABRAHEXEN-DRACHENSCHUPPENHAARFAERBEMITTELVERORDNUNGSBLATTFASERSTRUKTURWASSERMINDESTAUFNAHMESTEMPELGESETZ1A6a3671b9" \
   -H "Content-Type: application/json" \
-  -d '{"scope": "collector"}' | jq .
+  -d '{"scope": "collector"}'
 ```
 
-Copy the returned API key value (starts with `ltzf_`).
+Copy the returned API key value (starts with `pazufa-`).
 
 **4. Configure the scraper:**
 
@@ -181,7 +179,7 @@ Update `config.dev.toml` with your collector key:
 **5. Run the scraper against the local backend:**
 
 ```bash
-.venv/bin/python -m collector --config-file config.dev.toml --once
+.venv/bin/python -m bawue --config-file config.dev.toml --once
 ```
 
 **6. Inspect submitted data via the backend API:**
@@ -223,16 +221,16 @@ docker-compose -f docker-compose.dev.yml down -v
 
 ```bash
 docker-compose -f docker-compose.dev.yml down -v
-docker-compose -f docker-compose.dev.yml up -d --build
+docker-compose -f docker-compose.dev.yml up -d
 # Then re-create the collector API key (step 3)
 ```
 
 | Service      | URL                   | Notes                             |
 |--------------|-----------------------|-----------------------------------|
-| Backend API  | http://127.0.0.1:8090 | REST API + `/ping`, `/status`     |
+| Backend API  | http://127.0.0.1:8090 | REST API + `/status` (health)     |
 | PostgreSQL   | localhost:5432        | ltzf-user / ltzf-pass / ltzf      |
-| Redis        | localhost:6379        | Cache for the scraper framework   |
-| Keyadder key | `dev-keyadder-key`    | Used to create collector API keys |
+| Redis        | localhost:6379        | Cache for the scraper             |
+| Keyadder key | see `docker-compose.dev.yml` | Used to create collector API keys |
 
 ## Development
 
@@ -363,10 +361,53 @@ docker-compose logs -f scraper
 docker-compose build scraper && docker-compose up -d scraper
 ```
 
+## Deploy on Raspberry Pi
+
+Requires **Raspberry Pi OS 64-bit** (default since 2023). The pre-built image supports `linux/arm64` (Pi 3B and later). 32-bit Pi OS (`arm/v7`) is not supported.
+
+**1. Install Docker:**
+
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+**2. Clone the repository:**
+
+```bash
+git clone <repo-url> scraper-bawue && cd scraper-bawue
+```
+
+**3. Set up credentials:**
+
+```bash
+cp .env.example .env
+# Edit .env: fill in LTZF_API_URL, LTZF_API_KEY, LLM_PROVIDER_KEY
+```
+
+See the [LLM Document Enrichment](#llm-document-enrichment) section if you want to use a local Ollama instance instead of an OpenAI key (requires editing `docker-compose.yml` to replace `LLM_PROVIDER_KEY` with `LLM_PROVIDER_BASE_URL`/`LLM_MODEL`).
+
+**4. Update the image in `docker-compose.yml`:**
+
+```diff
+-    image: bawue-scraper:latest
++    image: froeser/pazufa-scraper-bw:main-00dba883
+```
+
+**5. Start:**
+
+```bash
+docker compose up -d
+docker compose logs -f scraper
+```
+
+**To update:** Change the image tag in `docker-compose.yml`, then `docker compose pull && docker compose up -d`.
+
 ## Docker
 
 ```bash
-make package          # Vendor collector + build image
+make package          # Lint, format, test, then build the image
 docker run bawue-scraper
 ```
 
@@ -392,7 +433,7 @@ See [docs/anforderungen.md — Konfiguration](docs/anforderungen.md#konfiguratio
 
 - [PaZuFa Organization](https://codeberg.org/PaZuFa)
 - [parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser) — Main project
-- [pazufa-collector](https://codeberg.org/PaZuFa/pazufa-collector) — Collector framework
+- [pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core) — Shared library (API client, LLM, normalisation)
 - [pazufa-backend](https://codeberg.org/PaZuFa/pazufa-backend) — Backend service
 - [PaZuFa backend OpenAPI Spec](https://codeberg.org/PaZuFa/parlamentszusammenfasser/src/branch/main/docs/specs/openapi.yml)
 - [CI Pipeline](https://ci.codeberg.org/repos/16437) — Woodpecker CI build status

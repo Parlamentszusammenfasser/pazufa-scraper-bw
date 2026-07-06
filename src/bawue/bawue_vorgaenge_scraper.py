@@ -11,34 +11,33 @@ from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
 import certifi
-from collector.config import CollectorConfiguration
-from collector.interface import VorgangsScraper
-from openapi_client.models import (
-    Autor,
-    Dokument,
-    Gremium,
-    Parlament,
-    Station,
-    StationDokumenteInner,
-    Stationstyp,
-    VgIdent,
-    Vorgang,
-)
-from openapi_client.models.doktyp import Doktyp
 
+from bawue.api import build_client
 from bawue.bawue_dok import LLMMetrics, clear_hash_cache
+from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
 from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.notifications import send_mattermost_summary
 from bawue.parlis_client import ParlisClient
+from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, format_duration, format_failed_section
 from bawue.types import (
     TODO_MARKER,
+    Autor,
+    Doktyp,
+    Dokument,
+    Gremium,
+    Parlament,
     RawFundstelle,
     RawVorgang,
     ReservedGremium,
+    Station,
+    Stationstyp,
+    Unset,
+    VgIdent,
+    Vorgang,
     canonicalize_organisation,
     is_verfassungsaendernd,
     none_if_blank,
@@ -87,7 +86,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
     wrapped in the async framework contract.
     """
 
-    def __init__(self, config: CollectorConfiguration, session: aiohttp.ClientSession) -> None:
+    def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         # Load BaWue-specific config from TOML
         bawue_config = load_toml_section(config, "bawue")
         self._wahlperiode = bawue_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
@@ -114,6 +113,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._raw_cache: dict[str, RawVorgang] = {}
 
         self._upload_limiter = create_upload_limiter()
+        self._client = build_client(config.database_url, config.api_key)
 
         self._published: int = 0
         self._failed: int = 0
@@ -137,10 +137,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
             self._llm = LLMConnector(
                 model=config.llm_model,
                 api_key=llm_key,
-                api_base=llm_base_url,
                 rate_limit_max_calls=5,
                 rate_limit_window_seconds=60,
             )
+            # corelib v0.1.2 LLMConnector takes no api_base kwarg; bawue_dok reads
+            # it off the instance (getattr) and passes it to litellm at call time.
+            self._llm.api_base = llm_base_url
 
     async def run(self) -> None:
         check_for_newer_wahlperiode(self._wahlperiode)
@@ -165,7 +167,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
         outcome = upload_vorgang(
-            self.config.oapiconfig,
+            self._client,
             self.scraper_id,
             self._upload_limiter,
             item,
@@ -334,10 +336,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
     _POSTPARL_TYPEN: frozenset[Stationstyp] = frozenset(
         {
-            Stationstyp.POSTPARL_MINUS_GSBLT,
-            Stationstyp.POSTPARL_MINUS_VESJA,
-            Stationstyp.POSTPARL_MINUS_VESNE,
-            Stationstyp.POSTPARL_MINUS_KRAFT,
+            Stationstyp.POSTPARL_GSBLT,
+            Stationstyp.POSTPARL_VESJA,
+            Stationstyp.POSTPARL_VESNE,
+            Stationstyp.POSTPARL_KRAFT,
         }
     )
 
@@ -373,7 +375,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         Entschließungsanträge are discarded entirely.
         """
         stationen: list[Station] = []
-        pending_aenderungsantraege: list[list[StationDokumenteInner]] = []
+        pending_aenderungsantraege: list[list[Dokument]] = []
         seen_ausschber = False
         last_station_typ_str = ""
         for fund in fundstellen:
@@ -395,7 +397,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             # Änderungsanträge as plain "Antrag". After a committee report,
             # "Antrag" is always an amendment, not a new initiative.
             if (
-                station.typ == Stationstyp.PARL_MINUS_INITIATIV
+                station.typ == Stationstyp.PARL_INITIATIV
                 and typ_lower in self._AMBIGUOUS_ANTRAG_TYPEN
                 and seen_ausschber
             ):
@@ -426,11 +428,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
             stationen.append(station)
             last_station_typ_str = station_typ_str
 
-            if station.typ == Stationstyp.PARL_MINUS_AUSSCHBER:
+            if station.typ == Stationstyp.PARL_AUSSCHBER:
                 seen_ausschber = True
 
             # Attach any buffered Änderungsanträge to this station if it's a vollvlsgn
-            if station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN and pending_aenderungsantraege:
+            if station.typ == Stationstyp.PARL_VOLLVLSGN and pending_aenderungsantraege:
                 for docs in pending_aenderungsantraege:
                     station.dokumente.extend(docs)
                 pending_aenderungsantraege.clear()
@@ -451,7 +453,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         recorded in the 'Aktueller Stand' metadata field. When that field says
         'Abgelehnt', this method adds the missing station.
         """
-        if any(s.typ == Stationstyp.PARL_MINUS_ABLEHNUNG for s in stationen):
+        if any(s.typ == Stationstyp.PARL_ABLEHNUNG for s in stationen):
             return
 
         if not stationen:
@@ -470,7 +472,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         stationen.append(
             Station(
                 api_id=str(api_id),
-                typ=Stationstyp.PARL_MINUS_ABLEHNUNG,
+                typ=Stationstyp.PARL_ABLEHNUNG,
                 dokumente=[],
                 zp_start=zp_start,
                 gremium=Gremium(
@@ -500,7 +502,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # Find the last preparl-regbsl (there may be several pre-parliamentary stations)
         regbsl_idx = None
         for i, s in enumerate(stationen):
-            if s.typ == Stationstyp.PREPARL_MINUS_REGBSL:
+            if s.typ == Stationstyp.PREPARL_REGBSL:
                 regbsl_idx = i
 
         if regbsl_idx is None:
@@ -508,14 +510,14 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         # Check if a parl-initiativ already follows
         next_idx = regbsl_idx + 1
-        if next_idx < len(stationen) and stationen[next_idx].typ == Stationstyp.PARL_MINUS_INITIATIV:
+        if next_idx < len(stationen) and stationen[next_idx].typ == Stationstyp.PARL_INITIATIV:
             return
 
         # Determine the date: use the next station's date if available, else the regbsl's
         zp_start = stationen[next_idx].zp_start if next_idx < len(stationen) else stationen[regbsl_idx].zp_start
 
         synthetic = Station(
-            typ=Stationstyp.PARL_MINUS_INITIATIV,
+            typ=Stationstyp.PARL_INITIATIV,
             dokumente=stationen[regbsl_idx].dokumente.copy(),
             zp_start=zp_start,
             gremium=Gremium(
@@ -548,7 +550,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         first_vollvlsgn_idx: int | None = None
         for i, s in enumerate(stationen):
-            if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN:
+            if s.typ == Stationstyp.PARL_VOLLVLSGN:
                 first_vollvlsgn_idx = i
                 break
 
@@ -559,10 +561,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
         bumped_zp_start = anchor_zp_start + timedelta(hours=1)
 
         for station in stationen[:first_vollvlsgn_idx]:
-            if station.typ != Stationstyp.PARL_MINUS_AUSSCHBER:
+            if station.typ != Stationstyp.PARL_AUSSCHBER:
                 continue
             station.zp_start = bumped_zp_start
-            if station.zp_modifiziert is not None and station.zp_modifiziert < bumped_zp_start:
+            if isinstance(station.zp_modifiziert, datetime) and station.zp_modifiziert < bumped_zp_start:
                 station.zp_modifiziert = bumped_zp_start
 
     @staticmethod
@@ -585,20 +587,20 @@ class BawueVorgaengeScraper(VorgangsScraper):
             while station.zp_start in seen and seen[station.zp_start] - {station.typ}:
                 bumped = station.zp_start + timedelta(hours=1)
                 station.zp_start = bumped
-                if station.zp_modifiziert is not None and station.zp_modifiziert < bumped:
+                if isinstance(station.zp_modifiziert, datetime) and station.zp_modifiziert < bumped:
                     station.zp_modifiziert = bumped
             seen.setdefault(station.zp_start, set()).add(station.typ)
 
     @staticmethod
     def _attach_pending_aenderungsantraege(
         stationen: list[Station],
-        pending: list[list[StationDokumenteInner]],
+        pending: list[list[Dokument]],
         vorgang_id: str,
     ) -> None:
         """Attach remaining Änderungsantrag docs to the last vollvlsgn, or warn."""
         target = None
         for s in reversed(stationen):
-            if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN:
+            if s.typ == Stationstyp.PARL_VOLLVLSGN:
                 target = s
                 break
         if target is not None:
@@ -639,12 +641,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
         """Locate the existing Station that ``station`` should merge into, or None.
 
         Dispatches on ``station.typ``:
-          - PARL_MINUS_AUSSCHBER: scan backwards for same committee, stop at plenary.
-          - PARL_MINUS_VOLLVLSGN: last appended station, but only if its raw PARLIS
+          - PARL_AUSSCHBER: scan backwards for same committee, stop at plenary.
+          - PARL_VOLLVLSGN: last appended station, but only if its raw PARLIS
             ``station_typ`` text describes the same reading round (DD-024).
           - Everything else: last appended station with same ``typ`` + gremium.
         """
-        if station.typ == Stationstyp.PARL_MINUS_AUSSCHBER:
+        if station.typ == Stationstyp.PARL_AUSSCHBER:
             return BawueVorgaengeScraper._find_matching_ausschuss(stationen, station.gremium.name)
 
         if not stationen:
@@ -653,9 +655,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if last.typ != station.typ or last.gremium.name != station.gremium.name:
             return None
 
-        if station.typ == Stationstyp.PARL_MINUS_VOLLVLSGN and not _same_round_label(
-            station_typ_str, last_station_typ_str
-        ):
+        if station.typ == Stationstyp.PARL_VOLLVLSGN and not _same_round_label(station_typ_str, last_station_typ_str):
             return None
 
         return last
@@ -670,16 +670,16 @@ class BawueVorgaengeScraper(VorgangsScraper):
         Staatshaushaltsgesetz Einzelplan debates).
         """
         target.dokumente.extend(station.dokumente)
-        if target.typ == Stationstyp.PARL_MINUS_VOLLVLSGN:
+        if target.typ == Stationstyp.PARL_VOLLVLSGN:
             _widen_span(target, station.zp_start)
 
     @staticmethod
     def _find_matching_ausschuss(stationen: list[Station], gremium_name: str) -> Station | None:
         """Search backwards for a committee station with the same gremium, stopping at plenary."""
         for s in reversed(stationen):
-            if s.typ == Stationstyp.PARL_MINUS_VOLLVLSGN:
+            if s.typ == Stationstyp.PARL_VOLLVLSGN:
                 return None
-            if s.typ == Stationstyp.PARL_MINUS_AUSSCHBER and s.gremium.name == gremium_name:
+            if s.typ == Stationstyp.PARL_AUSSCHBER and s.gremium.name == gremium_name:
                 return s
         return None
 
@@ -693,19 +693,19 @@ class BawueVorgaengeScraper(VorgangsScraper):
         - All documents having Doktyp.STELLUNGNAHME (standard case with PDF)
         - The Fundstelle type being "Stellungnahme"/"Antwort" with no documents (no PDF URL)
         """
-        if station.dokumente and all(d.actual_instance.typ == Doktyp.STELLUNGNAHME for d in station.dokumente):
+        if station.dokumente and all(d.typ == Doktyp.STELLUNGNAHME for d in station.dokumente):
             return True
         return not station.dokumente and station_typ_str.lower() in BawueVorgaengeScraper._STELLUNGNAHME_STATION_TYPEN
 
     @staticmethod
     def _attach_stellungnahme(
         stationen: list[Station],
-        dokumente: list[StationDokumenteInner],
+        dokumente: list[Dokument],
         vorgang_id: str,
     ) -> None:
         """Attach Stellungnahme documents to the most recent station."""
         if stationen:
-            if stationen[-1].stellungnahmen is None:
+            if isinstance(stationen[-1].stellungnahmen, Unset):
                 stationen[-1].stellungnahmen = []
             stationen[-1].stellungnahmen.extend(dokumente)
         else:
@@ -781,7 +781,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         ausschuss = fund.get("ausschuss", "")
         if ausschuss:
             name: str = ausschuss
-        elif station_typ == Stationstyp.POSTPARL_MINUS_GSBLT:
+        elif station_typ == Stationstyp.POSTPARL_GSBLT:
             name = ReservedGremium.GESETZESBLATT
         else:
             name = ReservedGremium.PLENUM
@@ -795,7 +795,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         station_typ: Stationstyp,
         initiative: str,
         zp_start: datetime,
-    ) -> tuple[list[StationDokumenteInner], int | None]:
+    ) -> tuple[list[Dokument], int | None]:
         """Build the document list for a station (0 or 1 documents).
 
         A document is only created when the Fundstelle includes a PDF link.
@@ -819,7 +819,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         doc_typ = map_dokumententyp(
             mapping_text,
-            is_vorparlamentarisch=(station_typ == Stationstyp.PREPARL_MINUS_REGBSL),
+            is_vorparlamentarisch=(station_typ == Stationstyp.PREPARL_REGBSL),
         )
         if doc_typ == Doktyp.SONSTIG and fund.get("plenarprotokoll"):
             doc_typ = Doktyp.REDEPROTOKOLL
@@ -833,7 +833,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         dok = Dokument(
             titel=station_typ_str or "Dokument",
             volltext=TODO_MARKER,
-            hash=TODO_MARKER,
+            hash_=TODO_MARKER,
             typ=doc_typ,
             zp_modifiziert=zp_start,
             zp_referenz=zp_start,
@@ -861,7 +861,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             except Exception:
                 logger.warning("Document enrichment failed for %s", pdf_url)
 
-        return [StationDokumenteInner(dok)], trojanergefahr
+        return [dok], trojanergefahr
 
     async def _fallback_pdf_url(self, drucksache: str | None) -> str | None:
         """Reconstruct and verify a Landtag-BW PDF URL when PARLIS omits it.
@@ -918,16 +918,16 @@ def _construct_drucksache_pdf_url(drucksache: str | None) -> str | None:
     return f"{_LANDTAG_PDF_BASE}/WP{wp}/Drucksachen/{block:04d}/{wp}_{num:04d}.pdf"
 
 
-def _dedup_drucks(doks: list[StationDokumenteInner]) -> list[StationDokumenteInner]:
+def _dedup_drucks(doks: list[Dokument]) -> list[Dokument]:
     """Remove duplicate documents with the same Drucksache number.
 
     Documents without a drucksnr are always kept (no dedup key).
     Ported from the BY scraper's dedup_drucks pattern.
     """
-    unique: list[StationDokumenteInner] = []
+    unique: list[Dokument] = []
     seen_drucksnr: set[str] = set()
     for d in doks:
-        drucksnr = d.actual_instance.drucksnr
+        drucksnr = d.drucksnr
         if drucksnr:
             if drucksnr in seen_drucksnr:
                 continue
@@ -941,8 +941,8 @@ def _dedup_drucks(doks: list[StationDokumenteInner]) -> list[StationDokumenteInn
 # (Gesetzentwurf der Landesregierung, mapped to preparl-regbsl).
 _INITIATIV_TYPEN: frozenset[Stationstyp] = frozenset(
     {
-        Stationstyp.PARL_MINUS_INITIATIV,
-        Stationstyp.PREPARL_MINUS_REGBSL,
+        Stationstyp.PARL_INITIATIV,
+        Stationstyp.PREPARL_REGBSL,
     }
 )
 
@@ -960,7 +960,7 @@ def _initiativ_drucksnr(stationen: list[Station]) -> str | None:
         if station.typ not in _INITIATIV_TYPEN:
             continue
         for dok in station.dokumente:
-            drucksnr = dok.actual_instance.drucksnr
+            drucksnr = dok.drucksnr
             if drucksnr:
                 return drucksnr
     return None
@@ -979,7 +979,7 @@ def _vorgang_kurztitel(stationen: list[Station]) -> str | None:
             if typen is not None and station.typ not in typen:
                 continue
             for dok in station.dokumente:
-                kurztitel = dok.actual_instance.kurztitel
+                kurztitel = dok.kurztitel
                 if kurztitel:
                     return kurztitel
     return None
@@ -1003,7 +1003,7 @@ def _assign_stable_station_ids(stationen: list[Station], vorgang_id: str) -> Non
     if vorgang_id == "unknown":
         return
     for station in stationen:
-        if station.api_id is not None or station.dokumente:
+        if not isinstance(station.api_id, Unset) or station.dokumente:
             continue
         key = f"bawue-station-{vorgang_id}-{station.typ.value}-{station.zp_start.isoformat()}"
         station.api_id = str(uuid5(NAMESPACE_URL, key))

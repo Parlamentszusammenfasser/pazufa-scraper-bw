@@ -681,13 +681,13 @@ gespeichert, bis der TTL (2 Wochen) abläuft, und verursachen keine Fehler.
 
 **Kontext:** Drei Quellen definieren reservierte `Gremium.name`-Werte:
 
-1. **OpenAPI-Spezifikation** (`vendor/pazufa-collector-core/openapi.yaml:1517`):
+1. **OpenAPI-Spezifikation** (PaZuFa-Spec v0.2.3, Feld `Gremium.name`):
    > "Name des betreffenden Gremiums. `'plenum'`, `'regierung'`, `'volk'` sind
    > reservierte namen"
 2. **Community-DoD-Wiki**: `regierung`, `plenum` (als Default, "wenn etwas
    'irgendwie passiert'"), **und `gesetzesblatt`** für die Veröffentlichung im
    Gesetzblatt.
-3. **BY-Referenz-Scraper** (`vendor/pazufa-collector/collector/scrapers/bylt_scraper.py`):
+3. **BY-Referenz-Scraper** (pazufa-collectors `bylt_scraper.py`):
    emittiert `gesetzesblatt` literal für `postparl-gsblt`-Stationen (Zeile 440)
    und `plenum` für alle anderen nicht-Ausschuss-Stationen — inkl. synthetisch
    erzeugte. BY hat **keinen** generischen Fallback wie `"Landtag"`.
@@ -789,7 +789,7 @@ Hintergrund: Das Backend hat zwar einen pg_trgm-Canary
 (`SIMILARITY(organisation, $2) > 0.66`, s. DD-021), der Near-Misses loggt, aber
 **keine** aktive Namensvereinheitlichung. Zwei Scraper, die dasselbe Gremium
 unterschiedlich benennen, erzeugen zwei `autor`-Zeilen. Produktionsdaten aus
-BY (`vendor/pazufa-collector/collector/tests/bylt_scraper/*.json`) zeigen das
+BY (pazufa-collectors `bylt_scraper`-Testfixtures) zeigen das
 Problem in der Praxis: dieselbe Person erscheint dort mit drei verschiedenen
 Organisations-Strings (`Alternative für Deutschland (AfD)`, `AfD-Fraktion im
 Bayerischen Landtag`, `AfD-Fraktion`). BY ist somit **nicht** Compliance-Referenz

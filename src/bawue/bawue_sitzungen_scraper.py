@@ -11,19 +11,16 @@ from zoneinfo import ZoneInfo
 
 import aiohttp
 import certifi
-import openapi_client
-import openapi_client.api
-import openapi_client.api.collector_schnittstellen_api
-from collector.config import CollectorConfiguration
-from collector.interface import SitzungsScraper
-from openapi_client.models import Gremium, Parlament, Sitzung
 
+from bawue.api import BawueApiError, build_client, put_kalender
+from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.ics_parser import group_events_by_date, parse_ics_feed
 from bawue.notifications import send_mattermost_summary
+from bawue.pipeline import SitzungsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
-from bawue.types import none_if_blank
+from bawue.types import Gremium, Parlament, Sitzung, none_if_blank
 from bawue.upload_throttle import with_upload_retry
 
 logger = logging.getLogger(__name__)
@@ -39,7 +36,7 @@ class BawueSitzungenScraper(SitzungsScraper):
     Auto-discovered by the framework when placed in the scrapers directory.
     """
 
-    def __init__(self, config: CollectorConfiguration, session: aiohttp.ClientSession) -> None:
+    def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         bawue_config = load_toml_section(config, "bawue")
         self._wahlperiode = bawue_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
         ics_url = bawue_config.get("ics-url", DEFAULT_ICS_URL)
@@ -47,6 +44,7 @@ class BawueSitzungenScraper(SitzungsScraper):
         super().__init__(config, uuid.UUID(config.collector_id), [ics_url], session)
 
         self._upload_limiter = create_upload_limiter()
+        self._client = build_client(config.database_url, config.api_key)
 
         self._events_by_date: dict[str, list] = {}
         self._total_events: int = 0
@@ -137,42 +135,40 @@ class BawueSitzungenScraper(SitzungsScraper):
 
         self.log_item(item)
 
-        with openapi_client.ApiClient(self.config.oapiconfig) as api_client:
-            api_instance = openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi(api_client)
-            try:
-                ret = with_upload_retry(
-                    lambda: api_instance.kal_date_put(
-                        x_scraper_id=str(self.scraper_id),
-                        parlament=Parlament.BW,
-                        datum=item[0],
-                        sitzung=item[1],
-                    ),
-                    self._upload_limiter,
-                    exception_type=openapi_client.ApiException,
-                )
-                logger.info("API Response: %s", ret)
-                self._published_dates += 1
-                self._published_sitzungen += len(item[1])
-                return item
-            except openapi_client.ApiException as e:
-                logger.error("API Exception: %s", e)
-                if e.status == 422:
-                    logger.error("Unprocessable Entity for date %s", item[0])
-                    self.log_item(item, True)
-                elif e.status == 401:
-                    logger.critical("Authentication failed. Check your API key.")
-                self._failed_dates += 1
-                self._failed_items.append(
-                    FailedItem(item_id=item[0].date().isoformat(), titel=None, reason=api_exception_reason(e))
-                )
-                return None
-            except Exception as e:
-                logger.error("Unexpected error sending item to API: %s", e)
-                self._failed_dates += 1
-                self._failed_items.append(
-                    FailedItem(item_id=item[0].date().isoformat(), titel=None, reason=api_exception_reason(e))
-                )
-                return None
+        try:
+            with_upload_retry(
+                lambda: put_kalender(
+                    self._client,
+                    self.scraper_id,
+                    Parlament.BW,
+                    item[0].date(),
+                    item[1],
+                ),
+                self._upload_limiter,
+                exception_type=BawueApiError,
+            )
+            self._published_dates += 1
+            self._published_sitzungen += len(item[1])
+            return item
+        except BawueApiError as e:
+            logger.error("API Error: %s", e)
+            if e.status == 422:
+                logger.error("Unprocessable Entity for date %s", item[0])
+                self.log_item(item, True)
+            elif e.status == 401:
+                logger.critical("Authentication failed. Check your API key.")
+            self._failed_dates += 1
+            self._failed_items.append(
+                FailedItem(item_id=item[0].date().isoformat(), titel=None, reason=api_exception_reason(e))
+            )
+            return None
+        except Exception as e:
+            logger.error("Unexpected error sending item to API: %s", e)
+            self._failed_dates += 1
+            self._failed_items.append(
+                FailedItem(item_id=item[0].date().isoformat(), titel=None, reason=api_exception_reason(e))
+            )
+            return None
 
 
 def _print_sitzungen_summary(

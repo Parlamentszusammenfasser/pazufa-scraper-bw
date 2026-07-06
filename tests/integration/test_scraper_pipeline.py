@@ -10,10 +10,9 @@ from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 import responses
-from openapi_client.models.stationstyp import Stationstyp
-from openapi_client.models.vorgangstyp import Vorgangstyp
 
 from bawue.parlis_client import BASE_URL, BROWSE_URL, REPORT_URL
+from bawue.types import Stationstyp, Vorgangstyp
 
 pytestmark = pytest.mark.integration
 
@@ -69,13 +68,14 @@ class TestGesetzgebungFullLifecycle:
         expected_api_id = str(uuid5(NAMESPACE_URL, "V-98001"))
         assert vg["api_id"] == expected_api_id
         assert vg["titel"] == "Gesetz zur Förderung erneuerbarer Energien"
-        assert vg["typ"] == Vorgangstyp.GG_MINUS_LAND_MINUS_PARL.value
+        assert vg["typ"] == Vorgangstyp.GG_LAND_PARL.value
         assert vg["wahlperiode"] == 17
         assert vg["verfassungsaendernd"] is False
 
-        # Initiatoren
-        assert len(vg["initiatoren"]) == 1
-        assert vg["initiatoren"][0]["organisation"] == "Fraktion GRÜNE, Fraktion CDU"
+        # Initiatoren — a comma-separated Fraktion list is parsed into separate authors
+        assert len(vg["initiatoren"]) == 2
+        assert vg["initiatoren"][0]["organisation"] == "Fraktion GRÜNE"
+        assert vg["initiatoren"][1]["organisation"] == "Fraktion CDU"
 
         # 4 stations from fundstellen
         assert len(vg["stationen"]) == 4
@@ -101,10 +101,10 @@ class TestGesetzgebungFullLifecycle:
         stations = mock_backend.vorgaenge[0]["stationen"]
         station_types = [s["typ"] for s in stations]
 
-        assert station_types[0] == Stationstyp.PARL_MINUS_INITIATIV.value  # Gesetzentwurf
-        assert station_types[1] == Stationstyp.PARL_MINUS_VOLLVLSGN.value  # Erste Beratung
-        assert station_types[2] == Stationstyp.PARL_MINUS_AUSSCHBER.value  # Beschlussempfehlung und Bericht
-        assert station_types[3] == Stationstyp.PARL_MINUS_AKZEPTANZ.value  # Zustimmung
+        assert station_types[0] == Stationstyp.PARL_INITIATIV.value  # Gesetzentwurf
+        assert station_types[1] == Stationstyp.PARL_VOLLVLSGN.value  # Erste Beratung
+        assert station_types[2] == Stationstyp.PARL_AUSSCHBER.value  # Beschlussempfehlung und Bericht
+        assert station_types[3] == Stationstyp.PARL_AKZEPTANZ.value  # Zustimmung
 
     @responses.activate
     @pytest.mark.asyncio
@@ -127,7 +127,7 @@ class TestGesetzgebungFullLifecycle:
         assert vg["initiatoren"][0]["organisation"] == "Landesregierung"
 
         station = vg["stationen"][0]
-        assert station["typ"] == Stationstyp.PREPARL_MINUS_REGBSL.value
+        assert station["typ"] == Stationstyp.PREPARL_REGBSL.value
 
 
 # ===================================================================
@@ -159,10 +159,15 @@ class TestKleineAnfrage:
     @responses.activate
     @pytest.mark.asyncio
     async def test_kleine_anfrage_with_answer(self, scraper, mock_backend, parlis_fixtures):
-        """Anfrage + Antwort fundstellen produce 2 stations with documents."""
+        """Anfrage + Antwort fundstellen produce 2 stations with documents.
+
+        The Antwort maps to a SONSTIG station, which the default
+        filter-sonstig-stations would drop; disable it here so this test can
+        verify that both fundstellen are extracted into stations.
+        """
         fx = parlis_fixtures("kleine_anfrage")
         _mock_parlis_for_types({"Kleine Anfrage": (fx["search_json"], fx["results_html"])})
-        s = await scraper(["Kleine Anfrage"])
+        s = await scraper(["Kleine Anfrage"], filter_sonstig=False)
         try:
             with patch("bawue.bawue_vorgaenge_scraper.date") as mock_date:
                 mock_date.today.return_value = date(2026, 1, 31)
@@ -208,7 +213,7 @@ class TestAntrag:
 
         # Second station should be Ausschuss
         ausschuss_station = vg["stationen"][1]
-        assert ausschuss_station["typ"] == Stationstyp.PARL_MINUS_AUSSCHBER.value
+        assert ausschuss_station["typ"] == Stationstyp.PARL_AUSSCHBER.value
         assert "Ausschuss" in ausschuss_station["gremium"]["name"]
 
 
@@ -262,7 +267,7 @@ class TestPipelineBehavior:
         assert mock_backend.call_count == 3
 
         typen = sorted(vg["typ"] for vg in mock_backend.vorgaenge)
-        assert typen.count(Vorgangstyp.GG_MINUS_LAND_MINUS_PARL.value) == 1
+        assert typen.count(Vorgangstyp.GG_LAND_PARL.value) == 1
         assert typen.count(Vorgangstyp.SONSTIG.value) == 2  # Kleine Anfrage + Antrag
 
     @responses.activate
@@ -332,6 +337,9 @@ class TestPipelineBehavior:
         assert doc["drucksnr"] == "17/12001"
         assert doc["link"] == "https://www.landtag-bw.de/files/gg1-entwurf.pdf"
 
-        # Station 1: Erste Beratung — no PDF (empty href)
+        # Station 1: Erste Beratung — carries a Redeprotokoll placeholder document
+        # (the fundstelle references a Plenarprotokoll; volltext/hash are filled by
+        # later LLM enrichment, which is disabled in this test).
         erste_beratung = stations[1]
-        assert len(erste_beratung["dokumente"]) == 0
+        assert len(erste_beratung["dokumente"]) == 1
+        assert erste_beratung["dokumente"][0]["typ"] == "redeprotokoll"

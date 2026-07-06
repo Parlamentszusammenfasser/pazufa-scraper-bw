@@ -11,8 +11,8 @@ services:
     # References the image build from `make package`
     # to re-create the image with the latest code run `make clean package`
     image: bawue-scraper:latest
-    # Override entrypoint to drop --once so the framework loops via cycle-time-s
-    entrypoint: ["sh", "-c", "python -m collector --config-file config.toml 2>&1 | tee /app/locallogs/stdout.log"]
+    # Override entrypoint to drop --once so the scraper loops via cycle-time-s
+    entrypoint: ["sh", "-c", "python -m bawue --config-file config.toml 2>&1 | tee /app/locallogs/stdout.log"]
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -29,7 +29,7 @@ services:
     volumes:
       # Mount staging config over the baked-in config.toml
       - ./config.staging.toml:/app/config.toml:ro
-      # Persist locallogs (JSONL collector output + stdout.log) to host
+      # Persist locallogs (JSONL scraper output + stdout.log) to host
       - ./locallogs:/app/locallogs
     depends_on:
       - redis

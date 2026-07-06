@@ -4,8 +4,8 @@ import logging
 import re
 
 import requests
-from collector.config import CollectorConfiguration
 
+from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 _ENV_PATTERN = re.compile(r"config\.(\w+)\.toml$")
 
 
-def _extract_environment(config: CollectorConfiguration) -> str:
+def _extract_environment(config: BawueConfig) -> str:
     config_file = getattr(config, "config_file", None)
     if config_file:
         m = _ENV_PATTERN.search(str(config_file))
@@ -23,7 +23,7 @@ def _extract_environment(config: CollectorConfiguration) -> str:
 
 
 def send_mattermost_summary(
-    config: CollectorConfiguration,
+    config: BawueConfig,
     title: str,
     lines: list[str],
 ) -> None:

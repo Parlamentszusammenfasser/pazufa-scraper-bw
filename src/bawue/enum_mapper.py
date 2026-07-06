@@ -6,17 +6,15 @@ The matching functions use case-insensitive substring matching against dictionar
 
 import re
 
-from openapi_client.models.doktyp import Doktyp
-from openapi_client.models.stationstyp import Stationstyp
-from openapi_client.models.vorgangstyp import Vorgangstyp
+from bawue.types import Doktyp, Stationstyp, Vorgangstyp
 
 # ---------------------------------------------------------------------------
 # Vorgangstyp mapping: PARLIS Vorgangstyp string → PaZuFa Vorgangstyp
 # ---------------------------------------------------------------------------
 VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
-    "Gesetzgebung": Vorgangstyp.GG_MINUS_LAND_MINUS_PARL,
-    "Haushaltsgesetzgebung": Vorgangstyp.GG_MINUS_LAND_MINUS_PARL,
-    "Volksantrag": Vorgangstyp.GG_MINUS_LAND_MINUS_VOLK,
+    "Gesetzgebung": Vorgangstyp.GG_LAND_PARL,
+    "Haushaltsgesetzgebung": Vorgangstyp.GG_LAND_PARL,
+    "Volksantrag": Vorgangstyp.GG_LAND_VOLK,
     "Antrag": Vorgangstyp.SONSTIG,
     "Antrag der Landesregierung/eines Ministeriums": Vorgangstyp.SONSTIG,
     "Antrag des Rechnungshofs": Vorgangstyp.SONSTIG,
@@ -52,25 +50,25 @@ VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
 # Stationstyp-Referenz: Alle 16 Enum-Werte aus der OpenAPI-Spezifikation
 #
 # Vorparlamentarisch (preparl-*):
-#   PREPARL_MINUS_REGENT  — Regierungsentwurf (Gesetzentwurf der Landesregierung)
-#   PREPARL_MINUS_ECKPUP  — Eckpunktepapier (Vorentwurf mit Kernpunkten)
-#   PREPARL_MINUS_REGBSL  — Regierungsbeschluss (Kabinettsbeschluss)
-#   PREPARL_MINUS_VBEGDE  — Verbändebeteiligung / Begründung (Anhörung externer Verbände)
+#   PREPARL_REGENT  — Regierungsentwurf (Gesetzentwurf der Landesregierung)
+#   PREPARL_ECKPUP  — Eckpunktepapier (Vorentwurf mit Kernpunkten)
+#   PREPARL_REGBSL  — Regierungsbeschluss (Kabinettsbeschluss)
+#   PREPARL_VBEGDE  — Verbändebeteiligung / Begründung (Anhörung externer Verbände)
 #
 # Parlamentarisch (parl-*):
-#   PARL_MINUS_INITIATIV  — Parlamentarische Initiative (Gesetzentwurf, Antrag, Anfrage)
-#   PARL_MINUS_AUSSCHBER  — Ausschussberatung (Beratung in Fachausschüssen)
-#   PARL_MINUS_VOLLVLSGN  — Vollversammlung / Lesung (1./2./3. Lesung im Plenum)
-#   PARL_MINUS_AKZEPTANZ  — Akzeptanz (Verabschiedung / Annahme durch den Landtag)
-#   PARL_MINUS_ABLEHNUNG  — Ablehnung (Ablehnung durch den Landtag)
-#   PARL_MINUS_ZURUECKGZ  — Zurückgezogen (Vorgang vom Initiator zurückgezogen)
-#   PARL_MINUS_GGENTWURF  — Gegenentwurf (Alternativentwurf zu einem Gesetzentwurf)
+#   PARL_INITIATIV  — Parlamentarische Initiative (Gesetzentwurf, Antrag, Anfrage)
+#   PARL_AUSSCHBER  — Ausschussberatung (Beratung in Fachausschüssen)
+#   PARL_VOLLVLSGN  — Vollversammlung / Lesung (1./2./3. Lesung im Plenum)
+#   PARL_AKZEPTANZ  — Akzeptanz (Verabschiedung / Annahme durch den Landtag)
+#   PARL_ABLEHNUNG  — Ablehnung (Ablehnung durch den Landtag)
+#   PARL_ZURUECKGZ  — Zurückgezogen (Vorgang vom Initiator zurückgezogen)
+#   PARL_GGENTWURF  — Gegenentwurf (Alternativentwurf zu einem Gesetzentwurf)
 #
 # Nachparlamentarisch (postparl-*):
-#   POSTPARL_MINUS_VESJA  — Volksentscheid Ja (Referendum angenommen)
-#   POSTPARL_MINUS_VESNE  — Volksentscheid Nein (Referendum abgelehnt)
-#   POSTPARL_MINUS_GSBLT  — Gesetzblatt (Verkündung im Gesetzblatt)
-#   POSTPARL_MINUS_KRAFT  — Inkrafttreten (Gesetz tritt in Kraft)
+#   POSTPARL_VESJA  — Volksentscheid Ja (Referendum angenommen)
+#   POSTPARL_VESNE  — Volksentscheid Nein (Referendum abgelehnt)
+#   POSTPARL_GSBLT  — Gesetzblatt (Verkündung im Gesetzblatt)
+#   POSTPARL_KRAFT  — Inkrafttreten (Gesetz tritt in Kraft)
 #
 # Sonstige:
 #   SONSTIG               — Nicht zuordenbare Stationen
@@ -80,31 +78,31 @@ VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
 # shorter patterns. "Gesetzentwurf" must come after "Erste/Zweite/Dritte Beratung".
 # ---------------------------------------------------------------------------
 STATIONSTYP_MAP: dict[str, Stationstyp] = {
-    "Gesetzentwurf": Stationstyp.PARL_MINUS_INITIATIV,
-    "Antrag": Stationstyp.PARL_MINUS_INITIATIV,
-    "Anträge": Stationstyp.PARL_MINUS_INITIATIV,
-    "Kleine Anfrage": Stationstyp.PARL_MINUS_INITIATIV,
-    "Große Anfrage": Stationstyp.PARL_MINUS_INITIATIV,
-    "Mündliche Anfrage": Stationstyp.PARL_MINUS_INITIATIV,
-    "Volksantrag": Stationstyp.PARL_MINUS_INITIATIV,
-    "Überweisung": Stationstyp.PARL_MINUS_VOLLVLSGN,
-    "Erste Beratung": Stationstyp.PARL_MINUS_VOLLVLSGN,
-    "Zweite Beratung": Stationstyp.PARL_MINUS_VOLLVLSGN,
-    "Dritte Beratung": Stationstyp.PARL_MINUS_VOLLVLSGN,
-    "Beratung": Stationstyp.PARL_MINUS_VOLLVLSGN,
-    "Beschlussempfehlung und Bericht": Stationstyp.PARL_MINUS_AUSSCHBER,
-    "Bericht und Empfehlungen": Stationstyp.PARL_MINUS_AUSSCHBER,
-    "Ausschussberatung": Stationstyp.PARL_MINUS_AUSSCHBER,
-    "Gesetzesbeschluss": Stationstyp.PARL_MINUS_AKZEPTANZ,
-    "Beschluss des Landtags in": Stationstyp.PARL_MINUS_VOLLVLSGN,
-    "Beschluss des Landtags": Stationstyp.PARL_MINUS_AKZEPTANZ,
-    "Zustimmung": Stationstyp.PARL_MINUS_AKZEPTANZ,
-    "Annahme": Stationstyp.PARL_MINUS_AKZEPTANZ,
-    "Ablehnung": Stationstyp.PARL_MINUS_ABLEHNUNG,
-    "Bekanntmachung": Stationstyp.POSTPARL_MINUS_GSBLT,
-    "Gesetzblatt": Stationstyp.POSTPARL_MINUS_GSBLT,
-    "Gesetz": Stationstyp.POSTPARL_MINUS_GSBLT,
-    "Inkrafttreten": Stationstyp.POSTPARL_MINUS_KRAFT,
+    "Gesetzentwurf": Stationstyp.PARL_INITIATIV,
+    "Antrag": Stationstyp.PARL_INITIATIV,
+    "Anträge": Stationstyp.PARL_INITIATIV,
+    "Kleine Anfrage": Stationstyp.PARL_INITIATIV,
+    "Große Anfrage": Stationstyp.PARL_INITIATIV,
+    "Mündliche Anfrage": Stationstyp.PARL_INITIATIV,
+    "Volksantrag": Stationstyp.PARL_INITIATIV,
+    "Überweisung": Stationstyp.PARL_VOLLVLSGN,
+    "Erste Beratung": Stationstyp.PARL_VOLLVLSGN,
+    "Zweite Beratung": Stationstyp.PARL_VOLLVLSGN,
+    "Dritte Beratung": Stationstyp.PARL_VOLLVLSGN,
+    "Beratung": Stationstyp.PARL_VOLLVLSGN,
+    "Beschlussempfehlung und Bericht": Stationstyp.PARL_AUSSCHBER,
+    "Bericht und Empfehlungen": Stationstyp.PARL_AUSSCHBER,
+    "Ausschussberatung": Stationstyp.PARL_AUSSCHBER,
+    "Gesetzesbeschluss": Stationstyp.PARL_AKZEPTANZ,
+    "Beschluss des Landtags in": Stationstyp.PARL_VOLLVLSGN,
+    "Beschluss des Landtags": Stationstyp.PARL_AKZEPTANZ,
+    "Zustimmung": Stationstyp.PARL_AKZEPTANZ,
+    "Annahme": Stationstyp.PARL_AKZEPTANZ,
+    "Ablehnung": Stationstyp.PARL_ABLEHNUNG,
+    "Bekanntmachung": Stationstyp.POSTPARL_GSBLT,
+    "Gesetzblatt": Stationstyp.POSTPARL_GSBLT,
+    "Gesetz": Stationstyp.POSTPARL_GSBLT,
+    "Inkrafttreten": Stationstyp.POSTPARL_KRAFT,
 }
 
 # Sorted keys longest-first for greedy matching
@@ -168,7 +166,7 @@ def map_stationstyp(fundstelle_text: str, initiator: str | None = None) -> Stati
     for key in _STATIONSTYP_KEYS_SORTED:
         if key.lower() in text_lower:
             if key == "Gesetzentwurf" and initiator and "Landesregierung" in initiator:
-                return Stationstyp.PREPARL_MINUS_REGBSL
+                return Stationstyp.PREPARL_REGBSL
             return STATIONSTYP_MAP[key]
     return Stationstyp.SONSTIG
 
@@ -179,6 +177,6 @@ def map_dokumententyp(context: str, is_vorparlamentarisch: bool = False) -> Dokt
     for key in _DOKUMENTENTYP_KEYS_SORTED:
         if key.lower() in context_lower:
             if key == "Gesetzentwurf" and is_vorparlamentarisch:
-                return Doktyp.PREPARL_MINUS_ENTWURF
+                return Doktyp.PREPARL_ENTWURF
             return DOKUMENTENTYP_MAP[key]
     return Doktyp.SONSTIG

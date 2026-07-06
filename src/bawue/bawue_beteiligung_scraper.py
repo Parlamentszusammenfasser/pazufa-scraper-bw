@@ -8,22 +8,8 @@ from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
-from collector.config import CollectorConfiguration
-from collector.interface import VorgangsScraper
-from openapi_client.models import (
-    Autor,
-    Doktyp,
-    Dokument,
-    Gremium,
-    Parlament,
-    Station,
-    StationDokumenteInner,
-    Stationstyp,
-    VgIdent,
-    Vorgang,
-    Vorgangstyp,
-)
 
+from bawue.api import build_client
 from bawue.bawue_dok import LLMMetrics, clear_hash_cache
 from bawue.beteiligung_client import BASE_URL, BeteiligungClient
 from bawue.beteiligung_parser import (
@@ -31,13 +17,25 @@ from bawue.beteiligung_parser import (
     RawBeteiligungProcess,
     parse_process_detail,
 )
+from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.notifications import send_mattermost_summary
+from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, format_duration, format_failed_section
 from bawue.types import (
     TODO_MARKER,
+    Autor,
+    Doktyp,
+    Dokument,
+    Gremium,
+    Parlament,
     ReservedGremium,
+    Station,
+    Stationstyp,
+    VgIdent,
+    Vorgang,
+    Vorgangstyp,
     canonicalize_organisation,
     is_verfassungsaendernd,
     todo_if_blank,
@@ -56,7 +54,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
     Auto-discovered by the framework when placed in the scrapers directory.
     """
 
-    def __init__(self, config: CollectorConfiguration, session: aiohttp.ClientSession) -> None:
+    def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         beteiligung_config = load_toml_section(config, "beteiligung")
         self._wahlperiode = beteiligung_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
         delay = beteiligung_config.get("request-delay-s", DEFAULT_BETEILIGUNG_DELAY)
@@ -65,6 +63,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         super().__init__(config, uuid.UUID(config.collector_id), listing_urls, session)
 
         self._client = BeteiligungClient(wahlperiode=self._wahlperiode, request_delay_s=delay)
+        self._api_client = build_client(config.database_url, config.api_key)
         self._raw_cache: dict[str, RawBeteiligungProcess] = {}
 
         self._upload_limiter = create_upload_limiter()
@@ -89,10 +88,12 @@ class BawueBeteiligungScraper(VorgangsScraper):
             self._llm = LLMConnector(
                 model=config.llm_model,
                 api_key=llm_key,
-                api_base=llm_base_url,
                 rate_limit_max_calls=5,
                 rate_limit_window_seconds=60,
             )
+            # corelib v0.1.2 LLMConnector takes no api_base kwarg; bawue_dok reads
+            # it off the instance (getattr) and passes it to litellm at call time.
+            self._llm.api_base = llm_base_url
 
     async def run(self) -> None:
         start = time.monotonic()
@@ -113,7 +114,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
         outcome = upload_vorgang(
-            self.config.oapiconfig,
+            self._api_client,
             self.scraper_id,
             self._upload_limiter,
             item,
@@ -196,14 +197,14 @@ class BawueBeteiligungScraper(VorgangsScraper):
         )
 
         # Build documents
-        dokumente: list[StationDokumenteInner] = []
+        dokumente: list[Dokument] = []
         trojaner_scores: list[int] = []
         for pdf in detail.pdf_links:
             dok = Dokument(
                 titel=todo_if_blank(pdf["title"]),
                 volltext=TODO_MARKER,
-                hash=TODO_MARKER,
-                typ=Doktyp.PREPARL_MINUS_ENTWURF,
+                hash_=TODO_MARKER,
+                typ=Doktyp.PREPARL_ENTWURF,
                 zp_modifiziert=zp_start,
                 zp_referenz=zp_start,
                 link=pdf["url"],
@@ -229,7 +230,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
                 except Exception:
                     logger.warning("Document enrichment failed for %s", pdf["url"])
 
-            dokumente.append(StationDokumenteInner(dok))
+            dokumente.append(dok)
 
         gremium = Gremium(
             parlament=Parlament.BW,
@@ -238,7 +239,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         )
 
         station = Station(
-            typ=Stationstyp.PREPARL_MINUS_REGENT,
+            typ=Stationstyp.PREPARL_REGENT,
             dokumente=dokumente,
             zp_start=zp_start,
             gremium=gremium,
@@ -252,7 +253,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             api_id=str(api_id),
             titel=todo_if_blank(detail.title),
             kurztitel=slug,
-            typ=Vorgangstyp.GG_MINUS_LAND_MINUS_PARL,
+            typ=Vorgangstyp.GG_LAND_PARL,
             wahlperiode=self._wahlperiode,
             verfassungsaendernd=is_verfassungsaendernd(detail.title),
             initiatoren=ministry_autoren,

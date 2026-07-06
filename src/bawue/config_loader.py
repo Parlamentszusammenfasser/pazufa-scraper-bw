@@ -3,13 +3,14 @@
 import logging
 
 import toml
-from collector.config import CollectorConfiguration
+
+from bawue.config import BawueConfig
 
 logger = logging.getLogger(__name__)
 
 
-def load_toml_section(config: CollectorConfiguration, section: str) -> dict:
-    """Load a named section from the collector's TOML config file.
+def load_toml_section(config: BawueConfig, section: str) -> dict:
+    """Load a named section from the BaWue config's TOML file.
 
     Returns the section dict, or {} if the file is missing or the section absent.
     """

@@ -4,6 +4,61 @@ import re
 from enum import StrEnum
 from typing import TypedDict
 
+# ---------------------------------------------------------------------------
+# OpenAPI model/enum import surface (migration Phase 0.3 — type-alias adapter).
+#
+# All BaWue code imports the generated API models/enums from *here* rather than
+# directly from the generated client. Phase 1 flipped this single re-export from
+# the collector's `openapi_client.models` (openapi-generator-cli, Pydantic v2,
+# spec v0.2.2) to `pazufa_corelib.api_client.models.*` (openapi-python-client,
+# attrs, spec v0.2.3).
+#
+# Consequences of the new (attrs) client, handled across the call sites:
+#   - Optional fields default to `UNSET` (not `None`); `UNSET` is omitted from
+#     `to_dict()` output, a bare `None` is serialised as JSON null.
+#   - `StationDokumenteInner` no longer exists: `Station.dokumente` is now a
+#     plain `list[Dokument | str]` (append the `Dokument` directly, no wrapper;
+#     read attributes off the item, not off a `.actual_instance` accessor).
+#   - `Dokument(hash=...)` is now `Dokument(hash_=...)`.
+# ---------------------------------------------------------------------------
+from pazufa_corelib.api_client.models.autor import Autor
+from pazufa_corelib.api_client.models.doktyp import Doktyp
+from pazufa_corelib.api_client.models.dokument import Dokument
+from pazufa_corelib.api_client.models.gremium import Gremium
+from pazufa_corelib.api_client.models.parlament import Parlament
+from pazufa_corelib.api_client.models.sitzung import Sitzung
+from pazufa_corelib.api_client.models.station import Station
+from pazufa_corelib.api_client.models.stationstyp import Stationstyp
+from pazufa_corelib.api_client.models.vg_ident import VgIdent
+from pazufa_corelib.api_client.models.vorgang import Vorgang
+from pazufa_corelib.api_client.models.vorgangstyp import Vorgangstyp
+from pazufa_corelib.api_client.types import UNSET, Unset
+
+__all__ = [
+    "TODO_MARKER",
+    "UNSET",
+    "Autor",
+    "CanonicalOrganisation",
+    "Doktyp",
+    "Dokument",
+    "Gremium",
+    "Parlament",
+    "RawFundstelle",
+    "RawVorgang",
+    "ReservedGremium",
+    "Sitzung",
+    "Station",
+    "Stationstyp",
+    "Unset",
+    "VgIdent",
+    "Vorgang",
+    "Vorgangstyp",
+    "canonicalize_organisation",
+    "is_verfassungsaendernd",
+    "none_if_blank",
+    "todo_if_blank",
+]
+
 
 class CanonicalOrganisation(StrEnum):
     """Canonical form for the well-known finite set of Baden-Württemberg
@@ -146,11 +201,11 @@ class ReservedGremium(StrEnum):
     """Canonical Gremium names reserved by the community DoD + OpenAPI spec.
 
     Sources:
-    - `vendor/pazufa-collector-core/openapi.yaml` field `Gremium.name`:
+    - PaZuFa OpenAPI spec (v0.2.3) field `Gremium.name`:
       "'plenum', 'regierung', 'volk' sind reservierte namen".
     - Community DoD wiki: adds `gesetzesblatt` "für die Veröffentlichung im
       Gesetzesblatt" and describes `plenum` as the default catch-all.
-    - BY reference scraper (`vendor/pazufa-collector/collector/scrapers/bylt_scraper.py`):
+    - BY reference scraper (pazufa-collector's `bylt_scraper.py`):
       emits `gesetzesblatt` literally for `postparl-gsblt` stations and `plenum`
       for all other non-committee stations.
 

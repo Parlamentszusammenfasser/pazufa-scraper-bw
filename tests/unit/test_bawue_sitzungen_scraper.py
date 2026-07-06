@@ -5,7 +5,6 @@ import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import openapi_client
 import pytest
 import pytest_asyncio
 
@@ -36,6 +35,7 @@ def _make_scraper() -> BawueSitzungenScraper:
     scraper._failed_dates = 0
     scraper._published_sitzungen = 0
     scraper._failed_items = []
+    scraper._client = MagicMock()
     return scraper
 
 
@@ -212,54 +212,33 @@ class TestSendResult:
         scraper.config = MagicMock()
         scraper.config.api_obj_log = None
 
-        mock_api_instance = MagicMock()
-        mock_api_instance.kal_date_put = MagicMock(return_value="ok")
-
-        with (
-            patch("bawue.bawue_sitzungen_scraper.openapi_client.ApiClient") as mock_client_cls,
-            patch(
-                "bawue.bawue_sitzungen_scraper.openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi",
-                return_value=mock_api_instance,
-            ),
-        ):
-            mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client_cls.return_value)
-            mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
+        with patch("bawue.bawue_sitzungen_scraper.put_kalender") as mock_put:
             item = (datetime.datetime(2026, 2, 25, 10, 0, tzinfo=datetime.UTC), [])
             await scraper.send_result(item)
 
-            call_kwargs = mock_api_instance.kal_date_put.call_args
-            # Verify Parlament.BW is used, not BY
-            from openapi_client.models import Parlament
+            # put_kalender(client, scraper_id, parlament, datum, sitzungen) — positional.
+            from bawue.types import Parlament
 
-            assert call_kwargs.kwargs.get("parlament") or call_kwargs[1].get("parlament")
-            # Check the actual value
-            args = call_kwargs[1] if call_kwargs[1] else {}
-            kwargs = call_kwargs.kwargs if hasattr(call_kwargs, "kwargs") else {}
-            all_args = {**args, **kwargs}
-            assert all_args["parlament"] == Parlament.BW
+            call = mock_put.call_args
+            assert call.args[2] == Parlament.BW
+            # datum is passed as a date (not a datetime).
+            assert call.args[3] == datetime.date(2026, 2, 25)
 
     @pytest.mark.asyncio
     async def test_send_result_422_returns_none_and_logs(self, caplog):
+        from bawue.api import BawueApiError
+
         scraper = _make_scraper()
         scraper.config = MagicMock()
         scraper.log_item = MagicMock()
 
-        exc = openapi_client.ApiException(status=422, reason="Unprocessable Entity")
-        mock_api_instance = MagicMock()
-        mock_api_instance.kal_date_put = MagicMock(side_effect=exc)
-
         with (
-            patch("bawue.bawue_sitzungen_scraper.openapi_client.ApiClient") as mock_client_cls,
             patch(
-                "bawue.bawue_sitzungen_scraper.openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi",
-                return_value=mock_api_instance,
+                "bawue.bawue_sitzungen_scraper.put_kalender",
+                side_effect=BawueApiError(422, b"Unprocessable Entity", "kal_date_put"),
             ),
             caplog.at_level(logging.ERROR, logger="bawue.bawue_sitzungen_scraper"),
         ):
-            mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client_cls.return_value)
-            mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
             item = (datetime.datetime(2026, 2, 25, 10, 0, tzinfo=datetime.UTC), [])
             result = await scraper.send_result(item)
 
@@ -268,25 +247,19 @@ class TestSendResult:
 
     @pytest.mark.asyncio
     async def test_send_result_401_logs_critical(self, caplog):
+        from bawue.api import BawueApiError
+
         scraper = _make_scraper()
         scraper.config = MagicMock()
         scraper.log_item = MagicMock()
 
-        exc = openapi_client.ApiException(status=401, reason="Unauthorized")
-        mock_api_instance = MagicMock()
-        mock_api_instance.kal_date_put = MagicMock(side_effect=exc)
-
         with (
-            patch("bawue.bawue_sitzungen_scraper.openapi_client.ApiClient") as mock_client_cls,
             patch(
-                "bawue.bawue_sitzungen_scraper.openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi",
-                return_value=mock_api_instance,
+                "bawue.bawue_sitzungen_scraper.put_kalender",
+                side_effect=BawueApiError(401, b"Unauthorized", "kal_date_put"),
             ),
             caplog.at_level(logging.CRITICAL, logger="bawue.bawue_sitzungen_scraper"),
         ):
-            mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client_cls.return_value)
-            mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
             item = (datetime.datetime(2026, 2, 25, 10, 0, tzinfo=datetime.UTC), [])
             result = await scraper.send_result(item)
 
@@ -295,24 +268,16 @@ class TestSendResult:
 
     @pytest.mark.asyncio
     async def test_send_result_records_failed_item_with_reason(self):
+        from bawue.api import BawueApiError
+
         scraper = _make_scraper()
         scraper.config = MagicMock()
         scraper.log_item = MagicMock()
 
-        exc = openapi_client.ApiException(status=500, reason="Internal Server Error")
-        mock_api_instance = MagicMock()
-        mock_api_instance.kal_date_put = MagicMock(side_effect=exc)
-
-        with (
-            patch("bawue.bawue_sitzungen_scraper.openapi_client.ApiClient") as mock_client_cls,
-            patch(
-                "bawue.bawue_sitzungen_scraper.openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi",
-                return_value=mock_api_instance,
-            ),
+        with patch(
+            "bawue.bawue_sitzungen_scraper.put_kalender",
+            side_effect=BawueApiError(500, b"Internal Server Error", "kal_date_put"),
         ):
-            mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client_cls.return_value)
-            mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
             item = (datetime.datetime(2026, 3, 12, 10, 0, tzinfo=datetime.UTC), [])
             await scraper.send_result(item)
 
@@ -326,20 +291,13 @@ class TestSendResult:
         scraper = _make_scraper()
         scraper.config = MagicMock()
 
-        mock_api_instance = MagicMock()
-        mock_api_instance.kal_date_put = MagicMock(side_effect=Exception("boom"))
-
         with (
-            patch("bawue.bawue_sitzungen_scraper.openapi_client.ApiClient") as mock_client_cls,
             patch(
-                "bawue.bawue_sitzungen_scraper.openapi_client.api.collector_schnittstellen_api.CollectorSchnittstellenApi",
-                return_value=mock_api_instance,
+                "bawue.bawue_sitzungen_scraper.put_kalender",
+                side_effect=Exception("boom"),
             ),
             caplog.at_level(logging.ERROR, logger="bawue.bawue_sitzungen_scraper"),
         ):
-            mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client_cls.return_value)
-            mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
             item = (datetime.datetime(2026, 2, 25, 10, 0, tzinfo=datetime.UTC), [])
             result = await scraper.send_result(item)
 

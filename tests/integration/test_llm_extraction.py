@@ -12,11 +12,9 @@ from datetime import UTC, datetime
 
 import aiohttp
 import pytest
-from openapi_client.models.autor import Autor
-from openapi_client.models.doktyp import Doktyp
-from openapi_client.models.dokument import Dokument
 
 from bawue.bawue_dok import enrich_dokument
+from bawue.types import Autor, Doktyp, Dokument
 
 pytestmark = pytest.mark.integration
 
@@ -33,7 +31,7 @@ def _make_test_dokument(typ: Doktyp = Doktyp.ENTWURF) -> Dokument:
     return Dokument(
         titel="Gesetz über einen Ausgleich im Zusammenhang mit Coronasoforthilfen des Landes Baden-Württemberg",
         volltext="",
-        hash="",
+        hash_="",
         typ=typ,
         zp_modifiziert=datetime(2026, 1, 15, tzinfo=UTC),
         zp_referenz=datetime(2026, 1, 15, tzinfo=UTC),
@@ -60,11 +58,12 @@ class TestEntwurfEnrichment:
         llm = _make_llm()
 
         async with aiohttp.ClientSession() as session:
-            enriched = await enrich_dokument(session, llm, dok)
+            result = await enrich_dokument(session, llm, dok)
+        enriched = result.dokument
 
         # Text extraction worked
         assert len(enriched.volltext) > 100, "volltext should contain substantial text"
-        assert len(enriched.hash) == 64, "hash should be SHA256 hex digest"
+        assert len(enriched.hash_) == 64, "hash should be SHA256 hex digest"
 
         # LLM extraction worked
         assert enriched.zusammenfassung is not None
@@ -83,7 +82,7 @@ class TestEntwurfEnrichment:
         print(f"Drucksnr:        {enriched.drucksnr}")
         print(f"Typ:             {enriched.typ}")
         print(f"Schlagworte:     {enriched.schlagworte}")
-        print(f"Hash:            {enriched.hash}")
+        print(f"Hash:            {enriched.hash_}")
         print(f"Volltext:        {enriched.volltext[:200]}…")
         print(f"Zusammenfassung: {enriched.zusammenfassung}")
         print("=" * 72)
@@ -95,7 +94,8 @@ class TestEntwurfEnrichment:
         llm = _make_llm()
 
         async with aiohttp.ClientSession() as session:
-            enriched = await enrich_dokument(session, llm, dok)
+            result = await enrich_dokument(session, llm, dok)
+        enriched = result.dokument
 
         assert enriched.titel == (
             "Gesetz über einen Ausgleich im Zusammenhang mit Coronasoforthilfen des Landes Baden-Württemberg"
@@ -116,4 +116,4 @@ class TestEntwurfEnrichment:
             e1 = await enrich_dokument(session, llm, dok)
             e2 = await enrich_dokument(session, llm, dok)
 
-        assert e1.hash == e2.hash
+        assert e1.dokument.hash_ == e2.dokument.hash_

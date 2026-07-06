@@ -1,9 +1,6 @@
 """Tests for the PARLIS→PaZuFa enum mapper."""
 
 import pytest
-from openapi_client.models.doktyp import Doktyp
-from openapi_client.models.stationstyp import Stationstyp
-from openapi_client.models.vorgangstyp import Vorgangstyp
 
 from bawue.enum_mapper import (
     VORGANGSTYP_MAP,
@@ -13,7 +10,10 @@ from bawue.enum_mapper import (
 )
 from bawue.types import (
     CanonicalOrganisation,
+    Doktyp,
     ReservedGremium,
+    Stationstyp,
+    Vorgangstyp,
     canonicalize_organisation,
     is_verfassungsaendernd,
 )
@@ -23,9 +23,9 @@ class TestVorgangstypMapping:
     @pytest.mark.parametrize(
         "parlis_typ,expected",
         [
-            ("Gesetzgebung", Vorgangstyp.GG_MINUS_LAND_MINUS_PARL),
-            ("Haushaltsgesetzgebung", Vorgangstyp.GG_MINUS_LAND_MINUS_PARL),
-            ("Volksantrag", Vorgangstyp.GG_MINUS_LAND_MINUS_VOLK),
+            ("Gesetzgebung", Vorgangstyp.GG_LAND_PARL),
+            ("Haushaltsgesetzgebung", Vorgangstyp.GG_LAND_PARL),
+            ("Volksantrag", Vorgangstyp.GG_LAND_VOLK),
             ("Antrag", Vorgangstyp.SONSTIG),
             ("Antrag der Landesregierung/eines Ministeriums", Vorgangstyp.SONSTIG),
             ("Antrag des Rechnungshofs", Vorgangstyp.SONSTIG),
@@ -71,86 +71,86 @@ class TestStationstypMapping:
     @pytest.mark.parametrize(
         "text,initiator,expected",
         [
-            ("Erste Beratung   Plenarprotokoll 17/141 05.02.2026", None, Stationstyp.PARL_MINUS_VOLLVLSGN),
-            ("Zweite Beratung   Plenarprotokoll 17/142 06.02.2026", None, Stationstyp.PARL_MINUS_VOLLVLSGN),
+            ("Erste Beratung   Plenarprotokoll 17/141 05.02.2026", None, Stationstyp.PARL_VOLLVLSGN),
+            ("Zweite Beratung   Plenarprotokoll 17/142 06.02.2026", None, Stationstyp.PARL_VOLLVLSGN),
             (
                 "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
                 None,
-                Stationstyp.PARL_MINUS_INITIATIV,
+                Stationstyp.PARL_INITIATIV,
             ),
             (
                 "Gesetzentwurf    Landesregierung  04.02.2026 Drucksache 17/10266",
                 "Landesregierung",
-                Stationstyp.PREPARL_MINUS_REGBSL,
+                Stationstyp.PREPARL_REGBSL,
             ),
             (
                 "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  02.02.2026 Drucksache 17/10210",
                 None,
-                Stationstyp.PARL_MINUS_AUSSCHBER,
+                Stationstyp.PARL_AUSSCHBER,
             ),
             (
                 "Kleine Anfrage   Dr. Schweickert (FDP/DVP)  15.01.2026 Drucksache 17/10143",
                 None,
-                Stationstyp.PARL_MINUS_INITIATIV,
+                Stationstyp.PARL_INITIATIV,
             ),
             (
                 "Große Anfrage   Fraktion der SPD  10.01.2026 Drucksache 17/10100",
                 None,
-                Stationstyp.PARL_MINUS_INITIATIV,
+                Stationstyp.PARL_INITIATIV,
             ),
             (
                 "Mündliche Anfrage   Plenarprotokoll 17/141 05.02.2026",
                 None,
-                Stationstyp.PARL_MINUS_INITIATIV,
+                Stationstyp.PARL_INITIATIV,
             ),
-            ("Zustimmung   Plenarprotokoll 17/143", None, Stationstyp.PARL_MINUS_AKZEPTANZ),
+            ("Zustimmung   Plenarprotokoll 17/143", None, Stationstyp.PARL_AKZEPTANZ),
             (
                 "Gesetzesbeschluss des Landtags      05.02.2026 Drucksache 17/10267",
                 None,
-                Stationstyp.PARL_MINUS_AKZEPTANZ,
+                Stationstyp.PARL_AKZEPTANZ,
             ),
             (
                 "Beschluss des Landtags in Zweiter Beratung      06.02.2026 Drucksache 17/2271",
                 None,
-                Stationstyp.PARL_MINUS_VOLLVLSGN,
+                Stationstyp.PARL_VOLLVLSGN,
             ),
             (
                 "Beschluss des Landtags in Dritter Beratung      22.12.2021 Drucksache 17/1234",
                 None,
-                Stationstyp.PARL_MINUS_VOLLVLSGN,
+                Stationstyp.PARL_VOLLVLSGN,
             ),
-            ("Ablehnung   Plenarprotokoll 17/143", None, Stationstyp.PARL_MINUS_ABLEHNUNG),
+            ("Ablehnung   Plenarprotokoll 17/143", None, Stationstyp.PARL_ABLEHNUNG),
             (
                 "Gesetz  vom 10. Februar 2026 Gesetzblatt für Baden-Württemberg 2026 Nr. 22",
                 None,
-                Stationstyp.POSTPARL_MINUS_GSBLT,
+                Stationstyp.POSTPARL_GSBLT,
             ),
             (
                 "Bekanntmachung der Neufassung      12.05.2021",
                 None,
-                Stationstyp.POSTPARL_MINUS_GSBLT,
+                Stationstyp.POSTPARL_GSBLT,
             ),
-            ("Gesetzblatt   15.03.2026", None, Stationstyp.POSTPARL_MINUS_GSBLT),
-            ("Inkrafttreten   01.04.2026", None, Stationstyp.POSTPARL_MINUS_KRAFT),
+            ("Gesetzblatt   15.03.2026", None, Stationstyp.POSTPARL_GSBLT),
+            ("Inkrafttreten   01.04.2026", None, Stationstyp.POSTPARL_KRAFT),
             (
                 "Änderungsanträge    Fraktion der FDP/DVP  20.07.2021 Drucksache 17/569",
                 None,
-                Stationstyp.PARL_MINUS_INITIATIV,
+                Stationstyp.PARL_INITIATIV,
             ),
             (
                 "Bericht und Empfehlungen    Petitionsausschuss  15.03.2026 Drucksache 17/1234",
                 None,
-                Stationstyp.PARL_MINUS_AUSSCHBER,
+                Stationstyp.PARL_AUSSCHBER,
             ),
             (
                 "Volksantrag    05.02.2023 Drucksache 17/4567",
                 None,
-                Stationstyp.PARL_MINUS_INITIATIV,
+                Stationstyp.PARL_INITIATIV,
             ),
             (
                 "Beratung   Plenarprotokoll 17/99 12.03.2023",
                 None,
-                Stationstyp.PARL_MINUS_VOLLVLSGN,
+                Stationstyp.PARL_VOLLVLSGN,
             ),
             # Gap #2 coverage — STATIONSTYP_MAP keys previously only covered
             # transitively (e.g. "Antrag" via "Änderungsanträge", "Dritte Beratung"
@@ -158,27 +158,27 @@ class TestStationstypMapping:
             (
                 "Antrag    Fraktion der FDP/DVP  10.01.2026 Drucksache 17/10140",
                 None,
-                Stationstyp.PARL_MINUS_INITIATIV,
+                Stationstyp.PARL_INITIATIV,
             ),
             (
                 "Dritte Beratung   Plenarprotokoll 17/145 15.03.2026",
                 None,
-                Stationstyp.PARL_MINUS_VOLLVLSGN,
+                Stationstyp.PARL_VOLLVLSGN,
             ),
             (
                 "Ausschussberatung    Ausschuss für Inneres  20.02.2026 Drucksache 17/10180",
                 None,
-                Stationstyp.PARL_MINUS_AUSSCHBER,
+                Stationstyp.PARL_AUSSCHBER,
             ),
             (
                 "Annahme   Plenarprotokoll 17/143 12.02.2026",
                 None,
-                Stationstyp.PARL_MINUS_AKZEPTANZ,
+                Stationstyp.PARL_AKZEPTANZ,
             ),
             (
                 "Beschluss des Landtags      05.02.2026 Drucksache 17/10267",
                 None,
-                Stationstyp.PARL_MINUS_AKZEPTANZ,
+                Stationstyp.PARL_AKZEPTANZ,
             ),
         ],
     )
@@ -190,23 +190,23 @@ class TestStationstypMapping:
         assert map_stationstyp("") == Stationstyp.SONSTIG
 
     def test_case_insensitive(self):
-        assert map_stationstyp("erste beratung   Plenarprotokoll 17/141") == Stationstyp.PARL_MINUS_VOLLVLSGN
+        assert map_stationstyp("erste beratung   Plenarprotokoll 17/141") == Stationstyp.PARL_VOLLVLSGN
 
     def test_longer_keys_take_precedence_over_gesetz(self):
         """'Gesetzentwurf' and 'Gesetzesbeschluss' must match before shorter 'Gesetz'."""
-        assert map_stationstyp("Gesetzentwurf    Fraktion GRÜNE") == Stationstyp.PARL_MINUS_INITIATIV
-        assert map_stationstyp("Gesetzesbeschluss des Landtags      05.02.2026") == Stationstyp.PARL_MINUS_AKZEPTANZ
-        assert map_stationstyp("Gesetzblatt   15.03.2026") == Stationstyp.POSTPARL_MINUS_GSBLT
+        assert map_stationstyp("Gesetzentwurf    Fraktion GRÜNE") == Stationstyp.PARL_INITIATIV
+        assert map_stationstyp("Gesetzesbeschluss des Landtags      05.02.2026") == Stationstyp.PARL_AKZEPTANZ
+        assert map_stationstyp("Gesetzblatt   15.03.2026") == Stationstyp.POSTPARL_GSBLT
         # Only bare "Gesetz" (enacted law) matches the short key
-        assert map_stationstyp("Gesetz  vom 10. Februar 2026") == Stationstyp.POSTPARL_MINUS_GSBLT
+        assert map_stationstyp("Gesetz  vom 10. Februar 2026") == Stationstyp.POSTPARL_GSBLT
 
     def test_antraege_plural_maps_to_initiativ(self):
         """Plural 'Änderungsanträge' (with umlaut ä) must not fall through to SONSTIG."""
-        assert map_stationstyp("Änderungsanträge    Fraktion der FDP/DVP") == Stationstyp.PARL_MINUS_INITIATIV
+        assert map_stationstyp("Änderungsanträge    Fraktion der FDP/DVP") == Stationstyp.PARL_INITIATIV
 
     def test_ueberweisung_maps_to_vollversammlung(self):
         """Committee referral 'Überweisung' maps to PARL_VOLLVLSGN, not sonstig."""
-        assert map_stationstyp("Überweisung") == Stationstyp.PARL_MINUS_VOLLVLSGN
+        assert map_stationstyp("Überweisung") == Stationstyp.PARL_VOLLVLSGN
 
 
 # PARLIS station-type strings observed in production that intentionally map to
@@ -322,7 +322,7 @@ class TestDokumententypMapping:
         "context,is_vorparl,expected",
         [
             ("Gesetzentwurf", False, Doktyp.ENTWURF),
-            ("Gesetzentwurf", True, Doktyp.PREPARL_MINUS_ENTWURF),
+            ("Gesetzentwurf", True, Doktyp.PREPARL_ENTWURF),
             ("Plenarprotokoll", False, Doktyp.REDEPROTOKOLL),
             ("Antrag", False, Doktyp.ANTRAG),
             ("Kleine Anfrage", False, Doktyp.ANFRAGE),
@@ -411,8 +411,7 @@ class TestEnumValuesExistInFramework:
 class TestReservedGremiumNames:
     """Lock the literal values of ReservedGremium against wiki + spec + BY precedent.
 
-    - `plenum`, `regierung`, `volk` come from the OpenAPI spec
-      (`vendor/pazufa-collector-core/openapi.yaml`).
+    - `plenum`, `regierung`, `volk` come from the PaZuFa OpenAPI spec (v0.2.3).
     - `gesetzesblatt` comes from the community DoD wiki and the BY reference
       scraper. It is NOT in the spec description, but the spec schema accepts
       any string, so the wiki/BY convention wins (see DD-021).
