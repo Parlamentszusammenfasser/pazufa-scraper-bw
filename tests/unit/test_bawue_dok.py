@@ -1009,6 +1009,23 @@ class TestNormalizeVolltext:
         break (e.g. 'E-Mail', 'Baden-W\u00fcrttemberg')."""
         assert normalize_volltext("per E-Mail") == "per E-Mail"
 
+    # --- Issue #30: "Rich terinnen" regression, real tokens --------------
+
+    def test_issue30_richterinnen_rejoined(self):
+        """Issue #30: 'Rich terinnen' in the V-215974 summary traced back to a
+        hyphenated line break in Drucksache 17/1000. These tokens are taken
+        verbatim from the kreuzberg extraction of that PDF and must rejoin so
+        the broken word never reaches the LLM. Fails against the pre-issue-20
+        normalizer, passes now."""
+        text = "planm\u00e4\u00dfigen Beamtinnen und Beamten oder Richte-rinnen und Richtern"
+        assert normalize_volltext(text) == (
+            "planm\u00e4\u00dfigen Beamtinnen und Beamten oder Richterinnen und Richtern"
+        )
+
+    def test_issue30_further_real_tokens_rejoined(self):
+        assert normalize_volltext("und Beam-ten sowie") == "und Beamten sowie"
+        assert normalize_volltext("im Ein-gangsamt oder") == "im Eingangsamt oder"
+
 
 # ---------------------------------------------------------------------------
 # TestSanitizeLlmText (DD-027)
