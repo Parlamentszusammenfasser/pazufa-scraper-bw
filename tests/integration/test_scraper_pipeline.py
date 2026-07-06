@@ -343,3 +343,58 @@ class TestPipelineBehavior:
         erste_beratung = stations[1]
         assert len(erste_beratung["dokumente"]) == 1
         assert erste_beratung["dokumente"][0]["typ"] == "redeprotokoll"
+
+    @responses.activate
+    @pytest.mark.asyncio
+    async def test_vorgang_carries_parlis_backlink(self, scraper, mock_backend, parlis_fixtures):
+        """Issue #31: the Vorgang-level PARLIS backlink reaches the backend payload."""
+        fx = parlis_fixtures("gesetzgebung")
+        _mock_parlis_for_types({"Gesetzgebung": (fx["search_json"], fx["results_html"])})
+        s = await scraper(["Gesetzgebung"])
+        try:
+            with patch("bawue.bawue_vorgaenge_scraper.date") as mock_date:
+                mock_date.today.return_value = date(2026, 1, 31)
+                mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+                await s.run()
+        finally:
+            await s.session.close()
+
+        vg = mock_backend.vorgaenge[0]
+        assert vg["links"] == ["https://parlis.landtag-bw.de/parlis/vorgang/V-98001"]
+
+
+# ===================================================================
+# Real-data regression (Issue #31)
+#
+# Fixtures gesetzgebung_backlink_real_* are a single, unmodified PARLIS
+# record captured live from https://parlis.landtag-bw.de for Vorgang
+# V-218907 ("Gesetz zur Änderung des baden-württembergischen
+# Ausführungsgesetzes zum Bundesmeldegesetz", WP17, Landesregierung).
+# The issue references exactly this Vorgang as an example of a missing
+# backlink, so it doubles as an end-to-end reproduction with real HTML.
+# ===================================================================
+
+
+class TestParlisBacklinkRealData:
+    @responses.activate
+    @pytest.mark.asyncio
+    async def test_real_vorgang_carries_parlis_backlink(self, scraper, mock_backend, parlis_fixtures):
+        """Issue #31: real V-218907 record yields its PARLIS backlink end-to-end."""
+        fx = parlis_fixtures("gesetzgebung_backlink_real")
+        _mock_parlis_for_types({"Gesetzgebung": (fx["search_json"], fx["results_html"])})
+        s = await scraper(["Gesetzgebung"])
+        try:
+            with patch("bawue.bawue_vorgaenge_scraper.date") as mock_date:
+                mock_date.today.return_value = date(2022, 12, 31)
+                mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+                await s.run()
+        finally:
+            await s.session.close()
+
+        assert mock_backend.call_count == 1
+        vg = mock_backend.vorgaenge[0]
+        assert vg["titel"] == (
+            "Gesetz zur Änderung des baden-württembergischen Ausführungsgesetzes zum Bundesmeldegesetz"
+        )
+        assert any(i["id"] == "V-218907" and i["typ"] == "vorgnr" for i in vg["ids"])
+        assert vg["links"] == ["https://parlis.landtag-bw.de/parlis/vorgang/V-218907"]

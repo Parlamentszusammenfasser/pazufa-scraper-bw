@@ -25,6 +25,7 @@ from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, format_duration, format_failed_section
 from bawue.types import (
     TODO_MARKER,
+    UNSET,
     Autor,
     Doktyp,
     Dokument,
@@ -322,6 +323,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
             initdrucks_ident = VgIdent(id=initiativ_drucks, typ="initdrucks")
             ids = [initdrucks_ident] if ids is None else [*ids, initdrucks_ident]
 
+        # Issue #31: forward the parsed PARLIS Vorgang URL as a backlink so
+        # consumers can trace the entry back to its source in PARLIS.
+        detail_url = raw.get("detail_url")
+
         return Vorgang(
             api_id=str(api_id),
             titel=todo_if_blank(titel),
@@ -332,6 +337,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             initiatoren=initiatoren,
             stationen=stationen,
             ids=ids,
+            links=[detail_url] if detail_url else UNSET,
         )
 
     _POSTPARL_TYPEN: frozenset[Stationstyp] = frozenset(
