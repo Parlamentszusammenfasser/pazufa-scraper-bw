@@ -90,6 +90,24 @@ class TestBuildVorgang:
         assert vorgang.kurztitel is None
 
     @pytest.mark.asyncio
+    async def test_build_vorgang_forwards_parlis_backlink(self, scraper_build_vorgang):
+        """Issue #31: the parsed PARLIS detail_url must reach Vorgang.links."""
+        raw = _make_raw_vorgang("V-218907")
+        raw["detail_url"] = "https://parlis.landtag-bw.de/parlis/vorgang/V-218907"
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert vorgang.links == ["https://parlis.landtag-bw.de/parlis/vorgang/V-218907"]
+
+    @pytest.mark.asyncio
+    async def test_build_vorgang_links_unset_without_backlink(self, scraper_build_vorgang):
+        """Issue #31: without a detail_url, links stays UNSET (not an empty list)."""
+        raw = _make_raw_vorgang("V-001")
+        raw.pop("detail_url", None)
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert vorgang.links is UNSET
+
+    @pytest.mark.asyncio
     async def test_kurztitel_from_initiative_document(self, scraper_build_vorgang):
         """Issue #25: the Vorgang Kurztitel reuses the initiating document's LLM kurztitel."""
         raw = _make_raw_vorgang("V-001")
