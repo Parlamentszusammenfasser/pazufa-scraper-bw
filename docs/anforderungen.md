@@ -221,7 +221,6 @@ PDFs mit Blob-IDs (`/resource/blob/{id}/...`). Kein REST-API, kein RSS-Feed.
 | `[cache]`       | `redis-port`             | 6379                                                       | Nein    | Redis-Port                                                          |
 | `[llm]`         | `provider-key`           |                                                            | Nein    | API-Key für LLM-Provider (via `LLM_PROVIDER_KEY` Umgebungsvariable) |
 | `[llm]`         | `model`                  | *(gpt-5-nano)*                                             | Nein    | LLM-Modellname (z.B. `gpt-5-nano`, `gpt-4.1-nano`)                  |
-| `[llm]`         | `truncate-tokens`        | 12000                                                      | Nein    | Max. Token-Anzahl für LLM-Input; 0 = keine Kürzung (DD-013)         |
 | `[bawue]`       | `enabled-vorgangstypen`  | `["Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag"]` | Nein    | PARLIS-Vorgangstypen die gescrapt werden (`listing_urls` der Pipeline) |
 | `[bawue]`       | `wahlperiode`            | 17                                                         | Nein    | Aktuelle Wahlperiode                                                |
 | `[bawue]`       | `parlis-request-delay-s` | 1.0                                                        | Nein    | Verzögerung zwischen PARLIS-Anfragen (s)                            |

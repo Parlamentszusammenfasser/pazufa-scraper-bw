@@ -32,7 +32,6 @@ from bawue.bawue_dok import (
     extract_pdf_text,
     extract_semantics,
     normalize_volltext,
-    truncate_text,
 )
 
 logging.basicConfig(
@@ -43,7 +42,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 OUTPUT_DIR = Path(__file__).parent / "output"
-TRUNCATE_TOKENS = 12000
 
 
 # ---------------------------------------------------------------------------
@@ -129,19 +127,6 @@ async def download_and_extract(session: aiohttp.ClientSession, doc: SampleDocume
     return full_text, doc_hash, duration
 
 
-def safe_truncate(text: str, max_tokens: int) -> str:
-    """Truncate text using a known-good tokenizer (gpt-5-nano)."""
-    try:
-        return truncate_text(text, max_tokens, model="gpt-5-nano")
-    except Exception as exc:
-        logger.warning("Tokenizer failed (%s), using char-based fallback", exc)
-        char_limit = max_tokens * 4
-        if len(text) > char_limit:
-            logger.info("Char-truncated from %d to %d chars", len(text), char_limit)
-            return text[:char_limit]
-        return text
-
-
 async def run_single_extraction(
     text: str,
     doktyp: Doktyp,
@@ -154,7 +139,7 @@ async def run_single_extraction(
     )
     start = time.monotonic()
     try:
-        result = await extract_semantics(llm, text, doktyp, model=model_cfg.model, max_tokens=0)
+        result = await extract_semantics(llm, text, doktyp, model=model_cfg.model)
         return {
             "status": "success",
             "duration_seconds": round(time.monotonic() - start, 2),
@@ -198,14 +183,11 @@ async def process_document(
             },
         }
 
-    # Pre-truncate with known-good tokenizer
-    truncated = safe_truncate(full_text, TRUNCATE_TOKENS)
-
-    # Run each model sequentially for fair timing
+    # Run each model sequentially for fair timing (full document text, no truncation)
     results = {}
     for model_cfg in models:
         logger.info("  Running %s (%s)...", model_cfg.name, model_cfg.model)
-        result = await run_single_extraction(truncated, doc.doktyp, model_cfg)
+        result = await run_single_extraction(full_text, doc.doktyp, model_cfg)
         results[model_cfg.name] = result
         if result["status"] == "success":
             logger.info("  %s: OK in %.1fs", model_cfg.name, result["duration_seconds"])
@@ -285,7 +267,6 @@ async def main(models: list[ModelConfig], args: argparse.Namespace) -> None:
         "models": {
             m.name: {"model": m.model, "api_base": m.api_base, "has_api_key": m.api_key is not None} for m in models
         },
-        "truncate_tokens": TRUNCATE_TOKENS,
     }
 
     documents = []
@@ -314,7 +295,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--openai-model", default="gpt-5-nano", help="OpenAI model (default: gpt-5-nano)")
     parser.add_argument("--ollama-model", default="ollama/gemma4:e4b", help="Ollama model (default: ollama/gemma4:e4b)")
     parser.add_argument("--ollama-base-url", default="http://localhost:11434", help="Ollama API base URL")
-    parser.add_argument("--max-tokens", type=int, default=TRUNCATE_TOKENS, help="Max input tokens for truncation")
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR, help="Output directory")
     return parser.parse_args()
 
@@ -339,6 +319,5 @@ if __name__ == "__main__":
         sys.exit(1)
 
     logger.info("Models: %s", ", ".join(f"{m.name} ({m.model})" for m in models))
-    TRUNCATE_TOKENS = args.max_tokens
 
     asyncio.run(main(models, args))

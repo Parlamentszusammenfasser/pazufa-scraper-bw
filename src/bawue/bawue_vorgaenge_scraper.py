@@ -129,9 +129,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._llm_enabled = bool(llm_key) or bool(llm_base_url)
         self._llm = None
         self._llm_metrics = LLMMetrics()
-        llm_config = load_toml_section(config, "llm")
         self._llm_model = config.llm_model
-        self._llm_truncate_tokens = int(llm_config.get("truncate-tokens", 12000))
         if self._llm_enabled:
             from pazufa_corelib.llm import LLMConnector
 
@@ -286,7 +284,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         initiatoren = _parse_autoren(initiative)
 
         fundstellen_parsed = raw.get("fundstellen_parsed", [])
-        stationen = await self._collect_stationen(fundstellen_parsed, initiative, vorgang_id)
+        stationen = await self._collect_stationen(fundstellen_parsed, initiative, vorgang_id, titel)
 
         if fundstellen_parsed and not stationen:
             logger.warning(
@@ -369,7 +367,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
     )
 
     async def _collect_stationen(
-        self, fundstellen: list[RawFundstelle], initiative: str, vorgang_id: str
+        self, fundstellen: list[RawFundstelle], initiative: str, vorgang_id: str, vorgang_titel: str = ""
     ) -> list[Station]:
         """Build stations from parsed Fundstellen, nesting Stellungnahmen as children.
 
@@ -385,7 +383,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         seen_ausschber = False
         last_station_typ_str = ""
         for fund in fundstellen:
-            station = await self._build_station(fund, initiative)
+            station = await self._build_station(fund, initiative, vorgang_titel)
             if station is None:
                 continue
             station_typ_str = fund.get("station_typ", "")
@@ -720,7 +718,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 vorgang_id,
             )
 
-    async def _build_station(self, fund: RawFundstelle, initiative: str) -> Station | None:
+    async def _build_station(self, fund: RawFundstelle, initiative: str, vorgang_titel: str = "") -> Station | None:
         """Convert a parsed Fundstelle dict into a framework Station.
 
         A Fundstelle is a reference line from the PARLIS search results, e.g.:
@@ -763,7 +761,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         gremium = self._determine_gremium(fund, station_typ)
         dokumente, trojanergefahr = await self._build_dokumente(
-            fund, station_typ_str, mapping_text, station_typ, initiative, zp_start
+            fund, station_typ_str, mapping_text, station_typ, initiative, zp_start, vorgang_titel
         )
 
         return Station(
@@ -801,6 +799,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         station_typ: Stationstyp,
         initiative: str,
         zp_start: datetime,
+        vorgang_titel: str = "",
     ) -> tuple[list[Dokument], int | None]:
         """Build the document list for a station (0 or 1 documents).
 
@@ -858,7 +857,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     self._llm,
                     dok,
                     model=self._llm_model,
-                    max_tokens=self._llm_truncate_tokens,
+                    vorgang_titel=vorgang_titel,
                     metrics=self._llm_metrics,
                     cache=self.config.cache,
                 )

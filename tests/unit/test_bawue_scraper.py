@@ -138,7 +138,6 @@ class TestBuildVorgang:
         scraper._llm_enabled = True
         scraper._llm = MagicMock()
         scraper._llm_model = "gpt-5-nano"
-        scraper._llm_truncate_tokens = 12000
         scraper._llm_metrics = LLMMetrics()
 
         async def _fake_enrich(session, llm, dok, **kwargs):
@@ -3451,7 +3450,6 @@ class TestTrojanergefahr:
         scraper._llm_enabled = True
         scraper._llm = AsyncMock()
         scraper._llm_model = "gpt-5-nano"
-        scraper._llm_truncate_tokens = 12000
         scraper._llm_metrics = LLMMetrics()
         scraper._filter_sonstig = True
         scraper.session = MagicMock()

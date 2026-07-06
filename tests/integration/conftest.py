@@ -179,7 +179,6 @@ def scraper(bawue_config):
         s._llm = None
         s._llm_metrics = LLMMetrics()
         s._llm_model = "gpt-5-nano"
-        s._llm_truncate_tokens = 12000
 
         return s
 

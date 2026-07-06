@@ -79,9 +79,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         self._llm_enabled = bool(llm_key) or bool(llm_base_url)
         self._llm = None
         self._llm_metrics = LLMMetrics()
-        llm_config = load_toml_section(config, "llm")
         self._llm_model = config.llm_model
-        self._llm_truncate_tokens = int(llm_config.get("truncate-tokens", 12000))
         if self._llm_enabled:
             from pazufa_corelib.llm import LLMConnector
 
@@ -220,7 +218,6 @@ class BawueBeteiligungScraper(VorgangsScraper):
                         self._llm,
                         dok,
                         model=self._llm_model,
-                        max_tokens=self._llm_truncate_tokens,
                         metrics=self._llm_metrics,
                         cache=self.config.cache,
                     )
