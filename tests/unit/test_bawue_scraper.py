@@ -101,6 +101,41 @@ class TestBuildVorgang:
         assert _vorgang_kurztitel(vorgang.stationen) == "Klimaschutzgesetz"
 
     @pytest.mark.asyncio
+    async def test_build_vorgang_kurztitel_is_semantic_not_vgnr(self, monkeypatch):
+        """Issue #25 regression: the *built* Vorgang exposes the initiating
+        document's plain-language kurztitel, never the vgnr.
+
+        This pins the exact seam that regressed the issue. With the original
+        buggy assignment (``kurztitel=vorgang_id``) this Vorgang's kurztitel
+        would have been ``"V-246999"``; it must now be the semantic title.
+        """
+        from bawue.bawue_dok import EnrichmentResult
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper.config = MagicMock()
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._llm_truncate_tokens = 12000
+        scraper._llm_metrics = LLMMetrics()
+
+        async def _fake_enrich(session, llm, dok, **kwargs):
+            # The initiating Gesetzentwurf comes back with an LLM kurztitel.
+            dok.kurztitel = "Ausgleich für Coronasoforthilfen"
+            return EnrichmentResult(dokument=dok)
+
+        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
+
+        vorgang = await scraper._build_vorgang(_make_raw_vorgang("V-246999"))
+
+        assert vorgang.kurztitel == "Ausgleich für Coronasoforthilfen"
+        assert vorgang.kurztitel != "V-246999"
+
+    @pytest.mark.asyncio
     async def test_documentless_station_gets_stable_api_id(self, scraper_build_vorgang):
         """DD-028: a document-less station (e.g. Gesetzentwurf without PDF) gets a
         deterministic api_id so the backend links it across re-runs instead of

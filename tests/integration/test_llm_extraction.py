@@ -14,7 +14,8 @@ import aiohttp
 import pytest
 
 from bawue.bawue_dok import enrich_dokument
-from bawue.types import Autor, Doktyp, Dokument
+from bawue.bawue_vorgaenge_scraper import _vorgang_kurztitel
+from bawue.types import Autor, Doktyp, Dokument, Gremium, Parlament, Station, Stationstyp
 
 pytestmark = pytest.mark.integration
 
@@ -105,6 +106,44 @@ class TestEntwurfEnrichment:
         assert enriched.autoren[0].organisation == "Fraktion GRÜNE"
         assert enriched.autoren[1].organisation == "Fraktion der CDU"
         assert enriched.zp_modifiziert == datetime(2026, 1, 15, tzinfo=UTC)
+
+    @pytest.mark.asyncio
+    async def test_vorgang_kurztitel_is_semantic_not_number(self):
+        """Issue #25 (special case, real data): a real Landtag Gesetzentwurf must
+        yield a Vorgang Kurztitel that is a human-readable summary — never the
+        Vorgangs-/Drucksachennummer.
+
+        This is the end-to-end guarantee the issue is about, and only real
+        document text + a real LLM can validate the *semantic* quality of the
+        title. Deterministic wiring is covered by the unit tests; this test
+        covers the content the unit tests cannot fake.
+        """
+        dok = _make_test_dokument(typ=Doktyp.ENTWURF)
+        llm = _make_llm()
+
+        async with aiohttp.ClientSession() as session:
+            result = await enrich_dokument(session, llm, dok)
+        enriched = result.dokument
+
+        # Wrap the enriched initiating document into its Station, exactly as the
+        # scraper does before building the Vorgang.
+        station = Station(
+            zp_start=datetime(2026, 1, 15, tzinfo=UTC),
+            gremium=Gremium(name="Plenum", wahlperiode=17, parlament=Parlament.BW),
+            typ=Stationstyp.PARL_INITIATIV,
+            dokumente=[enriched],
+        )
+
+        kurztitel = _vorgang_kurztitel([station])
+
+        print(f"\nVorgang Kurztitel (real data): {kurztitel!r}")
+
+        assert kurztitel == enriched.kurztitel, "Vorgang reuses the initiating document's kurztitel"
+        assert kurztitel, "kurztitel must not be empty"
+        # It must be a title, not an identifier: not the drucksnr, and not a bare number.
+        assert kurztitel != enriched.drucksnr
+        assert not kurztitel.replace("/", "").replace("-", "").isdigit(), "kurztitel must not be a bare number"
+        assert " " in kurztitel.strip(), "a human-readable title has more than one word"
 
     @pytest.mark.asyncio
     async def test_deterministic_hash(self):
