@@ -188,13 +188,23 @@ class TestBuildVorgang:
         assert vorgang.kurztitel == "entbuerokratisierung"
 
     @pytest.mark.asyncio
-    async def test_ids_contain_beteiligung_url(self):
+    async def test_links_contain_beteiligung_url(self):
+        # Issue #24: the source URL is a backlink, not a Vorgangsnummer.
         scraper = _make_scraper()
         detail = _make_detail()
         vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
-        assert vorgang.ids is not None
-        assert len(vorgang.ids) == 1
-        assert "beteiligungsportal" in vorgang.ids[0].id
+        assert vorgang.links is not None
+        assert len(vorgang.links) == 1
+        assert "beteiligungsportal" in str(vorgang.links[0])
+
+    @pytest.mark.asyncio
+    async def test_url_not_set_as_vorgnr_ident(self):
+        # Issue #24: pre-parliamentary drafts have no VNr; the URL must not be
+        # emitted as a `vorgnr` ident (it overflowed the website's id field).
+        scraper = _make_scraper()
+        detail = _make_detail()
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
+        assert not vorgang.ids
 
     @pytest.mark.asyncio
     async def test_zp_start_is_timezone_aware(self):
