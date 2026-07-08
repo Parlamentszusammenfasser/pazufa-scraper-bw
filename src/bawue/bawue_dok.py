@@ -549,12 +549,10 @@ async def extract_semantics(
         {"role": "user", "content": user_message},
     ]
 
-    api_base = getattr(llm, "api_base", None)
     async with _LLM_SEMAPHORE:
         response = await litellm.acompletion(
             model=model,
             api_key=llm.api_key,
-            api_base=api_base,
             messages=messages,
             temperature=llm.temperature,
             timeout=llm.timeout_seconds,
@@ -565,6 +563,46 @@ async def extract_semantics(
     content = response.choices[0].message.content
     data = _parse_llm_response(content)
     return _validate_scores(data)
+
+
+async def narrow_to_relevant_section(
+    llm: LLMConnector,
+    text: str,
+    doktyp: Doktyp,
+    titel: str | None,
+    drucksnr: str | None,
+) -> str:
+    """Narrow a plenary protocol to the section that concerns this Vorgang.
+
+    Delegates to pazufa-corelib's ``LLMConnector.extract_relevant_section``, which
+    splits the text into chunks, has the LLM mark the relevant line ranges and then
+    extracts them verbatim (issue #32). Only the *summary input* is narrowed; the
+    stored ``volltext`` remains the page-hint window.
+
+    Only ``REDEPROTOKOLL`` is narrowed — other doktypen are single-topic, so
+    narrowing would be wasteful and could drop content.
+
+    Returns *text* unchanged when narrowing is not applicable, the extractor is
+    unavailable, it errors, or it finds no relevant content.
+    """
+    if doktyp != Doktyp.REDEPROTOKOLL:
+        return text
+    if not (titel and titel.strip()):
+        return text  # extract_relevant_section requires a non-empty title
+    if not hasattr(llm, "extract_relevant_section"):
+        return text  # older corelib without the feature
+
+    try:
+        section = await llm.extract_relevant_section(text, titel.strip(), vorgang_vnr=drucksnr or None)
+    except Exception:
+        logger.warning("Section extraction failed, using full window", exc_info=True)
+        return text
+
+    if section:
+        logger.info("Narrowed protocol from %d to %d chars via section extraction", len(text), len(section))
+        return section
+    logger.info("Section extraction found no relevant content, using full window")
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -675,8 +713,13 @@ async def enrich_dokument(
                 if metrics is not None:
                     metrics.cache_hits += 1
             else:
+                # For multi-topic plenary protocols, narrow the summary input to
+                # the section about this Vorgang (issue #32). volltext stays the
+                # full window; only the LLM input is narrowed, and only on a cache
+                # miss so the semantics cache stays effective.
+                summary_input = await narrow_to_relevant_section(llm, full_text, dok.typ, context_titel, dok.drucksnr)
                 semantics = await extract_semantics(
-                    llm, full_text, dok.typ, model=model, dok_titel=context_titel, drucksnr=dok.drucksnr
+                    llm, summary_input, dok.typ, model=model, dok_titel=context_titel, drucksnr=dok.drucksnr
                 )
                 _hash_cache[cache_key] = semantics
                 _redis_set(cache, cache_key, json.dumps(semantics))

@@ -20,15 +20,9 @@ scraper-dir = "./src/bawue"
 ## api-obj-log = "locallogs"
 
 [llm]
-# --- Local Ollama (default, free, no API key needed) ---
-# Requires: ollama running locally (ollama serve) with the model pulled.
-provider-base-url = "http://localhost:11434"
-model = "ollama/gemma4:e4b"
-#
-# --- OpenAI (cloud alternative) ---
-# Uncomment provider-key and model below, and comment out provider-base-url above.
+# provider-key is read from the LLM_PROVIDER_KEY env var (keep secrets out of the file).
 # provider-key = "SET_VIA_ENV"
-# model = "gpt-5-nano"
+model = "gpt-5-nano"
 # Model alternatives (cost per doc: full document input + ~300 output tokens):
 #   gpt-5-nano     $0.05/$0.40   ~$0.0007/doc  (default, cheapest)
 #   gpt-4.1-nano   $0.10/$0.40   ~$0.0013/doc  (1M context window)

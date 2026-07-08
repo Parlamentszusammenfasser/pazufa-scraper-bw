@@ -253,11 +253,9 @@ pipeline checks both linting and formatting on every push and pull request.
 ### LLM Document Enrichment
 
 The scraper optionally enriches documents with LLM-extracted metadata (summary, keywords, short title).
-This works with either a cloud API (OpenAI) or a local Ollama instance.
+The provider is OpenAI (`gpt-5-nano` by default). Enrichment is enabled when `LLM_PROVIDER_KEY` is set.
 
-#### Option A: OpenAI (cloud)
-
-Set the API key in `config.toml` or via environment variable:
+Set the API key in `config.toml` or via the `LLM_PROVIDER_KEY` environment variable:
 
 ```toml
 [llm]
@@ -265,35 +263,8 @@ provider-key = "sk-..."
 model = "gpt-5-nano"              # default; see config.sample.toml for alternatives
 ```
 
-#### Option B: Local Ollama (free, no API key)
-
-Run a local model to avoid API costs. Requires [Ollama](https://ollama.com/) installed and running.
-
-```bash
-# Pull the model once
-ollama pull gemma4:e4b
-
-# Ollama serves on http://localhost:11434 by default
-ollama serve
-```
-
-Configure in `config.toml`:
-
-```toml
-[llm]
-provider-base-url = "http://localhost:11434"
-model = "ollama/gemma4:e4b"
-```
-
-Or via environment variables:
-
-```bash
-export LLM_PROVIDER_BASE_URL=http://localhost:11434
-export LLM_MODEL=ollama/gemma4:e4b
-```
-
-The `ollama/` prefix in the model name is required — it tells [LiteLLM](https://docs.litellm.ai/) to route
-to the Ollama provider. Any Ollama-compatible model works (e.g. `ollama/llama3`, `ollama/gemma3`).
+For plenary protocols (`redeprotokoll`), the summary input is first narrowed to the debated bill's
+agenda item via corelib's `extract_relevant_section` before summarization (see DD-029/DD-030).
 
 ### LLM Integration Tests
 
@@ -301,20 +272,13 @@ The LLM integration tests download a real PDF from the Landtag BW website and ca
 the full enrichment pipeline end-to-end.
 
 **Requirements:**
-- An LLM provider API key (e.g. OpenAI) or a running local Ollama instance
+- An OpenAI API key (`LLM_PROVIDER_KEY`)
 - Internet access (downloads PDFs from `landtag-bw.de`)
 
-**Run with OpenAI:**
+**Run:**
 
 ```bash
 LLM_PROVIDER_KEY=sk-... pytest -m integration tests/integration/test_llm_extraction.py -s
-```
-
-**Run with local Ollama:**
-
-```bash
-LLM_PROVIDER_BASE_URL=http://localhost:11434 LLM_MODEL=ollama/gemma4:e4b \
-  pytest -m integration tests/integration/test_llm_extraction.py -s
 ```
 
 Optionally set `LLM_MODEL` to override the default model:
@@ -323,7 +287,7 @@ Optionally set `LLM_MODEL` to override the default model:
 LLM_PROVIDER_KEY=sk-... LLM_MODEL=gpt-4o pytest -m integration tests/integration/test_llm_extraction.py -s
 ```
 
-The tests are skipped automatically when neither `LLM_PROVIDER_KEY` nor `LLM_PROVIDER_BASE_URL` is set, so
+The tests are skipped automatically when `LLM_PROVIDER_KEY` is not set, so
 `make test-integration` and CI runs are unaffected.
 
 ## Running against Staging
@@ -340,9 +304,8 @@ cp .env.example .env
 |-------------------------|-----------------------------------------------------------|
 | `LTZF_API_URL`          | PaZuFa backend URL (e.g. `https://staging.api.pazufa.de`) |
 | `LTZF_API_KEY`          | PaZuFa API key (`ltzf_...`)                               |
-| `LLM_PROVIDER_KEY`      | LLM provider API key (e.g. OpenAI `sk-...`)               |
-| `LLM_PROVIDER_BASE_URL` | LLM provider base URL (for local Ollama)                  |
-| `LLM_MODEL`             | LLM model override (e.g. `ollama/gemma4:e4b`)             |
+| `LLM_PROVIDER_KEY`      | OpenAI API key (`sk-...`)                                 |
+| `LLM_MODEL`             | LLM model override (default `gpt-5-nano`)                 |
 
 **2. Start the stack:**
 ```bash
@@ -386,8 +349,6 @@ cp .env.example .env
 # Edit .env: fill in LTZF_API_URL, LTZF_API_KEY, LLM_PROVIDER_KEY
 ```
 
-See the [LLM Document Enrichment](#llm-document-enrichment) section if you want to use a local Ollama instance instead of an OpenAI key (requires editing `docker-compose.yml` to replace `LLM_PROVIDER_KEY` with `LLM_PROVIDER_BASE_URL`/`LLM_MODEL`).
-
 **4. Update the image in `docker-compose.yml`:**
 
 ```diff
@@ -417,7 +378,7 @@ The image includes Tesseract OCR. Redis should be provided as a separate service
 
 4-tier precedence: Defaults → `config.toml` → Environment variables → CLI.
 
-Key env vars: `LTZF_API_KEY`, `LTZF_API_URL`, `COLLECTOR_ID`, `REDIS_HOST`, `LLM_PROVIDER_KEY`, `LLM_PROVIDER_BASE_URL`, `LLM_MODEL`
+Key env vars: `LTZF_API_KEY`, `LTZF_API_URL`, `COLLECTOR_ID`, `REDIS_HOST`, `LLM_PROVIDER_KEY`, `LLM_MODEL`
 
 See [docs/anforderungen.md — Konfiguration](docs/anforderungen.md#konfiguration) for the full reference.
 
