@@ -73,6 +73,7 @@ class BawueConfig:
             ),
             ConfigProp("collector_id", "main.collector-uuid", "COLLECTOR_ID", required=True),
             ConfigProp("cycle_time_s", "main.cycle-time-s", "CYCLE_TIME_S", None, 10800),
+            ConfigProp("max_concurrency", "main.max-concurrency", "MAX_CONCURRENCY", None, 3),
             ConfigProp(
                 "once",
                 "main.once",
