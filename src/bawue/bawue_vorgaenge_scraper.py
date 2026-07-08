@@ -123,10 +123,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._failed_items: list[FailedItem] = []
         self._parlis_errors: list[str] = []
 
-        # LLM document enrichment (optional, requires LLM_PROVIDER_KEY or LLM_PROVIDER_BASE_URL)
+        # LLM document enrichment (optional, requires LLM_PROVIDER_KEY)
         llm_key = getattr(config, "llm_provider_key", None)
-        llm_base_url = getattr(config, "llm_provider_base_url", None)
-        self._llm_enabled = bool(llm_key) or bool(llm_base_url)
+        self._llm_enabled = bool(llm_key)
         self._llm = None
         self._llm_metrics = LLMMetrics()
         self._llm_model = config.llm_model
@@ -139,9 +138,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 rate_limit_max_calls=5,
                 rate_limit_window_seconds=60,
             )
-            # corelib v0.1.2 LLMConnector takes no api_base kwarg; bawue_dok reads
-            # it off the instance (getattr) and passes it to litellm at call time.
-            self._llm.api_base = llm_base_url
 
     async def run(self) -> None:
         check_for_newer_wahlperiode(self._wahlperiode)

@@ -1417,16 +1417,41 @@ zweier Effekte im 30-Seiten-Fenster eines Plenarprotokolls (`#page=N`-Hint):
   wird und alle den Doktyp `redeprotokoll` teilen, fließen Titel und Drucksache
   jetzt in `_prompt_fingerprint()` ein. Andernfalls erhielte das zweite Gesetz
   die zwischengespeicherte (themenfremde) Zusammenfassung des ersten.
+- **Abschnitts-Extraktion via corelib (Redeprotokolle, OpenAI-Pfad).** Zusätzlich
+  zum Kontext-Header wird der Zusammenfassungs-*Input* bei Redeprotokollen
+  vorab auf den relevanten Tagesordnungspunkt eingegrenzt. `enrich_dokument()`
+  ruft dazu `LLMConnector.extract_relevant_section()` der corelib auf: Die
+  Funktion zerlegt den Text in Chunks, lässt das LLM die relevanten
+  Zeilenbereiche markieren und extrahiert diese **verbatim** (der zugehörige
+  Prompt kennt TOP-Grenzen). Das eliminiert die Fehlerursache an der Wurzel — das
+  Modell sieht nur noch die Fischerei-Debatte statt des ganzen 30-Seiten-Fensters
+  mit drei Tagesordnungspunkten.
+
+  Bewusste Eingrenzung:
+  - **Nur `redeprotokoll`** — andere Doktypen sind einthemig; eine
+    Abschnitts-Extraktion wäre verschwendet und könnte Inhalte verlieren.
+  - **None-sicherer Rückfall:** Findet die Extraktion nichts oder schlägt sie fehl,
+    bleibt das volle Fenster erhalten.
+  - **Nur der LLM-Input wird eingegrenzt**, nicht das gespeicherte `volltext`
+    (weiterhin das Page-Hint-Fenster). Die Eingrenzung läuft nur bei einem
+    Cache-Miss, damit der Semantik-Cache wirksam bleibt.
+
+  Das Page-Hint-Fenster (30 Seiten) bleibt als kostenloser Vorfilter bestehen und
+  liefert der Abschnitts-Extraktion einen einzigen Chunk (~18 000 Tokens < 30 000)
+  → genau ein zusätzlicher LLM-Aufruf pro Redeprotokoll-Dokument.
 
 **Implementierung:** `bawue_dok.py` — `_context_prefix()`, `_prompt_fingerprint()`,
-`extract_semantics()`, `enrich_dokument()`; Durchreichen des Vorgangstitels in
-`bawue_vorgaenge_scraper.py`.
+`extract_semantics()`, `narrow_to_relevant_section()`, `enrich_dokument()`;
+Durchreichen des Vorgangstitels in `bawue_vorgaenge_scraper.py`.
 
 **Tests:**
 - Unit (`tests/unit/test_bawue_dok.py`): `TestExtractSemanticsNoTruncation`
   (voller Text erreicht das LLM), `TestExtractSemanticsDocumentContext`
   (Drucksache + Titel im Prompt), `TestPromptFingerprintContext`
-  (Cache-Kollision zwischen Gesetzen derselben Sitzung ausgeschlossen).
+  (Cache-Kollision zwischen Gesetzen derselben Sitzung ausgeschlossen),
+  `TestNarrowToRelevantSection` (Abschnitts-Extraktion nur für Redeprotokoll;
+  None-/Fehler-Rückfall auf das volle Fenster; eingegrenzter Text erreicht die
+  Zusammenfassung).
 - Integration (`tests/integration/test_issue32_real_documents.py`): reales
   Plenarprotokoll 17/12 — deterministischer Nachweis, dass das Fenster das alte
   12 000-Token-Limit übersteigt und die historische Kürzung die Fischerei-Debatte
@@ -1437,4 +1462,47 @@ zweier Effekte im 30-Seiten-Fenster eines Plenarprotokolls (`#page=N`-Hint):
 `gpt-5-nano` (~0,05 $/1M Input) bleibt das im Bereich von Bruchteilen eines Cents
 pro Dokument; der Redis-Cache dedupliziert wiederkehrende PDFs. Der Gewinn an
 inhaltlicher Korrektheit überwiegt die geringen Mehrkosten deutlich.
+
+---
+
+## DD-030: Ollama-/Local-Provider-Support entfernt — OpenAI als einziger LLM-Provider
+
+**Datum:** 13.07.2026
+
+**Kontext:** Der Scraper unterstützte zwei LLM-Provider: OpenAI (Staging/Produktion,
+`gpt-5-nano`) und ein lokales Ollama als kostenlose Dev-Alternative
+(`provider-base-url`, `ollama/gemma4:e4b`). Da die corelib-`LLMConnector`
+kein `api_base` als Konstruktor-Argument kennt, wurde der Wert nachträglich als
+Instanz-Attribut gesetzt (`self._llm.api_base = …`) und in `bawue_dok` per
+`getattr` gelesen und an `litellm.acompletion` durchgereicht — ein Workaround.
+
+Mit der Abschnitts-Extraktion (DD-029) verschärfte sich die Lage: Die
+corelib-Methode `extract()` reicht `api_base` **nicht** durch, sodass die
+Funktion auf dem Ollama-Pfad den falschen Endpunkt getroffen hätte. Die
+Abschnitts-Extraktion — die entscheidende Qualitätsverbesserung für Issue #32 —
+wäre auf Ollama also gar nicht verfügbar.
+
+**Entscheidung:** Der Ollama-/Local-Provider-Pfad wird entfernt; OpenAI ist der
+einzige unterstützte LLM-Provider. Konkret gestrichen:
+
+- Konfigurationsschlüssel `llm.provider-base-url` / Umgebungsvariable
+  `LLM_PROVIDER_BASE_URL` (`config.py`).
+- Der `api_base`-Workaround in beiden Scrapern und in `extract_semantics()`
+  (`bawue_dok.py`). `_llm_enabled` hängt nun allein an `LLM_PROVIDER_KEY`.
+- Die OpenAI-Pfad-Bedingung in `narrow_to_relevant_section()` entfällt (es gibt
+  nur noch den OpenAI-Pfad).
+- Das Vergleichsskript `scripts/compare_llm_providers.py` (Zweck war der
+  Ollama-vs-OpenAI-Vergleich) samt Makefile-Ziel `compare-llm` und der
+  Testdatei `tests/unit/test_ollama_config.py`.
+- Ollama-Defaults in `config.dev.toml` / `config.sample.toml` → `gpt-5-nano`.
+
+**Warum kein Erhalt:** Ollama war reine lokale Dev-Bequemlichkeit; Staging und
+Produktion liefen ohnehin auf OpenAI. Der Workaround (Monkey-Patch eines nicht
+vorgesehenen Attributs) war fragil und blockierte die corelib-Abschnitts-
+Extraktion. Der Wegfall der kostenlosen lokalen Entwicklung wird als vertretbar
+bewertet; Dev benötigt jetzt einen OpenAI-Key (`gpt-5-nano` ist mit
+~0,0007 $/Dokument sehr günstig).
+
+**Implementierung:** `config.py`, `bawue_vorgaenge_scraper.py`,
+`bawue_beteiligung_scraper.py`, `bawue_dok.py`; Konfig- und README-Anpassungen.
 

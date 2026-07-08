@@ -31,6 +31,7 @@ from bawue.bawue_dok import (
     enrich_dokument,
     extract_pdf_text,
     extract_semantics,
+    narrow_to_relevant_section,
     normalize_volltext,
 )
 from bawue.types import UNSET, Autor, Doktyp, Dokument
@@ -436,6 +437,83 @@ class TestPromptFingerprintContext:
         a = _prompt_fingerprint(Doktyp.REDEPROTOKOLL, drucksnr="17/529", titel="Fischereigesetz")
         b = _prompt_fingerprint(Doktyp.REDEPROTOKOLL, drucksnr="17/529", titel="Fischereigesetz")
         assert a == b
+
+
+# ---------------------------------------------------------------------------
+# TestNarrowToRelevantSection — issue #32, corelib section extraction
+# ---------------------------------------------------------------------------
+
+
+def _make_section_llm_mock(section_return="RELEVANTER ABSCHNITT ÜBER FISCHEREI"):
+    """LLMConnector mock with a stubbed extract_relevant_section."""
+    llm = _make_llm_mock()
+    llm.extract_relevant_section = AsyncMock(return_value=section_return)
+    return llm
+
+
+class TestNarrowToRelevantSection:
+    """The corelib section extractor runs only for REDEPROTOKOLL, and always
+    degrades to the full window (issue #32)."""
+
+    WINDOW = "Punkt 3 Open Data … Punkt 4 Fischereigesetz Drucksache 17/529 …"
+
+    @pytest.mark.asyncio
+    async def test_narrows_redeprotokoll(self):
+        llm = _make_section_llm_mock()
+        out = await narrow_to_relevant_section(llm, self.WINDOW, Doktyp.REDEPROTOKOLL, "Fischereigesetz", "17/529")
+        assert out == "RELEVANTER ABSCHNITT ÜBER FISCHEREI"
+        llm.extract_relevant_section.assert_awaited_once_with(self.WINDOW, "Fischereigesetz", vorgang_vnr="17/529")
+
+    @pytest.mark.asyncio
+    async def test_skips_non_redeprotokoll(self):
+        llm = _make_section_llm_mock()
+        out = await narrow_to_relevant_section(llm, self.WINDOW, Doktyp.ENTWURF, "Ein Gesetz", "17/529")
+        assert out == self.WINDOW
+        llm.extract_relevant_section.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_when_no_section_found(self):
+        llm = _make_section_llm_mock(section_return=None)
+        out = await narrow_to_relevant_section(llm, self.WINDOW, Doktyp.REDEPROTOKOLL, "Fischereigesetz", "17/529")
+        assert out == self.WINDOW
+
+    @pytest.mark.asyncio
+    async def test_falls_back_on_extractor_error(self):
+        llm = _make_section_llm_mock()
+        llm.extract_relevant_section = AsyncMock(side_effect=RuntimeError("provider down"))
+        out = await narrow_to_relevant_section(llm, self.WINDOW, Doktyp.REDEPROTOKOLL, "Fischereigesetz", "17/529")
+        assert out == self.WINDOW
+
+    @pytest.mark.asyncio
+    async def test_skips_when_no_title(self):
+        llm = _make_section_llm_mock()
+        out = await narrow_to_relevant_section(llm, self.WINDOW, Doktyp.REDEPROTOKOLL, "  ", "17/529")
+        assert out == self.WINDOW
+        llm.extract_relevant_section.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_enrich_feeds_narrowed_text_to_summarizer(self):
+        """End-to-end wiring: on a cache miss, the narrowed section is what the
+        summarization LLM sees — not the full window."""
+        _hash_cache.clear()
+        dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL)
+        llm = _make_section_llm_mock(section_return="NUR DIE FISCHEREI-DEBATTE")
+        session = MagicMock()
+        captured: dict = {}
+
+        async def _capture(*_args, **kwargs):
+            captured["messages"] = kwargs["messages"]
+            return _mock_llm_response(SAMPLE_LLM_RESPONSE_GENERIC)
+
+        with (
+            _patch_pdf_pipeline(text_and_hash=("Voller Protokolltext mit mehreren Themen", "d" * 64)),
+            patch("bawue.bawue_dok.litellm.acompletion", new=_capture),
+        ):
+            await enrich_dokument(session, llm, dok)
+
+        user_msg = captured["messages"][-1]["content"]
+        assert "NUR DIE FISCHEREI-DEBATTE" in user_msg
+        _hash_cache.clear()
 
 
 # ---------------------------------------------------------------------------
