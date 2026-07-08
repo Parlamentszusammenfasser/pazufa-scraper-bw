@@ -23,8 +23,10 @@ when:
 #
 # Release workflow (trunk-based, automated semantic versioning):
 #   Merge to main → semantic-release reads Conventional Commits since the last
-#   tag, computes the next version (feat→minor, fix→patch), bumps pyproject,
-#   and pushes a bare semver tag (e.g. 0.2.2).
+#   tag, computes the next version (feat→minor, fix→patch), pushes a bare semver
+#   tag (e.g. 0.2.2) on the main commit, and publishes a Codeberg Release with
+#   the generated notes. main is a protected branch, so no version-bump commit
+#   is pushed to it — only the tag.
 #   → that tag push triggers docker-release, which pushes :0.2.2 :0.2 :latest
 #   Main branch pushes also produce snapshot tags → :main :main-<sha8>
 #   Feature branch pushes → :dev-<sha8>
@@ -65,15 +67,22 @@ steps:
       - poetry run pytest -m 'not integration'
 
   # Automated semantic versioning: on a merge to main, compute the next version
-  # from Conventional Commits, bump pyproject, and push a bare semver git tag.
-  # The tag push then triggers the docker-release step below (separate run).
-  # The release commit is `chore(release): …`, which is not a releasable type,
-  # so the follow-up push does not produce another tag (no loop).
+  # from Conventional Commits, tag the current main commit with a bare semver
+  # tag, and publish a Codeberg Release carrying the generated notes for that
+  # tag. main is a protected branch, so PSR must not push a version-bump commit
+  # or changelog to it — with --no-commit it pushes only the tag (PSR pushes the
+  # branch ref only when it also commits). The tag push then triggers the
+  # docker-release step below (separate run). docker-release does not run
+  # semantic-release, so there is no release loop.
   - name: semantic-release
     image: *python_image
     depends_on: [pytest, ruff-lint, ruff-format]
     environment:
-      GIT_TOKEN:
+      # PSR drives Codeberg through its gitea client (Forgejo is Gitea-API-
+      # compatible); the token env name is configured as CODEBERG_TOKEN in
+      # pyproject.toml. It authenticates both the tag push and the Releases API
+      # call. See [tool.semantic_release.remote] in pyproject.toml.
+      CODEBERG_TOKEN:
         from_secret: codeberg_token
     commands:
       - git config --global --add safe.directory "$CI_WORKSPACE"
@@ -82,9 +91,14 @@ steps:
       - git checkout main
       - git config user.name "Woodpecker CI"
       - git config user.email "ci@pazufa.local"
-      - git remote set-url origin "https://$GIT_TOKEN@codeberg.org/${CI_REPO}.git"
+      - git remote set-url origin "https://$CODEBERG_TOKEN@codeberg.org/${CI_REPO}.git"
       - pip install --quiet "python-semantic-release==10.5.3"
-      - semantic-release version --push --no-vcs-release
+      # --no-commit: no version-bump commit, and (since PSR only pushes the
+      #   branch when it commits) no push to protected main.
+      # --no-changelog: don't write/commit CHANGELOG.md; the release notes are
+      #   still generated and attached to the Codeberg Release by --vcs-release.
+      # --push publishes the new tag; --vcs-release creates the Codeberg Release.
+      - semantic-release version --no-commit --no-changelog --tag --push --vcs-release
     when:
       - event: push
         branch: main
