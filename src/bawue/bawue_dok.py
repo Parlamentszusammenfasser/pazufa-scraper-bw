@@ -66,7 +66,6 @@ class LLMMetrics:
 
 MAX_JSON_RETRIES = 3
 MIN_TEXT_LENGTH = 64
-DEFAULT_TRUNCATE_TOKENS = 12000
 _LLM_SEMAPHORE = asyncio.Semaphore(3)
 
 # Two-tier LLM semantics cache, keyed by (doc_hash, prompt_hash):
@@ -145,14 +144,42 @@ def _prompt_for_doktyp(doktyp: Doktyp) -> str:
     return _DOKTYP_PROMPT_MAP.get(doktyp, BODY_PROMPT_GENERIC)
 
 
-def _prompt_fingerprint(doktyp: Doktyp) -> str:
-    """SHA256 over (system prompt + body prompt) for the given doktyp.
+def _context_prefix(titel: str | None, drucksnr: str | None) -> str:
+    """Build the document-identity header that tells the LLM which matter to summarize.
 
-    Used as the prompt component of the LLM semantics cache key. Changing the
-    system prompt or any body prompt invalidates only the affected entries.
+    Plenary protocols (and other multi-topic PDFs) debate several bills in one
+    document. Without naming the target bill/Drucksache the model cannot tell
+    which passage is relevant and may summarize the wrong topic (issue #32).
+    Returns an empty string when no identity is available.
+    """
+    parts: list[str] = []
+    if titel and titel.strip():
+        parts.append(f"dem Gesetzgebungsverfahren „{titel.strip()}“")
+    if drucksnr and drucksnr.strip():
+        parts.append(f"Drucksache {drucksnr.strip()}")
+    if not parts:
+        return ""
+    bezug = " bzw. ".join(parts)
+    return (
+        f"KONTEXT: Dieses Dokument gehört zu {bezug}. "
+        "Falls der Text mehrere Themen behandelt (z. B. ein Plenarprotokoll mit "
+        "mehreren Tagesordnungspunkten), berücksichtige ausschließlich die "
+        "Abschnitte, die sich auf dieses Verfahren bzw. diese Drucksache beziehen.\n\n"
+    )
+
+
+def _prompt_fingerprint(doktyp: Doktyp, drucksnr: str | None = None, titel: str | None = None) -> str:
+    """SHA256 over (system prompt + context header + body prompt) for the given doktyp.
+
+    Used as the prompt component of the LLM semantics cache key. The document
+    identity (titel/Drucksache) is part of the fingerprint because the same
+    protocol PDF — hence the same file hash — is reused across several bills
+    debated in one session; without it the second bill would reuse the first
+    bill's cached (wrong-topic) summary (issue #32).
     """
     body = _prompt_for_doktyp(doktyp)
-    return hashlib.sha256(f"{_SYSTEM_PROMPT}\n\n{body}".encode()).hexdigest()
+    prefix = _context_prefix(titel, drucksnr)
+    return hashlib.sha256(f"{_SYSTEM_PROMPT}\n\n{prefix}{body}".encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -351,39 +378,6 @@ def _is_garbled(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Text truncation
-# ---------------------------------------------------------------------------
-
-
-def truncate_text(text: str, max_tokens: int, model: str = "gpt-5-nano") -> str:
-    """Truncate text to fit within a token budget.
-
-    Args:
-        text: The input text to (possibly) truncate.
-        max_tokens: Maximum number of tokens. 0 means no truncation.
-        model: Model name for tokenizer selection (e.g. "gpt-5-nano").
-
-    Returns:
-        The original text if within budget, otherwise truncated text.
-    """
-    if max_tokens <= 0:
-        return text
-
-    token_count = litellm.token_counter(model=model, text=text)
-    if token_count <= max_tokens:
-        return text
-
-    tokens = litellm.encode(model=model, text=text)
-    truncated_tokens = tokens[:max_tokens]
-    truncated = litellm.decode(model=model, tokens=truncated_tokens)
-    # Token slicing can split a multi-byte UTF-8 character, leaving an orphaned
-    # lead byte that breaks JSON serialization (BadRequestError from OpenAI).
-    truncated = truncated.encode("utf-8", errors="ignore").decode("utf-8")
-    logger.info("Truncated text from %d to %d tokens", token_count, max_tokens)
-    return truncated
-
-
-# ---------------------------------------------------------------------------
 # Page-hint extraction for plenary protocols
 # ---------------------------------------------------------------------------
 
@@ -526,21 +520,26 @@ async def extract_semantics(
     full_text: str,
     doktyp: Doktyp,
     model: str = "gpt-5-nano",
-    max_tokens: int = DEFAULT_TRUNCATE_TOKENS,
+    dok_titel: str | None = None,
+    drucksnr: str | None = None,
 ) -> dict:
     """Call LLM to extract structured metadata from document text.
 
     Returns a dict with keys like schlagworte, zusammenfassung, kurztitel,
     and optionally trojanergefahr/meinung/vorwort depending on doktyp.
 
+    The full document text is sent unmodified — there is no token truncation.
+    When *dok_titel* and/or *drucksnr* are given, a context header is prepended
+    so the model summarizes only the passages that concern this specific bill,
+    even in multi-topic plenary protocols (issue #32).
+
     Uses response_format=json_object with a json-repair fallback for models
     that occasionally emit malformed JSON, and validates score ranges
     post-extraction.
     """
-    text = truncate_text(full_text, max_tokens=max_tokens, model=model)
-
     prompt = _prompt_for_doktyp(doktyp)
-    user_message = f"{prompt}\n\n{text}"
+    context = _context_prefix(dok_titel, drucksnr)
+    user_message = f"{context}{prompt}\n\n{full_text}"
 
     input_tokens = litellm.token_counter(model=model, text=user_message)
     logger.info("LLM call: %d input tokens, model=%s", input_tokens, model)
@@ -602,7 +601,7 @@ async def enrich_dokument(
     llm: LLMConnector,
     dok: Dokument,
     model: str = "gpt-5-nano",
-    max_tokens: int = DEFAULT_TRUNCATE_TOKENS,
+    vorgang_titel: str | None = None,
     metrics: LLMMetrics | None = None,
     cache: BawueCache | None = None,
 ) -> EnrichmentResult:
@@ -612,6 +611,11 @@ async def enrich_dokument(
     and returns an EnrichmentResult containing the enriched Dokument and an optional
     trojanergefahr score (Station-level field extracted by LLM). PARLIS metadata
     (titel, autoren, drucksnr, timestamps) is preserved.
+
+    *vorgang_titel* is the bill title of the surrounding Vorgang. It is passed
+    to the LLM as document-identity context so that multi-topic plenary protocols
+    are summarized for the correct bill (issue #32); it falls back to the
+    document's own title when not provided.
 
     Uses an in-memory hash cache to skip LLM calls for duplicate PDFs within
     the same scraper run.
@@ -641,9 +645,14 @@ async def enrich_dokument(
             )
             return EnrichmentResult(dokument=dok)
 
+        # Document-identity context for the prompt: the Vorgang title (bill name)
+        # or, as a fallback, the document's own title, plus the Drucksache.
+        context_titel = vorgang_titel or dok.titel
+
         # Try LLM extraction (with two-tier cache deduplication, keyed by
-        # doc_hash + prompt_hash so different prompts don't collide).
-        prompt_hash = _prompt_fingerprint(dok.typ)
+        # doc_hash + prompt_hash). The prompt hash includes the document identity
+        # so two bills sharing one protocol PDF don't collide (issue #32).
+        prompt_hash = _prompt_fingerprint(dok.typ, drucksnr=dok.drucksnr, titel=context_titel)
         cache_key = _cache_key(doc_hash, prompt_hash)
         try:
             if cache_key in _hash_cache:
@@ -666,7 +675,9 @@ async def enrich_dokument(
                 if metrics is not None:
                     metrics.cache_hits += 1
             else:
-                semantics = await extract_semantics(llm, full_text, dok.typ, model=model, max_tokens=max_tokens)
+                semantics = await extract_semantics(
+                    llm, full_text, dok.typ, model=model, dok_titel=context_titel, drucksnr=dok.drucksnr
+                )
                 _hash_cache[cache_key] = semantics
                 _redis_set(cache, cache_key, json.dumps(semantics))
                 if metrics is not None:

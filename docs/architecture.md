@@ -128,7 +128,7 @@ Dashed lines mark stages not yet implemented. See [status.md](status.md) for imp
 | `pazufa-scraper-core` | API client + models (spec v0.2.3), `LLMConnector`, normalisation | Shared library |
 | `kreuzberg`           | PDF text extraction (normal + OCR fallback)                     | BaWue scraper |
 | `redis`               | Caching of processed Vorgänge/Dokumente (`bawue.cache`)         | BaWue scraper |
-| `litellm`             | LLM integration: token counting/truncation + LLM calls          | BaWue + scraper-core |
+| `litellm`             | LLM integration: token counting + LLM calls                     | BaWue + scraper-core |
 
 ## 3. Scraper Pipeline (`bawue.pipeline`)
 
@@ -219,11 +219,10 @@ classDiagram
 
     class BawueDok {
         <<module>>
-        +enrich_dokument(session, llm, dok, model, max_tokens) Dokument
+        +enrich_dokument(session, llm, dok, model, vorgang_titel) Dokument
         +download_pdf(session, url) Path
         +extract_pdf_text(pdf_path) tuple
-        +extract_semantics(llm, text, doktyp, model, max_tokens) dict
-        +truncate_text(text, max_tokens, model) str
+        +extract_semantics(llm, text, doktyp, model, dok_titel, drucksnr) dict
         -_hash_cache: dict
         -_LLM_SEMAPHORE: Semaphore
     }
@@ -440,8 +439,8 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 - Extracts: `zusammenfassung`, `schlagworte`, `kurztitel`, and optionally `meinung` (1–5 score) and `trojanergefahr` (1–10 score, passed to Station via `EnrichmentResult`)
 - JSON response with up to 3 retries on parse failures
 - Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
-- In-memory SHA256 hash cache skips LLM calls for duplicate PDFs within a run
-- Optional token truncation (default 12 000 tokens, configurable via `truncate-tokens` in `[llm]` config, DD-013)
+- In-memory SHA256 hash cache skips LLM calls for duplicate PDFs within a run (cache key includes document identity, DD-029)
+- Full document text is sent to the LLM (no truncation); a context header names the target bill title + Drucksache so multi-topic protocols are summarized for the correct bill (DD-029)
 
 **Graceful degradation (3 tiers):**
 

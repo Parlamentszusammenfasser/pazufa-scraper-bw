@@ -279,7 +279,6 @@ class TestTrojanergefahr:
         scraper._llm_enabled = True
         scraper._llm = AsyncMock()
         scraper._llm_model = "gpt-5-nano"
-        scraper._llm_truncate_tokens = 12000
 
         mock_result = EnrichmentResult(
             dokument=_make_enriched_dok(),
@@ -311,7 +310,6 @@ class TestTrojanergefahr:
         scraper._llm_enabled = True
         scraper._llm = AsyncMock()
         scraper._llm_model = "gpt-5-nano"
-        scraper._llm_truncate_tokens = 12000
 
         results = [
             EnrichmentResult(dokument=_make_enriched_dok("https://example.com/a.pdf"), trojanergefahr=3),

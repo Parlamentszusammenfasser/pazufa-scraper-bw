@@ -172,7 +172,6 @@ class TestBawueDokApiBase:
                 "Ein langer Text ueber ein Gesetz zur Aenderung des Schulgesetzes.",
                 MagicMock(),  # doktyp
                 model="ollama/gemma4:e4b",
-                max_tokens=12000,
             )
 
         call_kwargs = mock_litellm.acompletion.call_args.kwargs
@@ -205,7 +204,6 @@ class TestBawueDokApiBase:
                 "Ein langer Text ueber ein Gesetz.",
                 MagicMock(),
                 model="gpt-5-nano",
-                max_tokens=12000,
             )
 
         call_kwargs = mock_litellm.acompletion.call_args.kwargs

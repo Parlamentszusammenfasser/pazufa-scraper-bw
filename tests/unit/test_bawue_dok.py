@@ -32,7 +32,6 @@ from bawue.bawue_dok import (
     extract_pdf_text,
     extract_semantics,
     normalize_volltext,
-    truncate_text,
 )
 from bawue.types import UNSET, Autor, Doktyp, Dokument
 
@@ -357,6 +356,89 @@ class TestExtractSemantics:
 
 
 # ---------------------------------------------------------------------------
+# TestExtractSemanticsNoTruncation — issue #32, root cause #1
+# ---------------------------------------------------------------------------
+
+
+async def _capture_llm_messages(coro_factory) -> list[dict]:
+    """Run *coro_factory* with litellm.acompletion patched, capturing the messages."""
+    captured: dict = {}
+
+    async def _capture(*_args, **kwargs):
+        captured["messages"] = kwargs["messages"]
+        return _mock_llm_response(SAMPLE_LLM_RESPONSE_ENTWURF)
+
+    with patch("bawue.bawue_dok.litellm.acompletion", new=_capture):
+        await coro_factory()
+    return captured["messages"]
+
+
+class TestExtractSemanticsNoTruncation:
+    """Issue #32, root cause #1: the *complete* document text must reach the LLM.
+
+    The removed truncation (12 000-token cap) cut multi-topic plenary protocols
+    mid-debate, so a later agenda item (the Fischereigesetz, Drucksache 17/529)
+    was dropped while an earlier, unrelated debate survived in full — and the
+    summary then described the wrong topic.
+    """
+
+    @pytest.mark.asyncio
+    async def test_full_text_reaches_llm_untruncated(self):
+        llm = _make_llm_mock()
+        # A distinctive marker placed far past the old 12 000-token cut-off.
+        marker = "FISCHEREIGESETZ_TAGESORDNUNGSPUNKT_MARKER"
+        long_text = ("Debatte über ein völlig anderes Thema. " * 6000) + " " + marker
+
+        messages = await _capture_llm_messages(lambda: extract_semantics(llm, long_text, Doktyp.REDEPROTOKOLL))
+
+        user_msg = messages[-1]["content"]
+        assert marker in user_msg, "the tail of a long protocol must not be truncated away"
+
+
+class TestExtractSemanticsDocumentContext:
+    """Issue #32, root cause #2: the prompt must identify which bill to summarize."""
+
+    @pytest.mark.asyncio
+    async def test_prompt_includes_drucksnr_and_titel(self):
+        llm = _make_llm_mock()
+        messages = await _capture_llm_messages(
+            lambda: extract_semantics(
+                llm,
+                SAMPLE_FULL_TEXT,
+                Doktyp.REDEPROTOKOLL,
+                dok_titel="Gesetz zur Änderung des Fischereigesetzes",
+                drucksnr="17/529",
+            )
+        )
+        user_msg = messages[-1]["content"]
+        assert "17/529" in user_msg, "Drucksachennummer must anchor the summary"
+        assert "Fischereigesetz" in user_msg, "bill title must anchor the summary"
+
+    @pytest.mark.asyncio
+    async def test_context_omitted_when_no_identity_available(self):
+        """Without titel/drucksnr the prompt is the plain body prompt (no dangling header)."""
+        llm = _make_llm_mock()
+        messages = await _capture_llm_messages(lambda: extract_semantics(llm, SAMPLE_FULL_TEXT, Doktyp.ENTWURF))
+        assert SAMPLE_FULL_TEXT in messages[-1]["content"]
+
+
+class TestPromptFingerprintContext:
+    """Issue #32: two bills debated in the *same* protocol PDF share a file hash
+    and doktyp, so the LLM-cache key must also vary by document identity — else
+    the second bill silently gets the first bill's cached (wrong) summary."""
+
+    def test_different_drucksnr_yield_different_fingerprints(self):
+        a = _prompt_fingerprint(Doktyp.REDEPROTOKOLL, drucksnr="17/529", titel="Fischereigesetz")
+        b = _prompt_fingerprint(Doktyp.REDEPROTOKOLL, drucksnr="17/1567", titel="Open-Data-Gesetz")
+        assert a != b
+
+    def test_same_identity_is_stable(self):
+        a = _prompt_fingerprint(Doktyp.REDEPROTOKOLL, drucksnr="17/529", titel="Fischereigesetz")
+        b = _prompt_fingerprint(Doktyp.REDEPROTOKOLL, drucksnr="17/529", titel="Fischereigesetz")
+        assert a == b
+
+
+# ---------------------------------------------------------------------------
 # TestParseLlmResponse
 # ---------------------------------------------------------------------------
 
@@ -636,45 +718,6 @@ class TestEnrichDokument:
 
 
 # ---------------------------------------------------------------------------
-# TestTruncateText
-# ---------------------------------------------------------------------------
-
-
-class TestTruncateText:
-    def test_truncates_when_over_limit(self):
-        long_text = "Dies ist ein langer Testtext. " * 500
-        result = truncate_text(long_text, max_tokens=100, model="gpt-5-nano")
-        import litellm
-
-        token_count = litellm.token_counter(model="gpt-5-nano", text=result)
-        assert token_count <= 100
-        assert len(result) < len(long_text)
-
-    def test_no_truncation_when_under_limit(self):
-        short_text = "Kurzer Text."
-        result = truncate_text(short_text, max_tokens=1000, model="gpt-5-nano")
-        assert result == short_text
-
-    def test_disabled_when_zero(self):
-        long_text = "Dies ist ein langer Testtext. " * 500
-        result = truncate_text(long_text, max_tokens=0, model="gpt-5-nano")
-        assert result == long_text
-
-    def test_truncated_output_is_valid_utf8(self):
-        """Truncation at token boundary must not produce orphaned multi-byte sequences."""
-        # Build text with many multi-byte chars (umlauts, sharp-s) to maximize
-        # the chance of hitting a multi-byte boundary when slicing tokens
-        text = "Änderung des Gesetzes über Maßnahmen für Schülerinnen und Schüler " * 300
-        result = truncate_text(text, max_tokens=100, model="gpt-5-nano")
-        # Re-encode and decode to verify clean UTF-8 round-trip
-        assert result == result.encode("utf-8").decode("utf-8")
-        # Must also survive JSON serialization (the actual failure mode)
-        import json
-
-        json.dumps({"text": result})  # raises on invalid surrogates/sequences
-
-
-# ---------------------------------------------------------------------------
 # TestHashCache
 # ---------------------------------------------------------------------------
 
@@ -807,24 +850,6 @@ class TestTokenLogging:
             await enrich_dokument(session, llm, dok)
 
         assert any("token" in r.message.lower() for r in caplog.records)
-
-    @pytest.mark.asyncio
-    async def test_logs_truncation(self, caplog):
-        """Truncation is logged when text exceeds limit."""
-        long_text = "Dies ist ein langer Testtext. " * 500
-        long_hash = "cccc" * 16
-        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
-        session = MagicMock()
-        llm = _make_llm_mock()
-
-        with (
-            _patch_pdf_pipeline(text_and_hash=(long_text, long_hash)),
-            _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF),
-            caplog.at_level(logging.INFO, logger="bawue.bawue_dok"),
-        ):
-            await enrich_dokument(session, llm, dok, max_tokens=100)
-
-        assert any("truncat" in r.message.lower() for r in caplog.records)
 
     @pytest.mark.asyncio
     async def test_logs_cache_hit(self, caplog):
@@ -1664,10 +1689,12 @@ class TestRedisCacheIntegration:
         llm = _make_llm_mock()
         cache = MagicMock()
 
-        # Pre-populate in-memory cache with the composite (doc_hash, prompt_hash) key
-        _hash_cache[_cache_key(SAMPLE_HASH, _prompt_fingerprint(Doktyp.ENTWURF))] = json.loads(
-            SAMPLE_LLM_RESPONSE_ENTWURF
-        )
+        # Pre-populate in-memory cache with the composite (doc_hash, prompt_hash) key.
+        # The prompt hash includes the document identity (titel + Drucksache), as the
+        # production cache key does (issue #32).
+        _hash_cache[
+            _cache_key(SAMPLE_HASH, _prompt_fingerprint(Doktyp.ENTWURF, drucksnr=dok.drucksnr, titel=dok.titel))
+        ] = json.loads(SAMPLE_LLM_RESPONSE_ENTWURF)
 
         with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp:
             result = await enrich_dokument(session, llm, dok, cache=cache)
@@ -1688,7 +1715,10 @@ class TestRedisCacheIntegration:
         with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
             await enrich_dokument(session, llm, dok, cache=cache)
 
-        assert _cache_key(SAMPLE_HASH, _prompt_fingerprint(Doktyp.ENTWURF)) in _hash_cache
+        assert (
+            _cache_key(SAMPLE_HASH, _prompt_fingerprint(Doktyp.ENTWURF, drucksnr=dok.drucksnr, titel=dok.titel))
+            in _hash_cache
+        )
 
     @pytest.mark.asyncio
     async def test_no_cache_parameter_works(self):
