@@ -22,7 +22,7 @@ import aiohttp
 import certifi
 import litellm
 from json_repair import repair_json
-from kreuzberg import ExtractionConfig, OcrConfig, PageConfig, extract_file
+from kreuzberg import ConcurrencyConfig, ExtractionConfig, OcrConfig, PageConfig, extract_file
 from pazufa_corelib.llm import LLMConnector
 from pazufa_corelib.normalization import normalize_volltext as _core_normalize_volltext
 
@@ -435,9 +435,29 @@ async def download_pdf(session, url: str) -> Path:
     return Path(tmp.name)
 
 
+# OCR is the memory-heavy fallback: kreuzberg rasterizes every PDF page to a
+# ~300 DPI bitmap before running Tesseract. By default its internal Rayon pool
+# renders one page per CPU core in parallel, so a single large document can spike
+# to ~7.5 GB RSS on a 12-core host (measured) — enough to OOM-kill the container
+# on its own. Two guards keep the peak bounded and roughly independent of the
+# host's core count and of how many documents are in flight:
+#
+#   * max_threads=1 forces sequential page rendering *within* one document,
+#     capping it at ~1.3 GB (measured) instead of cores × ~0.7 GB.
+#   * _OCR_SEMAPHORE caps how many documents OCR *at the same time*.
+#
+# Peak OCR memory ≈ 0.65 GB base + (_OCR_SEMAPHORE limit × max_threads) × ~0.66 GB.
+# The default (2 × 1) targets ~2 GB, comfortably inside a 4 GB container while
+# leaving the fast native-text path (no OCR) free to run at main.max-concurrency.
+#
+# NB: lowering OCR DPI via ImagePreprocessingConfig would shrink each bitmap, but
+# that code path SIGABRTs in kreuzberg 4.9.9, so max_threads is the usable lever.
+_OCR_MAX_THREADS = 1
+_OCR_SEMAPHORE = asyncio.Semaphore(2)
 _OCR_CONFIG = ExtractionConfig(
     force_ocr=True,
     ocr=OcrConfig(backend="tesseract", language="deu"),
+    concurrency=ConcurrencyConfig(max_threads=_OCR_MAX_THREADS),
 )
 
 
@@ -469,12 +489,14 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tupl
 
     if len(text) < MIN_TEXT_LENGTH:
         logger.warning("Normal text extraction yielded <%d chars, retrying with OCR", MIN_TEXT_LENGTH)
-        ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
+        async with _OCR_SEMAPHORE:
+            ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
         text = ocr_result.content or ""
     elif _is_garbled(text):
         logger.warning("Garbled text detected (broken font encoding), retrying with OCR")
         try:
-            ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
+            async with _OCR_SEMAPHORE:
+                ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
             ocr_text = ocr_result.content or ""
             if ocr_text and not _is_garbled(ocr_text):
                 text = ocr_text
