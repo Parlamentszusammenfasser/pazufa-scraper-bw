@@ -51,9 +51,14 @@ represents the Gesetzblatt publication, not a separate Inkrafttreten step.
   Staatsministeriums über das Inkrafttreten`, `Berichtigung des Gesetzes` (DD-012).
 - **Regex fallback** (`station_typ not extracted by regex`): occurred for a
   handful of Fundstellen whose raw text begins with `Plenarprotokoll N/M …`
-  — no station-type prefix at all. These map to `SONSTIG` and are filtered
-  by `filter-sonstig-stations`. Listed as `SONSTIG: Plenarprotokoll-only` in
-  the test allow-list.
+  — no station-type prefix at all. These map to `SONSTIG` via `map_stationstyp()`.
+  Since DD-031, the *first* such unlabeled Plenarprotokoll Fundstelle (before
+  any labeled reading is recorded) is recovered as `parl-vollvlsgn` by a
+  positional fallback in `_collect_stationen`, rather than being filtered —
+  PARLIS omits the reading label often enough that dropping it silently lost
+  the `gg-land-parl` track's required second `V` (see DD-016, DD-031). Any
+  *subsequent* unlabeled Plenarprotokoll Fundstelle in the same Vorgang is
+  still filtered as `SONSTIG` as before.
 - **Reclassification** ("Antrag" → Änderungsantrag after Ausschussbericht): 1
   occurrence (V-214623), confirming DD-019 is exercised in production.
 
