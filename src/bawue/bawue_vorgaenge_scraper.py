@@ -405,8 +405,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 and not seen_vollvlsgn
             ):
                 logger.info(
-                    "Reclassifying unlabeled Plenarprotokoll Fundstelle as parl-vollvlsgn "
-                    "(first reading) in %s: '%s'",
+                    "Reclassifying unlabeled Plenarprotokoll Fundstelle as parl-vollvlsgn (first reading) in %s: '%s'",
                     vorgang_id,
                     fund.get("raw", "?"),
                 )

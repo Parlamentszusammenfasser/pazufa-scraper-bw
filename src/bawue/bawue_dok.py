@@ -443,11 +443,11 @@ async def download_pdf(session, url: str) -> Path:
 # host's core count and of how many documents are in flight:
 #
 #   * max_threads=1 forces sequential page rendering *within* one document,
-#     capping it at ~1.3 GB (measured) instead of cores × ~0.7 GB.
+#     capping it at ~1.3 GB (measured) instead of cores x ~0.7 GB.
 #   * _OCR_SEMAPHORE caps how many documents OCR *at the same time*.
 #
-# Peak OCR memory ≈ 0.65 GB base + (_OCR_SEMAPHORE limit × max_threads) × ~0.66 GB.
-# The default (2 × 1) targets ~2 GB, comfortably inside a 4 GB container while
+# Peak OCR memory ≈ 0.65 GB base + (_OCR_SEMAPHORE limit x max_threads) x ~0.66 GB.
+# The default (2 x 1) targets ~2 GB, comfortably inside a 4 GB container while
 # leaving the fast native-text path (no OCR) free to run at main.max-concurrency.
 #
 # NB: lowering OCR DPI via ImagePreprocessingConfig would shrink each bitmap, but
