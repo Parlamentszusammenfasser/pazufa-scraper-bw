@@ -33,7 +33,6 @@ from bawue.types import (
     ReservedGremium,
     Station,
     Stationstyp,
-    VgIdent,
     Vorgang,
     Vorgangstyp,
     canonicalize_organisation,
@@ -239,8 +238,10 @@ class BawueBeteiligungScraper(VorgangsScraper):
             trojanergefahr=max(trojaner_scores) if trojaner_scores else None,
         )
 
+        # Pre-parliamentary drafts have no Vorgangsnummer yet. Expose the source
+        # page as a backlink (Issue #24) rather than mislabeling the URL as a
+        # `vorgnr` ident — api_id already provides stable identity for dedup.
         beteiligung_url = f"{BASE_URL}/de/mitmachen/lp-{self._wahlperiode}/{slug}"
-        ids = [VgIdent(id=beteiligung_url, typ="vorgnr")]
 
         return Vorgang(
             api_id=str(api_id),
@@ -251,7 +252,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             verfassungsaendernd=is_verfassungsaendernd(detail.title),
             initiatoren=ministry_autoren,
             stationen=[station],
-            ids=ids,
+            links=[beteiligung_url],
         )
 
 
