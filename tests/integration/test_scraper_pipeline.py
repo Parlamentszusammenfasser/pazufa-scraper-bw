@@ -222,6 +222,63 @@ class TestAntrag:
 # ===================================================================
 
 
+class TestUnlabeledPlenarprotokollFundstelle:
+    """Regression for V-246637 (Gesetz zur Änderung des Abgeordnetengesetzes, WP18).
+
+    PARLIS occasionally omits the leading station-type label on a plenary
+    reading's Fundstelle, leaving a bare "Plenarprotokoll WP/Nr DD.MM.YYYY
+    S. X-Y" entry with no double-space-separated prefix for the station_typ
+    regex to capture. map_stationstyp() then falls through to SONSTIG and the
+    default filter-sonstig-stations=true setting silently discards it — losing
+    the Vorgang's first plenary reading entirely.
+    """
+
+    @responses.activate
+    @pytest.mark.asyncio
+    async def test_unlabeled_erste_beratung_recovered_as_vollvlsgn(self, scraper, mock_backend, parlis_fixtures):
+        """The unlabeled Plenarprotokoll Fundstelle is recovered as parl-vollvlsgn
+        instead of being dropped, and the Vorgang ends up with 4 stations."""
+        fx = parlis_fixtures("gesetzgebung_unlabeled_erste_beratung")
+        _mock_parlis_for_types({"Gesetzgebung": (fx["search_json"], fx["results_html"])})
+        s = await scraper(["Gesetzgebung"])
+        try:
+            with patch("bawue.bawue_vorgaenge_scraper.date") as mock_date:
+                mock_date.today.return_value = date(2026, 7, 8)
+                mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+                await s.run()
+        finally:
+            await s.session.close()
+
+        assert mock_backend.call_count == 1
+        vg = mock_backend.vorgaenge[0]
+        station_types = [st["typ"] for st in vg["stationen"]]
+
+        # Gesetzentwurf, unlabeled Plenarprotokoll (recovered), Beschlussempfehlung,
+        # Zweite Beratung, plus the synthesized parl-ablehnung (Aktueller Stand:
+        # Abgelehnt) — the unlabeled reading must not have been silently dropped.
+        assert station_types == [
+            Stationstyp.PARL_INITIATIV.value,
+            Stationstyp.PARL_VOLLVLSGN.value,
+            Stationstyp.PARL_AUSSCHBER.value,
+            Stationstyp.PARL_VOLLVLSGN.value,
+            Stationstyp.PARL_ABLEHNUNG.value,
+        ]
+
+        # gg-land-parl track: with the recovered Erste Beratung in place, the
+        # natural chronology already satisfies the track — Ausschussbericht
+        # (24.06) falls between the two readings (10.06, 01.07), and ablehnung
+        # is anchored strictly after the last (Zweite Beratung) reading. No
+        # retiming is needed for *this* Vorgang; that only kicks in for the
+        # Haushalt-Einzelplan pattern covered by TestEnsureAusschberAfterVollvlsgn.
+        by_typ = {}
+        for st in vg["stationen"]:
+            by_typ.setdefault(st["typ"], []).append(st["zp_start"])
+        ablehnung_zp = by_typ[Stationstyp.PARL_ABLEHNUNG.value][0]
+        ausschber_zp = by_typ[Stationstyp.PARL_AUSSCHBER.value][0]
+        erste_beratung_zp, zweite_beratung_zp = sorted(by_typ[Stationstyp.PARL_VOLLVLSGN.value])
+        assert erste_beratung_zp < ausschber_zp < zweite_beratung_zp < ablehnung_zp
+
+
 class TestPipelineBehavior:
     @responses.activate
     @pytest.mark.asyncio

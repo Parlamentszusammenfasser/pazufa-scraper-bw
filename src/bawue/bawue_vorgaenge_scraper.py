@@ -295,12 +295,16 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         self._ensure_initiativ_after_regbsl(stationen)
 
+        # Retime any out-of-order ausschber before anchoring the synthetic
+        # ablehnung station on the chronological last station, so the ablehnung
+        # doesn't get anchored on a stale (pre-retiming) ausschber timestamp.
+        self._ensure_ausschber_after_vollvlsgn(stationen)
+
         # parse rejections
         aktueller_stand = raw.get("Aktueller Stand", "")
         if aktueller_stand == "Abgelehnt":
             self._ensure_ablehnung_station(stationen, vorgang_id)
 
-        self._ensure_ausschber_after_vollvlsgn(stationen)
         self._enforce_total_ordering(stationen)
 
         # Stable identity for document-less stations so the backend links and
@@ -377,6 +381,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         stationen: list[Station] = []
         pending_aenderungsantraege: list[list[Dokument]] = []
         seen_ausschber = False
+        seen_vollvlsgn = False
         last_station_typ_str = ""
         for fund in fundstellen:
             station = await self._build_station(fund, initiative, vorgang_titel)
@@ -384,6 +389,27 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 continue
             station_typ_str = fund.get("station_typ", "")
             typ_lower = station_typ_str.lower()
+
+            # Positional heuristic: PARLIS sometimes omits the leading station-type
+            # label on a plenary reading, leaving a bare "Plenarprotokoll WP/Nr
+            # DD.MM.YYYY S. X-Y" Fundstelle that the regex-based station_typ
+            # extraction can't label, so map_stationstyp falls through to SONSTIG
+            # and it gets silently dropped by the filter below. If it's the first
+            # such unlabeled Plenarprotokoll Fundstelle (no reading recorded yet),
+            # it is that reading (typically Erste Beratung) — reclassify instead
+            # of discarding it.
+            if (
+                station.typ == Stationstyp.SONSTIG
+                and not station_typ_str
+                and fund.get("plenarprotokoll")
+                and not seen_vollvlsgn
+            ):
+                logger.info(
+                    "Reclassifying unlabeled Plenarprotokoll Fundstelle as parl-vollvlsgn (first reading) in %s: '%s'",
+                    vorgang_id,
+                    fund.get("raw", "?"),
+                )
+                station.typ = Stationstyp.PARL_VOLLVLSGN
 
             if typ_lower in self._ENTSCHLIESSUNGSANTRAG_TYPEN:
                 continue
@@ -431,6 +457,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
             if station.typ == Stationstyp.PARL_AUSSCHBER:
                 seen_ausschber = True
 
+            if station.typ == Stationstyp.PARL_VOLLVLSGN:
+                seen_vollvlsgn = True
+
             # Attach any buffered Änderungsanträge to this station if it's a vollvlsgn
             if station.typ == Stationstyp.PARL_VOLLVLSGN and pending_aenderungsantraege:
                 for docs in pending_aenderungsantraege:
@@ -463,7 +492,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
             )
             return
 
-        zp_start = stationen[-1].zp_start
+        # Anchor on the chronologically last station's zp_start, not the last one
+        # by list position: Fundstellen arrive in PARLIS listing order, which can
+        # place e.g. an ausschber ahead of a vollvlsgn in the list even after
+        # _ensure_ausschber_after_vollvlsgn has re-timed it to a later timestamp.
+        zp_start = max(s.zp_start for s in stationen)
         # Deterministic api_id so the backend station_merge_candidates query matches
         # this synthetic station across re-runs (it has no documents, so the only other
         # merge key — shared document hash — never matches and would insert a duplicate
@@ -543,7 +576,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         The list-position of the ausschber is left untouched; the backend
         sorts by ``zp_start`` before validating, so adjusting the timestamp
-        is sufficient.
+        is sufficient. Must run before ``_ensure_ablehnung_station``, which
+        anchors on the chronologically last ``zp_start`` and would otherwise
+        anchor on this ausschber's stale, pre-retiming timestamp.
         """
         if not stationen:
             return

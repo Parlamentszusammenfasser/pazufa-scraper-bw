@@ -2998,6 +2998,68 @@ class TestEnsureAusschberAfterVollvlsgn:
         BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn([])
 
 
+class TestAblehnungAnchorsAfterAusschberRetiming:
+    """Regression for V-246637 (Gesetz zur Änderung des Abgeordnetengesetzes, WP18).
+
+    PARLIS listed Fundstellen in the order Gesetzentwurf → Beschlussempfehlung
+    und Bericht (Ausschuss) → Zweite Beratung, i.e. the ausschber's Fundstelle
+    arrives, and is appended to ``stationen``, before the vollvlsgn's — even
+    though the committee report is chronologically earlier than the reading.
+    ``_ensure_ausschber_after_vollvlsgn`` retimes the ausschber to one hour past
+    vollvlsgn, but previously ``_ensure_ablehnung_station`` ran first and
+    anchored on ``stationen[-1]`` (list-position-last, i.e. vollvlsgn) instead
+    of the true chronological last station. That produced the order
+    initiativ → vollvlsgn → ausschber → ablehnung, which the BW gg-land-parl
+    track rejects with HTTP 400 "Track validation Failed". The fix reorders
+    the ensure-calls and anchors on the chronological max zp_start, producing
+    initiativ → vollvlsgn → ausschber → ablehnung with ablehnung strictly last.
+    """
+
+    @pytest.mark.asyncio
+    async def test_ablehnung_lands_after_retimed_ausschber(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-246637",
+            titel="Gesetz zur Änderung des Abgeordnetengesetzes",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  03.06.2026 Drucksache 18/1000",
+                    "datum": "03.06.2026",
+                    "drucksache": "18/1000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ständiger Ausschuss  24.06.2026 Drucksache 18/1100",
+                    "datum": "24.06.2026",
+                    "drucksache": "18/1100",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ständiger Ausschuss",
+                    "pdf_url": "https://example.com/ausschber.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 18/10 01.07.2026",
+                    "datum": "01.07.2026",
+                    "plenarprotokoll": "18/10",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        raw["Aktueller Stand"] = "Abgelehnt"
+        vorgang = await scraper_build_vorgang(raw)
+
+        ablehnung = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_ABLEHNUNG)
+        vollvlsgn = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_VOLLVLSGN)
+        ausschber = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_AUSSCHBER)
+
+        assert vollvlsgn.zp_start < ausschber.zp_start < ablehnung.zp_start, (
+            "gg-land-parl requires ablehnung strictly after the retimed ausschber, "
+            f"got vollvlsgn={vollvlsgn.zp_start}, ausschber={ausschber.zp_start}, "
+            f"ablehnung={ablehnung.zp_start}"
+        )
+
+
 class TestBeschlussDesLandtagsInBeratung:
     """Regression: 'Beschluss des Landtags in Zweiter/Dritter Beratung' must map to
     parl-vollvlsgn (reading vote), not parl-akzeptanz (acceptance).
@@ -3611,6 +3673,144 @@ class TestFilterSonstigStations:
             await scraper_build_vorgang(raw)
 
         assert any("sonstig" in r.message.lower() for r in caplog.records)
+
+
+class TestUnlabeledPlenarprotokollFallback:
+    """Regression for V-246637 (Gesetz zur Änderung des Abgeordnetengesetzes, WP18).
+
+    PARLIS occasionally omits the leading station-type label on a plenary
+    reading's Fundstelle text, e.g. a bare "Plenarprotokoll 18/6 10.06.2026
+    S. 94-97" with no "Erste Beratung" prefix. The parser's station_typ regex
+    requires a double-space/tab-terminated leading label, so it leaves
+    station_typ empty; map_stationstyp() then falls through to SONSTIG on the
+    raw-text fallback (no "Plenarprotokoll" key in STATIONSTYP_MAP), and the
+    default filter-sonstig-stations=true setting silently drops the station —
+    losing the Vorgang's first plenary reading entirely.
+
+    The fix: the first unlabeled Plenarprotokoll Fundstelle encountered before
+    any properly-labeled parl-vollvlsgn is recovered as parl-vollvlsgn instead
+    of being discarded.
+    """
+
+    @pytest.mark.asyncio
+    async def test_unlabeled_erste_beratung_recovered_as_vollvlsgn(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-246637",
+            titel="Gesetz zur Änderung des Abgeordnetengesetzes",
+            initiative="Fraktion der AfD",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion der AfD  03.06.2026 Drucksache 18/1000",
+                    "datum": "03.06.2026",
+                    "drucksache": "18/1000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    # No "station_typ": PARLIS omitted the leading label; the
+                    # regex-based extraction failed on this Fundstelle.
+                    "raw": "Plenarprotokoll 18/6 10.06.2026 S. 94-97",
+                    "datum": "10.06.2026",
+                    "plenarprotokoll": "18/6",
+                    "pdf_url": "https://example.com/plp-18-6.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ständiger Ausschuss  24.06.2026 Drucksache 18/1100",
+                    "datum": "24.06.2026",
+                    "drucksache": "18/1100",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ständiger Ausschuss",
+                    "pdf_url": "https://example.com/ausschber.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 18/10 01.07.2026",
+                    "datum": "01.07.2026",
+                    "plenarprotokoll": "18/10",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        raw["Aktueller Stand"] = "Abgelehnt"
+        vorgang = await scraper_build_vorgang(raw)
+
+        station_types = [s.typ for s in vorgang.stationen]
+        assert station_types == [
+            Stationstyp.PARL_INITIATIV,
+            Stationstyp.PARL_VOLLVLSGN,  # recovered, was SONSTIG and would've been dropped
+            Stationstyp.PARL_AUSSCHBER,
+            Stationstyp.PARL_VOLLVLSGN,
+            Stationstyp.PARL_ABLEHNUNG,
+        ]
+
+    @pytest.mark.asyncio
+    async def test_unlabeled_plenarprotokoll_after_first_reading_not_reclassified(self, scraper_build_vorgang):
+        """Only the *first* unlabeled Plenarprotokoll Fundstelle is recovered.
+
+        A second, later bare Plenarprotokoll entry (once a reading has already
+        been recorded) is left as SONSTIG and filtered — it is not assumed to
+        be another reading.
+        """
+        raw = _make_raw_vorgang(
+            "V-UNLABELED-2",
+            initiative="Fraktion GRÜNE",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  01.03.2026 Drucksache 17/2000",
+                    "datum": "01.03.2026",
+                    "drucksache": "17/2000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/200 10.03.2026",
+                    "datum": "10.03.2026",
+                    "plenarprotokoll": "17/200",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    # Unlabeled, but a vollvlsgn was already recorded above.
+                    "raw": "Plenarprotokoll 17/210 20.03.2026 S. 12-14",
+                    "datum": "20.03.2026",
+                    "plenarprotokoll": "17/210",
+                    "pdf_url": "https://example.com/plp-17-210.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        station_types = [s.typ for s in vorgang.stationen]
+        assert station_types == [Stationstyp.PARL_INITIATIV, Stationstyp.PARL_VOLLVLSGN]
+
+    @pytest.mark.asyncio
+    async def test_labeled_sonstig_fundstelle_still_filtered(self, scraper_build_vorgang):
+        """A Fundstelle with an explicit (non-reading) label, e.g. 'Mitteilung',
+        is still filtered as SONSTIG even if it references a Plenarprotokoll —
+        only *unlabeled* Fundstellen get the positional fallback."""
+        raw = _make_raw_vorgang(
+            "V-UNLABELED-3",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Mitteilung   Plenarprotokoll 17/141  06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Mitteilung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_INITIATIV
 
 
 class TestConstructDrucksachePdfUrl:

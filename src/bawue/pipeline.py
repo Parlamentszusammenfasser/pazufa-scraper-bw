@@ -75,9 +75,11 @@ class Scraper(ABC):
             # Empty set, not None: process_items iterates the result.
             return set()
 
-    async def helper_extract_send_item(self, item: Any) -> tuple[Any, Any] | None:
-        logger.info("Extraction started on item %s", item)
-        extracted_item = await self.item_extractor(item)
+    async def helper_extract_send_item(self, item: Any, semaphore: asyncio.Semaphore) -> tuple[Any, Any] | None:
+        async with semaphore:
+            logger.info("Extraction started on item %s", item)
+            extracted_item = await self.item_extractor(item)
+        self.items_done += 1
         logger.info(
             "Extraction Progress: %d/%d items, (%.1f%%) %s",
             self.items_done,
@@ -102,6 +104,7 @@ class Scraper(ABC):
         processed_count = 0
         skipped_count = 0
         logger.info("Processing Items Now")
+        semaphore = asyncio.Semaphore(self.config.max_concurrency)
 
         for item in sorted(items):
             key = await self.make_cache_key(item)
@@ -111,7 +114,7 @@ class Scraper(ABC):
                 skipped_count += 1
                 continue
 
-            tasks.append(self.helper_extract_send_item(item))
+            tasks.append(self.helper_extract_send_item(item, semaphore))
             processed_count += 1
 
         self.item_count = len(tasks)
