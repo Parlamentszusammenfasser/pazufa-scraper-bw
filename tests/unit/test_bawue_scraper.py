@@ -14,6 +14,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _assign_stable_station_ids,
     _construct_drucksache_pdf_url,
     _fallback_date_from_year,
+    _initiativ_drucksnr_from_fundstellen,
     _parse_autoren,
     _parse_fundstelle_date,
     _reading_round,
@@ -3912,3 +3913,61 @@ class TestBuildVorgangPdfFallback:
         docs = vorgang.stationen[0].dokumente
         assert len(docs) == 1
         assert docs[0].link.endswith("WP18/Drucksachen/0000/18_0075.pdf")
+
+
+class TestInitiativDrucksnrFromFundstellen:
+    """Issue #35: the initiating Drucksache must be derivable from the raw
+    Fundstellen (before stations exist) so enrichment can anchor section
+    extraction for shared plenary protocols on it."""
+
+    def test_returns_gesetzentwurf_drucksache(self):
+        fundstellen = [
+            {
+                "raw": "Gesetzentwurf  Fraktion GRÜNE  04.02.2026 Drucksache 17/529",
+                "station_typ": "Gesetzentwurf",
+                "drucksache": "17/529",
+            },
+            {
+                "raw": "Erste Beratung  Plenarprotokoll 17/12 29.09.2021",
+                "station_typ": "Erste Beratung",
+                "plenarprotokoll": "17/12",
+            },
+        ]
+        assert _initiativ_drucksnr_from_fundstellen(fundstellen, "Fraktion GRÜNE") == "17/529"
+
+    def test_skips_non_initiative_stations(self):
+        """A leading plenary reading (no initiating document) must not be picked."""
+        fundstellen = [
+            {
+                "raw": "Erste Beratung  Plenarprotokoll 17/12 29.09.2021",
+                "station_typ": "Erste Beratung",
+                "plenarprotokoll": "17/12",
+            },
+            {
+                "raw": "Gesetzentwurf  Landesregierung  01.01.2026 Drucksache 17/1000",
+                "station_typ": "Gesetzentwurf",
+                "drucksache": "17/1000",
+            },
+        ]
+        assert _initiativ_drucksnr_from_fundstellen(fundstellen, "Landesregierung") == "17/1000"
+
+    def test_returns_none_when_no_initiative_document(self):
+        fundstellen = [
+            {
+                "raw": "Erste Beratung  Plenarprotokoll 17/12 29.09.2021",
+                "station_typ": "Erste Beratung",
+                "plenarprotokoll": "17/12",
+            },
+        ]
+        assert _initiativ_drucksnr_from_fundstellen(fundstellen, "Fraktion GRÜNE") is None
+
+    def test_ignores_initiative_station_without_drucksache(self):
+        fundstellen = [
+            {"raw": "Gesetzentwurf  Fraktion GRÜNE  04.02.2026", "station_typ": "Gesetzentwurf", "drucksache": ""},
+            {
+                "raw": "Gesetzentwurf  Fraktion GRÜNE  05.02.2026 Drucksache 17/530",
+                "station_typ": "Gesetzentwurf",
+                "drucksache": "17/530",
+            },
+        ]
+        assert _initiativ_drucksnr_from_fundstellen(fundstellen, "Fraktion GRÜNE") == "17/530"

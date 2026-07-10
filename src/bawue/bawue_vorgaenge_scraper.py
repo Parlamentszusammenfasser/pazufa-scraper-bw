@@ -280,7 +280,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
         initiatoren = _parse_autoren(initiative)
 
         fundstellen_parsed = raw.get("fundstellen_parsed", [])
-        stationen = await self._collect_stationen(fundstellen_parsed, initiative, vorgang_id, titel)
+        # The initiating Drucksache (Gesetzentwurf) anchors section extraction for
+        # shared plenary protocols; derive it up front so it is available during
+        # station building, when enrichment runs (issue #35).
+        initiativ_vnr = _initiativ_drucksnr_from_fundstellen(fundstellen_parsed, initiative)
+        stationen = await self._collect_stationen(fundstellen_parsed, initiative, vorgang_id, titel, initiativ_vnr)
 
         if fundstellen_parsed and not stationen:
             logger.warning(
@@ -367,7 +371,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
     )
 
     async def _collect_stationen(
-        self, fundstellen: list[RawFundstelle], initiative: str, vorgang_id: str, vorgang_titel: str = ""
+        self,
+        fundstellen: list[RawFundstelle],
+        initiative: str,
+        vorgang_id: str,
+        vorgang_titel: str = "",
+        vorgang_vnr: str | None = None,
     ) -> list[Station]:
         """Build stations from parsed Fundstellen, nesting Stellungnahmen as children.
 
@@ -384,7 +393,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         seen_vollvlsgn = False
         last_station_typ_str = ""
         for fund in fundstellen:
-            station = await self._build_station(fund, initiative, vorgang_titel)
+            station = await self._build_station(fund, initiative, vorgang_titel, vorgang_vnr)
             if station is None:
                 continue
             station_typ_str = fund.get("station_typ", "")
@@ -749,7 +758,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 vorgang_id,
             )
 
-    async def _build_station(self, fund: RawFundstelle, initiative: str, vorgang_titel: str = "") -> Station | None:
+    async def _build_station(
+        self, fund: RawFundstelle, initiative: str, vorgang_titel: str = "", vorgang_vnr: str | None = None
+    ) -> Station | None:
         """Convert a parsed Fundstelle dict into a framework Station.
 
         A Fundstelle is a reference line from the PARLIS search results, e.g.:
@@ -792,7 +803,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         gremium = self._determine_gremium(fund, station_typ)
         dokumente, trojanergefahr = await self._build_dokumente(
-            fund, station_typ_str, mapping_text, station_typ, initiative, zp_start, vorgang_titel
+            fund, station_typ_str, mapping_text, station_typ, initiative, zp_start, vorgang_titel, vorgang_vnr
         )
 
         return Station(
@@ -831,6 +842,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         initiative: str,
         zp_start: datetime,
         vorgang_titel: str = "",
+        vorgang_vnr: str | None = None,
     ) -> tuple[list[Dokument], int | None]:
         """Build the document list for a station (0 or 1 documents).
 
@@ -889,6 +901,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     dok,
                     model=self._llm_model,
                     vorgang_titel=vorgang_titel,
+                    vorgang_vnr=vorgang_vnr,
                     metrics=self._llm_metrics,
                     cache=self.config.cache,
                 )
@@ -997,6 +1010,22 @@ def _initiativ_drucksnr(stationen: list[Station]) -> str | None:
             continue
         for dok in station.dokumente:
             drucksnr = dok.drucksnr
+            if drucksnr:
+                return drucksnr
+    return None
+
+
+def _initiativ_drucksnr_from_fundstellen(fundstellen: list[RawFundstelle], initiative: str) -> str | None:
+    """Initiating Drucksache derived from the raw Fundstellen, before stations exist.
+
+    Mirrors :func:`_initiativ_drucksnr` but works on the parsed Fundstellen so the
+    number is available *during* station construction, when enrichment runs and
+    needs it as a section-matching anchor for shared plenary protocols (issue #35).
+    """
+    for fund in fundstellen:
+        mapping_text = fund.get("station_typ") or fund.get("raw", "")
+        if map_stationstyp(mapping_text, initiator=initiative) in _INITIATIV_TYPEN:
+            drucksnr = none_if_blank(fund.get("drucksache"))
             if drucksnr:
                 return drucksnr
     return None
