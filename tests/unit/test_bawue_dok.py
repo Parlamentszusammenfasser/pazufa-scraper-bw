@@ -438,6 +438,20 @@ class TestPromptFingerprintContext:
         b = _prompt_fingerprint(Doktyp.REDEPROTOKOLL, drucksnr="17/529", titel="Fischereigesetz")
         assert a == b
 
+    def test_same_title_different_vorgang_vnr_yield_different_fingerprints(self):
+        """Issue #35 defense-in-depth: two Vorgänge sharing one protocol PDF stay on
+        separate cache entries even when their titles coincide, because the
+        initiating Drucksache (vorgang_vnr) differentiates them."""
+        a = _prompt_fingerprint(Doktyp.REDEPROTOKOLL, titel="Nachtragshaushalt", vorgang_vnr="17/400")
+        b = _prompt_fingerprint(Doktyp.REDEPROTOKOLL, titel="Nachtragshaushalt", vorgang_vnr="17/508")
+        assert a != b
+
+    def test_absent_vorgang_vnr_is_backward_compatible(self):
+        """Omitting vorgang_vnr must not perturb the fingerprint."""
+        a = _prompt_fingerprint(Doktyp.REDEPROTOKOLL, drucksnr="17/529", titel="Fischereigesetz")
+        b = _prompt_fingerprint(Doktyp.REDEPROTOKOLL, drucksnr="17/529", titel="Fischereigesetz", vorgang_vnr=None)
+        assert a == b
+
 
 # ---------------------------------------------------------------------------
 # TestNarrowToRelevantSection — issue #32, corelib section extraction
@@ -513,6 +527,26 @@ class TestNarrowToRelevantSection:
 
         user_msg = captured["messages"][-1]["content"]
         assert "NUR DIE FISCHEREI-DEBATTE" in user_msg
+        _hash_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_enrich_passes_vorgang_vnr_to_section_extractor(self):
+        """Issue #35: the section extractor is anchored on the bill's initiating
+        Drucksache (vorgang_vnr), not the document's own — which is None for a
+        REDEPROTOKOLL (the helper's 17/10266 must be overridden by vorgang_vnr)."""
+        _hash_cache.clear()
+        dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL)
+        llm = _make_section_llm_mock(section_return="NUR DIE FISCHEREI-DEBATTE")
+        session = MagicMock()
+
+        with (
+            _patch_pdf_pipeline(text_and_hash=("Voller Protokolltext mit mehreren Themen", "e" * 64)),
+            _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC),
+        ):
+            await enrich_dokument(session, llm, dok, vorgang_titel="Fischereigesetz", vorgang_vnr="17/529")
+
+        _, kwargs = llm.extract_relevant_section.await_args
+        assert kwargs["vorgang_vnr"] == "17/529"
         _hash_cache.clear()
 
 

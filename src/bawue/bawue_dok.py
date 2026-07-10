@@ -168,7 +168,12 @@ def _context_prefix(titel: str | None, drucksnr: str | None) -> str:
     )
 
 
-def _prompt_fingerprint(doktyp: Doktyp, drucksnr: str | None = None, titel: str | None = None) -> str:
+def _prompt_fingerprint(
+    doktyp: Doktyp,
+    drucksnr: str | None = None,
+    titel: str | None = None,
+    vorgang_vnr: str | None = None,
+) -> str:
     """SHA256 over (system prompt + context header + body prompt) for the given doktyp.
 
     Used as the prompt component of the LLM semantics cache key. The document
@@ -176,10 +181,16 @@ def _prompt_fingerprint(doktyp: Doktyp, drucksnr: str | None = None, titel: str 
     protocol PDF — hence the same file hash — is reused across several bills
     debated in one session; without it the second bill would reuse the first
     bill's cached (wrong-topic) summary (issue #32).
+
+    *vorgang_vnr* (the surrounding Vorgang's initiating Drucksache) is folded in
+    as a defense-in-depth per-Vorgang component: it uniquely identifies the bill,
+    so two bills sharing one protocol PDF stay on separate cache entries even if
+    their titles happen to coincide (issue #35).
     """
     body = _prompt_for_doktyp(doktyp)
     prefix = _context_prefix(titel, drucksnr)
-    return hashlib.sha256(f"{_SYSTEM_PROMPT}\n\n{prefix}{body}".encode()).hexdigest()
+    vnr_part = f"\n\nVORGANG-VNR:{vorgang_vnr}" if vorgang_vnr else ""
+    return hashlib.sha256(f"{_SYSTEM_PROMPT}\n\n{prefix}{body}{vnr_part}".encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -662,6 +673,7 @@ async def enrich_dokument(
     dok: Dokument,
     model: str = "gpt-5-nano",
     vorgang_titel: str | None = None,
+    vorgang_vnr: str | None = None,
     metrics: LLMMetrics | None = None,
     cache: BawueCache | None = None,
 ) -> EnrichmentResult:
@@ -676,6 +688,11 @@ async def enrich_dokument(
     to the LLM as document-identity context so that multi-topic plenary protocols
     are summarized for the correct bill (issue #32); it falls back to the
     document's own title when not provided.
+
+    *vorgang_vnr* is the surrounding Vorgang's initiating Drucksache. It is handed
+    to the section extractor as a matching anchor (protocol documents carry no
+    Drucksache of their own) and folded into the cache key so shared protocols stay
+    Vorgang-specific (issue #35).
 
     Uses an in-memory hash cache to skip LLM calls for duplicate PDFs within
     the same scraper run.
@@ -712,7 +729,7 @@ async def enrich_dokument(
         # Try LLM extraction (with two-tier cache deduplication, keyed by
         # doc_hash + prompt_hash). The prompt hash includes the document identity
         # so two bills sharing one protocol PDF don't collide (issue #32).
-        prompt_hash = _prompt_fingerprint(dok.typ, drucksnr=dok.drucksnr, titel=context_titel)
+        prompt_hash = _prompt_fingerprint(dok.typ, drucksnr=dok.drucksnr, titel=context_titel, vorgang_vnr=vorgang_vnr)
         cache_key = _cache_key(doc_hash, prompt_hash)
         try:
             if cache_key in _hash_cache:
@@ -739,7 +756,9 @@ async def enrich_dokument(
                 # the section about this Vorgang (issue #32). volltext stays the
                 # full window; only the LLM input is narrowed, and only on a cache
                 # miss so the semantics cache stays effective.
-                summary_input = await narrow_to_relevant_section(llm, full_text, dok.typ, context_titel, dok.drucksnr)
+                summary_input = await narrow_to_relevant_section(
+                    llm, full_text, dok.typ, context_titel, vorgang_vnr or dok.drucksnr
+                )
                 semantics = await extract_semantics(
                     llm, summary_input, dok.typ, model=model, dok_titel=context_titel, drucksnr=dok.drucksnr
                 )
