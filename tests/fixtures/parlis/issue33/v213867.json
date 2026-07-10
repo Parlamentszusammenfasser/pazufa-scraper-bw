@@ -1,0 +1,61 @@
+{
+  "titel": "Gesetz zur Änderung des Landeshochschulgesetzes und anderer Gesetze",
+  "vorgangs_id": "V-213867",
+  "Vorgangstyp": "Gesetzgebung",
+  "Initiative": "Fraktion GRÜNE, Fraktion der CDU",
+  "Aktueller Stand": "Verkündet",
+  "detail_url": "https://parlis.landtag-bw.de/parlis/vorgang/V-213867",
+  "fundstellen_parsed": [
+    {
+      "raw": "Gesetzentwurf    Fraktion GRÜNE, Fraktion der CDU  21.09.2021 Drucksache 17/847",
+      "datum": "21.09.2021",
+      "drucksache": "17/847",
+      "station_typ": "Gesetzentwurf",
+      "autor_text": "Fraktion GRÜNE, Fraktion der CDU",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/0000/17%5F0847%5FD.pdf"
+    },
+    {
+      "raw": "Erste Beratung   Plenarprotokoll 17/13 06.10.2021  S. 545-552",
+      "datum": "06.10.2021",
+      "plenarprotokoll": "17/13",
+      "station_typ": "Erste Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0013%5F06102021.pdf#page=41"
+    },
+    {
+      "raw": "Beschlussempfehlung und Bericht    Ausschuss für Wissenschaft, Forschung und Kunst  07.10.2021 Drucksache 17/945",
+      "datum": "07.10.2021",
+      "drucksache": "17/945",
+      "station_typ": "Beschlussempfehlung und Bericht",
+      "ausschuss": "Ausschuss für Wissenschaft, Forschung und Kunst",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/0000/17%5F0945%5FD.pdf"
+    },
+    {
+      "raw": "Änderungsantrag    Fraktion der FDP/DVP  19.10.2021 Drucksache 17/1026",
+      "datum": "19.10.2021",
+      "drucksache": "17/1026",
+      "station_typ": "Änderungsantrag",
+      "autor_text": "Fraktion der FDP/DVP",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1026%5FD.pdf"
+    },
+    {
+      "raw": "Zweite Beratung   Plenarprotokoll 17/15 20.10.2021  S. 673-679; 680-681 @@ D-214462",
+      "datum": "20.10.2021",
+      "plenarprotokoll": "17/15",
+      "station_typ": "Zweite Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0015%5F20102021.pdf#page=27"
+    },
+    {
+      "raw": "Gesetzesbeschluss des Landtags      20.10.2021 Drucksache 17/1008",
+      "datum": "20.10.2021",
+      "drucksache": "17/1008",
+      "station_typ": "Gesetzesbeschluss des Landtags",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1008%5FD.pdf"
+    },
+    {
+      "raw": "Gesetz  vom 26. Oktober 2021 Gesetzblatt für Baden-Württemberg 2021 Nr. 36     S. 941-942",
+      "datum": "26.10.2021",
+      "station_typ": "Gesetz",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/gesetzblaetter/2021/GBl202136.pdf#page=1"
+    }
+  ]
+}
