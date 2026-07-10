@@ -1,0 +1,95 @@
+{
+  "titel": "Staatshaushaltsplan 2022 – Einzelplan 03: Ministerium des Inneren, für Digitalisierung und Kommunen",
+  "vorgangs_id": "V-215974",
+  "Vorgangstyp": "Haushaltsgesetzgebung",
+  "detail_url": "https://parlis.landtag-bw.de/parlis/vorgang/V-215974",
+  "fundstellen_parsed": [
+    {
+      "raw": "Gesetzentwurf    Landesregierung  26.10.2021 Drucksache 17/1000   (40 S.)",
+      "datum": "26.10.2021",
+      "drucksache": "17/1000",
+      "station_typ": "Gesetzentwurf",
+      "autor_text": "Landesregierung",
+      "seiten": 40,
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1000%5FD.pdf"
+    },
+    {
+      "raw": "Beschlussempfehlung und Bericht    Ausschuss für Finanzen  19.11.2021 Drucksache 17/1103   (114 S.) (dazu Änderungsanträge Fraktion der AfD 03/1-03/7, Entschließungsanträge Fraktion der FDP/DVP 03/8-03/9, Änderungsanträge Fraktion der FDP/DVP 03/10-03/11, 03/13-03/14, Entschließungsantrag Fraktion der FDP/DVP 03/12, Entschließungsantrag Fraktion der SPD 03/15, Änderungsantrag Fraktion der SPD 03/16, Änderungsanträge Fraktion GRÜNE und Fraktion der CDU 03/17-03/43)",
+      "datum": "19.11.2021",
+      "drucksache": "17/1103",
+      "station_typ": "Beschlussempfehlung und Bericht",
+      "ausschuss": "Ausschuss für Finanzen",
+      "seiten": 114,
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1103%5FD.pdf"
+    },
+    {
+      "raw": "Änderungsanträge    Fraktion der AfD  13.12.2021 Drucksache 17/1203   S. 2-10 (Nr. 1-7)",
+      "datum": "13.12.2021",
+      "drucksache": "17/1203",
+      "station_typ": "Änderungsanträge",
+      "autor_text": "Fraktion der AfD",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=2"
+    },
+    {
+      "raw": "Entschließungsantrag    Fraktion der SPD  14.12.2021 Drucksache 17/1203   S. 11 (Nr. 8)",
+      "datum": "14.12.2021",
+      "drucksache": "17/1203",
+      "station_typ": "Entschließungsantrag",
+      "autor_text": "Fraktion der SPD",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=11"
+    },
+    {
+      "raw": "Änderungsanträge    Fraktion GRÜNE, Fraktion der CDU  14.12.2021 Drucksache 17/1203   S. 12-17 (Nr. 9-12)",
+      "datum": "14.12.2021",
+      "drucksache": "17/1203",
+      "station_typ": "Änderungsanträge",
+      "autor_text": "Fraktion GRÜNE, Fraktion der CDU",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=12"
+    },
+    {
+      "raw": "Entschließungsantrag    Fraktion der FDP/DVP  14.12.2021 Drucksache 17/1203   S. 18-20 (Nr. 13-14)",
+      "datum": "14.12.2021",
+      "drucksache": "17/1203",
+      "station_typ": "Entschließungsantrag",
+      "autor_text": "Fraktion der FDP/DVP",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=18"
+    },
+    {
+      "raw": "Änderungsanträge    Fraktion der FDP/DVP  14.12.2021 Drucksache 17/1203   S. 21-22 (Nr. 15-16)",
+      "datum": "14.12.2021",
+      "drucksache": "17/1203",
+      "station_typ": "Änderungsanträge",
+      "autor_text": "Fraktion der FDP/DVP",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=21"
+    },
+    {
+      "raw": "Änderungsantrag    Fraktion der FDP/DVP  16.11.2021 Drucksache 17/1203   S. 23 (Nr. 17)",
+      "datum": "16.11.2021",
+      "drucksache": "17/1203",
+      "station_typ": "Änderungsantrag",
+      "autor_text": "Fraktion der FDP/DVP",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=23"
+    },
+    {
+      "raw": "Zweite Beratung   Plenarprotokoll 17/22 15.12.2021  S. 1063-1079",
+      "datum": "15.12.2021",
+      "plenarprotokoll": "17/22",
+      "station_typ": "Zweite Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0022%5F15122021.pdf#page=49"
+    },
+    {
+      "raw": "Beschluss des Landtags in Zweiter Beratung      17.12.2021 Drucksache 17/1220   S. 14-34",
+      "datum": "17.12.2021",
+      "drucksache": "17/1220",
+      "station_typ": "Beschluss des Landtags in Zweiter Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1220%5FD.pdf#page=14"
+    },
+    {
+      "raw": "Dritte Beratung   Plenarprotokoll 17/25 22.12.2021  S. 1334-1355; 1356-1358",
+      "datum": "22.12.2021",
+      "plenarprotokoll": "17/25",
+      "station_typ": "Dritte Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0025%5F22122021.pdf#page=26"
+    }
+  ]
+}
