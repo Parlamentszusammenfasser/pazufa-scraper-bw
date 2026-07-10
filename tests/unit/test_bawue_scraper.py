@@ -199,22 +199,100 @@ class TestBuildVorgang:
         assert v1.stationen[0].api_id == v2.stationen[0].api_id
 
     @pytest.mark.asyncio
-    async def test_document_bearing_station_keeps_no_api_id(self, scraper_build_vorgang):
-        """Stations carrying documents are matched by document hash, so they are
-        left without a synthetic api_id (default fundstellen: Gesetzentwurf has a PDF)."""
+    async def test_budget_siblings_sharing_pdf_get_distinct_station_ids(self, scraper_build_vorgang):
+        """Issue #47 regression: two Haushalt-Einzelplan Vorgänge that cite the
+        *same* shared Staatshaushaltsgesetz PDF must produce distinct
+        document-bearing station api_ids. Before the fix these stations had no
+        api_id and the backend matched them by the shared document hash, merging
+        unrelated Vorgänge and violating rel_station_dokument_pkey."""
+        shared_fundstellen = [
+            {
+                "raw": "Gesetzentwurf    Landesregierung  01.11.2025 Drucksache 17/1000   (5 S.)",
+                "datum": "01.11.2025",
+                "drucksache": "17/1000",
+                "station_typ": "Gesetzentwurf",
+                "pdf_url": "https://www.landtag-bw.de/resource/blob/1/17_1000.pdf",
+            },
+        ]
+        v1 = await scraper_build_vorgang(
+            _make_raw_vorgang("V-100", initiative="Landesregierung", fundstellen=shared_fundstellen)
+        )
+        v2 = await scraper_build_vorgang(
+            _make_raw_vorgang("V-101", initiative="Landesregierung", fundstellen=shared_fundstellen)
+        )
+
+        # Every station carries a stable api_id (no reliance on document hash).
+        for vorgang in (v1, v2):
+            for station in vorgang.stationen:
+                assert station.api_id is not UNSET
+
+        ids_v1 = {s.api_id for s in v1.stationen}
+        ids_v2 = {s.api_id for s in v2.stationen}
+        assert ids_v1.isdisjoint(ids_v2)
+
+    @pytest.mark.asyncio
+    async def test_synthetic_initiativ_deep_copies_regbsl_documents(self, scraper_build_vorgang):
+        """Issue #47: the synthetic parl-initiativ inserted after preparl-regbsl
+        must own deep-copied Dokument objects, not alias the regbsl's, so that
+        per-station mutation (e.g. the stable api_id) does not leak between them."""
+        raw = _make_raw_vorgang(
+            "V-100",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  01.11.2025 Drucksache 17/1000   (5 S.)",
+                    "datum": "01.11.2025",
+                    "drucksache": "17/1000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/1/17_1000.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/150 15.12.2025",
+                    "datum": "15.12.2025",
+                    "plenarprotokoll": "17/150",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        by_typ = {s.typ: s for s in vorgang.stationen}
+        regbsl = by_typ[Stationstyp.PREPARL_REGBSL]
+        initiativ = by_typ[Stationstyp.PARL_INITIATIV]
+
+        assert regbsl.dokumente and initiativ.dokumente
+        # Distinct objects (deep copy) ...
+        assert initiativ.dokumente[0] is not regbsl.dokumente[0]
+        # ... with identical content ...
+        assert initiativ.dokumente[0].link == regbsl.dokumente[0].link
+        # ... but distinct, non-aliased station identities.
+        assert initiativ.api_id != regbsl.api_id
+
+    @pytest.mark.asyncio
+    async def test_document_bearing_station_gets_stable_api_id(self, scraper_build_vorgang):
+        """Issue #47: document-bearing stations also get a Vorgang-scoped api_id,
+        so the backend no longer identifies them by a document hash that collides
+        across Vorgänge (default fundstellen: Gesetzentwurf has a PDF)."""
         raw = _make_raw_vorgang("V-001")
         vorgang = await scraper_build_vorgang(raw)
 
         initiativ = vorgang.stationen[0]
         assert initiativ.typ == Stationstyp.PARL_INITIATIV
         assert initiativ.dokumente  # has a document
-        assert initiativ.api_id is UNSET
+        assert initiativ.api_id is not UNSET
 
-    def test_assign_stable_station_ids_skips_existing_and_documented(self):
-        """Stations with an api_id or with documents are not overwritten."""
+    def test_assign_stable_station_ids_skips_only_existing(self):
+        """Issue #47: only a station that already carries an api_id is left
+        untouched; both document-less and document-bearing stations get one."""
         from datetime import UTC, datetime
 
-        doc_station = MagicMock(api_id=UNSET, dokumente=[object()])
+        doc_station = MagicMock(
+            api_id=UNSET,
+            dokumente=[MagicMock(link="https://example.com/a.pdf")],
+            typ=Stationstyp.PARL_INITIATIV,
+            zp_start=datetime(2026, 6, 3, tzinfo=UTC),
+        )
         preset_station = MagicMock(api_id="preset", dokumente=[])
         bare_station = MagicMock(
             api_id=UNSET,
@@ -224,9 +302,31 @@ class TestBuildVorgang:
         )
         _assign_stable_station_ids([doc_station, preset_station, bare_station], "V-1")
 
-        assert doc_station.api_id is UNSET
+        assert doc_station.api_id is not UNSET
         assert preset_station.api_id == "preset"
         assert bare_station.api_id is not UNSET
+
+    def test_same_typ_same_date_stations_with_different_docs_get_distinct_ids(self):
+        """Issue #47: two same-typ stations sharing a zp_start but carrying
+        different documents must not collapse onto one api_id."""
+        from datetime import UTC, datetime
+
+        zp = datetime(2025, 12, 15, tzinfo=UTC)
+        first = MagicMock(
+            api_id=UNSET,
+            dokumente=[MagicMock(link="https://example.com/erste.pdf")],
+            typ=Stationstyp.PARL_VOLLVLSGN,
+            zp_start=zp,
+        )
+        second = MagicMock(
+            api_id=UNSET,
+            dokumente=[MagicMock(link="https://example.com/zweite.pdf")],
+            typ=Stationstyp.PARL_VOLLVLSGN,
+            zp_start=zp,
+        )
+        _assign_stable_station_ids([first, second], "V-1")
+
+        assert first.api_id != second.api_id
 
     @pytest.mark.asyncio
     async def test_ids_include_initiativdrucksache(self, scraper_build_vorgang):
