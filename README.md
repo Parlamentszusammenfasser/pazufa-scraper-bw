@@ -392,6 +392,7 @@ See [docs/anforderungen.md — Konfiguration](docs/anforderungen.md#konfiguratio
 
 ## Links
 
+- [Migration Wiki](https://migration.wiki.pazufa.de)
 - [PaZuFa Organization](https://codeberg.org/PaZuFa)
 - [parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser) — Main project
 - [pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core) — Shared library (API client, LLM, normalisation)
