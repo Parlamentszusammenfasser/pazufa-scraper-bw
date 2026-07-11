@@ -2,8 +2,10 @@
 .idea/
 
 ## AI Assistants
-.claude
-CLAUDE.md
+# Keep .claude local except the shared, committed permission allowlist.
+.claude/*
+!.claude/settings.json
+# CLAUDE.md is tracked so contributors get the project context.
 
 ## Environment properties
 config.toml
