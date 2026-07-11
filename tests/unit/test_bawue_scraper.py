@@ -3099,6 +3099,215 @@ class TestEnsureAusschberAfterVollvlsgn:
         BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn([])
 
 
+class TestIssue48OrderByZpStartNotListPosition:
+    """Issue #48: ordering helpers must reason about ``zp_start``, not list index.
+
+    PARLIS does not list Fundstellen in chronological order — a budget
+    Beschlussempfehlung dated in mid-November can appear *after* the December
+    first reading, and readings can be listed out of date order. The backend
+    sorts stations by ``zp_start`` before validating the ``gg-land-parl`` track,
+    so any helper keyed off list position leaves such stations out of canonical
+    order → HTTP 400 "Track validation Failed".
+    """
+
+    @staticmethod
+    def _station(typ: Stationstyp, zp: datetime) -> "object":
+        from bawue.types import Gremium, Parlament, Station
+
+        return Station(
+            typ=typ,
+            dokumente=[],
+            zp_start=zp,
+            gremium=Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17),
+        )
+
+    def test_ausschber_retimed_even_when_listed_after_vollvlsgn(self):
+        """An ausschber dated before the reading but *listed after* it must still
+        be retimed. The old ``stationen[:first_vollvlsgn_idx]`` slice never
+        reached an ausschber positioned past the first reading in the list."""
+        s = self._station
+        stationen = [
+            s(Stationstyp.PREPARL_REGBSL, datetime(2021, 10, 26, tzinfo=UTC)),
+            s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 17, tzinfo=UTC)),
+            s(Stationstyp.PARL_AUSSCHBER, datetime(2021, 11, 19, tzinfo=UTC)),
+            s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 22, tzinfo=UTC)),
+        ]
+        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+        assert stationen[2].zp_start == datetime(2021, 12, 17, 1, tzinfo=UTC)
+
+    def test_ausschber_anchor_is_earliest_vollvlsgn_by_date_not_first_in_list(self):
+        """The anchor is the earliest vollvlsgn by ``zp_start``, even when a
+        later-dated reading appears first in the list."""
+        s = self._station
+        stationen = [
+            s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 22, tzinfo=UTC)),  # later reading, listed first
+            s(Stationstyp.PARL_AUSSCHBER, datetime(2021, 11, 19, tzinfo=UTC)),
+            s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 17, tzinfo=UTC)),  # earliest reading
+        ]
+        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+        assert stationen[1].zp_start == datetime(2021, 12, 17, 1, tzinfo=UTC)
+
+    def test_ausschber_on_the_same_day_as_first_reading_is_still_bumped(self):
+        """Boundary: an ausschber dated *exactly* on the earliest reading has an
+        ambiguous order (same zp_start, different typ), so it must be pushed to
+        anchor + 1h rather than left tied."""
+        s = self._station
+        stationen = [
+            s(Stationstyp.PARL_AUSSCHBER, datetime(2021, 12, 17, tzinfo=UTC)),
+            s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 17, tzinfo=UTC)),
+        ]
+        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+        assert stationen[0].zp_start == datetime(2021, 12, 17, 1, tzinfo=UTC)
+
+    def test_ausschber_after_earliest_reading_is_left_untouched(self):
+        """An ausschber that legitimately falls between two readings (dated after
+        the earliest reading) keeps its date — only earlier-or-equal ones move."""
+        s = self._station
+        between = datetime(2021, 12, 18, tzinfo=UTC)
+        stationen = [
+            s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 17, tzinfo=UTC)),
+            s(Stationstyp.PARL_AUSSCHBER, between),
+            s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 22, tzinfo=UTC)),
+        ]
+        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+        assert stationen[1].zp_start == between
+
+    def test_synthetic_initiativ_dated_from_first_reading_not_list_next(self):
+        """The synthetic parl-initiativ is dated from the earliest vollvlsgn, not
+        the list-next station: when the station following the regbsl is a
+        later-dated reading, the old code pushed the introduction *after* an
+        earlier first reading."""
+        s = self._station
+        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+        stationen = [
+            s(Stationstyp.PREPARL_REGBSL, datetime(2021, 10, 26, tzinfo=UTC)),
+            s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 22, tzinfo=UTC)),  # later reading, list-next
+            s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 17, tzinfo=UTC)),  # earlier first reading
+        ]
+        scraper._ensure_initiativ_after_regbsl(stationen)
+        initiativ = next(x for x in stationen if x.typ == Stationstyp.PARL_INITIATIV)
+        assert initiativ.zp_start == datetime(2021, 12, 17, tzinfo=UTC)
+
+    def test_synthetic_initiativ_falls_back_to_regbsl_date_when_nothing_follows(self):
+        """Fallback: with no station following the regbsl (no reading to anchor
+        on), the synthetic initiativ inherits the regbsl's date. _build_vorgang's
+        later _enforce_total_ordering then separates the tie."""
+        s = self._station
+        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+        regbsl_zp = datetime(2021, 10, 26, tzinfo=UTC)
+        stationen = [s(Stationstyp.PREPARL_REGBSL, regbsl_zp)]
+        scraper._ensure_initiativ_after_regbsl(stationen)
+        initiativ = next(x for x in stationen if x.typ == Stationstyp.PARL_INITIATIV)
+        assert initiativ.zp_start == regbsl_zp
+
+    @staticmethod
+    def _assert_canonical_track(stationen: list) -> None:
+        """The zp_start-sorted track is canonical: preparl → initiativ before the
+        first reading, and every ausschber after at least one reading."""
+        order = [s.typ for s in sorted(stationen, key=lambda s: s.zp_start)]
+        first_vollvlsgn = order.index(Stationstyp.PARL_VOLLVLSGN)
+        assert order.index(Stationstyp.PARL_INITIATIV) < first_vollvlsgn, (
+            f"parl-initiativ must precede the first parl-vollvlsgn, got order {[t.value for t in order]}"
+        )
+        for i, typ in enumerate(order):
+            if typ == Stationstyp.PARL_AUSSCHBER:
+                assert i > first_vollvlsgn, (
+                    f"parl-ausschber must follow the first parl-vollvlsgn, got order {[t.value for t in order]}"
+                )
+
+    @pytest.mark.asyncio
+    async def test_drucksache_17_1000_einzelplan_passes_track_validation(self, scraper_build_vorgang):
+        """17/1000 Einzelplan (V-216013): Beschlussempfehlung 17/1117 dated 19.11
+        is a month before the 17.12 first reading yet listed after it. Must still
+        resolve to a canonical zp_start order."""
+        raw = _make_raw_vorgang(
+            "V-216013",
+            titel="Staatshaushaltsplan 2022 - Einzelplan 17",
+            vorgangstyp="Haushaltsgesetzgebung",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  26.10.2021 Drucksache 17/1000",
+                    "datum": "26.10.2021",
+                    "drucksache": "17/1000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/17_1000.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/30 17.12.2021",
+                    "datum": "17.12.2021",
+                    "plenarprotokoll": "17/30",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  19.11.2021 Drucksache 17/1117",
+                    "datum": "19.11.2021",
+                    "drucksache": "17/1117",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/17_1117.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/32 22.12.2021",
+                    "datum": "22.12.2021",
+                    "plenarprotokoll": "17/32",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+        self._assert_canonical_track(vorgang.stationen)
+
+    @pytest.mark.asyncio
+    async def test_drucksache_17_3500_einzelplan_passes_track_validation(self, scraper_build_vorgang):
+        """17/3500 Einzelplan (V-222767): same pattern in the 2023/2024 budget —
+        Beschlussempfehlung dated 18.11 before the 16.12 first reading, listed
+        after it."""
+        raw = _make_raw_vorgang(
+            "V-222767",
+            titel="Staatshaushaltsplan 2023/2024 - Einzelplan 17",
+            vorgangstyp="Haushaltsgesetzgebung",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  25.10.2022 Drucksache 17/3500",
+                    "datum": "25.10.2022",
+                    "drucksache": "17/3500",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/17_3500.pdf",
+                },
+                {
+                    "raw": "Erste Beratung   Plenarprotokoll 17/60 16.12.2022",
+                    "datum": "16.12.2022",
+                    "plenarprotokoll": "17/60",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  18.11.2022 Drucksache 17/3600",
+                    "datum": "18.11.2022",
+                    "drucksache": "17/3600",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/17_3600.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/62 21.12.2022",
+                    "datum": "21.12.2022",
+                    "plenarprotokoll": "17/62",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+        self._assert_canonical_track(vorgang.stationen)
+
+
 class TestAblehnungAnchorsAfterAusschberRetiming:
     """Regression for V-246637 (Gesetz zur Änderung des Abgeordnetengesetzes, WP18).
 

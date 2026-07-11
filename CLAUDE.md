@@ -53,9 +53,11 @@ consolidation (DD-024/DD-026), out-of-order ausschber retiming (DD-025), and
 ## Design decisions — read these first
 
 `docs/design_decisions.md` records **every deliberate deviation** from PaZuFa conventions as
-`DD-001 … DD-034` (also mirrored to the project wiki). Before changing station mapping,
-ordering, enum mapping, or synthetic-station logic: **find the relevant DD**, and when your
-change alters or adds a rule, **add/update a DD** in the same change. Behavior in the code is
+`DD-001 …` (also mirrored to the project wiki). It **opens with a scannable index table** (DD
+number + trigger keywords + code symbols) — read that first to find the relevant DD without
+loading the whole file, then jump to `## DD-NNN`. Before changing station mapping, ordering,
+enum mapping, or synthetic-station logic: **find the relevant DD**, and when your change alters
+or adds a rule, **add/update a DD** (and its index row) in the same change. Behavior in the code is
 usually intentional and DD-justified — don't "fix" it without checking.
 
 Other docs: `docs/architecture.md` (full component/data-flow reference),

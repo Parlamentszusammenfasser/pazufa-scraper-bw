@@ -5,6 +5,59 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 
 ---
 
+## Index
+
+> **Nutzung:** Stichworte des Tasks in der Tabelle suchen, dann per Textsuche
+> `## DD-NNN` zum Abschnitt springen. Zeilennummern sind bewusst nicht gelistet
+> (sie driften bei Edits) — der `## DD-NNN`-Anker ist stabil.
+> **Neue DD ⇒ hier eine Zeile ergänzen.**
+>
+> **Status-Marker:** ⛔ entfernt · ♻️ (teil-)abgelöst · 📝 nur Verifikation/kein Code · ⚠️ Nummernkollision.
+>
+> **Code-Spalte:** Symbole ohne Datei-Präfix liegen in `bawue_vorgaenge_scraper.py`;
+> `map_*` in `enum_mapper.py`; `ReservedGremium`/`CanonicalOrganisation`/`canonicalize_*`/`is_verfassungsaendernd` in `types.py`;
+> `enrich_*`/`extract_*`/`_sanitize_*`/`narrow_*`/`_prompt_fingerprint`/`normalize_volltext`/`_is_garbled` in `bawue_dok.py`.
+
+| DD | Thema — *relevant bei* | Code / Ort |
+|----|------------------------|------------|
+| 001 | Änderungs-/Entschließungsanträge als Dokumente statt Stationen — *Antrag-Handling* | `_collect_stationen` |
+| 002 | „Mitteilung" bewusst → `sonstig` — *Stationstyp-Mapping* | `map_stationstyp`, `DOKUMENTENTYP_MAP` |
+| 003 | „Gesetzentwurf" kontextabhängig (Landesregierung→`preparl-regbsl`, sonst `parl-initiativ`) — *Enum-Mapping mit Initiator* | `map_stationstyp(initiator)`, `map_dokumententyp` |
+| 004 ♻️ | Unterschiedliche Lesungsrunden nie mergen (tw. abgelöst durch DD-024) — *Stationen zusammenführen* | `_try_merge_station`, `_find_matching_ausschuss` |
+| 005 | Stellungnahmen/Antworten als Kinder der Vorstation — *Stellungnahme anhängen* | `_is_stellungnahme`, `_attach_stellungnahme` |
+| 006 | ICS: nur Plenar/FinA/Haushaltsberatungen — *Sitzungen filtern* | `ics_parser._classify_event` |
+| 007 | Beteiligungsportal: nur Prozesse mit Entwurf-PDF — *Beteiligung filtern* | `bawue_beteiligung_scraper.item_extractor` |
+| 008 | Platzhalterdatum `00.00.JJJJ` — *Datum-Parsing, Fallback, UTC* | `_parse_fundstelle_date`, `_fallback_date_from_year` |
+| 009 | Initiative-Fallback aus Fundstellen-Autor — *fehlendes „Initiative"-Feld (Haushalt)* | `_build_vorgang` |
+| 010 | Synthetische `parl-ablehnung` aus „Aktueller Stand: Abgelehnt" — *fehlende Ablehnungs-Station* | `_ensure_ablehnung_station` |
+| 011 | Whitespace-Normalisierung + Raw-Text-Gegenprüfung — *Mapping-Split-Bug „Beschluss des Landtags in …"* | `_normalize_whitespace`, `_build_station` |
+| 012 | Synthetische `parl-initiativ` nach `preparl-regbsl` — *Regierungsentwurf, fehlendes `I`* | `_ensure_initiativ_after_regbsl` |
+| 013 ⛔ | Token-Kürzung vor LLM (aufgehoben → DD-029) — *historisch* | `truncate_text` (entfernt) |
+| 014 | PARLIS: JSON-Kommentare primär, HTML/XPath als Fallback — *Suchergebnis-Parsing* | `parse_results`, `_extract_json_comments`, `_parse_results_from_html` |
+| 015 | Volltext-Normalisierung: Garbled-Erkennung, OCR-Retry, XSS-Guard — *PDF garbled, „xss detected", OCR* | `_is_garbled`, `extract_pdf_text`, `normalize_volltext` |
+| 016 | BW nutzt BY-Track unverändert (`gg-land-parl`-Regex) — *Track-Validierung, DFA, gültige Sequenzen* | `deploy/tracks.toml` |
+| 017 | Konfigurierbares Filtern von `sonstig`-Stationen — *Backend-Panic bei sonstig* | `_collect_stationen`, `filter-sonstig-stations` |
+| 018 ⛔ | *(entfernt)* | — |
+| 019 | „Antrag" nach Ausschussbericht = Änderungsantrag (Positionsheuristik) — *mehrdeutiges „Antrag"* | `_collect_stationen`, `_AMBIGUOUS_ANTRAG_TYPEN`, `seen_ausschber` |
+| 020 | LLM-Cache-Schlüssel = `doc_hash:prompt_hash` — *falsche Cache-Treffer je Doktyp* | `_prompt_fingerprint`, `_cache_key` |
+| 021 | Reservierte Gremium-Namen (`plenum`/`regierung`/`gesetzesblatt`/`volk`) — *`Gremium.name`-Routing* | `ReservedGremium`, `_determine_gremium` |
+| 022 | Kanonische `Autor.organisation` (5 Fraktionen + Landesregierung) — *Organisationsnamen normalisieren* | `CanonicalOrganisation`, `canonicalize_organisation`, `_parse_autoren` |
+| 023 | `verfassungsaendernd` per Titel-Heuristik — *Pflichtfeld nicht in Quelle* | `is_verfassungsaendernd` |
+| 024 | Gleiche Lesungsrunde konsolidieren — *zu viele `V`-Stationen, StHG-Einzelpläne, HTTP400 Track* | `_try_merge_station`, `_collect_stationen` |
+| 025 | `parl-ausschber` vor erster Lesung nachdatieren — *Ausschber vor `V`, HTTP400 Track* | `_ensure_ausschber_after_vollvlsgn` |
+| 026 | „Beschluss des Landtags in <Ordinal>er Beratung" = selbe Runde — *doppelte `V` je Runde* | `_reading_round`, `_same_round_label` |
+| 027 | LLM-Output-Sanitisierung (Tag-Stripping) — *`</narrow>`, „xss detected" in `zusammenfassung`* | `_sanitize_llm_text`, `_sanitize_llm_strings`, `enrich_dokument` |
+| 028 | Stabile `api_id` für dokumentlose Stationen — *Duplikat-Station über Läufe, `II`-Sequenz* | `_assign_stable_station_ids` |
+| 029 | Keine Token-Kürzung + Dokumentkontext + Abschnitts-Extraktion — *falsches Thema in Redeprotokoll-Summary (Issue #32)* | `extract_semantics`, `_context_prefix`, `narrow_to_relevant_section` |
+| 030 | Ollama entfernt — OpenAI einziger LLM-Provider — *LLM-Provider-Konfiguration* | `config.py`, `bawue_dok` |
+| 031 | Unlabeled Plenarprotokoll → Erste Beratung — *fehlendes `V`, `IVAVN`, unbeschriftete Fundstelle* | `_collect_stationen` (`seen_vollvlsgn`), `_ensure_ablehnung_station` |
+| 032 📝 | Issue #33 bereits durch DD-024/026 behoben (kein Code) — *Fundstelle/Runde-Verifikation* | `test_issue33_fundstelle_mapping` |
+| 033 | Initiativdrucksache als Anker + im Cache-Schlüssel (Issue #35) — *geteiltes Protokoll-PDF, falsche Summary* | `narrow_to_relevant_section`, `_prompt_fingerprint`, `_initiativ_drucksnr_from_fundstellen` |
+| 034 | Stabile `api_id` für *alle* Stationen (auch dokumenttragend, Issue #47) — *HTTP500 `rel_station_dokument_pkey`, geteiltes PDF* | `_assign_stable_station_ids`, `_ensure_initiativ_after_regbsl` (deepcopy) |
+| 035 | Reihenfolge-Helfer sortieren nach `zp_start`, nicht Listenposition (Issue #48) — *HTTP400 Track, falsche Sortierung* | `_ensure_ausschber_after_vollvlsgn`, `_ensure_initiativ_after_regbsl` |
+
+---
+
 ## DD-001: Änderungsanträge als Dokumente, nicht als Stationen
 
 **Datum:** 27.03.2026
@@ -358,35 +411,6 @@ bildet lediglich beide Schritte in einer Fundstelle ab.
 
 **Implementierung:** `bawue_vorgaenge_scraper.py`, Methoden `_build_vorgang()`
 und `_ensure_initiativ_after_regbsl()`.
-
----
-
-## DD-012: Überspringen von Vorgängen ohne parlamentarische Stationen
-
-**Datum:** 29.03.2026
-
-**Kontext:** PARLIS listet unter dem Vorgangstyp „Gesetzgebung" auch Einträge auf,
-die kein vollständiges parlamentarisches Gesetzgebungsverfahren durchlaufen haben.
-Diese Einträge besitzen ausschließlich nachparlamentarische Stationen (`postparl-*`)
-und keine parlamentarischen Stationen (`parl-*`). Es handelt sich um:
-
-- **Bekanntmachungen** — z. B. Inkrafttreten von Staatsverträgen (V-212734, V-213657)
-- **Neufassungen** — z. B. Geschäftsordnung der Landesregierung (V-212729, V-221160)
-- **Berichtigungen** — Korrekturen veröffentlichter Gesetze im Gesetzblatt (V-222654)
-
-Das Backend validiert Vorgänge gegen den Track `gg-land-parl`, der eine
-parlamentarische Kette (`parl-initiativ → parl-vollvlsgn → …`) voraussetzt.
-Einträge mit nur `postparl-gsblt` werden mit HTTP 400 (Track validation Failed)
-abgelehnt.
-
-**Entscheidung:** Vorgänge, bei denen alle Stationen nachparlamentarisch sind
-(`postparl-gsblt`, `postparl-vesja`, `postparl-vesne`, `postparl-kraft`), werden
-in `item_extractor()` übersprungen und mit einer Info-Lognachricht dokumentiert.
-Dies ist korrekt, da diese Einträge keine eigenständigen Gesetzgebungsverfahren
-des Landtags darstellen.
-
-**Implementierung:** `bawue_vorgaenge_scraper.py`, Methode `item_extractor()`,
-Konstantenmenge `_POSTPARL_TYPEN`.
 
 ---
 
@@ -1783,3 +1807,80 @@ synthetische `parl-initiativ`-Station dasselbe `Dokument`-Objekt aliaste.
 *künftige* Läufe; die bereits kollidierten 45 Vorgänge müssen einmalig über den
 Admin-Endpunkt neu eingelesen (bzw. bereinigt) werden, da die neue stabile
 `api_id` die alten `api_id=None`-Waisen nicht matcht.
+
+---
+
+## DD-035: Reihenfolge-Helfer sortieren nach `zp_start`, nicht nach Listenposition
+
+**Datum:** 11.07.2026
+
+**Kontext:** 5 Vorgänge scheiterten mit HTTP 400 *Track validation Failed*
+(17/1000 Einzelpläne 16/17, 17/3500 Einzelpläne 11/16/17). DD-012 und DD-025
+verankerten ihre Reihenfolge-Korrekturen an der **Listenposition**, während das
+Backend vor der Track-Validierung nach `zp_start` sortiert (s. DD-016). PARLIS
+liefert die Fundstellen aber nicht chronologisch — eine Mitte-November datierte
+Beschlussempfehlung kann **nach** der Dezember-Erstlesung in der Liste stehen,
+und Lesungen können in beliebiger Datumsreihenfolge auftreten. Dann greifen die
+listenpositions-basierten Heuristiken nicht (Issue #48):
+
+- `_ensure_ausschber_after_vollvlsgn` datierte nur `parl-ausschber` um, die
+  **vor** der ersten `parl-vollvlsgn` *im Listenindex* lagen
+  (`stationen[:first_vollvlsgn_idx]`). Ein chronologisch früher, aber später
+  gelisteter Ausschussbericht blieb unverändert und sortierte vor die Lesung.
+- `_ensure_initiativ_after_regbsl` datierte die synthetische `parl-initiativ`
+  vom **listen-nächsten** Station — war das eine später datierte Lesung, landete
+  die Initiative hinter einer früheren Erstlesung.
+
+**Entscheidung:** Beide Helfer argumentieren jetzt über `zp_start`:
+
+- **Ausschber:** Anker ist die **früheste** `parl-vollvlsgn` nach `zp_start`
+  (`min`, nicht erste in der Liste). Jeder `parl-ausschber` mit
+  `zp_start ≤ Anker` wird — unabhängig von der Listenposition — auf `Anker + 1h`
+  gesetzt. `parl-ausschber` mit `zp_start > Anker` (kanonisch zwischen zwei
+  Lesungen) bleiben unverändert. Die `zp_modifiziert`-Invariante aus DD-025
+  bleibt erhalten.
+- **Initiativ:** Datum ist das **kleinste `zp_start` aller auf den `regbsl`
+  folgenden Stationen** (`> regbsl.zp_start`), nicht das der listen-nächsten.
+  Das liegt garantiert bei/vor der ersten Lesung. Eine Datierung *exakt* auf die
+  erste Lesung wurde verworfen: sie kollidiert, und `_enforce_total_ordering`
+  (bumpt nur vorwärts) würde die Lesung über den umdatierten Ausschussbericht
+  hinausschieben.
+
+**Implementierung:** `bawue_vorgaenge_scraper.py`,
+`_ensure_ausschber_after_vollvlsgn()` und `_ensure_initiativ_after_regbsl()`.
+Reihenfolge der Aufrufe unverändert (DD-025).
+
+**Tests:** `tests/unit/test_bawue_scraper.py::TestIssue48OrderByZpStartNotListPosition`
+— je eine Regression pro Drucksache (17/1000, 17/3500) über `scraper_build_vorgang`,
+plus direkte Helfer-Tests (Ausschber nach der Lesung gelistet; Anker = früheste
+Lesung; Initiativ-Datierung).
+
+---
+
+## DD-036: Überspringen von Vorgängen ohne parlamentarische Stationen
+
+**Datum:** 29.03.2026 · *umnummeriert von DD-012 (Nummernkollision mit „Synthetische
+`parl-initiativ` nach `preparl-regbsl`") am 11.07.2026 — inhaltlich unverändert.*
+
+**Kontext:** PARLIS listet unter dem Vorgangstyp „Gesetzgebung" auch Einträge auf,
+die kein vollständiges parlamentarisches Gesetzgebungsverfahren durchlaufen haben.
+Diese Einträge besitzen ausschließlich nachparlamentarische Stationen (`postparl-*`)
+und keine parlamentarischen Stationen (`parl-*`). Es handelt sich um:
+
+- **Bekanntmachungen** — z. B. Inkrafttreten von Staatsverträgen (V-212734, V-213657)
+- **Neufassungen** — z. B. Geschäftsordnung der Landesregierung (V-212729, V-221160)
+- **Berichtigungen** — Korrekturen veröffentlichter Gesetze im Gesetzblatt (V-222654)
+
+Das Backend validiert Vorgänge gegen den Track `gg-land-parl`, der eine
+parlamentarische Kette (`parl-initiativ → parl-vollvlsgn → …`) voraussetzt.
+Einträge mit nur `postparl-gsblt` werden mit HTTP 400 (Track validation Failed)
+abgelehnt.
+
+**Entscheidung:** Vorgänge, bei denen alle Stationen nachparlamentarisch sind
+(`postparl-gsblt`, `postparl-vesja`, `postparl-vesne`, `postparl-kraft`), werden
+in `item_extractor()` übersprungen und mit einer Info-Lognachricht dokumentiert.
+Dies ist korrekt, da diese Einträge keine eigenständigen Gesetzgebungsverfahren
+des Landtags darstellen.
+
+**Implementierung:** `bawue_vorgaenge_scraper.py`, Methode `item_extractor()`,
+Konstantenmenge `_POSTPARL_TYPEN`.
