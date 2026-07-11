@@ -6,6 +6,7 @@ import re
 import ssl
 import time
 import uuid
+from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
 from uuid import NAMESPACE_URL, uuid5
 
@@ -560,7 +561,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         synthetic = Station(
             typ=Stationstyp.PARL_INITIATIV,
-            dokumente=stationen[regbsl_idx].dokumente.copy(),
+            # Deep-copy so the synthetic parl-initiativ owns its documents rather
+            # than aliasing the regbsl's Dokument objects (issue #47). A shared
+            # object would let per-station mutation (e.g. the stable api_id keyed
+            # off document links) leak between the two stations.
+            dokumente=deepcopy(stationen[regbsl_idx].dokumente),
             zp_start=zp_start,
             gremium=Gremium(
                 parlament=Parlament.BW,
@@ -1051,26 +1056,39 @@ def _vorgang_kurztitel(stationen: list[Station]) -> str | None:
 
 
 def _assign_stable_station_ids(stationen: list[Station], vorgang_id: str) -> None:
-    """Give document-less stations a deterministic api_id (DD-028).
+    """Give every station a deterministic, Vorgang-scoped api_id (DD-028, DD-034).
 
     The backend matches a station against an existing one on re-upload by its
     api_id or by a shared document hash (the ``station_merge_candidates`` query,
-    see DD-010). A station with no documents has neither key, so on every re-run
-    the backend cannot recognise it and inserts a duplicate — which then breaks
-    the Vorgang track (e.g. two ``parl-initiativ`` stations form an invalid
-    ``II`` sequence). Deriving a stable api_id from (vorgang_id, typ, zp_start)
-    lets the backend link and update the existing row instead.
+    see DD-010). Relying on the document hash is unsafe: identical PDFs recur
+    across Vorgänge (every Haushalt-Einzelplan Vorgang cites the shared
+    Staatshaushaltsgesetz Drucksache 17/1000), so the hash matches *across*
+    Vorgänge and the backend merges unrelated stations — a duplicate-key
+    violation on ``rel_station_dokument_pkey`` (issue #47). A missing api_id is
+    just as bad the other way: the backend cannot recognise the station on
+    re-runs and inserts a duplicate, breaking the track (e.g. two
+    ``parl-initiativ`` stations form an invalid ``II`` sequence, DD-028).
 
-    Document-bearing stations keep relying on their document hash, and stations
-    that already carry an api_id (the synthetic ablehnung, DD-010) are left
-    untouched.
+    Deriving the api_id from (vorgang_id, typ, zp_start) scopes identity to the
+    Vorgang and lets the backend link and update the existing row. Stations that
+    already carry an api_id (the synthetic ablehnung, DD-010) are left untouched.
+
+    Document-bearing stations additionally fold their document links into the
+    key: two same-typ stations may legitimately share a ``zp_start`` (e.g. two
+    plenary readings dated the same day, which ``_enforce_total_ordering`` leaves
+    tied) yet carry different documents, and must not collapse onto one api_id.
+    Document-less keys keep the exact DD-028 format so already-persisted rows
+    still match.
     """
     if vorgang_id == "unknown":
         return
     for station in stationen:
-        if not isinstance(station.api_id, Unset) or station.dokumente:
+        if not isinstance(station.api_id, Unset):
             continue
         key = f"bawue-station-{vorgang_id}-{station.typ.value}-{station.zp_start.isoformat()}"
+        if station.dokumente:
+            links = "|".join(sorted(str(dok.link) for dok in station.dokumente))
+            key = f"{key}-{links}"
         station.api_id = str(uuid5(NAMESPACE_URL, key))
 
 
