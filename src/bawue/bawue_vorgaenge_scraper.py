@@ -556,8 +556,23 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if next_idx < len(stationen) and stationen[next_idx].typ == Stationstyp.PARL_INITIATIV:
             return
 
-        # Determine the date: use the next station's date if available, else the regbsl's
-        zp_start = stationen[next_idx].zp_start if next_idx < len(stationen) else stationen[regbsl_idx].zp_start
+        # Date the introduction from the earliest station following the regbsl by
+        # zp_start, not the list-next one: PARLIS list order is not chronological
+        # (issue #48), so the neighbouring Fundstelle can be a later-dated reading
+        # that would push the synthetic parl-initiativ *after* an earlier first
+        # reading. Anchoring on the earliest post-regbsl zp_start keeps it at or
+        # before the first plenary reading. (Dating it exactly on the first
+        # reading instead would collide, and _enforce_total_ordering — which only
+        # bumps forward — would leapfrog the reading past the retimed ausschber.)
+        # Fall back to the list-next / regbsl date when nothing follows.
+        regbsl_zp = stationen[regbsl_idx].zp_start
+        later_starts = [s.zp_start for i, s in enumerate(stationen) if i != regbsl_idx and s.zp_start > regbsl_zp]
+        if later_starts:
+            zp_start = min(later_starts)
+        elif next_idx < len(stationen):
+            zp_start = stationen[next_idx].zp_start
+        else:
+            zp_start = regbsl_zp
 
         synthetic = Station(
             typ=Stationstyp.PARL_INITIATIV,
@@ -588,29 +603,26 @@ class BawueVorgaengeScraper(VorgangsScraper):
         past the first vollvlsgn so the canonical position is preserved
         without losing the station entirely.
 
-        The list-position of the ausschber is left untouched; the backend
-        sorts by ``zp_start`` before validating, so adjusting the timestamp
-        is sufficient. Must run before ``_ensure_ablehnung_station``, which
-        anchors on the chronologically last ``zp_start`` and would otherwise
-        anchor on this ausschber's stale, pre-retiming timestamp.
+        Both the anchor (the first reading) and the "out of order" test key off
+        ``zp_start``, not list position: PARLIS list order is not chronological,
+        so the offending ausschber can appear *after* the reading in the list
+        (issue #48). The list-position of the ausschber is left untouched; the
+        backend sorts by ``zp_start`` before validating, so adjusting the
+        timestamp is sufficient. Must run before ``_ensure_ablehnung_station``,
+        which anchors on the chronologically last ``zp_start`` and would
+        otherwise anchor on this ausschber's stale, pre-retiming timestamp.
         """
-        if not stationen:
+        vollvlsgn_starts = [s.zp_start for s in stationen if s.typ == Stationstyp.PARL_VOLLVLSGN]
+        if not vollvlsgn_starts:
             return
 
-        first_vollvlsgn_idx: int | None = None
-        for i, s in enumerate(stationen):
-            if s.typ == Stationstyp.PARL_VOLLVLSGN:
-                first_vollvlsgn_idx = i
-                break
-
-        if first_vollvlsgn_idx is None:
-            return
-
-        anchor_zp_start = stationen[first_vollvlsgn_idx].zp_start
+        anchor_zp_start = min(vollvlsgn_starts)
         bumped_zp_start = anchor_zp_start + timedelta(hours=1)
 
-        for station in stationen[:first_vollvlsgn_idx]:
+        for station in stationen:
             if station.typ != Stationstyp.PARL_AUSSCHBER:
+                continue
+            if station.zp_start > anchor_zp_start:
                 continue
             station.zp_start = bumped_zp_start
             if isinstance(station.zp_modifiziert, datetime) and station.zp_modifiziert < bumped_zp_start:

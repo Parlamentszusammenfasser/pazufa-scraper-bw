@@ -218,8 +218,8 @@ DOCUMENTED_SONSTIG_STATION_TYPES: list[tuple[str, str]] = [
     ("Mitteilung", "DD-002: sender/timing-dependent, no single mapping is correct"),
     ("Stellungnahme", "DD-005: scraper attaches as child of preceding station"),
     ("Antwort", "DD-005: scraper attaches as child of preceding station"),
-    ("Neufassung", "DD-012: postparl-only meta-entry, scraper skips the whole Vorgang"),
-    ("Berichtigung", "DD-012: postparl-only meta-entry, scraper skips the whole Vorgang"),
+    ("Neufassung", "DD-036: postparl-only meta-entry, scraper skips the whole Vorgang"),
+    ("Berichtigung", "DD-036: postparl-only meta-entry, scraper skips the whole Vorgang"),
     ("Dokument", "DD-017: generic PARLIS label with no parliamentary-process meaning"),
 ]
 

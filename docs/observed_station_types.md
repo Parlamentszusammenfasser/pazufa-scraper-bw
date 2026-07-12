@@ -48,7 +48,7 @@ represents the Gesetzblatt publication, not a separate Inkrafttreten step.
 
 - **Skipped Vorgänge** ("only post-parliamentary stations"): 5 — all driven by
   the meta-categories `Neufassung der Geschäftsordnung`, `Bekanntmachung des
-  Staatsministeriums über das Inkrafttreten`, `Berichtigung des Gesetzes` (DD-012).
+  Staatsministeriums über das Inkrafttreten`, `Berichtigung des Gesetzes` (DD-036).
 - **Regex fallback** (`station_typ not extracted by regex`): occurred for a
   handful of Fundstellen whose raw text begins with `Plenarprotokoll N/M …`
   — no station-type prefix at all. These map to `SONSTIG` via `map_stationstyp()`.
@@ -90,8 +90,8 @@ PARLIS label whose intentional `SONSTIG` mapping is asserted by
 | `Mitteilung`    | DD-002 | sender/timing-dependent, no single mapping is correct      |
 | `Stellungnahme` | DD-005 | scraper attaches as child of preceding station             |
 | `Antwort`       | DD-005 | scraper attaches as child of preceding station             |
-| `Neufassung`    | DD-012 | postparl-only meta-entry, scraper skips the whole Vorgang  |
-| `Berichtigung`  | DD-012 | postparl-only meta-entry, scraper skips the whole Vorgang  |
+| `Neufassung`    | DD-036 | postparl-only meta-entry, scraper skips the whole Vorgang  |
+| `Berichtigung`  | DD-036 | postparl-only meta-entry, scraper skips the whole Vorgang  |
 | `Dokument`      | DD-017 | generic PARLIS label with no parliamentary-process meaning |
 
 ## Refresh procedure
