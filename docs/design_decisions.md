@@ -1794,6 +1794,11 @@ synthetische `parl-initiativ`-Station dasselbe `Dokument`-Objekt aliaste.
 3. `_ensure_initiativ_after_regbsl` nutzt `deepcopy` statt `list.copy()`, sodass
    die synthetische `parl-initiativ`-Station eigene Dokument-Objekte besitzt und
    keine Mutation (z. B. die stabile `api_id`) zwischen den Stationen leakt.
+   Der Deep-Copy läuft über `_deepcopy_preserving_unset` (Memo `{id(UNSET): UNSET}`):
+   ein nacktes `deepcopy` klont das `UNSET`-Sentinel pro optionalem Feld, wodurch
+   corelibs identitätsbasierte `to_dict`-Prüfung (`is not UNSET`) fehlschlägt und
+   ein rohes `Unset` in den Payload leakt → `json.dumps` wirft "Object of type
+   Unset is not JSON serializable" (72 % der WP17-Uploads schlugen so fehl).
 
 **Implementierung:** `bawue_vorgaenge_scraper.py`, Funktionen
 `_assign_stable_station_ids()` und `_ensure_initiativ_after_regbsl()`.
@@ -1803,7 +1808,9 @@ synthetische `parl-initiativ`-Station dasselbe `Dokument`-Objekt aliaste.
 `test_assign_stable_station_ids_skips_only_existing`,
 `test_same_typ_same_date_stations_with_different_docs_get_distinct_ids`,
 `test_budget_siblings_sharing_pdf_get_distinct_station_ids` (Issue-#47-Muster),
-`test_synthetic_initiativ_deep_copies_regbsl_documents`.
+`test_synthetic_initiativ_deep_copies_regbsl_documents`,
+`test_synthetic_initiativ_documents_serialize_to_json` (UNSET-Sentinel bleibt
+JSON-serialisierbar).
 
 **Folgearbeit (Backend-seitig, einmalig):** Wie bei DD-028 heilt der Fix nur
 *künftige* Läufe; die bereits kollidierten 45 Vorgänge müssen einmalig über den

@@ -51,6 +51,19 @@ from bawue.wahlperiode_check import check_for_newer_wahlperiode
 logger = logging.getLogger(__name__)
 
 
+def _deepcopy_preserving_unset[T](obj: T) -> T:
+    """``deepcopy`` a corelib model tree without cloning the ``UNSET`` sentinel.
+
+    Corelib's generated ``to_dict`` omits optional fields via an identity check
+    (``if value is not UNSET``). A plain ``copy.deepcopy`` mints a *fresh* ``Unset``
+    instance for every such field, which then fails that check and leaks into the
+    payload as a raw, non-JSON-serializable ``Unset`` (72% of WP17 uploads failed
+    with "Object of type Unset is not JSON serializable"). Seeding the memo maps
+    the singleton to itself, so every reference to it copies back to the singleton.
+    """
+    return deepcopy(obj, {id(UNSET): UNSET})
+
+
 _AUTOR_SPLIT_RE = re.compile(
     r",\s+(?=Fraktion|Ministerium|Landesregierung|Staatsministerium|Präsident|Ständiger|Abg\.)",
 )
@@ -579,8 +592,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
             # Deep-copy so the synthetic parl-initiativ owns its documents rather
             # than aliasing the regbsl's Dokument objects (issue #47). A shared
             # object would let per-station mutation (e.g. the stable api_id keyed
-            # off document links) leak between the two stations.
-            dokumente=deepcopy(stationen[regbsl_idx].dokumente),
+            # off document links) leak between the two stations. Preserve the UNSET
+            # singleton across the copy so optional fields stay JSON-serializable.
+            dokumente=_deepcopy_preserving_unset(stationen[regbsl_idx].dokumente),
             zp_start=zp_start,
             gremium=Gremium(
                 parlament=Parlament.BW,
