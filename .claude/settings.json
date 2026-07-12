@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(make test)",
+      "Bash(make test *)",
+      "Bash(make test-cov *)",
+      "Bash(make test-all)",
+      "Bash(make test-all *)",
+      "Bash(make test-integration *)",
+      "Bash(make lint)",
+      "Bash(make lint *)",
+      "Bash(make lint-fix *)",
+      "Bash(make format)",
+      "Bash(make format *)",
+      "Bash(make install)",
+      "Bash(make install *)",
+      "Bash(.venv/bin/pytest *)",
+      "Bash(.venv/bin/ruff check *)",
+      "Bash(.venv/bin/ruff format *)",
+      "Bash(.venv/bin/python -m bawue.dry_run)",
+      "Bash(.venv/bin/python -m bawue.dry_run *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch *)",
+      "Bash(docker-compose up *)",
+      "Bash(docker-compose down *)",
+      "Bash(docker-compose ps *)",
+      "Bash(docker-compose logs *)",
+      "Bash(redis-cli ping *)"
+    ],
+    "deny": [
+      "Read(./config.toml)",
+      "Read(./.env)"
+    ],
+    "ask": []
+  }
+}
