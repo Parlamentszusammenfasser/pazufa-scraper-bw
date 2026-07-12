@@ -59,6 +59,7 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 | 037 ♻️ | Neutrale, Vorgangs-unabhängige Zusammenfassung für Redeprotokolle (löst per-Vorgang-Narrowing aus DD-029/033 für dieses Feld ab, Issue #49) — *geteiltes Protokoll-PDF, überschriebene Zusammenfassung* | `enrich_dokument`, `BODY_PROMPT_REDEPROTOKOLL` |
 | 038 | Page-Hint-Fenster mit < `MIN_TEXT_LENGTH` nutzbaren Zeichen fällt auf Volltext zurück (Issue #50) — *`#page=N` auf leere/„TODO"-/Seitenzahl-Seite* | `_extract_relevant_pages` |
 | 039 | Gleicher Ausschuss, Zeitabstand > 60 Tage → keine Zusammenführung (Issue #54) — *zwei Beschlussempfehlungen, verlorenes Datum, geteiltes Gremium* | `_find_matching_ausschuss`, `_AUSSCHBER_MERGE_MAX_GAP` |
+| 040 | Maßgebliche Track-Definition & Prefix-Match-Semantik (`parl-vollvlsgn` = `L` statt `V`, Ablehnung = `N`; Prefix- statt Full-Match; Korrektur zu DD-016/025/026/035) — *Track-Buchstaben, Prefix-Validierung, `SILAL`, „unvollständiger" Track gültig* | `_TRACKS_TOML_STATIONS`, `_BW_GG_LAND_PARL_TRACK`, `_passes_bw_track_validation` |
 
 ---
 
@@ -1898,7 +1899,7 @@ Konstantenmenge `_POSTPARL_TYPEN`.
 
 ---
 
-## DD-037: Maßgebliche Track-Definition & Prefix-Match-Semantik (Korrektur zu DD-016/025/026/035)
+## DD-040: Maßgebliche Track-Definition & Prefix-Match-Semantik (Korrektur zu DD-016/025/026/035)
 
 **Datum:** 12.07.2026
 
