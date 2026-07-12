@@ -556,8 +556,16 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if next_idx < len(stationen) and stationen[next_idx].typ == Stationstyp.PARL_INITIATIV:
             return
 
-        # Determine the date: use the next station's date if available, else the regbsl's
-        zp_start = stationen[next_idx].zp_start if next_idx < len(stationen) else stationen[regbsl_idx].zp_start
+        # Date the synthetic initiativ from the chronologically-earliest station
+        # after the regbsl — NOT the list-next one. PARLIS Fundstellen do not
+        # always arrive in date order, so the list-next station may be a *later*
+        # plenary reading; dating the initiativ from it would push it past the
+        # first reading and break the canonical parl-initiativ → parl-vollvlsgn
+        # order (issue #48). When no later station exists, fall back to the
+        # regbsl's own date (the Gesetzentwurf is the parliamentary initiative).
+        regbsl_zp = stationen[regbsl_idx].zp_start
+        following = [s.zp_start for i, s in enumerate(stationen) if i != regbsl_idx and s.zp_start >= regbsl_zp]
+        zp_start = min(following) if following else regbsl_zp
 
         synthetic = Station(
             typ=Stationstyp.PARL_INITIATIV,
@@ -597,20 +605,21 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if not stationen:
             return
 
-        first_vollvlsgn_idx: int | None = None
-        for i, s in enumerate(stationen):
-            if s.typ == Stationstyp.PARL_VOLLVLSGN:
-                first_vollvlsgn_idx = i
-                break
-
-        if first_vollvlsgn_idx is None:
+        # Anchor on the earliest reading by ``zp_start`` — NOT the first
+        # ``parl-vollvlsgn`` by list position. PARLIS Fundstellen do not always
+        # arrive in chronological order, so the list-first reading may be a later
+        # one, and a misdated committee report can sit *after* the readings in the
+        # list while being dated *before* them. Selecting the anchor and the
+        # offending ausschber by date (not list index) catches both (issue #48).
+        vollvlsgn_starts = [s.zp_start for s in stationen if s.typ == Stationstyp.PARL_VOLLVLSGN]
+        if not vollvlsgn_starts:
             return
 
-        anchor_zp_start = stationen[first_vollvlsgn_idx].zp_start
+        anchor_zp_start = min(vollvlsgn_starts)
         bumped_zp_start = anchor_zp_start + timedelta(hours=1)
 
-        for station in stationen[:first_vollvlsgn_idx]:
-            if station.typ != Stationstyp.PARL_AUSSCHBER:
+        for station in stationen:
+            if station.typ != Stationstyp.PARL_AUSSCHBER or station.zp_start >= anchor_zp_start:
                 continue
             station.zp_start = bumped_zp_start
             if isinstance(station.zp_modifiziert, datetime) and station.zp_modifiziert < bumped_zp_start:

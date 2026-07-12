@@ -1783,3 +1783,65 @@ synthetische `parl-initiativ`-Station dasselbe `Dokument`-Objekt aliaste.
 *künftige* Läufe; die bereits kollidierten 45 Vorgänge müssen einmalig über den
 Admin-Endpunkt neu eingelesen (bzw. bereinigt) werden, da die neue stabile
 `api_id` die alten `api_id=None`-Waisen nicht matcht.
+
+---
+
+## DD-035: Stations-Umsortierung nach `zp_start`, nicht nach Listenposition
+
+**Datum:** 12.07.2026
+
+**Kontext:** Issue #48. Fünf Vorgänge scheiterten im Staging mit HTTP 400 *Track
+validation Failed*. Betroffen waren erneut Haushalts-Einzelpläne (V-216013,
+V-216044, V-222757, V-222765, V-222767). Zwei Umsortier-Helfer aus DD-012 und
+DD-025 argumentierten über die **Listenposition** der Stationen statt über ihr
+Datum. PARLIS liefert Fundstellen aber **nicht garantiert chronologisch** —
+`_collect_stationen()` hängt sie in Listenreihenfolge an, ohne zu sortieren.
+Zwei Lücken entstanden dadurch:
+
+1. `_ensure_ausschber_after_vollvlsgn()` (DD-025) neu-datierte nur `parl-ausschber`,
+   die per Listenindex **vor** der ersten `parl-vollvlsgn` standen
+   (`stationen[:first_vollvlsgn_idx]`). Ein Ausschussbericht, der im PARLIS-Listing
+   **nach** der Lesung stand, aber früher datiert war (Beschlussempfehlung Mitte
+   November, Lesung Mitte Dezember), wurde nie erreicht. Zudem ankerte die Methode
+   auf der listen-ersten `parl-vollvlsgn`, nicht auf der chronologisch ersten.
+2. `_ensure_initiativ_after_regbsl()` (DD-012) datierte die synthetische
+   `parl-initiativ` auf die im Listing **nachfolgende** Station. War das eine
+   *spätere* Lesung, erhielt die Initiative ein Datum **hinter** der ersten Lesung
+   — die kanonische Reihenfolge `parl-initiativ → parl-vollvlsgn` brach.
+
+**Entscheidung:** Beide Helfer wählen Anker und Zielstationen ausschließlich über
+`zp_start`:
+
+- `_ensure_ausschber_after_vollvlsgn()`: Anker ist `min(zp_start)` **aller**
+  `parl-vollvlsgn`; neu-datiert wird **jede** `parl-ausschber` mit
+  `zp_start < anker`, unabhängig von der Listenposition, auf `anker + 1h` (wie
+  bisher). Ein Ausschussbericht, der bereits nach der ersten Lesung datiert ist,
+  bleibt unangetastet (kanonische Mittelposition).
+- `_ensure_initiativ_after_regbsl()`: Datum ist der **chronologisch früheste**
+  Zeitpunkt einer auf den `preparl-regbsl` folgenden Station
+  (`min(zp_start for s if s.zp_start >= regbsl_zp)`), nicht die listen-nächste.
+  Das entspricht der ursprünglichen DD-012-Absicht („Zeitpunkt der nächsten
+  Station") — „nächste" ist jetzt chronologisch, nicht positionell interpretiert.
+  Ohne Folgestation bleibt der Rückfall auf das `regbsl`-Datum (der Gesetzentwurf
+  *ist* die parlamentarische Initiative).
+
+Da die synthetische Initiative direkt hinter dem `regbsl` eingefügt wird und die
+Tie-Breaker-Bumps von `_enforce_total_ordering()` in Listenreihenfolge laufen,
+bleibt die Initiative auch bei Datumsgleichheit mit der ersten Lesung **vor**
+dieser (die kollidierende Lesung wird nach hinten geschoben).
+
+**Wirkung auf Bestandsdaten:** Der lokale WP17-Lauf ist von der Umstellung nicht
+betroffen — dort listete PARLIS die fraglichen Fundstellen zufällig günstig, sodass
+alle 350 Vorgänge bereits kanonisch sortiert waren (verifiziert). Der Fix härtet
+die Logik gegen die ungünstige (im Staging aufgetretene) Listenreihenfolge ab; bei
+bereits datums-konformer Reihenfolge ist er verhaltensneutral.
+
+**Implementierung:** `bawue_vorgaenge_scraper.py`,
+`_ensure_ausschber_after_vollvlsgn()` und `_ensure_initiativ_after_regbsl()`.
+Reihenfolge in `_build_vorgang()` unverändert (DD-025/DD-031).
+
+**Tests:** `tests/unit/test_bawue_scraper.py::TestIssue48OrderStationsByDate` —
+parametrisierter End-to-End-Test über alle fünf Dokumente mit
+nicht-chronologischer Fundstellen-Reihenfolge sowie vier Direkt-Unit-Tests auf
+die beiden Helfer (Ausschussbericht listen-hinter aber früher datiert; Anker =
+früheste Lesung; Initiative aus frühester Folgestation; `regbsl`-Rückfall).

@@ -3099,6 +3099,209 @@ class TestEnsureAusschberAfterVollvlsgn:
         BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn([])
 
 
+# Real per-document dates taken from the local WP17 dump (Staatshaushaltsplan
+# Einzelpläne). Each tuple is the committee-report (Beschlussempfehlung) date, the
+# two plenary readings, and the government-bill (regbsl) date. The staging failures
+# in issue #48 happened when PARLIS listed these Fundstellen out of chronological
+# order, so the ordering helpers — which keyed off list position — left the
+# committee report before the first reading and/or dated the synthetic initiativ
+# past it. Track validation (canonical ``I → V → A``) then rejected the Vorgang.
+_ISSUE_48_CASES = [
+    # (vid, einzelplan, regbsl, ausschber, reading1, reading2)
+    ("V-216013", "17", date(2021, 10, 26), date(2021, 11, 19), date(2021, 12, 17), date(2021, 12, 22)),
+    ("V-216044", "16", date(2021, 10, 26), date(2021, 11, 19), date(2021, 12, 17), date(2021, 12, 22)),
+    ("V-222757", "11", date(2022, 10, 25), date(2022, 11, 17), date(2022, 12, 14), date(2022, 12, 21)),
+    ("V-222765", "16", date(2022, 10, 25), date(2022, 11, 24), date(2022, 12, 16), date(2022, 12, 21)),
+    ("V-222767", "17", date(2022, 10, 25), date(2022, 11, 18), date(2022, 12, 16), date(2022, 12, 21)),
+]
+
+
+class TestIssue48OrderStationsByDate:
+    """Issue #48: ordering helpers must key off ``zp_start``, not list position.
+
+    ``_ensure_ausschber_after_vollvlsgn`` and ``_ensure_initiativ_after_regbsl``
+    previously reasoned about list index. PARLIS does not guarantee chronological
+    Fundstellen order, so a committee report dated before the readings could sit
+    *after* them in the list (never retimed), and a synthetic parl-initiativ could
+    inherit a *later* reading's date (pushed past the first reading). Both break
+    the canonical ``parl-initiativ → parl-vollvlsgn → parl-ausschber`` track.
+    """
+
+    @staticmethod
+    def _adversarial_fundstellen(einzelplan, regbsl, ausschber, reading1, reading2):
+        """Haushalt Einzelplan Fundstellen in a deliberately non-chronological order.
+
+        The Gesetzentwurf (regbsl) is first (PARLIS always lists the initiating
+        document first), but then the *later* reading precedes the earlier one and
+        the committee report comes last — the exact shape that defeated the old
+        list-position logic.
+        """
+        d = "%d.%m.%Y"
+        return [
+            {
+                "raw": f"Gesetzentwurf    Landesregierung  {regbsl.strftime(d)} Drucksache 17/1000",
+                "datum": regbsl.strftime(d),
+                "drucksache": "17/1000",
+                "station_typ": "Gesetzentwurf",
+                "pdf_url": "https://example.com/entwurf.pdf",
+            },
+            {
+                "raw": f"Dritte Beratung   Plenarprotokoll 17/91 {reading2.strftime(d)}",
+                "datum": reading2.strftime(d),
+                "plenarprotokoll": "17/91",
+                "station_typ": "Dritte Beratung",
+                "pdf_url": "",
+            },
+            {
+                "raw": f"Zweite Beratung   Plenarprotokoll 17/90 {reading1.strftime(d)}",
+                "datum": reading1.strftime(d),
+                "plenarprotokoll": "17/90",
+                "station_typ": "Zweite Beratung",
+                "pdf_url": "",
+            },
+            {
+                "raw": f"Beschlussempfehlung und Bericht {ausschber.strftime(d)} Drucksache 17/11{einzelplan}",
+                "datum": ausschber.strftime(d),
+                "drucksache": f"17/11{einzelplan}",
+                "station_typ": "Beschlussempfehlung und Bericht",
+                "ausschuss": "Ausschuss für Finanzen",
+                "pdf_url": "https://example.com/ausschber.pdf",
+            },
+        ]
+
+    @pytest.mark.parametrize(
+        ("vid", "einzelplan", "regbsl", "ausschber", "reading1", "reading2"),
+        _ISSUE_48_CASES,
+        ids=[c[0] for c in _ISSUE_48_CASES],
+    )
+    @pytest.mark.asyncio
+    async def test_affected_document_passes_track_validation(
+        self, scraper_build_vorgang, vid, einzelplan, regbsl, ausschber, reading1, reading2
+    ):
+        """Each of the five documents from issue #48 must build a canonical track.
+
+        Fundstellen are fed in non-chronological order; the built Vorgang must still
+        sort to ``... parl-initiativ → parl-vollvlsgn → parl-ausschber ...`` — i.e.
+        the synthetic initiativ before the first reading and the committee report
+        after it. This fails under the old list-position logic.
+        """
+        raw = _make_raw_vorgang(
+            vid,
+            titel=f"Staatshaushaltsplan Einzelplan {einzelplan}",
+            vorgangstyp="Haushaltsgesetzgebung",
+            initiative="Landesregierung",
+            fundstellen=self._adversarial_fundstellen(einzelplan, regbsl, ausschber, reading1, reading2),
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        by_date = sorted(vorgang.stationen, key=lambda s: s.zp_start)
+        initiativ = next(s for s in by_date if s.typ == Stationstyp.PARL_INITIATIV)
+        first_vollvlsgn = next(s for s in by_date if s.typ == Stationstyp.PARL_VOLLVLSGN)
+        ausschber_st = next(s for s in by_date if s.typ == Stationstyp.PARL_AUSSCHBER)
+
+        # Canonical: initiativ before the first reading, committee report after it.
+        assert initiativ.zp_start < first_vollvlsgn.zp_start
+        assert ausschber_st.zp_start > first_vollvlsgn.zp_start
+        # No parl-ausschber may sort before the first parl-vollvlsgn (the track
+        # letter A must never precede the first V).
+        assert not any(s.typ == Stationstyp.PARL_AUSSCHBER and s.zp_start < first_vollvlsgn.zp_start for s in by_date)
+
+    def test_unit_ausschber_after_vollvlsgn_in_list_but_dated_earlier(self):
+        """Committee report *after* the reading in list order, but dated earlier.
+
+        The old slice ``stationen[:first_vollvlsgn_idx]`` never reached it, leaving
+        it dated before the reading. Selecting by ``zp_start`` retimes it.
+        """
+        from bawue.types import Gremium, Parlament, Station
+
+        gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
+
+        def _station(typ, dt):
+            return Station(typ=typ, dokumente=[], zp_start=dt, gremium=gremium)
+
+        first_reading = datetime(2021, 12, 17, tzinfo=UTC)
+        stationen = [
+            _station(Stationstyp.PREPARL_REGBSL, datetime(2021, 10, 26, tzinfo=UTC)),
+            _station(Stationstyp.PARL_VOLLVLSGN, first_reading),  # reading listed first
+            _station(Stationstyp.PARL_AUSSCHBER, datetime(2021, 11, 19, tzinfo=UTC)),  # dated earlier, listed later
+            _station(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 22, tzinfo=UTC)),
+        ]
+
+        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+
+        assert stationen[2].zp_start == first_reading + timedelta(hours=1)
+
+    def test_unit_ausschber_anchor_is_earliest_reading_not_list_first(self):
+        """Anchor on the earliest reading by date, even if a later one is listed first."""
+        from bawue.types import Gremium, Parlament, Station
+
+        gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
+
+        def _station(typ, dt):
+            return Station(typ=typ, dokumente=[], zp_start=dt, gremium=gremium)
+
+        earliest_reading = datetime(2022, 12, 14, tzinfo=UTC)
+        stationen = [
+            _station(Stationstyp.PARL_VOLLVLSGN, datetime(2022, 12, 21, tzinfo=UTC)),  # later reading listed first
+            _station(Stationstyp.PARL_AUSSCHBER, datetime(2022, 11, 17, tzinfo=UTC)),
+            _station(Stationstyp.PARL_VOLLVLSGN, earliest_reading),
+        ]
+
+        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+
+        # Pinned one hour past the *earliest* reading, not the list-first one.
+        assert stationen[1].zp_start == earliest_reading + timedelta(hours=1)
+
+    def test_unit_initiativ_dated_from_earliest_following_not_list_next(self):
+        """Synthetic parl-initiativ takes the earliest following date, not list-next.
+
+        With a later reading list-adjacent to the regbsl, the old code dated the
+        initiativ from it, pushing it past the first reading. It must instead take
+        the earliest following station's date.
+        """
+        from bawue.types import Gremium, Parlament, Station
+
+        gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
+
+        def _station(typ, dt):
+            return Station(typ=typ, dokumente=[], zp_start=dt, gremium=gremium)
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+
+        earliest_following = datetime(2022, 11, 17, tzinfo=UTC)
+        stationen = [
+            _station(Stationstyp.PREPARL_REGBSL, datetime(2022, 10, 25, tzinfo=UTC)),
+            _station(Stationstyp.PARL_VOLLVLSGN, datetime(2022, 12, 21, tzinfo=UTC)),  # later reading list-next
+            _station(Stationstyp.PARL_AUSSCHBER, earliest_following),
+            _station(Stationstyp.PARL_VOLLVLSGN, datetime(2022, 12, 14, tzinfo=UTC)),
+        ]
+
+        scraper._ensure_initiativ_after_regbsl(stationen)
+
+        initiativ = next(s for s in stationen if s.typ == Stationstyp.PARL_INITIATIV)
+        first_reading = min(s.zp_start for s in stationen if s.typ == Stationstyp.PARL_VOLLVLSGN)
+        assert initiativ.zp_start == earliest_following
+        assert initiativ.zp_start < first_reading
+
+    def test_unit_initiativ_falls_back_to_regbsl_date_when_no_following(self):
+        """With no station after the regbsl, the initiativ takes the regbsl's date."""
+        from bawue.types import Gremium, Parlament, Station
+
+        gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
+        regbsl_zp = datetime(2022, 10, 25, tzinfo=UTC)
+        stationen = [
+            Station(typ=Stationstyp.PREPARL_REGBSL, dokumente=[], zp_start=regbsl_zp, gremium=gremium),
+        ]
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+        scraper._ensure_initiativ_after_regbsl(stationen)
+
+        initiativ = next(s for s in stationen if s.typ == Stationstyp.PARL_INITIATIV)
+        assert initiativ.zp_start == regbsl_zp
+
+
 class TestAblehnungAnchorsAfterAusschberRetiming:
     """Regression for V-246637 (Gesetz zur Änderung des Abgeordnetengesetzes, WP18).
 
