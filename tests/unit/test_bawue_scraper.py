@@ -3099,6 +3099,68 @@ class TestEnsureAusschberAfterVollvlsgn:
         BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn([])
 
 
+# Authoritative station→letter mapping and BW track, copied verbatim from the
+# backend's configured trackfile (see DD-036):
+#   docs/specs/tracks.toml @ tag v0.2.3+v0.0.7, version 0.0.7
+#   https://codeberg.org/PaZuFa/parlamentszusammenfasser/raw/tag/v0.2.3+v0.0.7/docs/specs/tracks.toml
+# The backend maps each Station's ``typ`` to the [stations] letter, joins them in
+# zp_start order, then checks the [tracks.BW] regex as a PREFIX match — a Vorgang
+# is valid iff its letters are consumed as the *start* of an accepting word, so
+# later stages (parl-akzeptanz J, postparl G/K, …) may legitimately be missing.
+_TRACKS_TOML_STATIONS = {
+    "preparl-regent": "R",
+    "preparl-eckpup": "E",
+    "preparl-regbsl": "S",
+    "parl-initiativ": "I",
+    "parl-vollvlsgn": "L",
+    "parl-akzeptanz": "J",
+    "parl-zurueckgz": "Z",
+    "parl-ablehnung": "N",
+    "parl-ausschber": "A",
+    "postparl-gsblt": "G",
+    "postparl-kraft": "K",
+    "preparl-vbegde": "B",
+    "parl-ggentwurf": "W",
+    "postparl-vesja": "Y",
+    "postparl-vesne": "X",
+}
+# Build the Stationstyp→letter map, keeping only the station strings that are
+# valid Stationstyp members (mirrors the backend's station_mapping).
+_GG_LAND_PARL_LETTER = {
+    Stationstyp(value): letter
+    for value, letter in _TRACKS_TOML_STATIONS.items()
+    if value in {s.value for s in Stationstyp}
+}
+
+# [tracks.BW] gg-land-parl, verbatim.
+_BW_GG_LAND_PARL_TRACK = "((E*R+)?S)?I((LA*(Z|LJGA*KA*|LN|LA*(Z|LJGA*KA*|LN)))|Z)"
+
+
+def _passes_bw_track_validation(track: str) -> bool:
+    """Mirror the backend's track validation for ``BW.gg-land-parl``.
+
+    The backend accepts a Vorgang iff its station-letter string is fully consumed
+    as a *prefix* of an accepting word (``matched && consumed == len``; see
+    validate.rs / DD-036). Python's ``regex`` module reproduces exactly this with
+    ``fullmatch(..., partial=True)``: a proper prefix returns a partial match.
+    """
+    regex = pytest.importorskip("regex")  # provided transitively via litellm→tiktoken
+    return regex.fullmatch(_BW_GG_LAND_PARL_TRACK, track, partial=True) is not None
+
+
+# The five processes from issue #48. Real dates from the local WP17 dump;
+# Fundstellen are fed to the parametrized test in a deliberately non-chronological
+# order to exercise the ordering helpers end-to-end.
+# (vid, label, gesetz_drs, besch_drs, regbsl, ausschber, reading1, reading2)
+_ISSUE_48_DOCUMENTS = [
+    ("V-216013", "17/1000 Einzelplan 17", "17/1000", "17/1117", "26.10.2021", "19.11.2021", "17.12.2021", "22.12.2021"),
+    ("V-216044", "17/1000 Einzelplan 16", "17/1000", "17/1118", "26.10.2021", "19.11.2021", "17.12.2021", "22.12.2021"),
+    ("V-222757", "17/3500 Einzelplan 11", "17/3500", "17/3611", "25.10.2022", "17.11.2022", "14.12.2022", "21.12.2022"),
+    ("V-222765", "17/3500 Einzelplan 16", "17/3500", "17/3616", "25.10.2022", "24.11.2022", "16.12.2022", "21.12.2022"),
+    ("V-222767", "17/3500 Einzelplan 17", "17/3500", "17/3617", "25.10.2022", "18.11.2022", "16.12.2022", "21.12.2022"),
+]
+
+
 class TestIssue48OrderByZpStartNotListPosition:
     """Issue #48: ordering helpers must reason about ``zp_start``, not list index.
 
@@ -3203,109 +3265,121 @@ class TestIssue48OrderByZpStartNotListPosition:
         assert initiativ.zp_start == regbsl_zp
 
     @staticmethod
-    def _assert_canonical_track(stationen: list) -> None:
-        """The zp_start-sorted track is canonical: preparl → initiativ before the
-        first reading, and every ausschber after at least one reading."""
-        order = [s.typ for s in sorted(stationen, key=lambda s: s.zp_start)]
-        first_vollvlsgn = order.index(Stationstyp.PARL_VOLLVLSGN)
-        assert order.index(Stationstyp.PARL_INITIATIV) < first_vollvlsgn, (
-            f"parl-initiativ must precede the first parl-vollvlsgn, got order {[t.value for t in order]}"
-        )
-        for i, typ in enumerate(order):
-            if typ == Stationstyp.PARL_AUSSCHBER:
-                assert i > first_vollvlsgn, (
-                    f"parl-ausschber must follow the first parl-vollvlsgn, got order {[t.value for t in order]}"
-                )
+    def _track_string(stationen: list) -> str:
+        """Whole track as the backend sees it: stations sorted by ``zp_start``,
+        each mapped to its ``gg-land-parl`` letter. Fails loudly on a Stationstyp
+        this test does not know how to score, so an unexpected type can't slip
+        through as a silent pass."""
+        letters = []
+        for s in sorted(stationen, key=lambda s: s.zp_start):
+            assert s.typ in _GG_LAND_PARL_LETTER, f"unmapped Stationstyp in track: {s.typ}"
+            letters.append(_GG_LAND_PARL_LETTER[s.typ])
+        return "".join(letters)
 
+    @classmethod
+    def _assert_valid_track(cls, stationen: list, expected: str) -> None:
+        """Assert the *whole* zp_start-sorted track would pass backend validation.
+
+        Unlike per-date assertions, this exercises the full ordering contract the
+        backend enforces:
+
+        * the letter string (stations mapped and sorted by ``zp_start``) equals
+          ``expected`` (e.g. ``"SILAL"``);
+        * that string passes the real ``BW.gg-land-parl`` prefix match — i.e. the
+          backend would accept the Vorgang (DD-036);
+        * no two *different-typed* stations share a ``zp_start`` — the backend
+          sorts by ``zp_start``, so a tie between different types leaves the order
+          ambiguous. ``_enforce_total_ordering`` guarantees this (issue #48 root).
+        """
+        track = cls._track_string(stationen)
+        assert track == expected, f"track {track!r} != expected {expected!r}"
+        assert _passes_bw_track_validation(track), f"track {track!r} rejected by BW.gg-land-parl validation"
+
+        slots: dict = {}
+        for s in stationen:
+            slots.setdefault(s.zp_start, set()).add(s.typ)
+        collisions = {zp: types for zp, types in slots.items() if len(types) > 1}
+        assert not collisions, f"different-typed stations share a zp_start: {collisions}"
+
+    @pytest.mark.parametrize(
+        ("vid", "label", "gesetz_drs", "besch_drs", "regbsl", "ausschber", "reading1", "reading2"),
+        _ISSUE_48_DOCUMENTS,
+        ids=[c[0] for c in _ISSUE_48_DOCUMENTS],
+    )
     @pytest.mark.asyncio
-    async def test_drucksache_17_1000_einzelplan_passes_track_validation(self, scraper_build_vorgang):
-        """17/1000 Einzelplan (V-216013): Beschlussempfehlung 17/1117 dated 19.11
-        is a month before the 17.12 first reading yet listed after it. Must still
-        resolve to a canonical zp_start order."""
+    async def test_affected_document_builds_valid_track(
+        self, scraper_build_vorgang, vid, label, gesetz_drs, besch_drs, regbsl, ausschber, reading1, reading2
+    ):
+        """Each of the five issue-#48 processes must build a valid whole track.
+
+        The committee report is dated ~a month before the first reading but the
+        Fundstellen are listed out of order (later reading first, committee report
+        last). The built Vorgang must still resolve, once sorted by ``zp_start``,
+        to the canonical ``preparl-regbsl → parl-initiativ → parl-vollvlsgn →
+        parl-ausschber → parl-vollvlsgn`` track (``SILAL``) with no tied slots.
+        """
         raw = _make_raw_vorgang(
-            "V-216013",
-            titel="Staatshaushaltsplan 2022 - Einzelplan 17",
+            vid,
+            titel=f"Staatshaushaltsplan {label}",
             vorgangstyp="Haushaltsgesetzgebung",
             initiative="Landesregierung",
             fundstellen=[
                 {
-                    "raw": "Gesetzentwurf    Landesregierung  26.10.2021 Drucksache 17/1000",
-                    "datum": "26.10.2021",
-                    "drucksache": "17/1000",
+                    "raw": f"Gesetzentwurf Landesregierung {regbsl} Drucksache {gesetz_drs}",
+                    "datum": regbsl,
+                    "drucksache": gesetz_drs,
                     "station_typ": "Gesetzentwurf",
-                    "pdf_url": "https://example.com/17_1000.pdf",
+                    "pdf_url": "https://example.com/gesetz.pdf",
                 },
                 {
-                    "raw": "Erste Beratung   Plenarprotokoll 17/30 17.12.2021",
-                    "datum": "17.12.2021",
-                    "plenarprotokoll": "17/30",
-                    "station_typ": "Erste Beratung",
+                    "raw": f"Dritte Beratung Plenarprotokoll 17/99 {reading2}",
+                    "datum": reading2,
+                    "plenarprotokoll": "17/99",
+                    "station_typ": "Dritte Beratung",
                     "pdf_url": "",
                 },
                 {
-                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  19.11.2021 Drucksache 17/1117",
-                    "datum": "19.11.2021",
-                    "drucksache": "17/1117",
-                    "station_typ": "Beschlussempfehlung und Bericht",
-                    "ausschuss": "Ausschuss für Finanzen",
-                    "pdf_url": "https://example.com/17_1117.pdf",
-                },
-                {
-                    "raw": "Zweite Beratung   Plenarprotokoll 17/32 22.12.2021",
-                    "datum": "22.12.2021",
-                    "plenarprotokoll": "17/32",
+                    "raw": f"Zweite Beratung Plenarprotokoll 17/98 {reading1}",
+                    "datum": reading1,
+                    "plenarprotokoll": "17/98",
                     "station_typ": "Zweite Beratung",
                     "pdf_url": "",
+                },
+                {
+                    "raw": f"Beschlussempfehlung und Bericht {ausschber} Drucksache {besch_drs}",
+                    "datum": ausschber,
+                    "drucksache": besch_drs,
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/beschluss.pdf",
                 },
             ],
         )
         vorgang = await scraper_build_vorgang(raw)
-        self._assert_canonical_track(vorgang.stationen)
+        self._assert_valid_track(vorgang.stationen, expected="SILAL")
 
-    @pytest.mark.asyncio
-    async def test_drucksache_17_3500_einzelplan_passes_track_validation(self, scraper_build_vorgang):
-        """17/3500 Einzelplan (V-222767): same pattern in the 2023/2024 budget —
-        Beschlussempfehlung dated 18.11 before the 16.12 first reading, listed
-        after it."""
-        raw = _make_raw_vorgang(
-            "V-222767",
-            titel="Staatshaushaltsplan 2023/2024 - Einzelplan 17",
-            vorgangstyp="Haushaltsgesetzgebung",
-            initiative="Landesregierung",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Landesregierung  25.10.2022 Drucksache 17/3500",
-                    "datum": "25.10.2022",
-                    "drucksache": "17/3500",
-                    "station_typ": "Gesetzentwurf",
-                    "pdf_url": "https://example.com/17_3500.pdf",
-                },
-                {
-                    "raw": "Erste Beratung   Plenarprotokoll 17/60 16.12.2022",
-                    "datum": "16.12.2022",
-                    "plenarprotokoll": "17/60",
-                    "station_typ": "Erste Beratung",
-                    "pdf_url": "",
-                },
-                {
-                    "raw": "Beschlussempfehlung und Bericht   Ausschuss für Finanzen  18.11.2022 Drucksache 17/3600",
-                    "datum": "18.11.2022",
-                    "drucksache": "17/3600",
-                    "station_typ": "Beschlussempfehlung und Bericht",
-                    "ausschuss": "Ausschuss für Finanzen",
-                    "pdf_url": "https://example.com/17_3600.pdf",
-                },
-                {
-                    "raw": "Zweite Beratung   Plenarprotokoll 17/62 21.12.2022",
-                    "datum": "21.12.2022",
-                    "plenarprotokoll": "17/62",
-                    "station_typ": "Zweite Beratung",
-                    "pdf_url": "",
-                },
-            ],
-        )
-        vorgang = await scraper_build_vorgang(raw)
-        self._assert_canonical_track(vorgang.stationen)
+    @pytest.mark.parametrize(
+        ("track", "valid"),
+        [
+            # Valid prefixes of an accepting BW.gg-land-parl word:
+            ("SILAL", True),  # the Haushalt Einzelplan shape the five issue-#48 cases resolve to
+            ("SIL", True),  # in progress: through the first reading only
+            ("ILAL", True),  # Fraktion bill (no preparl-regbsl)
+            ("SILALJGK", True),  # fully completed process (…akzeptanz, Gesetzblatt, in Kraft)
+            ("SILALN", True),  # rejected at the final reading (N = parl-ablehnung)
+            # Invalid orderings — the ones issue #48 produced or guards against:
+            ("SALIL", False),  # committee report before the first reading, initiativ after it
+            ("SLIAL", False),  # reading before the parl-initiativ
+            ("LIAL", False),  # reading before the parl-initiativ, no preparl
+            ("SIALL", False),  # ausschber immediately after initiativ, before any reading
+        ],
+    )
+    def test_bw_track_prefix_validation_matches_backend(self, track, valid):
+        """Pin the prefix-match semantics and the station→letter mapping against
+        the real ``BW.gg-land-parl`` track (DD-036): valid prefixes (including
+        in-progress and completed processes) pass; the mis-orderings issue #48
+        produced are rejected."""
+        assert _passes_bw_track_validation(track) is valid
 
 
 class TestAblehnungAnchorsAfterAusschberRetiming:
