@@ -56,6 +56,7 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 | 034 | Stabile `api_id` für *alle* Stationen (auch dokumenttragend, Issue #47) — *HTTP500 `rel_station_dokument_pkey`, geteiltes PDF* | `_assign_stable_station_ids`, `_ensure_initiativ_after_regbsl` (deepcopy) |
 | 035 | Reihenfolge-Helfer sortieren nach `zp_start`, nicht Listenposition (Issue #48) — *HTTP400 Track, falsche Sortierung* | `_ensure_ausschber_after_vollvlsgn`, `_ensure_initiativ_after_regbsl` |
 | 036 | Vorgänge ohne parlamentarische Stationen überspringen (vormals 2. DD-012) — *nur `postparl-*` → skip* | `item_extractor`, `_POSTPARL_TYPEN` |
+| 037 ♻️ | Neutrale, Vorgangs-unabhängige Zusammenfassung für Redeprotokolle (löst per-Vorgang-Narrowing aus DD-029/033 für dieses Feld ab, Issue #49) — *geteiltes Protokoll-PDF, überschriebene Zusammenfassung* | `enrich_dokument`, `BODY_PROMPT_REDEPROTOKOLL` |
 
 ---
 
@@ -1962,3 +1963,86 @@ verbatim aus `tracks.toml` übernommen (mit Quell-URL/Tag im Code dokumentiert).
 *Beschreibung* der Buchstaben/Semantik in den älteren DDs war ungenau. `V` wird
 in DD-016/025/026/035 weiterhin als Lesbarkeits-Platzhalter verwendet — gemeint
 ist stets `L` (`parl-vollvlsgn`).
+
+---
+
+## DD-037: Neutrale, Vorgangs-unabhängige Zusammenfassung für Redeprotokolle (Issue #49)
+
+**Datum:** 12.07.2026
+
+**Kontext:** Issue #49 meldete, dass Plp 17/0107 (Zweite Beratung) fünf Vorgänge
+verlinkt — Kindertagesbetreuungsgesetz, Privatschulgesetz, 5. HRÄG,
+Gemeindeordnung, Haushaltsbegleitgesetz 2025/2026 —, von denen vier eine falsche
+`zusammenfassung` anzeigten: alle zeigten die auf das Kindertagesbetreuungsgesetz
+zugeschnittene Zusammenfassung. Eine Nachstellung gegen die lokale WP17-Devdaten
+(Postgres) bestätigte den Fund unverändert: Dokument-Zeile 517 (exakt dieselben
+fünf Vorgänge, verlinkt über `17_0107_06112024.pdf`) trug nur eine
+Kita-spezifische `zusammenfassung`.
+
+Ursache ist ein struktureller Konflikt mit [DD-029](#dd-029-keine-token-kürzung--dokumentkontext-im-llm-prompt)/[DD-033](#dd-033-initiativdrucksache-als-anker-für-abschnitts-extraktion--im-cache-schlüssel-issue-35):
+Diese lösten Issue #32/#35 (falsches Thema in der Zusammenfassung), indem sie
+`zusammenfassung` bei Redeprotokollen bewusst **pro Vorgang** unterschiedlich
+berechnen — Abschnitts-Extraktion auf die Drucksache des jeweiligen Vorgangs
+zugeschnitten, Cache-Schlüssel inkl. Vorgangstitel/-Drucksache. Das ist für einen
+einzelnen Vorgang isoliert betrachtet korrekt. Das Backend speichert eine
+`dokument`-Zeile jedoch **pro PDF-Hash**, geteilt von allen Vorgängen, die in
+derselben Plenarsitzung debattiert wurden (`rel_station_dokument`, analog zum
+Stationen-Hash-Merge aus DD-028/034). Jeder PUT eines weiteren Vorgangs
+überschreibt also die zuvor gespeicherte, korrekt-aber-Vorgang-spezifische
+Zusammenfassung — der zuletzt gescrapte Vorgang "gewinnt", alle anderen zeigen
+sein Thema. Der Mechanismus, der #32/#35 löste, verursacht damit #49.
+
+**Entscheidung:** Für `Doktyp.REDEPROTOKOLL` wird die Vorgangsidentität
+(`vorgang_titel`, `vorgang_vnr`, `dok.drucksnr`) bewusst **nicht** an den
+Summarization-Schritt weitergereicht — anders als bei jedem anderen Doktyp:
+
+- **Kein Kontext-Header.** `_context_prefix()` erhält `titel=None`, sodass keine
+  Vorgangs-Verankerung ("KONTEXT: Dieses Dokument gehört zu …") in den Prompt
+  gelangt.
+- **Keine Abschnitts-Extraktion.** `narrow_to_relevant_section()` bricht ohne
+  Titel sofort ab (bestehender None-sicherer Rückfall, kein Code-Änderung
+  nötig) — es wird kein zusätzlicher corelib-Aufruf mehr gemacht, und das volle
+  Fenster (weiterhin das ±30-Seiten-Fenster aus DD-029) erreicht unverändert die
+  Zusammenfassung.
+- **Eigener, neutraler Prompt.** `BODY_PROMPT_REDEPROTOKOLL` ersetzt den
+  bisherigen generischen Fallback-Prompt und weist das Modell explizit an, den
+  Sitzungsabschnitt neutral zusammenzufassen und alle behandelten
+  Tagesordnungspunkte gleichrangig zu nennen, statt sich auf einen Vorgang zu
+  fokussieren.
+- **Cache-Schlüssel kollabiert auf `(doc_hash, doktyp-Prompt)`.** Da
+  `_prompt_fingerprint()` ohne Titel/Drucksache/Vorgangs-Drucksache aufgerufen
+  wird, erhalten alle Vorgänge, die dasselbe Protokoll-PDF teilen, denselben
+  Cache-Eintrag. Der zuerst angereicherte Vorgang berechnet die Zusammenfassung
+  und speichert sie unter diesem Schlüssel; jeder weitere Vorgang mit
+  demselben Hash bekommt einen Cache-Treffer und **übernimmt exakt dieselbe**
+  Zusammenfassung/Schlagworte/Kurztitel, statt eine eigene (und damit
+  überschreibende) Version zu berechnen. Das löst das Problem an der Wurzel,
+  unabhängig von der Scrape-Reihenfolge.
+
+Bewusst nicht angetastet: Das ±30-Seiten-Fenster (DD-029) bleibt unverändert —
+es bestimmt weiterhin sowohl `volltext` als auch den Summarization-Input. Das
+gespeicherte `volltext` selbst bleibt weiterhin abhängig davon, welcher Vorgang
+zuerst angereichert wird (sein `#page=N`-Fenster "gewinnt" ebenfalls); das ist
+eine kleinere, separate Inkonsistenz, die Issue #49 nicht adressiert (die
+Akzeptanzkriterien betreffen ausschließlich `zusammenfassung`).
+
+**Implementierung:** `bawue_dok.py` — `BODY_PROMPT_REDEPROTOKOLL`,
+`_DOKTYP_PROMPT_MAP`, `enrich_dokument()` (Verzweigung `context_titel` /
+`context_vorgang_vnr` / `context_drucksnr` für `Doktyp.REDEPROTOKOLL`).
+
+**Tests:**
+- Unit (`tests/unit/test_bawue_dok.py`):
+  `TestSharedRedeprotokollNeutralSummary::test_two_bills_sharing_one_protocol_get_identical_summary`
+  (Kern-Regression: zwei Vorgänge mit unterschiedlichem Titel/Drucksache und
+  unterschiedlichem simuliertem Seitenfenster, aber identischem PDF-Hash, erhalten
+  identische Zusammenfassung/Schlagworte/Kurztitel), `TestNarrowToRelevantSection::test_enrich_no_longer_narrows_redeprotokoll`
+  (Abschnitts-Extraktion wird für Redeprotokolle nicht mehr aufgerufen),
+  `TestNarrowToRelevantSection::test_enrich_omits_bill_context_for_redeprotokoll`
+  (kein KONTEXT-Header, kein Vorgangstitel/-Drucksache im Prompt),
+  `TestPromptForDoktyp::test_redeprotokoll_uses_dedicated_neutral_prompt`.
+- Integration (`tests/integration/test_issue32_real_documents.py`,
+  `TestEnrichedSummaryIsNeutralAcrossBills::test_two_bills_sharing_the_real_protocol_get_identical_summary`):
+  reales Plenarprotokoll 17/12 (derselbe reale PDF, der Issue #32 begründete),
+  zwei unterschiedliche Vorgangsidentitäten (Fischereigesetz 17/529,
+  Open-Data-Gesetz 17/513) liefern über einen echten LLM-Aufruf byte-identische
+  Zusammenfassung/Schlagworte/Kurztitel — end-to-end am realen Dokument bestätigt.
