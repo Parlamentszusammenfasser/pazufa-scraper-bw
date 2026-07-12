@@ -57,6 +57,9 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 | 035 | Reihenfolge-Helfer sortieren nach `zp_start`, nicht Listenposition (Issue #48) — *HTTP400 Track, falsche Sortierung* | `_ensure_ausschber_after_vollvlsgn`, `_ensure_initiativ_after_regbsl` |
 | 036 | Vorgänge ohne parlamentarische Stationen überspringen (vormals 2. DD-012) — *nur `postparl-*` → skip* | `item_extractor`, `_POSTPARL_TYPEN` |
 | 037 ♻️ | Neutrale, Vorgangs-unabhängige Zusammenfassung für Redeprotokolle (löst per-Vorgang-Narrowing aus DD-029/033 für dieses Feld ab, Issue #49) — *geteiltes Protokoll-PDF, überschriebene Zusammenfassung* | `enrich_dokument`, `BODY_PROMPT_REDEPROTOKOLL` |
+| 038 | Page-Hint-Fenster mit < `MIN_TEXT_LENGTH` nutzbaren Zeichen fällt auf Volltext zurück (Issue #50) — *`#page=N` auf leere/„TODO"-/Seitenzahl-Seite* | `_extract_relevant_pages` |
+| 039 | Gleicher Ausschuss, Zeitabstand > 60 Tage → keine Zusammenführung (Issue #54) — *zwei Beschlussempfehlungen, verlorenes Datum, geteiltes Gremium* | `_find_matching_ausschuss`, `_AUSSCHBER_MERGE_MAX_GAP` |
+| 040 | Maßgebliche Track-Definition & Prefix-Match-Semantik (`parl-vollvlsgn` = `L` statt `V`, Ablehnung = `N`; Prefix- statt Full-Match; Korrektur zu DD-016/025/026/035) — *Track-Buchstaben, Prefix-Validierung, `SILAL`, „unvollständiger" Track gültig* | `_TRACKS_TOML_STATIONS`, `_BW_GG_LAND_PARL_TRACK`, `_passes_bw_track_validation` |
 
 ---
 
@@ -1896,7 +1899,7 @@ Konstantenmenge `_POSTPARL_TYPEN`.
 
 ---
 
-## DD-037: Maßgebliche Track-Definition & Prefix-Match-Semantik (Korrektur zu DD-016/025/026/035)
+## DD-040: Maßgebliche Track-Definition & Prefix-Match-Semantik (Korrektur zu DD-016/025/026/035)
 
 **Datum:** 12.07.2026
 
@@ -2053,3 +2056,75 @@ Akzeptanzkriterien betreffen ausschließlich `zusammenfassung`).
   zwei unterschiedliche Vorgangsidentitäten (Fischereigesetz 17/529,
   Open-Data-Gesetz 17/513) liefern über einen echten LLM-Aufruf byte-identische
   Zusammenfassung/Schlagworte/Kurztitel — end-to-end am realen Dokument bestätigt.
+
+---
+
+## DD-038: Page-Hint-Fenster fällt bei leerem Fenster auf Volltext zurück (Issue #50)
+
+**Datum:** 12.07.2026
+
+**Kontext:** Ein `#page=N`-Fragment in einem Dokumentlink kann auf eine faktisch
+leere Seite zeigen (nur eine laufende Seitenzahl oder ein „TODO"-Platzhalter).
+`_extract_relevant_pages` schnitt das Fenster ab Seite `N` heraus und gab exakt
+diesen Inhalt zurück — der dann als `volltext` des Dokuments persistiert wurde.
+Belegt an Drucksache 17/3840 (Seite 2 → „TODO") und Drucksache 17/1201
+(Seite 2 → „6\n\n6"); beide PDFs extrahieren ohne Seiten-Fragment vollständig.
+
+**Entscheidung:** Liefert das Page-Hint-Fenster nach dem Zusammenfügen weniger
+als `MIN_TEXT_LENGTH` (64) nutzbare Zeichen (`len(windowed.strip())`), verwirft
+`_extract_relevant_pages` das Fenster und gibt den **vollständigen** Dokumenttext
+zurück (mit `logger.info`-Hinweis). Damit reiht sich der Fall bei den bereits
+bestehenden Rückfällen von `_extract_relevant_pages` ein (keine Seitenmarker,
+Seite jenseits des Dokumentendes). Der Schwellwert ist dieselbe Konstante, die
+`extract_pdf_text` als „hier ist zu wenig Text"-Signal (OCR-Retry) nutzt.
+
+Bewusste Eingrenzung: Das ±30-Seiten-Fenster (DD-029) bleibt der Normalfall; der
+Rückfall greift nur, wenn das gesamte Fenster unter der Mindestlänge liegt — ein
+kurzes Startseiten-Fragment mit Folgeseiten voller Inhalt bleibt unberührt.
+
+**Implementierung:** `bawue_dok.py` — `_extract_relevant_pages()`.
+
+**Tests:** Unit (`tests/unit/test_bawue_dok.py::TestPageHintExtraction`):
+`test_extract_relevant_pages_near_empty_window_falls_back` („6\n\n6"-Seite),
+`test_extract_relevant_pages_todo_only_window_falls_back` („TODO"-Seite),
+`test_extract_relevant_pages_substantial_window_kept` (ausreichend gefülltes
+Fenster wird unverändert eingegrenzt).
+
+---
+
+## DD-039: Gleicher Ausschuss, großer Zeitabstand → keine Zusammenführung (Issue #54)
+
+**Datum:** 12.07.2026
+
+**Kontext:** `_find_matching_ausschuss()` fasst aufeinanderfolgende `parl-ausschber`-
+Fundstellen desselben Gremiums (ohne dazwischenliegende Plenarstation) zu einer
+Station zusammen (DD-004). Das ist richtig für die Fundstellen **einer**
+Beratungsrunde (Beschlussempfehlung + Bericht, wenige Tage auseinander), aber falsch
+für **zwei getrennte** Beratungen desselben Ausschusses, die Monate auseinanderliegen.
+Beim Staatshaushaltsgesetz 2022 (V-214597, 17/1000) existieren zwei
+Beschlussempfehlungen des Finanzausschusses vom 30.06.2022 und 09.02.2023. Sie wurden
+zu einer Station verschmolzen, die nur das frühere Datum behielt — `_merge_into()`
+weitet die Zeitspanne für `parl-ausschber` nicht auf (anders als für `parl-vollvlsgn`,
+DD-024), das spätere Datum ging also verloren.
+
+**Entscheidung:** `_find_matching_ausschuss()` erhält zusätzlich das `zp_start` der neuen
+Station. Liegt der einzige rückwärts gefundene Kandidat desselben Gremiums mehr als
+`_AUSSCHBER_MERGE_MAX_GAP` (60 Tage) von der neuen Station entfernt, gilt er als
+eigenständige Beratung und wird **nicht** zusammengeführt (`return None`) — die neue
+Station bleibt als eigener Datensatz erhalten. 60 Tage trennen mehrmonatige
+Distanzen (Nachtrags-/Folgeberatungen) sicher von einer einzelnen, über Tage/Wochen
+laufenden Ausschussrunde. Die Prüfung nutzt `abs()`, ist also reihenfolgeunabhängig.
+
+Bewusst nicht angetastet: Die Zusammenführung innerhalb des Fensters bleibt unverändert
+(bestehende Merge-Tests grün), und `_merge_into()` weitet die Ausschber-Spanne weiterhin
+nicht auf — das ist nur bei getrennten Beratungen ein Problem, und dieser Fall wird jetzt
+an der Wurzel (keine Zusammenführung) gelöst.
+
+**Implementierung:** `bawue_vorgaenge_scraper.py` — `_AUSSCHBER_MERGE_MAX_GAP`,
+`_find_matching_ausschuss()`, `_find_merge_target()`.
+
+**Tests:** Unit (`tests/unit/test_bawue_scraper.py::TestStationMerging`):
+`test_ausschuss_no_merge_across_large_time_gap` (V-214597-Szenario: zwei
+Beschlussempfehlungen des Finanzausschusses 30.06.2022 / 09.02.2023 → zwei Stationen,
+beide Daten erhalten). Die bestehenden `test_ausschuss_merge_backwards_no_plenum_between`
+(2 Tage → 1 Station) und `test_ausschuss_no_merge_across_plenum` bleiben grün.

@@ -92,6 +92,14 @@ DEFAULT_WAHLPERIODE = 17
 DEFAULT_WAHLPERIODE_START = date(2021, 4, 26)  # WP 17 BW: Landtag constituted
 DEFAULT_PARLIS_DELAY = 1.0
 
+# Same-committee `parl-ausschber` fundstellen belonging to one deliberation round
+# (e.g. a Beschlussempfehlung plus its Bericht) fall days apart and are merged into
+# a single station. Two Beschlussempfehlungen months apart are *distinct*
+# deliberations, however, and merging them would silently drop the later date
+# (`_merge_into` keeps the earlier `zp_start`). Cap the merge window so far-apart
+# committee reports stay separate records (issue #54, DD-039).
+_AUSSCHBER_MERGE_MAX_GAP = timedelta(days=60)
+
 
 class BawueVorgaengeScraper(VorgangsScraper):
     """Scrapes legislative data from the Baden-Württemberg PARLIS system.
@@ -722,7 +730,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
           - Everything else: last appended station with same ``typ`` + gremium.
         """
         if station.typ == Stationstyp.PARL_AUSSCHBER:
-            return BawueVorgaengeScraper._find_matching_ausschuss(stationen, station.gremium.name)
+            return BawueVorgaengeScraper._find_matching_ausschuss(stationen, station.gremium.name, station.zp_start)
 
         if not stationen:
             return None
@@ -749,12 +757,19 @@ class BawueVorgaengeScraper(VorgangsScraper):
             _widen_span(target, station.zp_start)
 
     @staticmethod
-    def _find_matching_ausschuss(stationen: list[Station], gremium_name: str) -> Station | None:
-        """Search backwards for a committee station with the same gremium, stopping at plenary."""
+    def _find_matching_ausschuss(stationen: list[Station], gremium_name: str, zp_start: datetime) -> Station | None:
+        """Search backwards for a committee station with the same gremium, stopping at plenary.
+
+        A candidate more than ``_AUSSCHBER_MERGE_MAX_GAP`` away from ``zp_start`` is a
+        distinct deliberation, not a continuation of the same one, so it is not merged
+        (issue #54 — merging would drop the later Beschlussempfehlung's date).
+        """
         for s in reversed(stationen):
             if s.typ == Stationstyp.PARL_VOLLVLSGN:
                 return None
             if s.typ == Stationstyp.PARL_AUSSCHBER and s.gremium.name == gremium_name:
+                if abs(zp_start - s.zp_start) > _AUSSCHBER_MERGE_MAX_GAP:
+                    return None
                 return s
         return None
 

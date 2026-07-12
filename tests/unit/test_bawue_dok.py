@@ -1821,6 +1821,42 @@ class TestPageHintExtraction:
         result = _extract_relevant_pages(text, start_page=50)
         assert result == text
 
+    def test_extract_relevant_pages_near_empty_window_falls_back(self):
+        """Issue #50: a #page=N window with < MIN_TEXT_LENGTH usable chars
+        (e.g. a blank page or a page-number-only page) falls back to full text."""
+        full = (
+            "\n\n<!-- PAGE 1 -->\n\n"
+            "Dies ist der vollständige Gesetzestext mit reichlich Inhalt, "
+            "der als Volltext des Dokuments dienen soll und weit über die "
+            "Mindestlänge hinausgeht."
+            "\n\n<!-- PAGE 2 -->\n\n6\n\n6"
+        )
+        result = _extract_relevant_pages(full, start_page=2, max_pages=30)
+        assert result == full
+
+    def test_extract_relevant_pages_todo_only_window_falls_back(self):
+        """Issue #50: a page-hint window containing only placeholder 'TODO' text
+        falls back to the full document text rather than persisting 'TODO'."""
+        full = (
+            "\n\n<!-- PAGE 1 -->\n\n"
+            "Ausführlicher Beschlussempfehlungstext, der deutlich länger ist "
+            "als die konfigurierte Mindesttextlänge und echten Inhalt trägt."
+            "\n\n<!-- PAGE 2 -->\n\nTODO"
+        )
+        result = _extract_relevant_pages(full, start_page=2, max_pages=30)
+        assert result == full
+
+    def test_extract_relevant_pages_substantial_window_kept(self):
+        """A page-hint window with enough content is returned as-is (no fallback)."""
+        pages = []
+        for i in range(1, 6):
+            pages.append(f"\n\n<!-- PAGE {i} -->\n\nAusreichend langer Seiteninhalt Nummer {i} " * 3)
+        text = "".join(pages)
+        result = _extract_relevant_pages(text, start_page=3, max_pages=30)
+        assert "Seiteninhalt Nummer 3" in result
+        assert "Seiteninhalt Nummer 1" not in result
+        assert result != text
+
 
 # ---------------------------------------------------------------------------
 # TestClearHashCache

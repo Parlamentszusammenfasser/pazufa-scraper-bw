@@ -435,7 +435,20 @@ def _extract_relevant_pages(text: str, start_page: int, max_pages: int = 30) -> 
     if not relevant:
         return text
 
-    return "\n\n".join(relevant)
+    windowed = "\n\n".join(relevant)
+    # A #page=N fragment can point at a blank or near-empty page (e.g. one holding
+    # only a running page number or a "TODO" placeholder). Persisting that window
+    # would drop the document's real content, so fall back to the full text when
+    # the window yields fewer than MIN_TEXT_LENGTH usable chars (issue #50).
+    if len(windowed.strip()) < MIN_TEXT_LENGTH:
+        logger.info(
+            "Page-hint window (page %d) yielded <%d usable chars, falling back to full text",
+            start_page,
+            MIN_TEXT_LENGTH,
+        )
+        return text
+
+    return windowed
 
 
 # ---------------------------------------------------------------------------
