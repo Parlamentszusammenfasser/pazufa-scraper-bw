@@ -1,5 +1,6 @@
 """Tests for the BawueVorgaengeScraper item_extractor logic."""
 
+import json
 import logging
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -269,6 +270,47 @@ class TestBuildVorgang:
         assert initiativ.dokumente[0].link == regbsl.dokumente[0].link
         # ... but distinct, non-aliased station identities.
         assert initiativ.api_id != regbsl.api_id
+
+    @pytest.mark.asyncio
+    async def test_synthetic_initiativ_documents_serialize_to_json(self, scraper_build_vorgang):
+        """Deep-copying the regbsl documents for the synthetic parl-initiativ
+        (issue #47) must not break API serialization. ``copy.deepcopy`` mints a
+        fresh ``Unset`` instance per optional field, and corelib's ``to_dict``
+        guards those fields by identity (``is not UNSET``); a deep-copied sentinel
+        slips past the guard and lands in the payload, so ``json.dumps`` raises
+        'Object of type Unset is not JSON serializable' (72% of WP17 uploads
+        failed on this). Serializing the whole Vorgang must succeed and the
+        synthetic station's document autoren must carry the real UNSET singleton."""
+        raw = _make_raw_vorgang(
+            "V-100",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  01.11.2025 Drucksache 17/1000   (5 S.)",
+                    "datum": "01.11.2025",
+                    "drucksache": "17/1000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/1/17_1000.pdf",
+                },
+                {
+                    "raw": "Zweite Beratung   Plenarprotokoll 17/150 15.12.2025",
+                    "datum": "15.12.2025",
+                    "plenarprotokoll": "17/150",
+                    "station_typ": "Zweite Beratung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        initiativ = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_INITIATIV)
+        autor = initiativ.dokumente[0].autoren[0]
+        # The deep-copied autor must hold the genuine singleton, not a clone, so
+        # the identity-based to_dict guard omits it.
+        assert autor.person is UNSET
+
+        # Whole-Vorgang serialization (the exact path the API client takes).
+        json.dumps(vorgang.to_dict())
 
     @pytest.mark.asyncio
     async def test_document_bearing_station_gets_stable_api_id(self, scraper_build_vorgang):
