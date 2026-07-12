@@ -94,6 +94,22 @@ make run             # run the scraper (needs config.toml + Redis)
 Config is 4-tier: defaults → TOML (`config.*.toml`) → env vars → CLI. LLM document
 enrichment (`bawue_dok.py`) is **off by default** (needs `LLM_PROVIDER_KEY`).
 
+## Git Commit
+
+This repo uses semantic-releases and requires "conventional commit" messages.
+Syntax:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+Types: `feat`, `fix`, `build`, `chore`, `ci`, `docs`, `style`, `refactor`, `perf`, `test`  
+Breaking changes: a commit that has a footer `BREAKING CHANGE:`
+
 ## Local dev data / logs
 
 `locallogs/*.jsonl` are produced when `api-obj-log = "locallogs"` is set (see

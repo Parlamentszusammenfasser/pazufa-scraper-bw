@@ -12,7 +12,7 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 > (sie driften bei Edits) — der `## DD-NNN`-Anker ist stabil.
 > **Neue DD ⇒ hier eine Zeile ergänzen.**
 >
-> **Status-Marker:** ⛔ entfernt · ♻️ (teil-)abgelöst · 📝 nur Verifikation/kein Code · ⚠️ Nummernkollision.
+> **Status-Marker:** ⛔ entfernt · ♻️ (teil-)abgelöst · 📝 nur Verifikation/kein Code.
 >
 > **Code-Spalte:** Symbole ohne Datei-Präfix liegen in `bawue_vorgaenge_scraper.py`;
 > `map_*` in `enum_mapper.py`; `ReservedGremium`/`CanonicalOrganisation`/`canonicalize_*`/`is_verfassungsaendernd` in `types.py`;
@@ -55,6 +55,7 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 | 033 | Initiativdrucksache als Anker + im Cache-Schlüssel (Issue #35) — *geteiltes Protokoll-PDF, falsche Summary* | `narrow_to_relevant_section`, `_prompt_fingerprint`, `_initiativ_drucksnr_from_fundstellen` |
 | 034 | Stabile `api_id` für *alle* Stationen (auch dokumenttragend, Issue #47) — *HTTP500 `rel_station_dokument_pkey`, geteiltes PDF* | `_assign_stable_station_ids`, `_ensure_initiativ_after_regbsl` (deepcopy) |
 | 035 | Reihenfolge-Helfer sortieren nach `zp_start`, nicht Listenposition (Issue #48) — *HTTP400 Track, falsche Sortierung* | `_ensure_ausschber_after_vollvlsgn`, `_ensure_initiativ_after_regbsl` |
+| 036 | Vorgänge ohne parlamentarische Stationen überspringen (vormals 2. DD-012) — *nur `postparl-*` → skip* | `item_extractor`, `_POSTPARL_TYPEN` |
 
 ---
 
