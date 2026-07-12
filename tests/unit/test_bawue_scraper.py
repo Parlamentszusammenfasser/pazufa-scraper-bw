@@ -1539,6 +1539,43 @@ class TestStationMerging:
         assert len(ausschuss_stationen) == 2
 
     @pytest.mark.asyncio
+    async def test_ausschuss_no_merge_across_large_time_gap(self, scraper_build_vorgang):
+        """Issue #54: two same-committee Beschlussempfehlungen months apart are
+        distinct deliberations and must stay separate stations — merging them
+        would drop the later date (Staatshaushaltsgesetz 2022, V-214597:
+        Beschlussempfehlungen dated 2022-06-30 and 2023-02-09)."""
+        raw = _make_raw_vorgang(
+            "V-214597",
+            titel="Staatshaushaltsgesetz 2022",
+            fundstellen=[
+                {
+                    "raw": "Beschlussempfehlung   Ausschuss für Finanzen  30.06.2022 Drucksache 17/2600",
+                    "datum": "30.06.2022",
+                    "drucksache": "17/2600",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/be1.pdf",
+                },
+                {
+                    "raw": "Beschlussempfehlung   Ausschuss für Finanzen  09.02.2023 Drucksache 17/4200",
+                    "datum": "09.02.2023",
+                    "drucksache": "17/4200",
+                    "station_typ": "Beschlussempfehlung und Bericht",
+                    "ausschuss": "Ausschuss für Finanzen",
+                    "pdf_url": "https://example.com/be2.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        ausschuss_stationen = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_AUSSCHBER]
+        assert len(ausschuss_stationen) == 2
+        # No date loss: both Beschlussempfehlung dates survive as distinct records.
+        dates = {s.zp_start.date() for s in ausschuss_stationen}
+        assert date(2022, 6, 30) in dates
+        assert date(2023, 2, 9) in dates
+
+    @pytest.mark.asyncio
     async def test_stellungnahme_still_attaches_after_merge(self, scraper_build_vorgang):
         """Merged station followed by Stellungnahme → Stellungnahme attaches to the merged station."""
         raw = _make_raw_vorgang(
