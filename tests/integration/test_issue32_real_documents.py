@@ -25,10 +25,16 @@ exceeds the old 12 000-token cut, that the historical truncation would have gutt
 the fishing debate while keeping the open-data one, and that the full text now sent
 to the LLM contains the complete fishing debate.
 
-``test_enriched_summary_is_about_fishing_not_open_data`` is the end-to-end guarantee
-and needs a real LLM (it is skipped without ``LLM_PROVIDER_KEY``); like the
-comparable issue #30 check it validates *semantic* correctness that only a real
-model can produce.
+``TestEnrichedSummaryIsNeutralAcrossBills`` is the end-to-end guarantee and needs a
+real LLM (it is skipped without ``LLM_PROVIDER_KEY``). It no longer asserts the
+summary is exclusively about the fishing bill — that per-bill anchoring was reverted
+by issue #49 (https://codeberg.org/PaZuFa/pazufa-scraper-bw/issues/49): the backend
+stores one Dokument row per PDF hash, shared by every bill debated in one sitting, so
+a summary narrowed to a single bill cannot survive more than one bill's upload intact.
+Instead it proves the actual issue #49 fix: two different Vorgänge (different bill
+title/Drucksache) sharing this same real protocol PDF get back an *identical*
+zusammenfassung/schlagworte/kurztitel, because the cache key no longer varies by
+bill identity for REDEPROTOKOLL.
 
 Run with: pytest -m integration tests/integration/test_issue32_real_documents.py
 """
@@ -40,7 +46,7 @@ import aiohttp
 import litellm
 import pytest
 
-from bawue.bawue_dok import download_pdf, extract_pdf_text, normalize_volltext
+from bawue.bawue_dok import _hash_cache, download_pdf, extract_pdf_text, normalize_volltext
 from bawue.types import Doktyp, Dokument
 
 pytestmark = pytest.mark.integration
@@ -115,11 +121,19 @@ class TestFishingDebateSurvivesTruncationRemoval:
         assert "Fischerei" in tail, "fishing content past the old cut must be preserved now that truncation is gone"
 
 
-class TestEnrichedSummaryTopic:
-    """End-to-end guarantee of the whole fix — requires a real LLM."""
+# Second agenda item sharing the same protocol PDF/window: TOP 3, Drucksache
+# 17/513 (open-data/transparency bill, per DD-029's account of this window).
+# Only the Drucksache and the fact that it's a distinct bill matter here — this
+# proves cache collapse across *different* bill identities, not a specific title.
+OPEN_DATA_TITEL = "Gesetz zur Verbesserung der Transparenz der Verwaltung"
+OPEN_DATA_DRUCKSNR = "17/513"
+
+
+class TestEnrichedSummaryIsNeutralAcrossBills:
+    """End-to-end guarantee of the issue #49 fix — requires a real LLM."""
 
     @pytest.mark.asyncio
-    async def test_enriched_summary_is_about_fishing_not_open_data(self):
+    async def test_two_bills_sharing_the_real_protocol_get_identical_summary(self):
         llm_key = os.environ.get("LLM_PROVIDER_KEY")
         if not llm_key:
             pytest.skip("LLM_PROVIDER_KEY not set — skipping LLM end-to-end check")
@@ -129,30 +143,42 @@ class TestEnrichedSummaryTopic:
         from bawue.bawue_dok import enrich_dokument
 
         llm = LLMConnector(model=os.environ.get("LLM_MODEL", _MODEL), api_key=llm_key)
+        _hash_cache.clear()
 
-        # Build the Redeprotokoll document exactly as the scraper does: the link
-        # carries the page hint, drucksnr identifies the debated bill.
-        dok = Dokument(
-            titel="Redebeitrag",
-            volltext="",
-            hash_="",
-            typ=Doktyp.REDEPROTOKOLL,
-            zp_modifiziert=datetime(2021, 9, 29, tzinfo=UTC),
-            zp_referenz=datetime(2021, 9, 29, tzinfo=UTC),
-            link=f"{PP_17_12_URL}#page={PP_17_12_PAGE_HINT}",
-            autoren=[],
-            drucksnr=FISHING_DRUCKSNR,
-        )
+        def _make_dok(drucksnr: str) -> Dokument:
+            # Built exactly as the scraper does: the link carries the page hint;
+            # only drucksnr differs between the two bills' own placeholder Dokumente.
+            return Dokument(
+                titel="Redebeitrag",
+                volltext="",
+                hash_="",
+                typ=Doktyp.REDEPROTOKOLL,
+                zp_modifiziert=datetime(2021, 9, 29, tzinfo=UTC),
+                zp_referenz=datetime(2021, 9, 29, tzinfo=UTC),
+                link=f"{PP_17_12_URL}#page={PP_17_12_PAGE_HINT}",
+                autoren=[],
+                drucksnr=drucksnr,
+            )
 
         async with aiohttp.ClientSession() as session:
-            result = await enrich_dokument(session, llm, dok, vorgang_titel=FISHING_TITEL)
-        summary = (result.dokument.zusammenfassung or "").lower()
+            result_fishing = await enrich_dokument(
+                session, llm, _make_dok(FISHING_DRUCKSNR), vorgang_titel=FISHING_TITEL, vorgang_vnr=FISHING_DRUCKSNR
+            )
+            result_open_data = await enrich_dokument(
+                session,
+                llm,
+                _make_dok(OPEN_DATA_DRUCKSNR),
+                vorgang_titel=OPEN_DATA_TITEL,
+                vorgang_vnr=OPEN_DATA_DRUCKSNR,
+            )
 
-        print(f"\nissue #32 summary (real LLM): {summary!r}")
+        print(f"\nissue #49 shared summary (real LLM): {result_fishing.dokument.zusammenfassung!r}")
 
-        assert summary, "enrichment must produce a summary"
-        assert "fisch" in summary, "summary must be about the fishing bill (Drucksache 17/529)"
-        # The earlier open-data/transparency debate must no longer dominate the summary.
-        assert "open data" not in summary and "open-data" not in summary, (
-            "summary must not describe the unrelated open-data bill"
-        )
+        assert result_fishing.dokument.zusammenfassung, "enrichment must produce a summary"
+        assert result_fishing.dokument.hash_ == result_open_data.dokument.hash_, "same PDF must hash identically"
+        # The actual issue #49 guarantee: whichever bill is enriched first computes
+        # the summary and the second bill's differing identity must not recompute
+        # (and thus overwrite) it with a different, equally one-sided version.
+        assert result_fishing.dokument.zusammenfassung == result_open_data.dokument.zusammenfassung
+        assert result_fishing.dokument.schlagworte == result_open_data.dokument.schlagworte
+        assert result_fishing.dokument.kurztitel == result_open_data.dokument.kurztitel

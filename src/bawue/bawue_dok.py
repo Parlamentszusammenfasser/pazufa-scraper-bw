@@ -131,11 +131,23 @@ Extrahiere aus dem folgenden parlamentarischen Dokument die folgenden Informatio
  "kurztitel": "Kurzer verständlicher Titel in einfacher Sprache"}
 Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
 
+BODY_PROMPT_REDEPROTOKOLL = """\
+Extrahiere aus dem folgenden Ausschnitt eines Plenarprotokolls die folgenden Informationen als JSON:
+{"schlagworte": ["Liste inhaltlich bedeutsamer Schlagworte"],
+ "zusammenfassung": "Neutrale Zusammenfassung des Sitzungsabschnitts in 150-250 Worten",
+ "kurztitel": "Kurzer verständlicher Titel in einfacher Sprache"}
+Dieses Protokoll wird von mehreren Gesetzgebungsverfahren gemeinsam genutzt, die in
+derselben Plenarsitzung behandelt wurden. Fasse den Sitzungsabschnitt daher neutral
+zusammen und nenne alle behandelten Tagesordnungspunkte bzw. Gesetzentwürfe
+gleichrangig, ohne dich auf einen einzelnen davon zu konzentrieren.
+Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
+
 _DOKTYP_PROMPT_MAP: dict[Doktyp, str] = {
     Doktyp.ENTWURF: BODY_PROMPT_ENTWURF,
     Doktyp.PREPARL_ENTWURF: BODY_PROMPT_ENTWURF,
     Doktyp.STELLUNGNAHME: BODY_PROMPT_STELLUNGNAHME,
     Doktyp.BESCHLUSSEMPF: BODY_PROMPT_BESCHLUSSEMPF,
+    Doktyp.REDEPROTOKOLL: BODY_PROMPT_REDEPROTOKOLL,
 }
 
 
@@ -694,6 +706,14 @@ async def enrich_dokument(
     Drucksache of their own) and folded into the cache key so shared protocols stay
     Vorgang-specific (issue #35).
 
+    Exception: for ``REDEPROTOKOLL``, *vorgang_titel*/*vorgang_vnr* are deliberately
+    withheld. The backend stores one Dokument row per PDF hash, shared across every
+    bill debated in that plenary sitting, so a per-bill narrowed summary can never
+    survive more than one bill's upload — the last one silently overwrites the rest
+    (issue #49). Withholding bill identity collapses the cache key to
+    ``(doc_hash, doktyp)``, so every bill sharing the PDF reuses the same neutral,
+    session-level summary instead of computing (and overwriting with) its own.
+
     Uses an in-memory hash cache to skip LLM calls for duplicate PDFs within
     the same scraper run.
 
@@ -724,12 +744,24 @@ async def enrich_dokument(
 
         # Document-identity context for the prompt: the Vorgang title (bill name)
         # or, as a fallback, the document's own title, plus the Drucksache.
-        context_titel = vorgang_titel or dok.titel
+        # REDEPROTOKOLL is withheld from this context (issue #49) — see the
+        # docstring's "Exception" paragraph.
+        if dok.typ == Doktyp.REDEPROTOKOLL:
+            context_titel = None
+            context_vorgang_vnr = None
+            context_drucksnr = None
+        else:
+            context_titel = vorgang_titel or dok.titel
+            context_vorgang_vnr = vorgang_vnr
+            context_drucksnr = dok.drucksnr
 
         # Try LLM extraction (with two-tier cache deduplication, keyed by
         # doc_hash + prompt_hash). The prompt hash includes the document identity
-        # so two bills sharing one protocol PDF don't collide (issue #32).
-        prompt_hash = _prompt_fingerprint(dok.typ, drucksnr=dok.drucksnr, titel=context_titel, vorgang_vnr=vorgang_vnr)
+        # so two bills sharing one protocol PDF don't collide (issue #32) — except
+        # REDEPROTOKOLL, where it is deliberately omitted (issue #49).
+        prompt_hash = _prompt_fingerprint(
+            dok.typ, drucksnr=context_drucksnr, titel=context_titel, vorgang_vnr=context_vorgang_vnr
+        )
         cache_key = _cache_key(doc_hash, prompt_hash)
         try:
             if cache_key in _hash_cache:
@@ -755,12 +787,14 @@ async def enrich_dokument(
                 # For multi-topic plenary protocols, narrow the summary input to
                 # the section about this Vorgang (issue #32). volltext stays the
                 # full window; only the LLM input is narrowed, and only on a cache
-                # miss so the semantics cache stays effective.
+                # miss so the semantics cache stays effective. context_titel is
+                # None for REDEPROTOKOLL, so narrow_to_relevant_section() no-ops
+                # (issue #49) — see the docstring's "Exception" paragraph.
                 summary_input = await narrow_to_relevant_section(
-                    llm, full_text, dok.typ, context_titel, vorgang_vnr or dok.drucksnr
+                    llm, full_text, dok.typ, context_titel, context_vorgang_vnr or context_drucksnr
                 )
                 semantics = await extract_semantics(
-                    llm, summary_input, dok.typ, model=model, dok_titel=context_titel, drucksnr=dok.drucksnr
+                    llm, summary_input, dok.typ, model=model, dok_titel=context_titel, drucksnr=context_drucksnr
                 )
                 _hash_cache[cache_key] = semantics
                 _redis_set(cache, cache_key, json.dumps(semantics))

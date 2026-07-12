@@ -506,9 +506,13 @@ class TestNarrowToRelevantSection:
         llm.extract_relevant_section.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_enrich_feeds_narrowed_text_to_summarizer(self):
-        """End-to-end wiring: on a cache miss, the narrowed section is what the
-        summarization LLM sees — not the full window."""
+    async def test_enrich_no_longer_narrows_redeprotokoll(self):
+        """Issue #49 supersedes issue #32/#35's per-bill narrowing: the backend
+        stores one Dokument row per shared REDEPROTOKOLL PDF, so a per-bill
+        narrowed section can never survive multiple bills' uploads intact —
+        whichever bill is scraped last silently overwrites the others. enrich_dokument
+        must no longer call the corelib section extractor for REDEPROTOKOLL, and the
+        full window must reach the summarizer unmodified."""
         _hash_cache.clear()
         dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL)
         llm = _make_section_llm_mock(section_return="NUR DIE FISCHEREI-DEBATTE")
@@ -523,30 +527,39 @@ class TestNarrowToRelevantSection:
             _patch_pdf_pipeline(text_and_hash=("Voller Protokolltext mit mehreren Themen", "d" * 64)),
             patch("bawue.bawue_dok.litellm.acompletion", new=_capture),
         ):
-            await enrich_dokument(session, llm, dok)
+            await enrich_dokument(session, llm, dok, vorgang_titel="Fischereigesetz", vorgang_vnr="17/529")
 
+        llm.extract_relevant_section.assert_not_awaited()
         user_msg = captured["messages"][-1]["content"]
-        assert "NUR DIE FISCHEREI-DEBATTE" in user_msg
+        assert "Voller Protokolltext mit mehreren Themen" in user_msg
+        assert "NUR DIE FISCHEREI-DEBATTE" not in user_msg
         _hash_cache.clear()
 
     @pytest.mark.asyncio
-    async def test_enrich_passes_vorgang_vnr_to_section_extractor(self):
-        """Issue #35: the section extractor is anchored on the bill's initiating
-        Drucksache (vorgang_vnr), not the document's own — which is None for a
-        REDEPROTOKOLL (the helper's 17/10266 must be overridden by vorgang_vnr)."""
+    async def test_enrich_omits_bill_context_for_redeprotokoll(self):
+        """Issue #49: no bill title/Drucksache anchor reaches the REDEPROTOKOLL
+        prompt — the summary must stay neutral, not narrowed to one Vorgang."""
         _hash_cache.clear()
         dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL)
-        llm = _make_section_llm_mock(section_return="NUR DIE FISCHEREI-DEBATTE")
+        llm = _make_section_llm_mock()
         session = MagicMock()
+        captured: dict = {}
+
+        async def _capture(*_args, **kwargs):
+            captured["messages"] = kwargs["messages"]
+            return _mock_llm_response(SAMPLE_LLM_RESPONSE_GENERIC)
 
         with (
             _patch_pdf_pipeline(text_and_hash=("Voller Protokolltext mit mehreren Themen", "e" * 64)),
-            _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC),
+            patch("bawue.bawue_dok.litellm.acompletion", new=_capture),
         ):
             await enrich_dokument(session, llm, dok, vorgang_titel="Fischereigesetz", vorgang_vnr="17/529")
 
-        _, kwargs = llm.extract_relevant_section.await_args
-        assert kwargs["vorgang_vnr"] == "17/529"
+        llm.extract_relevant_section.assert_not_awaited()
+        user_msg = captured["messages"][-1]["content"]
+        assert "Fischereigesetz" not in user_msg
+        assert "17/529" not in user_msg
+        assert "KONTEXT" not in user_msg
         _hash_cache.clear()
 
 
@@ -618,10 +631,13 @@ class TestPromptForDoktyp:
         assert "meinung" in prompt.lower() or "Meinung" in prompt
         assert "trojanergefahr" in prompt.lower() or "Trojanergefahr" in prompt
 
-    def test_redeprotokoll_uses_generic_prompt(self):
+    def test_redeprotokoll_uses_dedicated_neutral_prompt(self):
+        """Issue #49: REDEPROTOKOLL gets its own prompt (not the generic one),
+        asking for a session-level summary rather than a single-bill one."""
         prompt = _prompt_for_doktyp(Doktyp.REDEPROTOKOLL)
         assert "trojanergefahr" not in prompt.lower()
         assert "meinung" not in prompt.lower()
+        assert prompt != _prompt_for_doktyp(Doktyp.SONSTIG)
 
     def test_sonstig_uses_generic_prompt(self):
         prompt = _prompt_for_doktyp(Doktyp.SONSTIG)
@@ -827,6 +843,81 @@ class TestEnrichDokument:
             await enrich_dokument(session, llm, dok)
 
         assert not tmp_path.exists(), "Temporary PDF should be cleaned up"
+
+
+# ---------------------------------------------------------------------------
+# TestSharedRedeprotokollNeutralSummary — issue #49
+# ---------------------------------------------------------------------------
+
+
+class TestSharedRedeprotokollNeutralSummary:
+    """Issue #49: Plp 17/0107 links 5 bills (Kita, Privatschulgesetz, 5. HRÄG,
+    Gemeindeordnung, Haushaltsbegleitgesetz 2025/2026); the backend stores one
+    Dokument row per PDF hash, so only the last-uploaded bill's per-bill
+    narrowed summary survived — reproduced against real WP17 dev data, where
+    the shared row's zusammenfassung described only the Kita bill.
+
+    The fix makes the REDEPROTOKOLL LLM-semantics cache key collapse to
+    (doc_hash, doktyp) — identical for every bill sharing the PDF — so the
+    first bill enriched "wins" the cache entry and every other bill reuses it
+    verbatim instead of computing (and then overwriting with) its own
+    bill-narrowed version.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_two_bills_sharing_one_protocol_get_identical_summary(self):
+        session = MagicMock()
+        llm = _make_llm_mock()
+        shared_hash = SAMPLE_HASH
+
+        dok_kita = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, titel="Zweite Beratung")
+        dok_privatschule = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, titel="Zweite Beratung")
+
+        with (
+            _patch_pdf_pipeline(text_and_hash=("Fenster um die Kita-Debatte", shared_hash)),
+            _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC),
+        ):
+            result_kita = await enrich_dokument(
+                session,
+                llm,
+                dok_kita,
+                vorgang_titel="Gesetz zur Änderung des Kindertagesbetreuungsgesetzes",
+                vorgang_vnr="17/6789",
+            )
+
+        # Second bill: different title/Drucksache and (simulating a different
+        # #page=N window of the same PDF) different extracted text, but the
+        # identical PDF hash — this is what the backend dedups on.
+        wrong_topic_response = json.dumps(
+            {
+                "schlagworte": ["privatschule"],
+                "zusammenfassung": "FALSCHES THEMA: Privatschulgesetz-spezifische Zusammenfassung.",
+                "kurztitel": "Privatschulgesetz",
+            }
+        )
+        with (
+            _patch_pdf_pipeline(text_and_hash=("Anderes Seitenfenster desselben Protokolls", shared_hash)),
+            _patch_llm(wrong_topic_response),
+        ):
+            result_privatschule = await enrich_dokument(
+                session,
+                llm,
+                dok_privatschule,
+                vorgang_titel="Gesetz zur Änderung des Privatschulgesetzes",
+                vorgang_vnr="17/1234",
+            )
+
+        assert result_privatschule.dokument.hash_ == result_kita.dokument.hash_
+        assert result_privatschule.dokument.zusammenfassung == result_kita.dokument.zusammenfassung
+        assert result_privatschule.dokument.schlagworte == result_kita.dokument.schlagworte
+        assert result_privatschule.dokument.kurztitel == result_kita.dokument.kurztitel
+        assert "FALSCHES THEMA" not in result_privatschule.dokument.zusammenfassung
 
 
 # ---------------------------------------------------------------------------
