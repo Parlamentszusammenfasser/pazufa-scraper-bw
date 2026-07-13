@@ -48,6 +48,11 @@ enabled-vorgangstypen = ["Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag"]
 # The backend currently panics on sonstig stations (validate.rs:310).
 # Set to false once the backend accepts sonstig.
 #filter-sonstig-stations = true
+# Expose the Initiativdrucksache as a cross-reference `vg_ident` (Issue #26).
+# Off by default as a backend workaround (DD-041): the backend merges unrelated
+# Vorgänge that share this many-to-one ident → HTTP 500 rel_station_dokument_pkey.
+# Set to true once the backend matches only on 1:1 identifiers.
+#emit-initdrucks-ident = false
 
 ics-url = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkalender.ics"
 
