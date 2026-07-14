@@ -15,51 +15,54 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 > **Status-Marker:** ⛔ entfernt · ♻️ (teil-)abgelöst · 📝 nur Verifikation/kein Code.
 >
 > **Code-Spalte:** Symbole ohne Datei-Präfix liegen in `bawue_vorgaenge_scraper.py`;
-> `map_*` in `enum_mapper.py`; `ReservedGremium`/`CanonicalOrganisation`/`canonicalize_*`/`is_verfassungsaendernd` in `types.py`;
-> `enrich_*`/`extract_*`/`_sanitize_*`/`narrow_*`/`_prompt_fingerprint`/`normalize_volltext`/`_is_garbled` in `bawue_dok.py`.
+> `map_*` in `enum_mapper.py`; `ReservedGremium`/`CanonicalOrganisation`/`canonicalize_*`/`is_verfassungsaendernd` in
+`types.py`;
+> `enrich_*`/`extract_*`/`_sanitize_*`/`narrow_*`/`_prompt_fingerprint`/`normalize_volltext`/`_is_garbled` in
+`bawue_dok.py`.
 
-| DD | Thema — *relevant bei* | Code / Ort |
-|----|------------------------|------------|
-| 001 | Änderungs-/Entschließungsanträge als Dokumente statt Stationen — *Antrag-Handling* | `_collect_stationen` |
-| 002 | „Mitteilung" bewusst → `sonstig` — *Stationstyp-Mapping* | `map_stationstyp`, `DOKUMENTENTYP_MAP` |
-| 003 | „Gesetzentwurf" kontextabhängig (Landesregierung→`preparl-regbsl`, sonst `parl-initiativ`) — *Enum-Mapping mit Initiator* | `map_stationstyp(initiator)`, `map_dokumententyp` |
-| 004 ♻️ | Unterschiedliche Lesungsrunden nie mergen (tw. abgelöst durch DD-024) — *Stationen zusammenführen* | `_try_merge_station`, `_find_matching_ausschuss` |
-| 005 | Stellungnahmen/Antworten als Kinder der Vorstation — *Stellungnahme anhängen* | `_is_stellungnahme`, `_attach_stellungnahme` |
-| 006 | ICS: nur Plenar/FinA/Haushaltsberatungen — *Sitzungen filtern* | `ics_parser._classify_event` |
-| 007 | Beteiligungsportal: nur Prozesse mit Entwurf-PDF — *Beteiligung filtern* | `bawue_beteiligung_scraper.item_extractor` |
-| 008 | Platzhalterdatum `00.00.JJJJ` — *Datum-Parsing, Fallback, UTC* | `_parse_fundstelle_date`, `_fallback_date_from_year` |
-| 009 | Initiative-Fallback aus Fundstellen-Autor — *fehlendes „Initiative"-Feld (Haushalt)* | `_build_vorgang` |
-| 010 | Synthetische `parl-ablehnung` aus „Aktueller Stand: Abgelehnt" — *fehlende Ablehnungs-Station* | `_ensure_ablehnung_station` |
-| 011 | Whitespace-Normalisierung + Raw-Text-Gegenprüfung — *Mapping-Split-Bug „Beschluss des Landtags in …"* | `_normalize_whitespace`, `_build_station` |
-| 012 | Synthetische `parl-initiativ` nach `preparl-regbsl` — *Regierungsentwurf, fehlendes `I`* | `_ensure_initiativ_after_regbsl` |
-| 013 ⛔ | Token-Kürzung vor LLM (aufgehoben → DD-029) — *historisch* | `truncate_text` (entfernt) |
-| 014 | PARLIS: JSON-Kommentare primär, HTML/XPath als Fallback — *Suchergebnis-Parsing* | `parse_results`, `_extract_json_comments`, `_parse_results_from_html` |
-| 015 | Volltext-Normalisierung: Garbled-Erkennung, OCR-Retry, XSS-Guard — *PDF garbled, „xss detected", OCR* | `_is_garbled`, `extract_pdf_text`, `normalize_volltext` |
-| 016 | BW nutzt BY-Track unverändert (`gg-land-parl`-Regex) — *Track-Validierung, DFA, gültige Sequenzen* | `deploy/tracks.toml` |
-| 017 | Konfigurierbares Filtern von `sonstig`-Stationen — *Backend-Panic bei sonstig* | `_collect_stationen`, `filter-sonstig-stations` |
-| 018 ⛔ | *(entfernt)* | — |
-| 019 | „Antrag" nach Ausschussbericht = Änderungsantrag (Positionsheuristik) — *mehrdeutiges „Antrag"* | `_collect_stationen`, `_AMBIGUOUS_ANTRAG_TYPEN`, `seen_ausschber` |
-| 020 | LLM-Cache-Schlüssel = `doc_hash:prompt_hash` — *falsche Cache-Treffer je Doktyp* | `_prompt_fingerprint`, `_cache_key` |
-| 021 | Reservierte Gremium-Namen (`plenum`/`regierung`/`gesetzesblatt`/`volk`) — *`Gremium.name`-Routing* | `ReservedGremium`, `_determine_gremium` |
-| 022 | Kanonische `Autor.organisation` (5 Fraktionen + Landesregierung) — *Organisationsnamen normalisieren* | `CanonicalOrganisation`, `canonicalize_organisation`, `_parse_autoren` |
-| 023 | `verfassungsaendernd` per Titel-Heuristik — *Pflichtfeld nicht in Quelle* | `is_verfassungsaendernd` |
-| 024 | Gleiche Lesungsrunde konsolidieren — *zu viele `V`-Stationen, StHG-Einzelpläne, HTTP400 Track* | `_try_merge_station`, `_collect_stationen` |
-| 025 | `parl-ausschber` vor erster Lesung nachdatieren — *Ausschber vor `V`, HTTP400 Track* | `_ensure_ausschber_after_vollvlsgn` |
-| 026 | „Beschluss des Landtags in <Ordinal>er Beratung" = selbe Runde — *doppelte `V` je Runde* | `_reading_round`, `_same_round_label` |
-| 027 | LLM-Output-Sanitisierung (Tag-Stripping) — *`</narrow>`, „xss detected" in `zusammenfassung`* | `_sanitize_llm_text`, `_sanitize_llm_strings`, `enrich_dokument` |
-| 028 | Stabile `api_id` für dokumentlose Stationen — *Duplikat-Station über Läufe, `II`-Sequenz* | `_assign_stable_station_ids` |
-| 029 | Keine Token-Kürzung + Dokumentkontext + Abschnitts-Extraktion — *falsches Thema in Redeprotokoll-Summary (Issue #32)* | `extract_semantics`, `_context_prefix`, `narrow_to_relevant_section` |
-| 030 | Ollama entfernt — OpenAI einziger LLM-Provider — *LLM-Provider-Konfiguration* | `config.py`, `bawue_dok` |
-| 031 | Unlabeled Plenarprotokoll → Erste Beratung — *fehlendes `V`, `IVAVN`, unbeschriftete Fundstelle* | `_collect_stationen` (`seen_vollvlsgn`), `_ensure_ablehnung_station` |
-| 032 📝 | Issue #33 bereits durch DD-024/026 behoben (kein Code) — *Fundstelle/Runde-Verifikation* | `test_issue33_fundstelle_mapping` |
-| 033 | Initiativdrucksache als Anker + im Cache-Schlüssel (Issue #35) — *geteiltes Protokoll-PDF, falsche Summary* | `narrow_to_relevant_section`, `_prompt_fingerprint`, `_initiativ_drucksnr_from_fundstellen` |
-| 034 | Stabile `api_id` für *alle* Stationen (auch dokumenttragend, Issue #47) — *HTTP500 `rel_station_dokument_pkey`, geteiltes PDF* | `_assign_stable_station_ids`, `_ensure_initiativ_after_regbsl` (deepcopy) |
-| 035 | Reihenfolge-Helfer sortieren nach `zp_start`, nicht Listenposition (Issue #48) — *HTTP400 Track, falsche Sortierung* | `_ensure_ausschber_after_vollvlsgn`, `_ensure_initiativ_after_regbsl` |
-| 036 | Vorgänge ohne parlamentarische Stationen überspringen (vormals 2. DD-012) — *nur `postparl-*` → skip* | `item_extractor`, `_POSTPARL_TYPEN` |
-| 037 ♻️ | Neutrale, Vorgangs-unabhängige Zusammenfassung für Redeprotokolle (löst per-Vorgang-Narrowing aus DD-029/033 für dieses Feld ab, Issue #49) — *geteiltes Protokoll-PDF, überschriebene Zusammenfassung* | `enrich_dokument`, `BODY_PROMPT_REDEPROTOKOLL` |
-| 038 | Page-Hint-Fenster mit < `MIN_TEXT_LENGTH` nutzbaren Zeichen fällt auf Volltext zurück (Issue #50) — *`#page=N` auf leere/„TODO"-/Seitenzahl-Seite* | `_extract_relevant_pages` |
-| 039 | Gleicher Ausschuss, Zeitabstand > 60 Tage → keine Zusammenführung (Issue #54) — *zwei Beschlussempfehlungen, verlorenes Datum, geteiltes Gremium* | `_find_matching_ausschuss`, `_AUSSCHBER_MERGE_MAX_GAP` |
-| 040 | Maßgebliche Track-Definition & Prefix-Match-Semantik (`parl-vollvlsgn` = `L` statt `V`, Ablehnung = `N`; Prefix- statt Full-Match; Korrektur zu DD-016/025/026/035) — *Track-Buchstaben, Prefix-Validierung, `SILAL`, „unvollständiger" Track gültig* | `_TRACKS_TOML_STATIONS`, `_BW_GG_LAND_PARL_TRACK`, `_passes_bw_track_validation` |
+| DD     | Thema — *relevant bei*                                                                                                                                                                                                                                    | Code / Ort                                                                                  |
+|--------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| 001    | Änderungs-/Entschließungsanträge als Dokumente statt Stationen — *Antrag-Handling*                                                                                                                                                                        | `_collect_stationen`                                                                        |
+| 002    | „Mitteilung" bewusst → `sonstig` — *Stationstyp-Mapping*                                                                                                                                                                                                  | `map_stationstyp`, `DOKUMENTENTYP_MAP`                                                      |
+| 003    | „Gesetzentwurf" kontextabhängig (Landesregierung→`preparl-regbsl`, sonst `parl-initiativ`) — *Enum-Mapping mit Initiator*                                                                                                                                 | `map_stationstyp(initiator)`, `map_dokumententyp`                                           |
+| 004 ♻️ | Unterschiedliche Lesungsrunden nie mergen (tw. abgelöst durch DD-024) — *Stationen zusammenführen*                                                                                                                                                        | `_try_merge_station`, `_find_matching_ausschuss`                                            |
+| 005    | Stellungnahmen/Antworten als Kinder der Vorstation — *Stellungnahme anhängen*                                                                                                                                                                             | `_is_stellungnahme`, `_attach_stellungnahme`                                                |
+| 006    | ICS: nur Plenar/FinA/Haushaltsberatungen — *Sitzungen filtern*                                                                                                                                                                                            | `ics_parser._classify_event`                                                                |
+| 007    | Beteiligungsportal: nur Prozesse mit Entwurf-PDF — *Beteiligung filtern*                                                                                                                                                                                  | `bawue_beteiligung_scraper.item_extractor`                                                  |
+| 008    | Platzhalterdatum `00.00.JJJJ` — *Datum-Parsing, Fallback, UTC*                                                                                                                                                                                            | `_parse_fundstelle_date`, `_fallback_date_from_year`                                        |
+| 009    | Initiative-Fallback aus Fundstellen-Autor — *fehlendes „Initiative"-Feld (Haushalt)*                                                                                                                                                                      | `_build_vorgang`                                                                            |
+| 010    | Synthetische `parl-ablehnung` aus „Aktueller Stand: Abgelehnt" — *fehlende Ablehnungs-Station*                                                                                                                                                            | `_ensure_ablehnung_station`                                                                 |
+| 011    | Whitespace-Normalisierung + Raw-Text-Gegenprüfung — *Mapping-Split-Bug „Beschluss des Landtags in …"*                                                                                                                                                     | `_normalize_whitespace`, `_build_station`                                                   |
+| 012    | Synthetische `parl-initiativ` nach `preparl-regbsl` — *Regierungsentwurf, fehlendes `I`*                                                                                                                                                                  | `_ensure_initiativ_after_regbsl`                                                            |
+| 013 ⛔  | Token-Kürzung vor LLM (aufgehoben → DD-029) — *historisch*                                                                                                                                                                                                | `truncate_text` (entfernt)                                                                  |
+| 014    | PARLIS: JSON-Kommentare primär, HTML/XPath als Fallback — *Suchergebnis-Parsing*                                                                                                                                                                          | `parse_results`, `_extract_json_comments`, `_parse_results_from_html`                       |
+| 015    | Volltext-Normalisierung: Garbled-Erkennung, OCR-Retry, XSS-Guard — *PDF garbled, „xss detected", OCR*                                                                                                                                                     | `_is_garbled`, `extract_pdf_text`, `normalize_volltext`                                     |
+| 016    | BW nutzt BY-Track unverändert (`gg-land-parl`-Regex) — *Track-Validierung, DFA, gültige Sequenzen*                                                                                                                                                        | `deploy/tracks.toml`                                                                        |
+| 017    | Konfigurierbares Filtern von `sonstig`-Stationen — *Backend-Panic bei sonstig*                                                                                                                                                                            | `_collect_stationen`, `filter-sonstig-stations`                                             |
+| 018 ⛔  | *(entfernt)*                                                                                                                                                                                                                                              | —                                                                                           |
+| 019    | „Antrag" nach Ausschussbericht = Änderungsantrag (Positionsheuristik) — *mehrdeutiges „Antrag"*                                                                                                                                                           | `_collect_stationen`, `_AMBIGUOUS_ANTRAG_TYPEN`, `seen_ausschber`                           |
+| 020    | LLM-Cache-Schlüssel = `doc_hash:prompt_hash` — *falsche Cache-Treffer je Doktyp*                                                                                                                                                                          | `_prompt_fingerprint`, `_cache_key`                                                         |
+| 021    | Reservierte Gremium-Namen (`plenum`/`regierung`/`gesetzesblatt`/`volk`) — *`Gremium.name`-Routing*                                                                                                                                                        | `ReservedGremium`, `_determine_gremium`                                                     |
+| 022    | Kanonische `Autor.organisation` (5 Fraktionen + Landesregierung) — *Organisationsnamen normalisieren*                                                                                                                                                     | `CanonicalOrganisation`, `canonicalize_organisation`, `_parse_autoren`                      |
+| 023    | `verfassungsaendernd` per Titel-Heuristik — *Pflichtfeld nicht in Quelle*                                                                                                                                                                                 | `is_verfassungsaendernd`                                                                    |
+| 024    | Gleiche Lesungsrunde konsolidieren — *zu viele `V`-Stationen, StHG-Einzelpläne, HTTP400 Track*                                                                                                                                                            | `_try_merge_station`, `_collect_stationen`                                                  |
+| 025    | `parl-ausschber` vor erster Lesung nachdatieren — *Ausschber vor `V`, HTTP400 Track*                                                                                                                                                                      | `_ensure_ausschber_after_vollvlsgn`                                                         |
+| 026    | „Beschluss des Landtags in <Ordinal>er Beratung" = selbe Runde — *doppelte `V` je Runde*                                                                                                                                                                  | `_reading_round`, `_same_round_label`                                                       |
+| 027    | LLM-Output-Sanitisierung (Tag-Stripping) — *`</narrow>`, „xss detected" in `zusammenfassung`*                                                                                                                                                             | `_sanitize_llm_text`, `_sanitize_llm_strings`, `enrich_dokument`                            |
+| 028    | Stabile `api_id` für dokumentlose Stationen — *Duplikat-Station über Läufe, `II`-Sequenz*                                                                                                                                                                 | `_assign_stable_station_ids`                                                                |
+| 029    | Keine Token-Kürzung + Dokumentkontext + Abschnitts-Extraktion — *falsches Thema in Redeprotokoll-Summary (Issue #32)*                                                                                                                                     | `extract_semantics`, `_context_prefix`, `narrow_to_relevant_section`                        |
+| 030    | Ollama entfernt — OpenAI einziger LLM-Provider — *LLM-Provider-Konfiguration*                                                                                                                                                                             | `config.py`, `bawue_dok`                                                                    |
+| 031    | Unlabeled Plenarprotokoll → Erste Beratung — *fehlendes `V`, `IVAVN`, unbeschriftete Fundstelle*                                                                                                                                                          | `_collect_stationen` (`seen_vollvlsgn`), `_ensure_ablehnung_station`                        |
+| 032 📝 | Issue #33 bereits durch DD-024/026 behoben (kein Code) — *Fundstelle/Runde-Verifikation*                                                                                                                                                                  | `test_issue33_fundstelle_mapping`                                                           |
+| 033    | Initiativdrucksache als Anker + im Cache-Schlüssel (Issue #35) — *geteiltes Protokoll-PDF, falsche Summary*                                                                                                                                               | `narrow_to_relevant_section`, `_prompt_fingerprint`, `_initiativ_drucksnr_from_fundstellen` |
+| 034    | Stabile `api_id` für *alle* Stationen (auch dokumenttragend, Issue #47) — *HTTP500 `rel_station_dokument_pkey`, geteiltes PDF*                                                                                                                            | `_assign_stable_station_ids`, `_ensure_initiativ_after_regbsl` (deepcopy)                   |
+| 035    | Reihenfolge-Helfer sortieren nach `zp_start`, nicht Listenposition (Issue #48) — *HTTP400 Track, falsche Sortierung*                                                                                                                                      | `_ensure_ausschber_after_vollvlsgn`, `_ensure_initiativ_after_regbsl`                       |
+| 036    | Vorgänge ohne parlamentarische Stationen überspringen (vormals 2. DD-012) — *nur `postparl-*` → skip*                                                                                                                                                     | `item_extractor`, `_POSTPARL_TYPEN`                                                         |
+| 037 ♻️ | Neutrale, Vorgangs-unabhängige Zusammenfassung für Redeprotokolle (löst per-Vorgang-Narrowing aus DD-029/033 für dieses Feld ab, Issue #49) — *geteiltes Protokoll-PDF, überschriebene Zusammenfassung*                                                   | `enrich_dokument`, `BODY_PROMPT_REDEPROTOKOLL`                                              |
+| 038    | Page-Hint-Fenster mit < `MIN_TEXT_LENGTH` nutzbaren Zeichen fällt auf Volltext zurück (Issue #50) — *`#page=N` auf leere/„TODO"-/Seitenzahl-Seite*                                                                                                        | `_extract_relevant_pages`                                                                   |
+| 039    | Gleicher Ausschuss, Zeitabstand > 60 Tage → keine Zusammenführung (Issue #54) — *zwei Beschlussempfehlungen, verlorenes Datum, geteiltes Gremium*                                                                                                         | `_find_matching_ausschuss`, `_AUSSCHBER_MERGE_MAX_GAP`                                      |
+| 040    | Maßgebliche Track-Definition & Prefix-Match-Semantik (`parl-vollvlsgn` = `L` statt `V`, Ablehnung = `N`; Prefix- statt Full-Match; Korrektur zu DD-016/025/026/035) — *Track-Buchstaben, Prefix-Validierung, `SILAL`, „unvollständiger" Track gültig*     | `_TRACKS_TOML_STATIONS`, `_BW_GG_LAND_PARL_TRACK`, `_passes_bw_track_validation`            |
+| 041    | WORKAROUND (togglebar): Initiativdrucksache standardmäßig **nicht** als `vg_ident` senden (`emit-initdrucks-ident`, Default `false`; deaktiviert Issue #26) — *Backend `vorgang_merge_candidates` führt fremde Vorgänge über geteilten `initdrucks` zusammen → HTTP500 `rel_station_dokument_pkey` / stille Titel-Korruption; Backend-Issue #150* | `_build_vorgang` (ids), `_emit_initdrucks_ident`, `_initiativ_drucksnr`                     |
 
 ---
 
@@ -231,11 +234,11 @@ im Sinne des PaZuFa-Datenmodells.
 
 **Entscheidung:** Nur folgende Eventtypen werden übernommen:
 
-| SUMMARY-Präfix                                   | Gremium                  |
-|--------------------------------------------------|--------------------------|
-| `Plenarsitzung:`                                 | `plenum` (reserviert)    |
-| `Fraktions- und Ausschusssitzungen: FinA`        | `Finanzausschuss`        |
-| `Haushaltsberatungen:`                           | (aus Suffix extrahiert)  |
+| SUMMARY-Präfix                            | Gremium                 |
+|-------------------------------------------|-------------------------|
+| `Plenarsitzung:`                          | `plenum` (reserviert)   |
+| `Fraktions- und Ausschusssitzungen: FinA` | `Finanzausschuss`       |
+| `Haushaltsberatungen:`                    | (aus Suffix extrahiert) |
 
 Ausgeschlossen werden: **Fraktionen** (parteiinterne Sitzungen), **Ausschuesse**
 (Sammel-Event ohne Ausschuss-Namen — DoD-Regel "Namen MÜSSEN so spezifisch wie
@@ -346,7 +349,7 @@ Trennzeichen zwischen Feldern (z. B. Stationstyp, Autor, Datum). Der Parser
 trennt, um den `station_typ` zu extrahieren.
 
 Problematisch wird dies bei mehrteiligen Stationstypen wie
-„Beschluss des Landtags  in Zweiter Beratung", wenn PARLIS ein Doppelleerzeichen
+„Beschluss des Landtags in Zweiter Beratung", wenn PARLIS ein Doppelleerzeichen
 *innerhalb* des Stationstyps einfügt. Der Parser schneidet dann nach „Landtags"
 ab und extrahiert `station_typ = "Beschluss des Landtags"` — ohne den
 qualifizierenden Zusatz „in Zweiter Beratung".
@@ -360,7 +363,7 @@ Haushaltsgesetzgebung) zeigten dadurch mehrere falsche Annahme-Stationen.
 
 1. **Whitespace-Normalisierung:** `map_stationstyp()` und `map_dokumententyp()`
    kollabieren vor dem Substring-Matching alle Whitespace-Sequenzen zu einfachen
-   Leerzeichen. Damit matcht auch „Landtags  in" den Schlüssel
+   Leerzeichen. Damit matcht auch „Landtags in" den Schlüssel
    „Beschluss des Landtags in".
 
 2. **Raw-Text-Gegenprüfung:** `_build_station()` mappt zunächst den extrahierten
@@ -421,7 +424,8 @@ und `_ensure_initiativ_after_regbsl()`.
 
 ## DD-013: Optionale Token-Kürzung vor LLM-Aufruf
 
-> **Status: AUFGEHOBEN (13.07.2026, ersetzt durch [DD-029](#dd-029-keine-token-kürzung--dokumentkontext-im-llm-prompt)).**
+> **Status: AUFGEHOBEN (13.07.2026, ersetzt durch [DD-029](#dd-029-keine-token-kürzung--dokumentkontext-im-llm-prompt)).
+**
 > Die Token-Kürzung war eine Mitursache von Issue #32: Bei einem Plenarprotokoll
 > mit mehreren Tagesordnungspunkten schnitt das 12 000-Token-Limit die relevante
 > Debatte (Fischereigesetz, Drucksache 17/529) mitten heraus und behielt eine
@@ -544,10 +548,10 @@ schlugen mit HTTP 400 (`xss detected`) fehl. Zwei Ursachen:
 2. **Paragraph-Quality-Scoring:** `normalize_volltext()` teilt den Text in
    Absätze und bewertet jeden mit `_paragraph_quality_score()`. Die Bewertung
    kombiniert vier Signale:
-   - C1-Steuerzeichen (0x80–0x9F)
-   - Latin-Extended-B-Zeichen (0x0180–0x024F)
-   - Lange Wörter ohne deutsche Vokale
-   - Übermäßiger Großbuchstabenanteil (>60 %)
+    - C1-Steuerzeichen (0x80–0x9F)
+    - Latin-Extended-B-Zeichen (0x0180–0x024F)
+    - Lange Wörter ohne deutsche Vokale
+    - Übermäßiger Großbuchstabenanteil (>60 %)
 
    Absätze mit Score < 0,5 werden entfernt. Bei Drucksache 17/4244 überlebten
    2 von 24 Absätzen (1 738 von 38 168 Zeichen).
@@ -561,6 +565,7 @@ Stufe 1 rettet den Inhalt (OCR produziert korrekten Text: 37 117 Zeichen,
 in denen OCR nicht verfügbar ist oder fehlschlägt.
 
 **Implementierung:** `bawue_dok.py`:
+
 - `_is_garbled()` — Latin-Extended-Ratio > 5 % der Alpha-Zeichen
 - `extract_pdf_text()` — OCR-Retry mit `_OCR_CONFIG` bei garbled Text
 - `_paragraph_quality_score()` — Multi-Signal-Bewertung pro Absatz
@@ -603,12 +608,12 @@ gg-land-parl = "((E*R+)?S)?I((VA*(Z|VJGK|VN|VA*(Z|VJGK|VN)))|Z)"
 
 **Validierte Sequenzen** (Dev-Lauf 171 Vorgänge, WP 17):
 
-| Sequenz   | Anzahl | Beschreibung                                      |
-|-----------|--------|---------------------------------------------------|
-| `SIVAVJG` | 112    | Regierungsentwurf (nach R→S) + Annahme            |
-| `IVAVJG`  | 14     | Fraktionsentwurf + Annahme                        |
-| `IVAVN`   | 31     | Ablehnung nach Ausschuss und 2. Lesung            |
-| `S`, `SI` | 3      | Unvollständig — gültige Präfixe                   |
+| Sequenz   | Anzahl | Beschreibung                           |
+|-----------|--------|----------------------------------------|
+| `SIVAVJG` | 112    | Regierungsentwurf (nach R→S) + Annahme |
+| `IVAVJG`  | 14     | Fraktionsentwurf + Annahme             |
+| `IVAVN`   | 31     | Ablehnung nach Ausschuss und 2. Lesung |
+| `S`, `SI` | 3      | Unvollständig — gültige Präfixe        |
 
 Quelle: [Issue #26](https://codeberg.org/PaZuFa/pazufa-backend/issues/26),
 Crystalkey-Review 05.04.2026.
@@ -707,6 +712,7 @@ treffen weiterhin den Cache.
 gespeichert, bis der TTL (2 Wochen) abläuft, und verursachen keine Fehler.
 
 **Implementierung:** `bawue_dok.py`:
+
 - `_prompt_fingerprint(doktyp)` — SHA-256-Hash über System- und Body-Prompt des jeweiligen `Doktyp`
 - `_cache_key(doc_hash, prompt_hash)` — Konkatenation zu `{doc_hash}:{prompt_hash}`
 - `enrich_dokument()` — berechnet beide Hashes vor dem Cache-Lookup
@@ -753,13 +759,13 @@ Wiki + BY-Convention sind maßgeblich.
 deutschsprachiger Klartext-Fallback mehr. Das Routing erfolgt im Scraper
 typ-gewahr:
 
-| Kontext / Station-Typ                                    | Gremium-Name       |
-|----------------------------------------------------------|--------------------|
-| Fundstelle mit Ausschuss-Angabe                          | Ausschuss-Name     |
-| `postparl-gsblt` (Gesetz, Bekanntmachung, Gesetzblatt)   | `gesetzesblatt`    |
-| Alle übrigen (parl-*, preparl-regent, synthetische)      | `plenum` (Default) |
-| Beteiligungsportal-Station (`preparl-regent`)            | `regierung`        |
-| ICS-Plenarsitzung                                        | `plenum`           |
+| Kontext / Station-Typ                                  | Gremium-Name       |
+|--------------------------------------------------------|--------------------|
+| Fundstelle mit Ausschuss-Angabe                        | Ausschuss-Name     |
+| `postparl-gsblt` (Gesetz, Bekanntmachung, Gesetzblatt) | `gesetzesblatt`    |
+| Alle übrigen (parl-*, preparl-regent, synthetische)    | `plenum` (Default) |
+| Beteiligungsportal-Station (`preparl-regent`)          | `regierung`        |
+| ICS-Plenarsitzung                                      | `plenum`           |
 
 **Bewusst nicht geändert:**
 
@@ -925,11 +931,11 @@ deutsche Gesetzgebungssprache nennt Verfassungsänderungen sehr stringent — Ar
 64 der Landesverfassung BW verlangt eine 2/3-Mehrheit, und die entsprechenden
 Gesetze tragen das im Titel:
 
-| Phrasing                                   | Behandlung |
-|--------------------------------------------|------------|
-| `Änderung der Verfassung` / `Änderung der Landesverfassung` | `True` |
-| `Verfassungsänderung` (nominal compound)   | `True` |
-| alles Übrige                               | `False` |
+| Phrasing                                                    | Behandlung |
+|-------------------------------------------------------------|------------|
+| `Änderung der Verfassung` / `Änderung der Landesverfassung` | `True`     |
+| `Verfassungsänderung` (nominal compound)                    | `True`     |
+| alles Übrige                                                | `False`    |
 
 Die Heuristik ist mit Absicht konservativ: Titel wie „Gesetz zur Stärkung des
 Verfassungsschutzes" oder „Landesverfassungsschutzgesetz" matchen nicht (eine
@@ -1461,13 +1467,13 @@ zweier Effekte im 30-Seiten-Fenster eines Plenarprotokolls (`#page=N`-Hint):
   mit drei Tagesordnungspunkten.
 
   Bewusste Eingrenzung:
-  - **Nur `redeprotokoll`** — andere Doktypen sind einthemig; eine
-    Abschnitts-Extraktion wäre verschwendet und könnte Inhalte verlieren.
-  - **None-sicherer Rückfall:** Findet die Extraktion nichts oder schlägt sie fehl,
-    bleibt das volle Fenster erhalten.
-  - **Nur der LLM-Input wird eingegrenzt**, nicht das gespeicherte `volltext`
-    (weiterhin das Page-Hint-Fenster). Die Eingrenzung läuft nur bei einem
-    Cache-Miss, damit der Semantik-Cache wirksam bleibt.
+    - **Nur `redeprotokoll`** — andere Doktypen sind einthemig; eine
+      Abschnitts-Extraktion wäre verschwendet und könnte Inhalte verlieren.
+    - **None-sicherer Rückfall:** Findet die Extraktion nichts oder schlägt sie fehl,
+      bleibt das volle Fenster erhalten.
+    - **Nur der LLM-Input wird eingegrenzt**, nicht das gespeicherte `volltext`
+      (weiterhin das Page-Hint-Fenster). Die Eingrenzung läuft nur bei einem
+      Cache-Miss, damit der Semantik-Cache wirksam bleibt.
 
   Das Page-Hint-Fenster (30 Seiten) bleibt als kostenloser Vorfilter bestehen und
   liefert der Abschnitts-Extraktion einen einzigen Chunk (~18 000 Tokens < 30 000)
@@ -1478,6 +1484,7 @@ zweier Effekte im 30-Seiten-Fenster eines Plenarprotokolls (`#page=N`-Hint):
 Durchreichen des Vorgangstitels in `bawue_vorgaenge_scraper.py`.
 
 **Tests:**
+
 - Unit (`tests/unit/test_bawue_dok.py`): `TestExtractSemanticsNoTruncation`
   (voller Text erreicht das LLM), `TestExtractSemanticsDocumentContext`
   (Drucksache + Titel im Prompt), `TestPromptFingerprintContext`
@@ -1706,7 +1713,8 @@ Fixtures) gegen Regression gepinnt.
 
 **Datum:** 10.07.2026
 
-**Kontext:** Issue #35 meldete erneut das Muster aus Issue #32/[DD-029](#dd-029-keine-token-kürzung--dokumentkontext-im-llm-prompt):
+**Kontext:** Issue #35 meldete erneut das Muster aus Issue
+#32/[DD-029](#dd-029-keine-token-kürzung--dokumentkontext-im-llm-prompt):
 Bei einem von mehreren Vorgängen geteilten Plenarprotokoll-PDF beschreibt die
 `zusammenfassung` das falsche Gesetz. Der Kern war zum Zeitpunkt des Reports
 bereits durch DD-029 behoben (`narrow_to_relevant_section()` +
@@ -1783,6 +1791,7 @@ die Dokumentliste des `preparl-regbsl` nur flach (`list.copy()`), sodass die
 synthetische `parl-initiativ`-Station dasselbe `Dokument`-Objekt aliaste.
 
 **Entscheidung:**
+
 1. Die Skip-Bedingung `or station.dokumente` in `_assign_stable_station_ids`
    entfällt: **jede** Station ohne eigene `api_id` erhält eine
    Vorgang-skopierte `api_id`. Die Identität hängt damit an `(vorgang_id, typ,
@@ -1922,14 +1931,14 @@ und den BW-Track in `[tracks.BW]`.
 
 **Maßgebliches Stations→Buchstaben-Mapping** (Auszug der für BW relevanten):
 
-| Buchstabe | Stationstyp | | Buchstabe | Stationstyp |
-|---|---|---|---|---|
-| `R` | `preparl-regent` | | `J` | `parl-akzeptanz` |
-| `E` | `preparl-eckpup` | | `Z` | `parl-zurueckgz` |
-| `S` | `preparl-regbsl` | | `N` | `parl-ablehnung` |
-| `I` | `parl-initiativ` | | `G` | `postparl-gsblt` |
-| **`L`** | **`parl-vollvlsgn`** | | `K` | `postparl-kraft` |
-| `A` | `parl-ausschber` | | | |
+| Buchstabe | Stationstyp          | | Buchstabe | Stationstyp      |
+|-----------|----------------------|-|-----------|------------------|
+| `R`       | `preparl-regent`     | | `J`       | `parl-akzeptanz` |
+| `E`       | `preparl-eckpup`     | | `Z`       | `parl-zurueckgz` |
+| `S`       | `preparl-regbsl`     | | `N`       | `parl-ablehnung` |
+| `I`       | `parl-initiativ`     | | `G`       | `postparl-gsblt` |
+| **`L`**   | **`parl-vollvlsgn`** | | `K`       | `postparl-kraft` |
+| `A`       | `parl-ausschber`     | |           |                  |
 
 → **`parl-vollvlsgn` ist `L`, nicht `V`** (`V` = `parl-vermittas`, im
 tracks.toml auskommentiert). **Ablehnung ist `N`**, `Z` ist „zurückgezogen".
@@ -1989,7 +1998,8 @@ zugeschnittene Zusammenfassung. Eine Nachstellung gegen die lokale WP17-Devdaten
 fünf Vorgänge, verlinkt über `17_0107_06112024.pdf`) trug nur eine
 Kita-spezifische `zusammenfassung`.
 
-Ursache ist ein struktureller Konflikt mit [DD-029](#dd-029-keine-token-kürzung--dokumentkontext-im-llm-prompt)/[DD-033](#dd-033-initiativdrucksache-als-anker-für-abschnitts-extraktion--im-cache-schlüssel-issue-35):
+Ursache ist ein struktureller Konflikt
+mit [DD-029](#dd-029-keine-token-kürzung--dokumentkontext-im-llm-prompt)/[DD-033](#dd-033-initiativdrucksache-als-anker-für-abschnitts-extraktion--im-cache-schlüssel-issue-35):
 Diese lösten Issue #32/#35 (falsches Thema in der Zusammenfassung), indem sie
 `zusammenfassung` bei Redeprotokollen bewusst **pro Vorgang** unterschiedlich
 berechnen — Abschnitts-Extraktion auf die Drucksache des jeweiligen Vorgangs
@@ -2041,11 +2051,13 @@ Akzeptanzkriterien betreffen ausschließlich `zusammenfassung`).
 `context_vorgang_vnr` / `context_drucksnr` für `Doktyp.REDEPROTOKOLL`).
 
 **Tests:**
+
 - Unit (`tests/unit/test_bawue_dok.py`):
   `TestSharedRedeprotokollNeutralSummary::test_two_bills_sharing_one_protocol_get_identical_summary`
   (Kern-Regression: zwei Vorgänge mit unterschiedlichem Titel/Drucksache und
   unterschiedlichem simuliertem Seitenfenster, aber identischem PDF-Hash, erhalten
-  identische Zusammenfassung/Schlagworte/Kurztitel), `TestNarrowToRelevantSection::test_enrich_no_longer_narrows_redeprotokoll`
+  identische Zusammenfassung/Schlagworte/Kurztitel),
+  `TestNarrowToRelevantSection::test_enrich_no_longer_narrows_redeprotokoll`
   (Abschnitts-Extraktion wird für Redeprotokolle nicht mehr aufgerufen),
   `TestNarrowToRelevantSection::test_enrich_omits_bill_context_for_redeprotokoll`
   (kein KONTEXT-Header, kein Vorgangstitel/-Drucksache im Prompt),
@@ -2128,3 +2140,86 @@ an der Wurzel (keine Zusammenführung) gelöst.
 Beschlussempfehlungen des Finanzausschusses 30.06.2022 / 09.02.2023 → zwei Stationen,
 beide Daten erhalten). Die bestehenden `test_ausschuss_merge_backwards_no_plenum_between`
 (2 Tage → 1 Station) und `test_ausschuss_no_merge_across_plenum` bleiben grün.
+
+---
+
+## DD-041: WORKAROUND — Initiativdrucksache standardmäßig nicht als `vg_ident` senden (togglebar)
+
+**Datum:** 13.07.2026
+
+**Kontext:** Ein voller WP17-Backfill gegen Backend 0.2.14 brach an 31 Vorgängen ab
+(27× HTTP 500 `duplicate key … rel_station_dokument_pkey`, 4× HTTP 400 „Track
+validation Failed"). Root-Cause-Analyse (inkl. Backend-Quellcode, https://codeberg.org/PaZuFa/pazufa-backend/issues/150)
+zeigte: die Ursache liegt **im Backend**, nicht im Scraper.
+
+`pazufa-backend-lib/src/db/merge/candidates.rs::vorgang_merge_candidates` hält zwei
+Vorgänge für **denselben** Vorgang, wenn gilt:
+
+```
+(wahlperiode, typ) gleich
+UND ( api_id exakt gleich  ODER  (irgendein vg_ident gleich UND ein Bundesland gleich) )
+```
+
+Der `vg_ident`-Zweig behandelt **jeden einzelnen** übereinstimmenden `vg_ident` als
+Identitätsbeweis — unabhängig davon, ob der Identifier-Typ überhaupt 1:1 mit einem
+Vorgang ist. `initdrucks` (die Drucksache des *initiierenden* Dokuments, seit Issue #26
+als Cross-Referenz mitgegeben) ist aber **n:1**: Jeder Haushalts-Einzelplan zitiert
+dieselbe Staatshaushaltsgesetz-Drucksache (z. B. 17/8000). Damit matchen alle ~18
+Einzelpläne einer Haushaltssaison gegenseitig, das Backend „merged" sie und
+
+1. überschreibt via `execute_merge_vorgang` (`execute.rs:283`) **bedingungslos** Titel/
+   Kurztitel/`verfassungsaendernd`/Typ des zuerst angelegten Vorgangs (stille Korruption,
+   falls die Stationen nicht kollidieren), und
+2. matcht danach fremde Stationen über geteilte Dokument-Hashes → Insert kollidiert mit
+   `rel_station_dokument (stat_id, dok_id)` → HTTP 500.
+
+Wichtig: Ein **korrekter, distinkter `api_id`** (DD-028/DD-034) verhindert das **nicht** —
+der `vg_ident`-Zweig ist ein `OR` und feuert unabhängig vom `api_id`-Match. Der einzige
+scraper-seitige Hebel ist deshalb, **welche `vg_ident` wir senden**.
+
+**Entscheidung:** Die Emission der Initiativdrucksache als `vg_ident`
+(`typ="initdrucks"`) wird hinter einen Konfigurationsschalter gelegt:
+`[bawue] emit-initdrucks-ident` (Default `false`). Standardmäßig hängt nur der
+1:1-Identifier `vorgnr` am Vorgang; die Cross-Referenz aus Issue #26 bleibt
+deaktiviert, bis das Backend nur noch über 1:1-Identifier matcht. Der Schalter
+ist als **Klassenattribut-Default** (`_emit_initdrucks_ident = False`) umgesetzt,
+damit Tests und andere `object.__new__`-Konstruktionspfade den sicheren Wert erben,
+ohne ihn explizit setzen zu müssen (analog zum Muster von DD-017).
+
+- Verhindert den Fehler robust — auch **über Läufe hinweg** (EP12 in Lauf 1, EP11 in
+  Lauf 2 würden sonst weiterhin kollidieren; eine reine Intra-Lauf-Deduplizierung
+  reichte nicht).
+- Die Information geht nicht verloren: Die Initiativdrucksache steht weiterhin als
+  `drucksnr` am Dokument der initiierenden Station.
+- Re-Upload-Idempotenz bleibt erhalten: `vorgnr` + stabile Stations-`api_id`
+  (DD-028/DD-034) genügen für korrekte Wiedererkennung (empirisch verifiziert gegen
+  0.2.14: EP11/EP12 laden 201/201, Re-Upload ohne Duplikate).
+
+**Empirische Verifikation (Backend 0.2.14, frische DB):**
+
+| Payloads                           | Ergebnis                                           |
+|------------------------------------|----------------------------------------------------|
+| ep12 + ep11 **mit** `initdrucks`   | 201, **500** (`rel_station_dokument_pkey`)         |
+| ep12 + ep11 **ohne** `initdrucks`  | 201, 201 — zwei distinkte Vorgänge, Titel erhalten |
+| Re-Upload beider ohne `initdrucks` | 201, 201 — keine Duplikat-Zeilen                   |
+
+**Reversibilität:** Sobald das Backend nur noch über 1:1-Identifier matcht (oder
+`initdrucks` aus der Merge-Kandidatensuche ausschließt — Vorschläge siehe
+https://codeberg.org/PaZuFa/pazufa-backend/issues/150), genügt
+`emit-initdrucks-ident = true` in der `[bawue]`-Konfiguration, um die Cross-Referenz
+aus Issue #26 wieder zu aktivieren — kein Code-Change nötig. `initiativ_drucksnr`
+aus den Fundstellen (DD-033, `_initiativ_drucksnr_from_fundstellen`) ist von alldem
+unberührt und bleibt für die Abschnitts-Extraktion erhalten.
+
+**Implementierung:** `bawue_vorgaenge_scraper.py` — Klassenattribut-Default
+`_emit_initdrucks_ident = False`, aus `[bawue] emit-initdrucks-ident` in `__init__`
+gelesen; `_build_vorgang()` hängt den `initdrucks`-`VgIdent` nur bei aktivem Schalter
+an (`_initiativ_drucksnr(stationen)` liefert die Nummer). Dokumentiert in
+`config.sample.toml`.
+
+**Tests:** `tests/unit/test_bawue_scraper.py::TestBuildVorgang` —
+`test_ids_omit_initiativdrucksache_by_default` (Default: Initiative mit Drucksache
+17/10266 → nur `vorgnr`, kein `initdrucks`), `test_ids_include_initiativdrucksache_when_enabled`
+(Schalter an → `initdrucks` = 17/10266 vorhanden), `test_ids_omit_initiativdrucksache_when_absent_though_enabled`
+(Schalter an, aber keine Drucksache → kein `initdrucks`). Backend-seitige Reproduktion
+& Evidenz: https://codeberg.org/PaZuFa/pazufa-backend/issues/150.
