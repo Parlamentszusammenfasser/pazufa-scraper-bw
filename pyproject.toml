@@ -27,7 +27,7 @@ icalendar = ">=7.0"
 certifi = ">=2026.0"
 python-json-logger = "^3.2"
 litellm = ">=1.83.0"
-json-repair = "^0.59"
+json-repair = "^0.61"
 
 [tool.poetry.group.dev.dependencies]
 # For local iteration, install corelib from a sibling checkout instead of the
