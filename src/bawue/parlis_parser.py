@@ -188,19 +188,18 @@ def parse_fundstelle_text(text: str) -> dict:
     if type_match:
         result["station_typ"] = type_match.group(1).strip()
 
-    # Committee name: "Ausschuss für ..." up to a date or "Drucksache" keyword
-    ausschuss_match = re.search(
-        r"(Ausschuss\s+für\s+\D+?)(?:\s+\d{2}\.\d{2}\.|\s+Drucksache)",
-        text,
-    )
-    if ausschuss_match:
-        result["ausschuss"] = ausschuss_match.group(1).strip()
-
-    # Author text: anything between the station type and the date that is not a
-    # known keyword (committees and protocols have their own fields above)
+    # The segment between the station type and the date names the acting body:
+    # either a committee or the document's author(s).  One check decides which,
+    # so the two fields cannot disagree.  Previously a committee was recognised
+    # by a "Ausschuss für …" prefix but excluded from autor_text by the wider
+    # "Ausschuss" prefix, so names matching only the latter — genitive
+    # ("Ausschuss des Inneren, für …") or prefixed ("Ständiger Ausschuss") —
+    # landed in neither field and the station fell back to `plenum` (issue #68).
     if type_match and date_match:
         gap_text = text[type_match.end() : date_match.start()].strip()
-        if gap_text and not gap_text.startswith(("Ausschuss", "Plenarprotokoll")):
+        if "ausschuss" in gap_text.lower():
+            result["ausschuss"] = gap_text
+        elif gap_text and not gap_text.startswith("Plenarprotokoll"):
             result["autor_text"] = gap_text
 
     # Page count: "(42 S.)" → 42

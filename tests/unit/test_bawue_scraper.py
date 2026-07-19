@@ -22,6 +22,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _same_round_label,
     _vorgang_kurztitel,
 )
+from bawue.parlis_parser import parse_fundstelle_text
 from bawue.types import UNSET, Doktyp, Stationstyp, Vorgangstyp
 
 
@@ -660,6 +661,24 @@ class TestBuildVorgang:
         assert station.typ == Stationstyp.PARL_AUSSCHBER
         assert station.gremium.name == "Ausschuss für Wirtschaft"
         assert station.dokumente[0].typ == Doktyp.BESCHLUSSEMPF
+
+    @pytest.mark.asyncio
+    async def test_genitive_ausschuss_gremium_issue68(self, scraper_build_vorgang):
+        """Issue #68: real Fundstelle (Drucksache 17/2586) fell back to `plenum`.
+
+        Parses the raw text rather than a pre-built dict so the whole
+        parse → gremium chain is pinned, not just the station builder.
+        """
+        fund = parse_fundstelle_text(
+            "Beschlussempfehlung und Bericht    Ausschuss des Inneren, für Digitalisierung und Kommunen  "
+            "18.05.2022 Drucksache 17/2586"
+        )
+        fund["pdf_url"] = "https://example.com/report.pdf"
+        vorgang = await scraper_build_vorgang(_make_raw_vorgang("V-068", fundstellen=[fund]))
+
+        station = vorgang.stationen[0]
+        assert station.gremium.name == "Ausschuss des Inneren, für Digitalisierung und Kommunen"
+        assert station.typ == Stationstyp.PARL_AUSSCHBER
 
     @pytest.mark.asyncio
     async def test_empty_fundstellen_produces_no_stations(self, scraper_build_vorgang):
