@@ -247,6 +247,7 @@ class TestStationstypDocumentedSonstig:
 OBSERVED_STATION_TYPES: list[str] = [
     # Initiative (parl-initiativ)
     "Gesetzentwurf",  # production, 455x
+    "Gesetzentwürfe",  # umlaut plural (issue #69) — defensive
     "Antrag",  # production, 1x
     "Anträge",
     "Änderungsantrag",  # production, 83x — singular variant
@@ -270,6 +271,7 @@ OBSERVED_STATION_TYPES: list[str] = [
     "Beschluss des Landtags in Dritter Beratung",
     # Akzeptanz (parl-akzeptanz)
     "Gesetzesbeschluss",
+    "Gesetzesbeschlüsse",  # umlaut plural (issue #69) — defensive
     "Gesetzesbeschluss des Landtags",  # production, 219x — qualified variant
     "Beschluss des Landtags",
     "Zustimmung",
@@ -347,6 +349,17 @@ class TestDokumententypMapping:
     def test_known_patterns(self, context, is_vorparl, expected):
         assert map_dokumententyp(context, is_vorparlamentarisch=is_vorparl) == expected
 
+    def test_antraege_plural_maps_to_antrag_issue69(self):
+        """Issue #69: umlaut plural "Anträge" doesn't contain "Antrag" (Drs 17/4495).
+
+        STATIONSTYP_MAP already carries an explicit "Anträge" key; this pins the
+        parallel entry in DOKUMENTENTYP_MAP so the two cannot drift apart again.
+        """
+        assert map_dokumententyp("Änderungsanträge") == Doktyp.ANTRAG
+        assert map_dokumententyp("Anträge") == Doktyp.ANTRAG
+        # The singular already worked — grammatical number must not change the typ
+        assert map_dokumententyp("Änderungsantrag") == Doktyp.ANTRAG
+
     def test_unknown_and_empty_default_to_sonstig(self):
         assert map_dokumententyp("unknown") == Doktyp.SONSTIG
         assert map_dokumententyp("") == Doktyp.SONSTIG
@@ -362,6 +375,34 @@ class TestDokumententypMapping:
         assert map_dokumententyp("Beschluss des Landtags") == Doktyp.MITTEILUNG
         # Qualified "Beschluss des Landtags in ..." is a reading vote, not final decision
         assert map_dokumententyp("Beschluss des Landtags in Zweiter Beratung") == Doktyp.REDEPROTOKOLL
+
+
+class TestUmlautPluralForms:
+    """Issue #69: German umlaut plurals don't contain their singular as a substring.
+
+    "Anträge"/"Antrag", "Gesetzentwürfe"/"Gesetzentwurf" — the vowel change breaks
+    the mapper's substring matching, so each needs an explicit key. These are the
+    dangerous ones: unlike a plain missing key they don't degrade to SONSTIG but
+    match a *shorter* key ("Gesetz"), yielding a wrong typ instead of a visible gap.
+    Grammatical number must never change the mapping.
+    """
+
+    @pytest.mark.parametrize(
+        "singular,plural",
+        [
+            ("Antrag", "Anträge"),
+            ("Gesetzentwurf", "Gesetzentwürfe"),
+            ("Gesetzesbeschluss", "Gesetzesbeschlüsse"),
+        ],
+    )
+    def test_plural_maps_like_singular(self, singular, plural):
+        assert map_stationstyp(plural) == map_stationstyp(singular)
+        assert map_dokumententyp(plural) == map_dokumententyp(singular)
+
+    def test_gesetzentwuerfe_not_shadowed_by_gesetz(self):
+        """The failure mode that makes this class worse than a missing key."""
+        assert map_stationstyp("Gesetzentwürfe") == Stationstyp.PARL_INITIATIV
+        assert map_dokumententyp("Gesetzentwürfe") == Doktyp.ENTWURF
 
 
 class TestEnumValuesExistInFramework:

@@ -79,6 +79,7 @@ VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
 # ---------------------------------------------------------------------------
 STATIONSTYP_MAP: dict[str, Stationstyp] = {
     "Gesetzentwurf": Stationstyp.PARL_INITIATIV,
+    "Gesetzentwürfe": Stationstyp.PARL_INITIATIV,
     "Antrag": Stationstyp.PARL_INITIATIV,
     "Anträge": Stationstyp.PARL_INITIATIV,
     "Kleine Anfrage": Stationstyp.PARL_INITIATIV,
@@ -94,6 +95,7 @@ STATIONSTYP_MAP: dict[str, Stationstyp] = {
     "Bericht und Empfehlungen": Stationstyp.PARL_AUSSCHBER,
     "Ausschussberatung": Stationstyp.PARL_AUSSCHBER,
     "Gesetzesbeschluss": Stationstyp.PARL_AKZEPTANZ,
+    "Gesetzesbeschlüsse": Stationstyp.PARL_AKZEPTANZ,
     "Beschluss des Landtags in": Stationstyp.PARL_VOLLVLSGN,
     "Beschluss des Landtags": Stationstyp.PARL_AKZEPTANZ,
     "Zustimmung": Stationstyp.PARL_AKZEPTANZ,
@@ -114,6 +116,15 @@ _STATIONSTYP_KEYS_SORTED = sorted(STATIONSTYP_MAP.keys(), key=len, reverse=True)
 DOKUMENTENTYP_MAP: dict[str, Doktyp] = {
     "Gesetzentwurf": Doktyp.ENTWURF,
     "Antrag": Doktyp.ANTRAG,
+    # Umlaut plurals need their own keys: the vowel change means "Anträge" does
+    # not contain "Antrag", so the plural silently misses its singular key.
+    # "Anträge" is observed in production (issue #69); the other two are
+    # defensive coverage per docs/observed_station_types.md, and matter because
+    # they do not fall through to SONSTIG but to the shorter "Gesetz" key —
+    # a wrong typ rather than a visible gap.
+    "Anträge": Doktyp.ANTRAG,
+    "Gesetzentwürfe": Doktyp.ENTWURF,
+    "Gesetzesbeschlüsse": Doktyp.MITTEILUNG,
     "Kleine Anfrage": Doktyp.ANFRAGE,
     "Große Anfrage": Doktyp.ANFRAGE,
     "Mündliche Anfrage": Doktyp.ANFRAGE,

@@ -681,6 +681,25 @@ class TestBuildVorgang:
         assert station.typ == Stationstyp.PARL_AUSSCHBER
 
     @pytest.mark.asyncio
+    async def test_antraege_plural_document_typ_issue69(self, scraper_build_vorgang):
+        """Issue #69: "Änderungsanträge" document got typ `sonstig` (Drs 17/4495).
+
+        Uses a real PARLIS Fundstelle and parses it, so the station_typ that
+        reaches map_dokumententyp is the one production actually produces.
+        Per DD-001 an Änderungsantrag attaches to the preceding plenary station,
+        so the Fundstelle needs that station to exist or it is discarded.
+        """
+        beratung = parse_fundstelle_text("Zweite Beratung   Plenarprotokoll 17/20 13.12.2021")
+        beratung["pdf_url"] = "https://example.com/protokoll.pdf"
+        antraege = parse_fundstelle_text("Änderungsanträge    Fraktion der AfD  13.12.2021 Drucksache 17/1203")
+        antraege["pdf_url"] = "https://example.com/aenderungsantraege.pdf"
+        vorgang = await scraper_build_vorgang(_make_raw_vorgang("V-069", fundstellen=[beratung, antraege]))
+
+        typen = [d.typ for s in vorgang.stationen for d in s.dokumente]
+        assert Doktyp.ANTRAG in typen, f"Änderungsanträge did not map to antrag: {typen}"
+        assert Doktyp.SONSTIG not in typen
+
+    @pytest.mark.asyncio
     async def test_empty_fundstellen_produces_no_stations(self, scraper_build_vorgang):
         raw = _make_raw_vorgang("V-040", fundstellen=[])
         vorgang = await scraper_build_vorgang(raw)
