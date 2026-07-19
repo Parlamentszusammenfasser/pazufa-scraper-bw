@@ -1174,14 +1174,14 @@ files = [
 
 [[package]]
 name = "json-repair"
-version = "0.59.10"
+version = "0.61.5"
 description = "A package to repair broken json strings"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "json_repair-0.59.10-py3-none-any.whl", hash = "sha256:5468fa3eaadcc9b4a5646776bc4176e2fe5f374b5848a15f468cce3b60e3db0e"},
-    {file = "json_repair-0.59.10.tar.gz", hash = "sha256:2e4b85537c752d8a513ea28fdad891e5ede32c83de745366b97f648b8c34ede7"},
+    {file = "json_repair-0.61.5-py3-none-any.whl", hash = "sha256:766a712a05b5a2673212ca0df0e27e6dbb446c9b59ab837613a369304b222886"},
+    {file = "json_repair-0.61.5.tar.gz", hash = "sha256:965cc39a7cddc84aad0a1b00a4ce44906cf14893bd0e3890a386d28ca21dd0f0"},
 ]
 
 [package.extras]
@@ -3302,4 +3302,4 @@ type = ["pytest-mypy (>=1.0.1) ; platform_python_implementation != \"PyPy\""]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<3.14"
-content-hash = "554e4916f83915735c64024726b18f4eb227b1cb1420b23e9693156650439ed1"
+content-hash = "2aa886813c3aafeb4ef08320ee6ee16310bec39d2f4f4d2b55c66d98f2f06a3f"

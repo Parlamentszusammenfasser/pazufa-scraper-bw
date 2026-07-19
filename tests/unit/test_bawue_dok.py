@@ -815,6 +815,37 @@ class TestEnrichDokument:
         mock_llm.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_download_failure_sets_download_failed_flag(self):
+        """Issue #66 follow-up: a failed PDF download is retryable (WP18
+        Plenarprotokolle are published weeks after the session, e.g.
+        18_0007_01072026.pdf still 404s), so the result must be flagged —
+        the scraper then skips caching the Vorgang and retries next cycle."""
+        dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL)
+        session = MagicMock()
+        llm = AsyncMock()
+
+        failure = RuntimeError("PDF download failed with status 404: https://example.com/plp.pdf")
+        with patch("bawue.bawue_dok.download_pdf", new_callable=AsyncMock, side_effect=failure):
+            result = await enrich_dokument(session, llm, dok)
+
+        assert result.dokument is dok
+        assert result.download_failed is True
+
+    @pytest.mark.asyncio
+    async def test_empty_extracted_text_is_not_a_download_failure(self):
+        """Empty extraction is a permanent content problem (scanned/garbled
+        source), not a retryable download failure — it must not keep the
+        Vorgang out of the cache forever."""
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        session = MagicMock()
+        llm = AsyncMock()
+
+        with _patch_pdf_pipeline(text_and_hash=("", "deadbeef")):
+            result = await enrich_dokument(session, llm, dok)
+
+        assert result.download_failed is False
+
+    @pytest.mark.asyncio
     async def test_tempfile_cleaned_up_after_enrichment(self):
         """Temporary PDF file should be cleaned up after enrichment."""
         import tempfile

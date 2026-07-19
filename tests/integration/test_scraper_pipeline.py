@@ -5,7 +5,7 @@ External systems are mocked: PARLIS via ``responses``, PaZuFa backend via ``pyte
 """
 
 from datetime import date
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import NAMESPACE_URL, uuid5
 
 import pytest
@@ -455,3 +455,65 @@ class TestParlisBacklinkRealData:
         )
         assert any(i["id"] == "V-218907" and i["typ"] == "vorgnr" for i in vg["ids"])
         assert vg["links"] == ["https://parlis.landtag-bw.de/parlis/vorgang/V-218907"]
+
+
+# ===================================================================
+# Station-id stability across re-scrapes (Issue #66)
+# ===================================================================
+
+
+class TestStationIdStabilityAcrossRescrapes:
+    @responses.activate
+    @pytest.mark.asyncio
+    async def test_station_ids_stable_when_documents_arrive_later(self, scraper, mock_backend, parlis_fixtures):
+        """Issue #66 (WP18 V-246637): a young PARLIS record lists the
+        Gesetzentwurf Fundstelle before its PDF exists; the link and further
+        Fundstellen appear on a later scrape. The parl-initiativ station must
+        keep its api_id across the two uploads, otherwise the backend cannot
+        match it against the persisted row and keeps both — an invalid ``II``
+        sequence that fails track validation on every subsequent upload."""
+        young = parlis_fixtures("gesetzgebung_wp18_young")
+        complete = parlis_fixtures("gesetzgebung_wp18_complete")
+
+        _mock_parlis_for_types({"Gesetzgebung": (young["search_json"], young["results_html"])})
+        s1 = await scraper(["Gesetzgebung"])
+        try:
+            with (
+                patch("bawue.bawue_vorgaenge_scraper.date") as mock_date,
+                # The Drucksache PDF is not on landtag-bw.de yet either, so the
+                # reconstructed fallback URL (DD-style HEAD probe) resolves to None.
+                patch.object(type(s1), "_fallback_pdf_url", new=AsyncMock(return_value=None)),
+            ):
+                mock_date.today.return_value = date(2026, 7, 12)
+                mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+                await s1.run()
+        finally:
+            await s1.session.close()
+
+        _mock_parlis_for_types({"Gesetzgebung": (complete["search_json"], complete["results_html"])})
+        s2 = await scraper(["Gesetzgebung"])
+        try:
+            with patch("bawue.bawue_vorgaenge_scraper.date") as mock_date:
+                mock_date.today.return_value = date(2026, 7, 18)
+                mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+                await s2.run()
+        finally:
+            await s2.session.close()
+
+        assert mock_backend.call_count == 2
+        first, second = mock_backend.vorgaenge
+
+        # Run 1: the young record yields a single document-less initiativ station.
+        assert len(first["stationen"]) == 1
+        young_initiativ = first["stationen"][0]
+        assert young_initiativ["typ"] == Stationstyp.PARL_INITIATIV.value
+        assert not young_initiativ.get("dokumente")
+
+        # Run 2: the full record yields all four stations, exactly one initiativ.
+        assert len(second["stationen"]) == 4
+        initiativ_stations = [st for st in second["stationen"] if st["typ"] == Stationstyp.PARL_INITIATIV.value]
+        assert len(initiativ_stations) == 1
+        assert initiativ_stations[0]["dokumente"]  # the PDF has arrived
+
+        # The station id survives the document arriving (issue #66).
+        assert initiativ_stations[0]["api_id"] == young_initiativ["api_id"]

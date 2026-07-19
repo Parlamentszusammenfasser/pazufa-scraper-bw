@@ -14,6 +14,11 @@ class VorgangsnummerFilter(logging.Filter):
         return True
 
 
+def get_vorgangs_id() -> str | None:
+    """Return the vorgangs_id of the current async context (None outside item processing)."""
+    return _vorgangs_id.get()
+
+
 def set_vorgangs_id(vorgangs_id: str | None) -> contextvars.Token:
     """Set the vorgangs_id for the current context. Returns a token to restore previous value."""
     return _vorgangs_id.set(vorgangs_id)

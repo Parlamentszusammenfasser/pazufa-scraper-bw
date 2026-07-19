@@ -10,7 +10,7 @@ services:
   scraper:
     # References the image build from `make package`
     # to re-create the image with the latest code run `make clean package`
-    image: bawue-scraper:latest
+    image: froeser/pazufa-scraper-bw:1.0.8
     # Override entrypoint to drop --once so the scraper loops via cycle-time-s
     entrypoint: ["sh", "-c", "python -m bawue --config-file config.toml 2>&1 | tee /app/locallogs/stdout.log"]
     environment:

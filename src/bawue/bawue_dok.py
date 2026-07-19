@@ -37,6 +37,11 @@ class EnrichmentResult(NamedTuple):
 
     dokument: Dokument
     trojanergefahr: int | None = None
+    # True when the PDF download itself failed (e.g. a Plenarprotokoll that is
+    # not published yet, issue #66). Retryable — the scraper must not cache the
+    # Vorgang so the next cycle attempts the download again. Content-level
+    # failures (empty/garbled extraction) are permanent and stay False.
+    download_failed: bool = False
 
 
 class LLMMetrics:
@@ -739,7 +744,11 @@ async def enrich_dokument(
     try:
         # Download PDF
         page_hint = _parse_page_hint(dok.link)
-        pdf_path = await download_pdf(session, dok.link)
+        try:
+            pdf_path = await download_pdf(session, dok.link)
+        except Exception:
+            logger.warning("PDF download failed for %s, returning original document", dok.link, exc_info=True)
+            return EnrichmentResult(dokument=dok, download_failed=True)
 
         # Extract text + hash, then normalize
         full_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint)

@@ -155,6 +155,62 @@ class TestBuildVorgang:
         assert vorgang.kurztitel != "V-246999"
 
     @pytest.mark.asyncio
+    async def test_build_vorgang_marks_vorgang_with_failed_pdf_download(self, monkeypatch):
+        """Issue #66 follow-up: when enrichment reports a failed PDF download
+        (document not yet published), the Vorgang's vorgnr is remembered so
+        the run does not cache it and the next cycle retries the download."""
+        from bawue.bawue_dok import EnrichmentResult
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 18
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper.config = MagicMock()
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._llm_metrics = LLMMetrics()
+        scraper._pending_pdf_downloads = set()
+
+        async def _fake_enrich(session, llm, dok, **kwargs):
+            return EnrichmentResult(dokument=dok, download_failed=True)
+
+        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
+
+        # item_extractor sets the vorgangs-id context before building (log_context).
+        from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
+
+        token = set_vorgangs_id("V-246637")
+        try:
+            await scraper._build_vorgang(_make_raw_vorgang("V-246637"))
+        finally:
+            reset_vorgangs_id(token)
+
+        assert "V-246637" in scraper._pending_pdf_downloads
+
+    @pytest.mark.asyncio
+    async def test_store_extracted_result_skips_caching_on_pending_pdf_download(self):
+        """Issue #66 follow-up: a Vorgang with a not-yet-published PDF must not
+        be cached — an abgelehnter Vorgang's PARLIS record never changes again,
+        so a cached entry would keep the volltext missing forever."""
+        from bawue.types import VgIdent
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper.config = MagicMock()
+        scraper._pending_pdf_downloads = {"V-246637"}
+
+        pending = MagicMock(ids=[VgIdent(id="V-246637", typ="vorgnr")])
+        await scraper.store_extracted_result("raw-key-1", pending)
+        scraper.config.cache.store_raw.assert_not_called()
+        assert "V-246637" not in scraper._pending_pdf_downloads  # consumed
+
+        clean = MagicMock(ids=[VgIdent(id="V-247045", typ="vorgnr")])
+        clean.to_dict.return_value = {"api_id": "x"}
+        await scraper.store_extracted_result("raw-key-2", clean)
+        scraper.config.cache.store_raw.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_documentless_station_gets_stable_api_id(self, scraper_build_vorgang):
         """DD-028: a document-less station (e.g. Gesetzentwurf without PDF) gets a
         deterministic api_id so the backend links it across re-runs instead of
@@ -199,6 +255,35 @@ class TestBuildVorgang:
         v1 = await scraper_build_vorgang(raw)
         v2 = await scraper_build_vorgang(raw)
         assert v1.stationen[0].api_id == v2.stationen[0].api_id
+
+    @pytest.mark.asyncio
+    async def test_station_api_id_stable_when_document_arrives_later(self, scraper_build_vorgang):
+        """Issue #66: WP18 V-246637. A young PARLIS record carries the
+        Gesetzentwurf fundstelle without a PDF link; the link appears on a later
+        scrape. The station api_id must not change when the document arrives,
+        otherwise the backend cannot match the re-uploaded station against the
+        persisted row and keeps both — two parl-initiativ stations at the same
+        zp_start fail track validation (HTTP 400) on every subsequent upload."""
+        fundstelle = {
+            "raw": "Gesetzentwurf    Fraktion der AfD  03.06.2026 Drucksache 18/75   (4 S.)",
+            "datum": "03.06.2026",
+            "drucksache": "18/75",
+            "station_typ": "Gesetzentwurf",
+            "pdf_url": "",
+        }
+        young = await scraper_build_vorgang(
+            _make_raw_vorgang("V-246637", initiative="Fraktion der AfD", fundstellen=[dict(fundstelle)])
+        )
+        fundstelle["pdf_url"] = (
+            "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Drs/18%5F0075%5FD.pdf"
+        )
+        complete = await scraper_build_vorgang(
+            _make_raw_vorgang("V-246637", initiative="Fraktion der AfD", fundstellen=[fundstelle])
+        )
+
+        assert young.stationen[0].dokumente == []
+        assert complete.stationen[0].dokumente  # document has arrived
+        assert young.stationen[0].api_id == complete.stationen[0].api_id
 
     @pytest.mark.asyncio
     async def test_budget_siblings_sharing_pdf_get_distinct_station_ids(self, scraper_build_vorgang):
@@ -370,6 +455,58 @@ class TestBuildVorgang:
         _assign_stable_station_ids([first, second], "V-1")
 
         assert first.api_id != second.api_id
+
+    def test_station_id_matches_persisted_docless_row_after_document_arrives(self):
+        """Issue #66: the id of a station whose document arrives on a later
+        scrape must keep matching the row persisted under the document-less
+        DD-028 key (staging holds station c65767f1-… for exactly this key)."""
+        from datetime import UTC, datetime
+        from uuid import NAMESPACE_URL, uuid5
+
+        station = MagicMock(
+            api_id=UNSET,
+            dokumente=[
+                MagicMock(
+                    link="https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Drs/18%5F0075%5FD.pdf"
+                )
+            ],
+            typ=Stationstyp.PARL_INITIATIV,
+            zp_start=datetime(2026, 6, 3, tzinfo=UTC),
+        )
+        _assign_stable_station_ids([station], "V-246637")
+
+        docless_key = "bawue-station-V-246637-parl-initiativ-2026-06-03T00:00:00+00:00"
+        assert station.api_id == str(uuid5(NAMESPACE_URL, docless_key))
+
+    def test_same_typ_same_date_tie_ids_stable_when_docs_change(self):
+        """Issue #66 follow-up to the #47 distinctness rule: two same-typ
+        stations sharing a zp_start stay distinct via their list position, so
+        their ids survive later document changes on either station."""
+        from datetime import UTC, datetime
+
+        zp = datetime(2025, 12, 15, tzinfo=UTC)
+
+        def _pair(first_link: str | None, second_link: str | None):
+            first = MagicMock(
+                api_id=UNSET,
+                dokumente=[MagicMock(link=first_link)] if first_link else [],
+                typ=Stationstyp.PARL_VOLLVLSGN,
+                zp_start=zp,
+            )
+            second = MagicMock(
+                api_id=UNSET,
+                dokumente=[MagicMock(link=second_link)] if second_link else [],
+                typ=Stationstyp.PARL_VOLLVLSGN,
+                zp_start=zp,
+            )
+            _assign_stable_station_ids([first, second], "V-1")
+            return first.api_id, second.api_id
+
+        run1 = _pair(None, "https://example.com/zweite.pdf")
+        run2 = _pair("https://example.com/erste.pdf", "https://example.com/zweite_v2.pdf")
+
+        assert run1[0] != run1[1]  # tie stays distinct (issue #47)
+        assert run1 == run2  # ids survive documents arriving/changing
 
     @pytest.mark.asyncio
     async def test_ids_omit_initiativdrucksache_by_default(self, scraper_build_vorgang):
