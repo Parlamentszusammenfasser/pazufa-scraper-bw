@@ -1556,6 +1556,38 @@ class TestBuildStationAutoren:
         assert doc.autoren == []
 
     @pytest.mark.asyncio
+    async def test_ausschuss_is_document_autor_issue71(self, scraper_build_vorgang):
+        """Issue #71: Beschlussempfehlung authored by the committee, not the initiator.
+
+        Parses the real Fundstelle (Drucksache 17/2586) so the committee comes
+        from the parser exactly as production produces it.
+        """
+        fund = parse_fundstelle_text(
+            "Beschlussempfehlung und Bericht    Ausschuss des Inneren, für Digitalisierung und Kommunen  "
+            "18.05.2022 Drucksache 17/2586"
+        )
+        fund["pdf_url"] = "https://example.com/report.pdf"
+        raw = _make_raw_vorgang("V-710", initiative="Landesregierung", fundstellen=[fund])
+
+        doc = (await scraper_build_vorgang(raw)).stationen[0].dokumente[0]
+        # The comma inside the genitive name must not split it into two authors
+        assert [a.organisation for a in doc.autoren] == ["Ausschuss des Inneren, für Digitalisierung und Kommunen"]
+
+    @pytest.mark.asyncio
+    async def test_initiative_fallback_kept_without_ausschuss_issue71(self, scraper_build_vorgang):
+        """Issue #71: the initiator fallback stays where nothing better is derivable.
+
+        A Gesetzesbeschluss names no acting body in its Fundstelle, so it keeps
+        the Vorgang initiator — a deliberate scope decision, see DD-042.
+        """
+        fund = parse_fundstelle_text("Gesetzesbeschluss des Landtags     10.11.2021 Drucksache 17/1050")
+        fund["pdf_url"] = "https://example.com/beschluss.pdf"
+        raw = _make_raw_vorgang("V-711", initiative="Landesregierung", fundstellen=[fund])
+
+        doc = (await scraper_build_vorgang(raw)).stationen[0].dokumente[0]
+        assert [a.organisation for a in doc.autoren] == ["Landesregierung"]
+
+    @pytest.mark.asyncio
     async def test_multiple_autoren_from_fundstelle(self, scraper_build_vorgang):
         raw = _make_raw_vorgang(
             "V-503",

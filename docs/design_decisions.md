@@ -63,6 +63,7 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 | 039    | Gleicher Ausschuss, Zeitabstand > 60 Tage → keine Zusammenführung (Issue #54) — *zwei Beschlussempfehlungen, verlorenes Datum, geteiltes Gremium*                                                                                                         | `_find_matching_ausschuss`, `_AUSSCHBER_MERGE_MAX_GAP`                                      |
 | 040    | Maßgebliche Track-Definition & Prefix-Match-Semantik (`parl-vollvlsgn` = `L` statt `V`, Ablehnung = `N`; Prefix- statt Full-Match; Korrektur zu DD-016/025/026/035) — *Track-Buchstaben, Prefix-Validierung, `SILAL`, „unvollständiger" Track gültig*     | `_TRACKS_TOML_STATIONS`, `_BW_GG_LAND_PARL_TRACK`, `_passes_bw_track_validation`            |
 | 041    | WORKAROUND (togglebar): Initiativdrucksache standardmäßig **nicht** als `vg_ident` senden (`emit-initdrucks-ident`, Default `false`; deaktiviert Issue #26) — *Backend `vorgang_merge_candidates` führt fremde Vorgänge über geteilten `initdrucks` zusammen → HTTP500 `rel_station_dokument_pkey` / stille Titel-Korruption; Backend-Issue #150* | `_build_vorgang` (ids), `_emit_initdrucks_ident`, `_initiativ_drucksnr`                     |
+| 042    | `Dokument.autoren`: Ausschuss der Fundstelle vor Initiator-Fallback (Issue #71) — *Beschlussempfehlung erbte „Landesregierung"; Redeprotokoll/Gesetzesbeschluss/GBl behalten bewusst den Initiator* | `_build_dokumente`, `_parse_autoren` |
 
 ---
 
@@ -2241,3 +2242,69 @@ an (`_initiativ_drucksnr(stationen)` liefert die Nummer). Dokumentiert in
 (Schalter an → `initdrucks` = 17/10266 vorhanden), `test_ids_omit_initiativdrucksache_when_absent_though_enabled`
 (Schalter an, aber keine Drucksache → kein `initdrucks`). Backend-seitige Reproduktion
 & Evidenz: https://codeberg.org/PaZuFa/pazufa-backend/issues/150.
+
+---
+
+## DD-042: `Dokument.autoren` — Ausschuss vor Initiator-Fallback (Issue #71)
+
+**Datum:** 19.07.2026
+
+**Kontext:** `Dokument.autoren` wurde aus genau zwei Quellen befüllt: dem
+`autor_text` der Fundstelle, sonst — als Fallback — den `Initiative`-Autoren des
+*Vorgangs*. Damit erbte jedes Dokument ohne eigenen Autortext den Initiator.
+Auswertung des vollen WP17-Laufs (`locallogs`, 3258 Dokumente):
+
+| Doktyp            | n    | bisheriger Autor            | korrekt? |
+|-------------------|------|-----------------------------|----------|
+| `preparl-entwurf` | 710  | Landesregierung             | ja       |
+| `entwurf`/`antrag`| 270  | eigener `autor_text`        | ja       |
+| `beschlussempf`   | 478  | Initiator (332× Landesreg.) | **nein** |
+| `redeprotokoll`   | 1132 | Initiator (920× Landesreg.) | siehe unten |
+| `mitteilung`      | 618  | Initiator (542× Landesreg.) | siehe unten |
+
+Für **Beschlussempfehlungen** ist der tatsächliche Urheber bekannt: PARLIS nennt den
+Ausschuss in der Fundstelle, und seit Issue #68 landet er zuverlässig in
+`fund["ausschuss"]` (vorher scheiterte das an Genitiv-/Präfix-Namen). Die
+OpenAPI-Spec erlaubt ein **Gremium** ausdrücklich als Autor:
+„Kann z.B. eine Person, eine Organisation oder ein Gremium sein."
+
+Hinweis: Vor Issue #68 trugen 68 Beschlussempfehlungen versehentlich „Ständiger
+Ausschuss", weil Präfix-Ausschussnamen in den `autor_text` durchsickerten. Der
+#68-Fix hat diese zufällige Teil-Abhilfe entfernt — sie wird hier bewusst ersetzt.
+
+**Entscheidung:** `Dokument.autoren` wird in dieser Priorität bestimmt:
+
+1. `autor_text` der Fundstelle (eigener Urheber, unverändert),
+2. **`ausschuss` der Fundstelle** (das Gremium, das das Dokument erstellt hat) — neu,
+3. `Initiative` des Vorgangs (Fallback).
+
+Schritt 1 und 2 schließen sich seit Issue #68 gegenseitig aus: eine Fundstelle nennt
+entweder einen Autor *oder* einen Ausschuss, entschieden von genau einer Prüfung in
+`parse_fundstelle_text`.
+
+**Bewusst nicht geändert** (Scope-Entscheidung, Issue #71):
+
+- **Redeprotokolle** behalten den Initiator. Ein Plenarprotokoll hat keinen
+  einzelnen Urheber; weder Community-Wiki noch DoD noch OpenAPI-Spec definieren
+  eine Konvention, und die Fundstelle nennt keine bessere Quelle. Redner aus dem
+  PDF abzuleiten wäre nur mit aktiviertem LLM möglich (Default: aus) und damit
+  nicht deterministisch.
+- **`Gesetzesbeschluss` und Gesetzblatt-Dokumente** (beide `mitteilung`) behalten
+  den Initiator. „Landtag" bzw. das herausgebende Organ wären neue frei erfundene
+  Autor-Strings; DD-021 hält reservierte Namen (`plenum`) ausdrücklich für
+  `Gremium.name` und **nicht** für `Autor.organisation` vor, und die kanonische
+  Normalisierung der Autor-Strings ist als Roadmap #10 G2 offen.
+
+Leitlinie: Der Initiator-Fallback bleibt überall dort, wo die Quelldaten nichts
+Besseres hergeben. Geändert wird nur, was PARLIS tatsächlich benennt.
+
+**Implementierung:** `bawue_vorgaenge_scraper.py`, Methode `_build_dokumente()`.
+Ausschussnamen mit Komma („Ausschuss des Inneren, für Digitalisierung und
+Kommunen") bleiben dank der Lookahead-Trennung in `_AUTOR_SPLIT_RE` **ein**
+Autor und werden nicht aufgespalten.
+
+**Tests:** `tests/unit/test_bawue_scraper.py::TestBuildStationAutoren` —
+`test_ausschuss_is_document_autor_issue71` (reale Fundstelle Drucksache 17/2586 →
+Autor ist der Ausschuss, nicht „Landesregierung"; Komma spaltet nicht),
+`test_initiative_fallback_kept_without_ausschuss_issue71` (Gesetzesbeschluss ohne
+Ausschuss → Initiator bleibt).
