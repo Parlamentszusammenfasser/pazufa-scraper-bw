@@ -18,7 +18,7 @@ from bawue.bawue_dok import LLMMetrics, clear_hash_cache
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
-from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
+from bawue.log_context import get_vorgangs_id, reset_vorgangs_id, set_vorgangs_id
 from bawue.notifications import send_mattermost_summary
 from bawue.parlis_client import ParlisClient
 from bawue.pipeline import VorgangsScraper
@@ -147,6 +147,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         self._upload_limiter = create_upload_limiter()
         self._client = build_client(config.database_url, config.api_key)
+
+        # vorgnrs whose enrichment hit a not-yet-published PDF this cycle
+        # (issue #66) — excluded from caching so the next cycle retries.
+        self._pending_pdf_downloads: set[str] = set()
 
         self._published: int = 0
         self._failed: int = 0
@@ -283,6 +287,24 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return vorgang
         finally:
             reset_vorgangs_id(token)
+
+    async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
+        """Cache the uploaded Vorgang — unless a PDF download failed (issue #66).
+
+        Plenarprotokolle are published weeks after the session; a Vorgang cached
+        with a still-missing PDF would keep its TODO volltext until the PARLIS
+        record changes — for a closed (e.g. abgelehnt) Vorgang that is never.
+        Skipping the cache makes the next cycle retry the download.
+        """
+        vorgnr = next((i.id for i in result.ids or [] if i.typ == "vorgnr"), None)
+        if vorgnr is not None and vorgnr in self._pending_pdf_downloads:
+            self._pending_pdf_downloads.discard(vorgnr)
+            logger.info(
+                "Not caching Vorgang %s: a document PDF is not published yet; retrying next cycle",
+                vorgnr,
+            )
+            return
+        await super().store_extracted_result(item_key, result)
 
     async def _build_vorgang(self, raw: RawVorgang) -> Vorgang:
         """Convert a raw PARLIS dict into a framework Vorgang model.
@@ -971,6 +993,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 )
                 dok = result.dokument
                 trojanergefahr = result.trojanergefahr
+                if result.download_failed and (vorgnr := get_vorgangs_id()):
+                    self._pending_pdf_downloads.add(vorgnr)
             except Exception:
                 logger.warning("Document enrichment failed for %s", pdf_url)
 
@@ -1134,22 +1158,30 @@ def _assign_stable_station_ids(stationen: list[Station], vorgang_id: str) -> Non
     Vorgang and lets the backend link and update the existing row. Stations that
     already carry an api_id (the synthetic ablehnung, DD-010) are left untouched.
 
-    Document-bearing stations additionally fold their document links into the
-    key: two same-typ stations may legitimately share a ``zp_start`` (e.g. two
-    plenary readings dated the same day, which ``_enforce_total_ordering`` leaves
-    tied) yet carry different documents, and must not collapse onto one api_id.
-    Document-less keys keep the exact DD-028 format so already-persisted rows
-    still match.
+    The key must not depend on the station's documents (issue #66): young PARLIS
+    records list Fundstellen before their PDFs exist, so document sets grow on
+    later scrapes. A document-derived key changes when the PDF arrives, the
+    backend cannot match the re-uploaded station against the persisted row and
+    keeps both — an invalid ``II`` sequence that fails track validation on every
+    subsequent upload. Two same-typ stations may still legitimately share a
+    ``zp_start`` (e.g. two plenary readings dated the same day, which
+    ``_enforce_total_ordering`` leaves tied) and must not collapse onto one
+    api_id, so ties are disambiguated by their position among equal-keyed
+    stations instead. The first station of a (typ, zp_start) key keeps the exact
+    DD-028 format so already-persisted rows still match.
     """
     if vorgang_id == "unknown":
         return
+    tie_count: dict[tuple[str, str], int] = {}
     for station in stationen:
         if not isinstance(station.api_id, Unset):
             continue
-        key = f"bawue-station-{vorgang_id}-{station.typ.value}-{station.zp_start.isoformat()}"
-        if station.dokumente:
-            links = "|".join(sorted(str(dok.link) for dok in station.dokumente))
-            key = f"{key}-{links}"
+        zp = station.zp_start.isoformat()
+        key = f"bawue-station-{vorgang_id}-{station.typ.value}-{zp}"
+        ordinal = tie_count.get((station.typ.value, zp), 0)
+        tie_count[(station.typ.value, zp)] = ordinal + 1
+        if ordinal:
+            key = f"{key}-tie{ordinal + 1}"
         station.api_id = str(uuid5(NAMESPACE_URL, key))
 
 

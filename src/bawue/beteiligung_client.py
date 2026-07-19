@@ -45,22 +45,28 @@ class BeteiligungClient:
     def fetch_process_list(self) -> list[RawBeteiligungProcess]:
         """Fetch the LP index page and return parsed process entries.
 
-        A 404 means the index page for this Wahlperiode does not exist yet
-        (e.g. a newly constituted Landtag with no consultations), which is a
-        normal empty state rather than an error.
+        A 403/404 means the index page for this Wahlperiode does not exist
+        (yet): early in WP18 the portal serves lp-18 process pages while the
+        lp-18 index itself returns 403. Fall back to the parent /de/mitmachen
+        listing, which links current processes across Wahlperioden — the
+        lp-prefix filter below keeps only this Wahlperiode's entries.
         """
         url = f"{BASE_URL}/de/mitmachen/lp-{self._wahlperiode}"
         logger.info("Fetching Beteiligungsportal index: %s", url)
         try:
             resp = self._get(url, timeout=30)
         except requests.HTTPError as exc:
-            if exc.response is not None and exc.response.status_code == 404:
-                logger.warning(
-                    "No Beteiligungsportal index for lp-%d yet (404); treating as no processes",
-                    self._wahlperiode,
-                )
-                return []
-            raise
+            status = exc.response.status_code if exc.response is not None else None
+            if status not in (403, 404):
+                raise
+            fallback_url = f"{BASE_URL}/de/mitmachen"
+            logger.warning(
+                "Beteiligungsportal index for lp-%d unavailable (HTTP %s); falling back to %s",
+                self._wahlperiode,
+                status,
+                fallback_url,
+            )
+            resp = self._get(fallback_url, timeout=30)
         all_processes = parse_process_list(resp.text)
 
         lp_prefix = f"/de/mitmachen/lp-{self._wahlperiode}/"

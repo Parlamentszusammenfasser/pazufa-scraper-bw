@@ -73,13 +73,37 @@ class TestFetchProcessList:
         assert processes[0].slug == "test-gesetz"
 
     @responses.activate
-    def test_returns_empty_on_404(self):
+    def test_returns_empty_on_404_when_parent_has_no_lp_processes(self):
         """A missing index page (new Wahlperiode, no consultations) is empty, not an error."""
         client = BeteiligungClient(wahlperiode=18, request_delay_s=0.0)
-        lp18_url = f"{BASE_URL}/de/mitmachen/lp-18"
-        responses.add(responses.GET, lp18_url, status=404)
+        responses.add(responses.GET, f"{BASE_URL}/de/mitmachen/lp-18", status=404)
+        responses.add(responses.GET, f"{BASE_URL}/de/mitmachen", body="<html><body></body></html>", status=200)
 
         assert client.fetch_process_list() == []
+
+    @responses.activate
+    def test_falls_back_to_parent_index_on_403(self):
+        """WP18: the portal has no lp-18 index page (HTTP 403), but lp-18
+        processes are listed on the parent /de/mitmachen page — fall back to it
+        and keep only the lp-prefix matches (observed live 2026-07-19:
+        /de/mitmachen/lp-18/dienst-und-versorgungsbezuege)."""
+        client = BeteiligungClient(wahlperiode=18, request_delay_s=0.0)
+        parent_html = """<html><body>
+    <article class="teaser tx-bw_textimageteaser_pi1">
+        <div class="teaser__headline"><h2>Dienst- und Versorgungsbezüge</h2></div>
+        <a class="teaser__overlay-link" href="/de/mitmachen/lp-18/dienst-und-versorgungsbezuege">Mehr</a>
+    </article>
+    <article class="teaser tx-bw_textimageteaser_pi1">
+        <div class="teaser__headline"><h2>Kommunale Beteiligungsverfahren</h2></div>
+        <a class="teaser__overlay-link" href="/de/mitmachen/kommunale-verfahren">Mehr</a>
+    </article>
+    </body></html>"""
+        responses.add(responses.GET, f"{BASE_URL}/de/mitmachen/lp-18", status=403)
+        responses.add(responses.GET, f"{BASE_URL}/de/mitmachen", body=parent_html, status=200)
+
+        processes = client.fetch_process_list()
+
+        assert [p.slug for p in processes] == ["dienst-und-versorgungsbezuege"]
 
     @responses.activate
     def test_reraises_non_404_errors(self, client):

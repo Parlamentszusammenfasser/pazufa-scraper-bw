@@ -120,6 +120,7 @@ def bawue_config(mock_backend, httpserver):
     config = object.__new__(BawueConfig)
     config.collector_id = FIXED_COLLECTOR_ID
     config.linearize = True
+    config.max_concurrency = 3
     config.config_file = None
     config.api_obj_log = None
     config.dry_run = False
@@ -163,6 +164,7 @@ def scraper(bawue_config):
         s._filter_sonstig = filter_sonstig
         s._parlis = ParlisClient(wahlperiode=17, request_delay_s=0.0)
         s._raw_cache = {}
+        s._pending_pdf_downloads = set()
         s._upload_limiter = create_upload_limiter()
         s._client = build_client(bawue_config.database_url, bawue_config.api_key)
 

@@ -55,7 +55,7 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 | 031    | Unlabeled Plenarprotokoll → Erste Beratung — *fehlendes `V`, `IVAVN`, unbeschriftete Fundstelle*                                                                                                                                                          | `_collect_stationen` (`seen_vollvlsgn`), `_ensure_ablehnung_station`                        |
 | 032 📝 | Issue #33 bereits durch DD-024/026 behoben (kein Code) — *Fundstelle/Runde-Verifikation*                                                                                                                                                                  | `test_issue33_fundstelle_mapping`                                                           |
 | 033    | Initiativdrucksache als Anker + im Cache-Schlüssel (Issue #35) — *geteiltes Protokoll-PDF, falsche Summary*                                                                                                                                               | `narrow_to_relevant_section`, `_prompt_fingerprint`, `_initiativ_drucksnr_from_fundstellen` |
-| 034    | Stabile `api_id` für *alle* Stationen (auch dokumenttragend, Issue #47) — *HTTP500 `rel_station_dokument_pkey`, geteiltes PDF*                                                                                                                            | `_assign_stable_station_ids`, `_ensure_initiativ_after_regbsl` (deepcopy)                   |
+| 034    | Stabile `api_id` für *alle* Stationen (auch dokumenttragend, Issue #47; dokumentunabhängig seit Issue #66) — *HTTP500 `rel_station_dokument_pkey`, geteiltes PDF, HTTP400 doppelte `parl-initiativ`, nachgelieferte PDFs*                                  | `_assign_stable_station_ids`, `_ensure_initiativ_after_regbsl` (deepcopy)                   |
 | 035    | Reihenfolge-Helfer sortieren nach `zp_start`, nicht Listenposition (Issue #48) — *HTTP400 Track, falsche Sortierung*                                                                                                                                      | `_ensure_ausschber_after_vollvlsgn`, `_ensure_initiativ_after_regbsl`                       |
 | 036    | Vorgänge ohne parlamentarische Stationen überspringen (vormals 2. DD-012) — *nur `postparl-*` → skip*                                                                                                                                                     | `item_extractor`, `_POSTPARL_TYPEN`                                                         |
 | 037 ♻️ | Neutrale, Vorgangs-unabhängige Zusammenfassung für Redeprotokolle (löst per-Vorgang-Narrowing aus DD-029/033 für dieses Feld ab, Issue #49) — *geteiltes Protokoll-PDF, überschriebene Zusammenfassung*                                                   | `enrich_dokument`, `BODY_PROMPT_REDEPROTOKOLL`                                              |
@@ -1797,12 +1797,30 @@ synthetische `parl-initiativ`-Station dasselbe `Dokument`-Objekt aliaste.
    Vorgang-skopierte `api_id`. Die Identität hängt damit an `(vorgang_id, typ,
    zp_start)` statt am geteilten Dokument-Hash — kein vorgangsübergreifendes
    Matching mehr.
-2. Dokumenttragende Stationen falten zusätzlich ihre Dokument-Links in den
-   Schlüssel. Zwei gleich-typige Stationen dürfen sich ein `zp_start` teilen
+2. ♻️ *(Ursprungsfassung, abgelöst — s. Update unten)* Dokumenttragende
+   Stationen falteten zusätzlich ihre Dokument-Links in den Schlüssel. Zwei
+   gleich-typige Stationen dürfen sich ein `zp_start` teilen
    (`_enforce_total_ordering` verschiebt nur verschieden-typige Kollisionen),
    tragen aber ggf. verschiedene Dokumente und dürfen nicht auf *eine* `api_id`
    kollabieren. Dokumentlose Schlüssel behalten das exakte DD-028-Format, damit
    bereits persistierte Zeilen weiter matchen.
+
+   **Update 19.07.2026 (Issue #66):** Der Schlüssel ist jetzt
+   **dokumentunabhängig**. Junge PARLIS-Einträge listen Fundstellen, bevor
+   deren PDFs existieren (WP18 V-246637: Gesetzentwurf 18/75 am 12.07. ohne,
+   am 18.07. mit PDF). Ein dokumentabhängiger Schlüssel ändert sich, sobald
+   das PDF nachgeliefert wird — das Backend kann die Station nicht mehr der
+   persistierten Zeile zuordnen, behält beide, und die doppelte
+   `parl-initiativ` (ungültige `II`-Sequenz) lässt **jeden** weiteren Upload
+   an der Track-Validierung scheitern (HTTP 400). Gleich-typige
+   `zp_start`-Kollisionen werden stattdessen über die Listenposition
+   disambiguiert (`-tie2`, `-tie3`, … ab der zweiten Station eines
+   `(typ, zp_start)`-Schlüssels); die erste Station behält das exakte
+   DD-028-Format, damit bereits persistierte Zeilen weiter matchen.
+   Regressionstests: `test_station_api_id_stable_when_document_arrives_later`,
+   `test_station_id_matches_persisted_docless_row_after_document_arrives`,
+   `test_same_typ_same_date_tie_ids_stable_when_docs_change` (unit) und
+   `TestStationIdStabilityAcrossRescrapes` (integration).
 3. `_ensure_initiativ_after_regbsl` nutzt `deepcopy` statt `list.copy()`, sodass
    die synthetische `parl-initiativ`-Station eigene Dokument-Objekte besitzt und
    keine Mutation (z. B. die stabile `api_id`) zwischen den Stationen leakt.
