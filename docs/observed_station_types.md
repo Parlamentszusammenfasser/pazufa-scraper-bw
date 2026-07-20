@@ -68,6 +68,9 @@ The mapper supports additional keys that did not appear because they are
 either restricted to non-enabled Vorgangstypen or are rare in WP 17:
 
 - `Anträge` (plural without Änderung-)
+- `Gesetzentwürfe`, `Gesetzesbeschlüsse` (umlaut plurals, issue #69 — added
+  defensively because they do not fall through to `SONSTIG` but to the shorter
+  `Gesetz` key, i.e. a wrong typ rather than a visible gap)
 - `Kleine Anfrage`, `Große Anfrage`, `Mündliche Anfrage`
 - `Volksantrag`, `Bericht und Empfehlungen`, `Ausschussberatung`
 - bare `Dritte Beratung`, `Beratung`, `Überweisung`

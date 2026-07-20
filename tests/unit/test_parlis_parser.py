@@ -308,6 +308,23 @@ class TestParseFundstelleText:
         )
         assert "Ausschuss für Wirtschaft" in result["ausschuss"]
 
+    def test_extracts_ausschuss_genitive_issue68(self):
+        """Issue #68: genitive committee names were never matched (Drucksache 17/2586)."""
+        result = parse_fundstelle_text(
+            "Beschlussempfehlung und Bericht    Ausschuss des Inneren, für Digitalisierung und Kommunen  "
+            "18.05.2022 Drucksache 17/2586"
+        )
+        assert result["ausschuss"] == "Ausschuss des Inneren, für Digitalisierung und Kommunen"
+        assert "autor_text" not in result
+
+    def test_extracts_ausschuss_with_prefix_issue68(self):
+        """Issue #68: prefixed committee names leaked into autor_text instead."""
+        result = parse_fundstelle_text(
+            "Beschlussempfehlung und Bericht    Ständiger Ausschuss  24.06.2026 Drucksache 18/1100"
+        )
+        assert result["ausschuss"] == "Ständiger Ausschuss"
+        assert "autor_text" not in result
+
     def test_extracts_pages(self):
         result = parse_fundstelle_text("Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)")
         assert result["seiten"] == 13
