@@ -105,6 +105,25 @@ class TestParseDetailMissingFields:
         assert detail.pdf_filename is None
 
 
+class TestParseDetailPdfLink:
+    """PDF-link extraction branches not exercised by the real (absolute-href) fixtures."""
+
+    def test_relative_href_is_resolved_to_absolute(self):
+        html = '<html><body><a href="/index.php?eID=dumpFile&t=r&fn=GBl.pdf">PDF</a></body></html>'
+        detail = parse_detail(html, BASE_URL)
+        assert detail.pdf_url == "https://www.baden-wuerttemberg.de/index.php?eID=dumpFile&t=r&fn=GBl.pdf"
+        assert detail.pdf_filename == "GBl.pdf"
+
+    def test_pdf_filename_none_when_fn_query_absent(self):
+        html = (
+            '<html><body><a href="https://www.baden-wuerttemberg.de/index.php?eID=dumpFile&t=r">PDF</a></body></html>'
+        )
+        detail = parse_detail(html, BASE_URL)
+        assert detail.pdf_url is not None
+        assert "eID=dumpFile" in detail.pdf_url
+        assert detail.pdf_filename is None
+
+
 class TestParseDetailBekanntmachung:
     def test_typ_is_bekanntmachung(self, detail_bekanntmachung_html):
         detail = parse_detail(detail_bekanntmachung_html, BASE_URL)

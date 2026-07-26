@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://www.baden-wuerttemberg.de"
 _DETAIL_BASE = f"{BASE_URL}/de/service/gesetze-und-verordnungen/gesetzblatt/detail"
 
+# BW publishes on the order of a few hundred Gesetzblatt entries per year. This
+# sanity cap is far above any real year and exists purely to bound the search:
+# if the site ever soft-404s (HTTP 200 for a nonexistent detail page) instead of
+# returning 404, an unbounded probe would loop forever and hang the whole run.
+_MAX_ENTRIES_PER_YEAR = 2000
+
 
 class GesetzblattClient:
     """HTTP client for the Gesetzblatt detail pages."""
@@ -46,7 +52,12 @@ class GesetzblattClient:
             return resp
 
     def _head(self, url: str, **kw) -> requests.Response:
-        """Rate-limited HEAD with automatic 429 retry. Does not raise for 404."""
+        """Rate-limited HEAD with automatic 429 retry. Does not raise for 404.
+
+        Follows redirects (``requests`` defaults HEAD to ``allow_redirects=False``)
+        so a canonicalising 3xx on a real detail page is not misread as missing.
+        """
+        kw.setdefault("allow_redirects", True)
         while True:
             self._rate_limiter.wait()
             resp = self._session.head(url, **kw)
@@ -72,20 +83,34 @@ class GesetzblattClient:
         """Binary-search for the highest entry number published in a given year.
 
         Uses HEAD-only requests. Returns 0 if the year has no entries at all.
+
+        The search is bounded by ``_MAX_ENTRIES_PER_YEAR`` on both the probe and
+        the bisection so it always terminates — a soft-404 (or a future off-by-one
+        that stalls progress) can never hang the run; it caps out and warns instead.
         """
         if not self.entry_exists(year, 1):
             return 0
-        # Exponential probe to find an upper bound
+        # Exponential probe to find an upper bound (bounded by the sanity cap)
         hi = 1
-        while self.entry_exists(year, hi * 2):
+        while hi * 2 <= _MAX_ENTRIES_PER_YEAR and self.entry_exists(year, hi * 2):
             hi *= 2
-        # Binary search in [hi, hi*2 - 1]
+        # Binary search in [hi, min(hi*2 - 1, cap)]. The guard counter is ample for
+        # a correct search (~log2(cap) steps) and only trips if progress stalls.
         lo = hi
-        hi = hi * 2 - 1
-        while lo < hi:
+        hi = min(hi * 2 - 1, _MAX_ENTRIES_PER_YEAR)
+        guard = _MAX_ENTRIES_PER_YEAR.bit_length() + 2
+        while lo < hi and guard > 0:
+            guard -= 1
             mid = (lo + hi + 1) // 2
             if self.entry_exists(year, mid):
                 lo = mid
             else:
                 hi = mid - 1
+        if lo >= _MAX_ENTRIES_PER_YEAR:
+            logger.warning(
+                "Gesetzblatt year %d hit the %d-entry sanity cap; the site may be "
+                "soft-404ing (HTTP 200 for nonexistent entries)",
+                year,
+                _MAX_ENTRIES_PER_YEAR,
+            )
         return lo

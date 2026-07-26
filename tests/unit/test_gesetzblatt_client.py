@@ -5,9 +5,10 @@ import time
 from unittest.mock import patch
 
 import pytest
+import requests
 import responses
 
-from bawue.gesetzblatt_client import BASE_URL, GesetzblattClient
+from bawue.gesetzblatt_client import _MAX_ENTRIES_PER_YEAR, BASE_URL, GesetzblattClient
 
 DETAIL_URL = f"{BASE_URL}/de/service/gesetze-und-verordnungen/gesetzblatt/detail/2026-19"
 SAMPLE_DETAIL_HTML = "<html><body><h1>Gesetz zur Detail</h1></body></html>"
@@ -34,6 +35,25 @@ class TestFetchDetail:
         html = client.fetch_detail(DETAIL_URL)
 
         assert "<h1>Gesetz zur Detail</h1>" in html
+
+    @responses.activate
+    def test_retries_on_429(self, client):
+        responses.add(responses.GET, DETAIL_URL, status=429)
+        responses.add(responses.GET, DETAIL_URL, body=SAMPLE_DETAIL_HTML, status=200)
+
+        with patch("bawue.rate_limiter.time") as mock_time:
+            mock_time.monotonic.return_value = 0.0
+            html = client.fetch_detail(DETAIL_URL)
+
+        assert "<h1>Gesetz zur Detail</h1>" in html
+        assert len(responses.calls) == 2
+
+    @responses.activate
+    def test_raises_on_server_error(self, client):
+        responses.add(responses.GET, DETAIL_URL, status=500)
+
+        with pytest.raises(requests.HTTPError):
+            client.fetch_detail(DETAIL_URL)
 
     @responses.activate
     def test_utf8_response_decoded_correctly(self, client):
@@ -153,6 +173,21 @@ class TestFindMaxNumber:
         responses.add_callback(responses.HEAD, DETAIL_URL_PATTERN, callback=handler)
 
         assert client.find_max_number(2026) == max_n
+
+    @responses.activate
+    def test_soft_404_terminates_at_cap_without_hanging(self):
+        """If the site ever answers 200 for every entry (soft-404), the search must
+        still terminate at the sanity cap instead of probing forever and hanging."""
+        client = GesetzblattClient(request_delay_s=0.0)
+
+        def always_200(request):
+            return (200, {}, "")
+
+        responses.add_callback(responses.HEAD, DETAIL_URL_PATTERN, callback=always_200)
+
+        # Bounded call count proves the binary search terminates (no linear/infinite scan).
+        assert client.find_max_number(2026) == _MAX_ENTRIES_PER_YEAR
+        assert len(responses.calls) < 100
 
 
 class TestRequestDelay:

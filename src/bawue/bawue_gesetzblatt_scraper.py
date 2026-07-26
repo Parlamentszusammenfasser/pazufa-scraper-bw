@@ -202,9 +202,10 @@ class BawueGesetzblattScraper(VorgangsScraper):
         # backend matches this station against others by shared document hash —
         # and this scraper never enriches, so every document carries the constant
         # TODO_MARKER hash. Two Gesetze would then collide on that shared hash
-        # (HTTP 500 rel_station_dokument_pkey). Same key scheme as the PARLIS
-        # scraper's _assign_stable_station_ids; one station per Vorgang, no ties.
-        station_key = f"bawue-station-{slug}-{Stationstyp.POSTPARL_GSBLT.value}-{zp_publik.isoformat()}"
+        # (HTTP 500 rel_station_dokument_pkey). There is exactly one station per
+        # Vorgang, so the slug alone scopes it; the date is deliberately left out
+        # of the key so a corrected Publikationsdatum still re-matches the row.
+        station_key = f"bawue-station-{slug}-{Stationstyp.POSTPARL_GSBLT.value}"
         station = Station(
             api_id=str(uuid5(NAMESPACE_URL, station_key)),
             typ=Stationstyp.POSTPARL_GSBLT,
