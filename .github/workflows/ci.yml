@@ -177,6 +177,14 @@ jobs:
           REPO: ${{ secrets.DOCKER_REPO }}
           RELEASED_VERSION: ${{ needs.release.outputs.version }}
         run: |
+          # Docker refs must be lowercase and free of whitespace; a stray space
+          # or newline pasted into the DOCKER_REPO secret yields "invalid
+          # reference format". Strip whitespace, lowercase, then sanity-check.
+          REPO=$(printf '%s' "$REPO" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+          if ! printf '%s' "$REPO" | grep -qE '^([a-z0-9.-]+(:[0-9]+)?/)?[a-z0-9._/-]+$'; then
+            echo "::error::DOCKER_REPO is empty or not a valid image path (e.g. user/repo)."
+            exit 1
+          fi
           SHA8="${GITHUB_SHA::8}"
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             # Manual semver tag push, e.g. 0.2.2 → 0.2.2, 0.2, latest
