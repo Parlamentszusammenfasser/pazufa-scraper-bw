@@ -154,10 +154,14 @@ jobs:
           VERSION=$(git tag --points-at HEAD | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-  # Multi-arch Docker publish. Runs on every push (not PRs). The tag set depends on
-  # the ref and on whether the release job cut a version in this run — the semver
-  # image is built here rather than on the tag push, since a tag pushed by
-  # GITHUB_TOKEN does not trigger a new workflow run.
+  # Multi-arch Docker publish. Runs on every push (not PRs). Tags (via
+  # docker/metadata-action):
+  #   any branch push → <branch>  sha-<short>   (e.g. main, my-feature)
+  #   main push that cut a release, or a manual x.y.z tag push
+  #                    → x.y.z  x.y  latest
+  # The release image is built here rather than on the tag push, since a tag
+  # pushed by GITHUB_TOKEN does not trigger a new workflow run — so the version
+  # the release job cut is injected into metadata-action instead.
   docker:
     needs: [ruff-lint, ruff-format, pytest, release]
     if: >-
@@ -171,36 +175,24 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Compute image tags
-        id: tags
-        env:
-          REPO: ${{ secrets.DOCKER_REPO }}
-          RELEASED_VERSION: ${{ needs.release.outputs.version }}
-        run: |
-          # Docker refs must be lowercase and free of whitespace; a stray space
-          # or newline pasted into the DOCKER_REPO secret yields "invalid
-          # reference format". Strip whitespace, lowercase, then sanity-check.
-          REPO=$(printf '%s' "$REPO" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-          if ! printf '%s' "$REPO" | grep -qE '^([a-z0-9.-]+(:[0-9]+)?/)?[a-z0-9._/-]+$'; then
-            echo "::error::DOCKER_REPO is empty or not a valid image path (e.g. user/repo)."
-            exit 1
-          fi
-          SHA8="${GITHUB_SHA::8}"
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            # Manual semver tag push, e.g. 0.2.2 → 0.2.2, 0.2, latest
-            V="$GITHUB_REF_NAME"
-            TAGS="$REPO:$V,$REPO:${V%.*},$REPO:latest"
-          elif [ "$GITHUB_REF_NAME" = "main" ]; then
-            TAGS="$REPO:main,$REPO:main-$SHA8"
-            if [ -n "$RELEASED_VERSION" ]; then
-              # main push that cut a release → also tag the semver image
-              TAGS="$TAGS,$REPO:$RELEASED_VERSION,$REPO:${RELEASED_VERSION%.*},$REPO:latest"
-            fi
-          else
-            TAGS="$REPO:dev-$SHA8"
-          fi
-          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
-          echo "Image tags: $TAGS"
+      # docker/metadata-action generates tags + OCI labels declaratively and
+      # lowercases/sanitizes the image name for us (no manual munging).
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_REPO }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            # Same-run release image (see job comment): inject the version the
+            # release job just cut, since the branch ref isn't a git tag here.
+            type=semver,pattern={{version}},value=${{ needs.release.outputs.version }},enable=${{ needs.release.outputs.version != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }},enable=${{ needs.release.outputs.version != '' }}
+            type=raw,value=latest,enable=${{ needs.release.outputs.version != '' }}
+          flavor: latest=auto
 
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
@@ -214,6 +206,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
