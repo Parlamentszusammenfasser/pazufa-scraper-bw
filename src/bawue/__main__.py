@@ -1,7 +1,7 @@
 """Entry point for the BaWue scraper, replacing `python -m collector`.
 
 Unlike the removed collector, scrapers are not auto-discovered from a
-directory — there are only three of them, so a static registry is simpler
+directory — there are only four of them, so a static registry is simpler
 and avoids importlib plugin-loading machinery.
 """
 
@@ -13,6 +13,7 @@ import aiohttp
 from dotenv import load_dotenv
 
 from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
+from bawue.bawue_gesetzblatt_scraper import BawueGesetzblattScraper
 from bawue.bawue_sitzungen_scraper import BawueSitzungenScraper
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.config import BawueConfig
@@ -26,7 +27,7 @@ import litellm  # noqa: E402, F401
 
 logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
-SCRAPERS = [BawueVorgaengeScraper, BawueBeteiligungScraper, BawueSitzungenScraper]
+SCRAPERS = [BawueVorgaengeScraper, BawueBeteiligungScraper, BawueSitzungenScraper, BawueGesetzblattScraper]
 
 
 def load_scrapers(config: BawueConfig, session: aiohttp.ClientSession) -> list[Scraper]:

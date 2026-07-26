@@ -3,17 +3,18 @@
 ## 1. System Overview
 
 The BaWue Scraper is a **self-contained scraper**. It owns its own entry point (`bawue.__main__`), config
-loader (`bawue.config`), Redis cache (`bawue.cache`), and scraping loop (`bawue.pipeline`). Its three scrapers
+loader (`bawue.config`), Redis cache (`bawue.cache`), and scraping loop (`bawue.pipeline`). Its four scrapers
 subclass the local `VorgangsScraper` / `SitzungsScraper` base classes and are run from a static registry — there
 is no external framework. It depends only on
 [pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core) (the shared library providing the httpx
 API client, LLM enrichment, and normalisation) plus standard Python packages.
 
-Three data sources are covered:
+Four data sources are covered:
 
 1. **PARLIS** — parliamentary proceedings (Vorgänge) via HTML scraping
 2. **Beteiligungsportal Baden-Württemberg** — pre-parliamentary draft laws (`preparl-regent` station)
 3. **ICS calendar** — parliamentary sessions (Sitzungen)
+4. **Gesetzblatt Baden-Württemberg** — promulgated laws (`postparl-gsblt` station, correct Ausgabedatum; DD-044)
 
 ```mermaid
 graph LR
@@ -22,6 +23,7 @@ graph LR
         PDFs["Drucksachen PDFs<br/>(landtag-bw.de)"]
         BetPortal["Beteiligungsportal<br/>(beteiligungsportal.baden-wuerttemberg.de)"]
         ICSFeed["ICS Calendar<br/>(landtag-bw.de)"]
+        GBlFeed["Gesetzblatt BW<br/>(baden-wuerttemberg.de)"]
         LLMProvider["LLM Provider<br/>(via litellm)"]
     end
 
@@ -42,6 +44,9 @@ graph LR
         EM["EnumMapper"]
         BC["BeteiligungClient"]
         BP["BeteiligungParser"]
+        GBS["BawueGesetzblattScraper<br/>(VorgangsScraper)"]
+        GBC["GesetzblattClient"]
+        GBP["GesetzblattParser"]
         BDK["BawueDok<br/>(PDF + LLM enrichment)"]
         RL["AdaptiveRateLimiter"]
         UT["UploadThrottle"]
@@ -58,12 +63,16 @@ graph LR
     BVS --> EM
     BetPortal -->|" HTML "| BC
     BC --> BP --> BBS
+    GBlFeed -->|" HTML "| GBC
+    GBC --> GBP --> GBS
     Runner -->|" orchestrates "| BVS
     Runner -->|" orchestrates "| BBS
     Runner -->|" orchestrates "| BSS
+    Runner -->|" orchestrates "| GBS
     BVS -->|" Vorgang "| Cache
     BBS -->|" Vorgang "| Cache
     BSS -->|" Sitzung "| Cache
+    GBS -->|" Vorgang "| Cache
     Cache -->|" dedup "| APIClient
     APIClient -->|" PUT /api/v2/vorgang "| API
     APIClient -->|" PUT /api/v2/kalender "| API
