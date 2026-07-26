@@ -8,6 +8,7 @@ import time
 import uuid
 from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
+from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
@@ -1065,15 +1066,23 @@ def _dedup_drucks(doks: list[Dokument]) -> list[Dokument]:
 
     Documents without a drucksnr are always kept (no dedup key).
     Ported from the BY scraper's dedup_drucks pattern.
+
+    The dedup key includes the link's ``#page=N`` anchor: several distinct
+    documents can share one Sammeldrucksache PDF, each anchored to its own page
+    (e.g. two Änderungsanträge under Drucksache 17/4495, one at ``#page=1`` and
+    the adopted one at ``#page=5``, issue #72). They differ only in the anchor,
+    so keying on the Drucksache alone would drop all but the first. True
+    duplicates (same Drucksache, same anchor) are still collapsed.
     """
     unique: list[Dokument] = []
-    seen_drucksnr: set[str] = set()
+    seen_keys: set[tuple[str, str]] = set()
     for d in doks:
         drucksnr = d.drucksnr
         if drucksnr:
-            if drucksnr in seen_drucksnr:
+            key = (drucksnr, urlparse(d.link).fragment if d.link else "")
+            if key in seen_keys:
                 continue
-            seen_drucksnr.add(drucksnr)
+            seen_keys.add(key)
         unique.append(d)
     return unique
 

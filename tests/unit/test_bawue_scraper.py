@@ -319,6 +319,57 @@ class TestBuildVorgang:
         assert ids_v1.isdisjoint(ids_v2)
 
     @pytest.mark.asyncio
+    async def test_amendments_sharing_drucksache_keep_distinct_page_anchors(self, scraper_build_vorgang):
+        """Issue #72 regression: two Änderungsanträge packed into one shared
+        Sammeldrucksache PDF (same Drucksache, different ``#page=N`` anchors)
+        must both survive as distinct documents on the plenary station.
+
+        Before the fix ``_dedup_drucks`` keyed on the Drucksache alone, so the
+        second amendment (the adopted one at ``#page=5``) was silently dropped
+        and only ``#page=1`` reached the backend.
+        """
+        fundstellen = [
+            {
+                "raw": "Gesetzentwurf    Fraktion GRÜNE  01.03.2023 Drucksache 17/4000   (5 S.)",
+                "datum": "01.03.2023",
+                "drucksache": "17/4000",
+                "station_typ": "Gesetzentwurf",
+                "pdf_url": "https://www.landtag-bw.de/resource/blob/1/17_4000.pdf",
+            },
+            {
+                "raw": "Änderungsantrag   Fraktion SPD  29.03.2023 Drucksache 17/4495",
+                "datum": "29.03.2023",
+                "drucksache": "17/4495",
+                "station_typ": "Änderungsantrag",
+                "pdf_url": "https://www.landtag-bw.de/resource/blob/3/17_4495.pdf#page=1",
+            },
+            {
+                "raw": "Änderungsantrag   Fraktion GRÜNE und CDU und SPD  29.03.2023 Drucksache 17/4495",
+                "datum": "29.03.2023",
+                "drucksache": "17/4495",
+                "station_typ": "Änderungsantrag",
+                "pdf_url": "https://www.landtag-bw.de/resource/blob/3/17_4495.pdf#page=5",
+            },
+            {
+                "raw": "Zweite Beratung   Plenarprotokoll 17/50 29.03.2023",
+                "datum": "29.03.2023",
+                "plenarprotokoll": "17/50",
+                "station_typ": "Zweite Beratung",
+                "pdf_url": "",
+            },
+        ]
+        vorgang = await scraper_build_vorgang(
+            _make_raw_vorgang("V-170962", titel="Kommunalwahlrecht", fundstellen=fundstellen)
+        )
+
+        vollvlsgn = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_VOLLVLSGN)
+        amendment_links = {d.link for d in vollvlsgn.dokumente if d.drucksnr == "17/4495"}
+        assert amendment_links == {
+            "https://www.landtag-bw.de/resource/blob/3/17_4495.pdf#page=1",
+            "https://www.landtag-bw.de/resource/blob/3/17_4495.pdf#page=5",
+        }
+
+    @pytest.mark.asyncio
     async def test_synthetic_initiativ_deep_copies_regbsl_documents(self, scraper_build_vorgang):
         """Issue #47: the synthetic parl-initiativ inserted after preparl-regbsl
         must own deep-copied Dokument objects, not alias the regbsl's, so that
