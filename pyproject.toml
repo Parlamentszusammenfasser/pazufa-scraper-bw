@@ -50,25 +50,22 @@ build-backend = "poetry.core.masonry.api"
 # semver tag (0.2.2), matching the existing 0.2.0 / 0.2.1 tags, plus a Codeberg
 # Release carrying the generated notes for that tag (see [.remote] below). main
 # is a protected branch, so CI pushes only the tag — the `version` field below
-# is not committed by CI (see .woodpecker.yml). The current version is derived
-# from the latest matching git tag, not from this file, so a stale field here
-# is harmless. version_toml is kept so PSR knows where the version lives.
+# is not committed by CI (see .github/workflows/ci.yml). The current version is
+# derived from the latest matching git tag, not from this file, so a stale field
+# here is harmless. version_toml is kept so PSR knows where the version lives.
 version_toml = ["pyproject.toml:project.version"]
 tag_format = "{version}"
 allow_zero_version = true   # stay in 0.x; fix→patch, feat→minor (PSR 10 defaults this to false)
 build_command = ""          # the Docker pipeline builds artifacts, not PSR
 
-# Codeberg runs Forgejo, whose Releases API is Gitea-compatible, so PSR drives
-# it through its "gitea" client (there is no separate forgejo/codeberg client).
-# This lets PSR attach the generated release notes to each tag via the API — no
-# CHANGELOG.md committed to protected main. The token env name is our choice
-# (the client would default to GITEA_TOKEN); we use CODEBERG_TOKEN for clarity,
-# wired to the codeberg_token secret in .woodpecker.yml. owner/repo come from
-# the git remote.
+# PSR drives GitHub through its default "github" client, which attaches the
+# generated release notes to each tag via the Releases API — no CHANGELOG.md
+# committed to protected main. It authenticates with GH_TOKEN, wired to the
+# built-in GITHUB_TOKEN in .github/workflows/ci.yml. owner/repo come from the
+# git remote.
 [tool.semantic_release.remote]
-type = "gitea"                          # Forgejo/Codeberg speak the Gitea API
-domain = "codeberg.org"
-token = { env = "CODEBERG_TOKEN" }
+type = "github"
+token = { env = "GH_TOKEN" }
 
 [tool.semantic_release.branches.main]
 match = "main"

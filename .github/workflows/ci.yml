@@ -1,0 +1,212 @@
+name: CI
+
+# Gates: trivy audit → ruff lint + format → pytest, then semantic-release and a
+# multi-arch (amd64 + arm64) Docker publish. arm/v7 is excluded — the dep stack
+# (tiktoken, cryptography, pillow) has no arm/v7 wheels.
+#
+# Required secrets (Settings → Secrets and variables → Actions):
+#   DOCKER_USERNAME / DOCKER_PASSWORD (Hub access token) / DOCKER_REPO (full path).
+#   Releases use the built-in GITHUB_TOKEN — no secret needed.
+#
+# Image tags:
+#   semver release → :x.y.z :x.y :latest    (main push that cuts a version,
+#                                             or a manual x.y.z tag push)
+#   main push      → :main :main-<sha8>
+#   feature push   → :dev-<sha8>
+
+on:
+  push:
+    branches: ['**']
+    tags: ['[0-9]*']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Scan poetry.lock for known CVEs before anything else. Ignore entries live in
+  # .trivyignore at the repo root. Results are also uploaded to the GitHub
+  # Security tab (native code scanning).
+  dependency-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: fs
+          scan-ref: poetry.lock
+          scanners: vuln
+          exit-code: '1'
+          trivyignores: .trivyignore
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload results to Security tab
+        if: always()
+        continue-on-error: true  # non-fatal on repos without code scanning enabled
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+
+  ruff-lint:
+    needs: dependency-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install --quiet ruff
+      - run: ruff check src/ tests/
+
+  ruff-format:
+    needs: dependency-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install --quiet ruff
+      - run: ruff format --check src/ tests/
+
+  pytest:
+    needs: dependency-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install poetry
+        run: pipx install poetry
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: poetry
+      # poetry.toml enforces no-scripts; install won't modify the lockfile.
+      # pazufa-corelib is fetched from its pinned git tag (see pyproject.toml).
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-ansi
+      # Emit ::error:: annotations for test failures so they surface inline on the
+      # PR diff. CI-only plugin — kept out of pyproject to leave the lockfile alone.
+      - name: Enable PR annotations for failures
+        run: poetry run pip install --quiet pytest-github-actions-annotate-failures
+      - name: Run tests with coverage
+        run: poetry run pytest -m 'not integration' --cov=bawue --cov-report=xml --cov-report=term-missing
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "## Coverage"
+            echo ""
+            poetry run coverage report --format=markdown
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  # Automated semantic versioning: on a push to main, compute the next version from
+  # Conventional Commits, tag the current main commit with a bare semver tag, and
+  # publish a GitHub Release with the generated notes. --no-commit keeps protected
+  # main free of a version-bump commit — only the tag is pushed. Exposes the cut
+  # version (empty when no release was warranted) so the docker job can build the
+  # matching release image in this same run.
+  release:
+    needs: [ruff-lint, ruff-format, pytest]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # push the tag + create the GitHub Release
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # PSR needs full history + tags to parse commits
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install --quiet "python-semantic-release==10.5.3"
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # No-op when there are no releasable commits; otherwise pushes the tag
+          # and creates the GitHub Release (see [tool.semantic_release] in pyproject).
+          semantic-release version --no-commit --no-changelog --tag --push --vcs-release
+          # Report the semver tag now pointing at HEAD (if PSR just cut one).
+          VERSION=$(git tag --points-at HEAD | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  # Multi-arch Docker publish. Runs on every push (not PRs). Tags (via
+  # docker/metadata-action):
+  #   any branch push → <branch>  sha-<short>   (e.g. main, my-feature)
+  #   main push that cut a release, or a manual x.y.z tag push
+  #                    → x.y.z  x.y  latest
+  # The release image is built here rather than on the tag push, since a tag
+  # pushed by GITHUB_TOKEN does not trigger a new workflow run — so the version
+  # the release job cut is injected into metadata-action instead.
+  docker:
+    needs: [ruff-lint, ruff-format, pytest, release]
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      needs.ruff-lint.result == 'success' &&
+      needs.ruff-format.result == 'success' &&
+      needs.pytest.result == 'success' &&
+      (needs.release.result == 'success' || needs.release.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # docker/metadata-action generates tags + OCI labels declaratively and
+      # lowercases/sanitizes the image name for us (no manual munging).
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ secrets.DOCKER_REPO }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            # Same-run release image (see job comment): inject the version the
+            # release job just cut, since the branch ref isn't a git tag here.
+            type=semver,pattern={{version}},value=${{ needs.release.outputs.version }},enable=${{ needs.release.outputs.version != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }},enable=${{ needs.release.outputs.version != '' }}
+            type=raw,value=latest,enable=${{ needs.release.outputs.version != '' }}
+          flavor: latest=auto
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
