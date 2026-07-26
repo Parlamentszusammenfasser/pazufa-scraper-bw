@@ -179,7 +179,7 @@ jobs:
       # lowercases/sanitizes the image name for us (no manual munging).
       - name: Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ secrets.DOCKER_REPO }}
           tags: |
