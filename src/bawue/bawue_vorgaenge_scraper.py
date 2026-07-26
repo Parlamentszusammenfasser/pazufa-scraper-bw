@@ -933,8 +933,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
         """Build the document list for a station (0 or 1 documents).
 
         A document is only created when the Fundstelle includes a PDF link.
-        Authors are taken from the Fundstelle's autor_text if available,
-        otherwise fall back to the Vorgang-level initiative (who initiated the process).
+        Authors are taken from the Fundstelle's autor_text if available, else the
+        committee named in the Fundstelle, else the Vorgang-level initiative
+        (who initiated the process). See DD-042.
 
         When LLM is enabled, enriches the document with PDF text extraction
         and LLM-based semantic extraction (summary, keywords, scores).
@@ -958,7 +959,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if doc_typ == Doktyp.SONSTIG and fund.get("plenarprotokoll"):
             doc_typ = Doktyp.REDEPROTOKOLL
 
-        autor_text = fund.get("autor_text", "")
+        # Author priority (DD-042): the Fundstelle's own author, else the committee
+        # that produced the document, else the Vorgang initiator. The committee step
+        # matters for Beschlussempfehlungen, whose acting body PARLIS names in the
+        # Fundstelle but which previously inherited the initiator (issue #71).
+        autor_text = fund.get("autor_text", "") or fund.get("ausschuss", "")
         autoren = _parse_autoren(autor_text) if autor_text else _parse_autoren(initiative)
 
         # volltext + hash carry the TODO marker until LLM enrichment fills
