@@ -9,12 +9,12 @@ The dedicated source solves the PARLIS date bug (issue #9): PARLIS only carries 
 Gesetzesbeschluss/Ausfertigung date in its Fundstellen, so the `postparl-gsblt`
 station built from PARLIS is dated with the wrong day. Here the station's ``zp_start``
 is the Gesetzblatt **Publikationsdatum** (the true Ausgabedatum) and the document's
-``zp_referenz`` is the Ausfertigungsdatum — see DD-043.
+``zp_referenz`` is the Ausfertigungsdatum — see DD-044.
 
 The MVP emits standalone Gesetzblatt-Vorgänge; cross-source merging with PARLIS
 Vorgänge (via ``VgIdent(typ="initdrucks")``) is deferred because the Drucksachennummer
 lives only in the PDF text and because emitting `initdrucks` on the PARLIS side is
-currently gated off (DD-028/DD-034). See DD-043 and docs/gesetzblatt_scraping.md.
+currently gated off (DD-028/DD-034). See DD-044 and docs/gesetzblatt_scraping.md.
 """
 
 import asyncio
@@ -128,10 +128,20 @@ class BawueGesetzblattScraper(VorgangsScraper):
         return keys
 
     async def item_extractor(self, key: str) -> Vorgang | None:
-        """Fetch a Gesetzblatt detail page on demand and build a Vorgang."""
+        """Fetch a Gesetzblatt detail page on demand and build a Vorgang.
+
+        ``jahr``/``nummer`` are taken from the authoritative URL key ("YYYY-N")
+        rather than the parsed page: the parser defaults both to 0 when a field
+        is missing/renamed, which would collapse distinct laws onto one identity
+        (``gsblt-YYYY-0``). The key is what this scraper enumerated, so it is the
+        stable source of identity.
+        """
         url = f"{BASE_URL}{_DETAIL_PATH}/{key}"
         raw_html = await asyncio.to_thread(self._client.fetch_detail, url)
         detail = parse_detail(raw_html, BASE_URL)
+        year_str, _, num_str = key.partition("-")
+        detail.jahr = int(year_str)
+        detail.nummer = int(num_str)
         return await self._build_vorgang(detail)
 
     async def _build_vorgang(self, detail: RawGesetzblattDetail) -> Vorgang | None:
@@ -188,7 +198,15 @@ class BawueGesetzblattScraper(VorgangsScraper):
             autoren=[Autor(organisation=organisation)],
         )
 
+        # Vorgang-scoped stable station api_id (DD-028/DD-034). Without it the
+        # backend matches this station against others by shared document hash —
+        # and this scraper never enriches, so every document carries the constant
+        # TODO_MARKER hash. Two Gesetze would then collide on that shared hash
+        # (HTTP 500 rel_station_dokument_pkey). Same key scheme as the PARLIS
+        # scraper's _assign_stable_station_ids; one station per Vorgang, no ties.
+        station_key = f"bawue-station-{slug}-{Stationstyp.POSTPARL_GSBLT.value}-{zp_publik.isoformat()}"
         station = Station(
+            api_id=str(uuid5(NAMESPACE_URL, station_key)),
             typ=Stationstyp.POSTPARL_GSBLT,
             dokumente=[dok],
             zp_start=zp_publik,

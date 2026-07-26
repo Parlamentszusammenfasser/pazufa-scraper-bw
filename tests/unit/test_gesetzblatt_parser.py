@@ -79,6 +79,32 @@ class TestParseDetailVerordnung:
         assert "Verordnung" in detail.titel
 
 
+class TestParseDetailMissingFields:
+    """Degraded pages must yield the documented empty/None defaults, because the
+    scraper's skip logic depends on them (empty pdf_url / publikationsdatum → skip).
+    A parser change that started raising or returning wrong defaults here would
+    silently break those skips."""
+
+    def test_empty_document_yields_defaults(self):
+        detail = parse_detail("<html><body></body></html>", BASE_URL)
+        assert detail.titel == ""
+        assert detail.jahr == 0
+        assert detail.nummer == 0
+        assert detail.publikationsdatum == ""
+        assert detail.ausfertigungsdatum is None
+        assert detail.typ == ""
+        assert detail.federfuehrung is None
+        assert detail.pdf_url is None
+        assert detail.pdf_filename is None
+
+    def test_missing_pdf_link_yields_none(self):
+        html = '<html><body><div class="tx-rsmbwlawsheet"><h1>Ein Gesetz</h1></div></body></html>'
+        detail = parse_detail(html, BASE_URL)
+        assert detail.titel == "Ein Gesetz"
+        assert detail.pdf_url is None
+        assert detail.pdf_filename is None
+
+
 class TestParseDetailBekanntmachung:
     def test_typ_is_bekanntmachung(self, detail_bekanntmachung_html):
         detail = parse_detail(detail_bekanntmachung_html, BASE_URL)

@@ -137,6 +137,23 @@ class TestFindMaxNumber:
 
         assert client.find_max_number(2024) == max_n
 
+    # Boundary values: powers of two (2, 4, 8) sit exactly on the exponential-probe
+    # stop and the binary-search lower edge (lo = hi); 3 and 7 sit on the upper edge
+    # of their range — the only inputs that exercise the `+1` in (lo+hi+1)//2. The
+    # 5/119 cases above are mid-range and would stay green through an off-by-one, so
+    # these guard find_max_number against a "slight change" reintroducing a boundary bug.
+    @responses.activate
+    @pytest.mark.parametrize("max_n", [2, 3, 4, 6, 7, 8, 16])
+    def test_boundary_values(self, client, max_n):
+        def handler(request):
+            m = re.search(r"/detail/\d+-(\d+)", request.url)
+            n = int(m.group(1))
+            return (200, {}, "") if n <= max_n else (404, {}, "")
+
+        responses.add_callback(responses.HEAD, DETAIL_URL_PATTERN, callback=handler)
+
+        assert client.find_max_number(2026) == max_n
+
 
 class TestRequestDelay:
     @responses.activate

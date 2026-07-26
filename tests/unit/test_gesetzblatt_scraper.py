@@ -184,9 +184,57 @@ class TestBuildVorgang:
         )
         station = vorgang.stationen[0]
         dok = station.dokumente[0]
-        assert (station.zp_start.day, station.zp_start.month) == (29, 12)
-        assert (dok.zp_referenz.day, dok.zp_referenz.month) == (21, 12)
+        assert (station.zp_start.year, station.zp_start.month, station.zp_start.day) == (2022, 12, 29)
+        assert (dok.zp_referenz.year, dok.zp_referenz.month, dok.zp_referenz.day) == (2022, 12, 21)
         assert station.zp_start > dok.zp_referenz
+
+    @pytest.mark.asyncio
+    async def test_zp_referenz_falls_back_to_publication_when_ausfertigung_missing(self):
+        """No Ausfertigung line → document zp_referenz falls back to the publication
+        date. This is the branch that keeps issue #9 safe when the site omits it."""
+        scraper = _make_scraper()
+        vorgang = await scraper._build_vorgang(_make_detail(publikationsdatum="27.02.2026", ausfertigungsdatum=None))
+        station = vorgang.stationen[0]
+        assert station.dokumente[0].zp_referenz == station.zp_start
+
+    @pytest.mark.asyncio
+    async def test_zp_referenz_falls_back_when_ausfertigung_unparseable(self):
+        scraper = _make_scraper()
+        vorgang = await scraper._build_vorgang(
+            _make_detail(publikationsdatum="27.02.2026", ausfertigungsdatum="garbage")
+        )
+        station = vorgang.stationen[0]
+        assert station.dokumente[0].zp_referenz == station.zp_start
+
+    @pytest.mark.asyncio
+    async def test_station_gets_stable_api_id(self):
+        """The station must carry a Vorgang-scoped api_id (DD-028/DD-034); without it
+        the backend matches stations by the constant TODO document hash and collides
+        distinct Gesetze (HTTP 500 rel_station_dokument_pkey)."""
+        scraper = _make_scraper()
+        vorgang = await scraper._build_vorgang(_make_detail())
+        api_id = vorgang.stationen[0].api_id
+        assert isinstance(api_id, str) and api_id
+
+    @pytest.mark.asyncio
+    async def test_station_api_id_deterministic_and_distinct_per_entry(self):
+        scraper = _make_scraper()
+        v1a = await scraper._build_vorgang(_make_detail(jahr=2026, nummer=19))
+        v1b = await scraper._build_vorgang(_make_detail(jahr=2026, nummer=19))
+        v2 = await scraper._build_vorgang(_make_detail(jahr=2026, nummer=20))
+        id1a = v1a.stationen[0].api_id
+        id1b = v1b.stationen[0].api_id
+        id2 = v2.stationen[0].api_id
+        assert id1a == id1b  # deterministic for the same Gesetz
+        assert id1a != id2  # distinct Gesetze → distinct station ids (no hash collision)
+
+    @pytest.mark.asyncio
+    async def test_skips_empty_type(self):
+        """A degraded page whose Gbl-Typ did not parse (typ == "") must be skipped,
+        not published as a bogus Gesetz."""
+        scraper = _make_scraper()
+        vorgang = await scraper._build_vorgang(_make_detail(typ=""))
+        assert vorgang is None
 
     @pytest.mark.asyncio
     async def test_skips_when_pdf_url_missing(self):
@@ -282,3 +330,49 @@ class TestItemExtractor:
 
         expected_url = "https://www.baden-wuerttemberg.de/de/service/gesetze-und-verordnungen/gesetzblatt/detail/2025-7"
         scraper._client.fetch_detail.assert_called_once_with(expected_url)
+
+    @pytest.mark.asyncio
+    async def test_identity_uses_url_key_not_parsed_number(self):
+        """When the page markup fails to yield a Gesetzblatt-Nr (parser defaults
+        nummer to 0), identity must still come from the authoritative URL key —
+        otherwise every such law collapses onto gsblt-YYYY-0."""
+        scraper = _make_scraper()
+        scraper._client.fetch_detail = MagicMock(return_value="<html/>")
+        degraded = _make_detail(jahr=0, nummer=0, typ="Gesetz")
+
+        with patch("bawue.bawue_gesetzblatt_scraper.parse_detail", return_value=degraded):
+            vorgang = await scraper.item_extractor("2025-7")
+
+        assert vorgang is not None
+        assert vorgang.kurztitel == "gsblt-2025-7"
+
+
+class TestParseGermanDate:
+    """Direct unit tests for the date parser that underlies zp_start / zp_referenz."""
+
+    def test_none_returns_none(self):
+        from bawue.bawue_gesetzblatt_scraper import _parse_german_date
+
+        assert _parse_german_date(None) is None
+
+    def test_empty_returns_none(self):
+        from bawue.bawue_gesetzblatt_scraper import _parse_german_date
+
+        assert _parse_german_date("") is None
+
+    def test_invalid_calendar_day_returns_none(self):
+        from bawue.bawue_gesetzblatt_scraper import _parse_german_date
+
+        assert _parse_german_date("31.02.2026") is None
+
+    def test_wrong_format_returns_none(self):
+        from bawue.bawue_gesetzblatt_scraper import _parse_german_date
+
+        assert _parse_german_date("2026-02-27") is None
+
+    def test_valid_date_is_utc_midnight(self):
+        from datetime import UTC, datetime
+
+        from bawue.bawue_gesetzblatt_scraper import _parse_german_date
+
+        assert _parse_german_date("27.02.2026") == datetime(2026, 2, 27, tzinfo=UTC)
