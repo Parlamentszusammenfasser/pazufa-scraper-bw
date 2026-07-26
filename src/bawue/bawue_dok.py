@@ -754,6 +754,19 @@ async def enrich_dokument(
         full_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint)
         full_text = normalize_volltext(full_text)
 
+        # A #page=N anchor on a non-protocol document distinguishes separate
+        # logical documents packed into one shared Sammeldrucksache PDF (e.g.
+        # several Änderungsanträge under Drucksache 17/4495, issue #72). doc_hash
+        # is the whole-file digest, so those siblings would otherwise collide —
+        # the backend keys both the semantics cache and rel_station_dokument on
+        # the hash, so a shared hash re-collapses them into one. Folding the page
+        # anchor into the hash keeps them distinct. REDEPROTOKOLL is exempt: the
+        # same protocol PDF is deliberately shared across the bills debated in
+        # that sitting, where one shared hash (and cache entry) is the point
+        # (DD-036).
+        if page_hint is not None and dok.typ != Doktyp.REDEPROTOKOLL:
+            doc_hash = hashlib.sha256(f"{doc_hash}#page={page_hint}".encode()).hexdigest()
+
         if not full_text:
             # Empty volltext is rejected by the backend (required StrictStr).
             # Fall back to the original Dokument (volltext=TODO_MARKER) rather

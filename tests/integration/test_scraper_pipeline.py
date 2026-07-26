@@ -187,6 +187,51 @@ class TestKleineAnfrage:
 
 
 # ===================================================================
+# Shared-document amendment (Issue #72)
+# ===================================================================
+
+
+class TestSharedAmendmentDrucksache:
+    """Regression for issue #72 (V-170962, Kommunalwahlrecht, WP17).
+
+    PARLIS lists two Änderungsanträge under one Sammeldrucksache (17/4495),
+    each anchored to its own page of the shared PDF (Nr. 1 at ``#page=1``, the
+    adopted Nr. 2 at ``#page=5``). ``_dedup_drucks`` used to key on the
+    Drucksache alone, so the second (adopted) amendment was silently dropped and
+    only ``#page=1`` reached the backend. Both must now survive end-to-end.
+    """
+
+    @responses.activate
+    @pytest.mark.asyncio
+    async def test_both_amendments_sharing_drucksache_reach_backend(self, scraper, mock_backend, parlis_fixtures):
+        fx = parlis_fixtures("gesetzgebung_shared_amendment")
+        _mock_parlis_for_types({"Gesetzgebung": (fx["search_json"], fx["results_html"])})
+        s = await scraper(["Gesetzgebung"])
+        try:
+            with patch("bawue.bawue_vorgaenge_scraper.date") as mock_date:
+                mock_date.today.return_value = date(2023, 4, 30)
+                mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+                await s.run()
+        finally:
+            await s.session.close()
+
+        assert mock_backend.call_count == 1
+        vg = mock_backend.vorgaenge[0]
+
+        # Both amendments survive, distinguished by their page anchor.
+        amendment_links = {
+            doc["link"]
+            for station in vg["stationen"]
+            for doc in station["dokumente"]
+            if doc.get("drucksnr") == "17/4495"
+        }
+        assert amendment_links == {
+            "https://www.landtag-bw.de/files/17_4495.pdf#page=1",
+            "https://www.landtag-bw.de/files/17_4495.pdf#page=5",
+        }
+
+
+# ===================================================================
 # Antrag Tests
 # ===================================================================
 

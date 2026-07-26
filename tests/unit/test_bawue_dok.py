@@ -779,6 +779,44 @@ class TestEnrichDokument:
         assert result.dokument.link == page_url
 
     @pytest.mark.asyncio
+    async def test_page_anchored_siblings_get_distinct_hashes(self):
+        """Issue #72: two non-protocol documents packed into one shared PDF but
+        anchored to different pages (same file → same file digest) must get
+        distinct ``hash_`` values, so the backend keeps both as separate rows
+        instead of collapsing them by hash."""
+        base = "https://www.landtag-bw.de/resource/blob/3/17_4495.pdf"
+        dok1 = _make_plain_dokument(typ=Doktyp.ENTWURF, link=f"{base}#page=1")
+        dok5 = _make_plain_dokument(typ=Doktyp.ENTWURF, link=f"{base}#page=5")
+        session = MagicMock()
+        llm = _make_llm_mock()
+
+        # Both docs extract to the *same* file digest (same underlying PDF).
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
+            r1 = await enrich_dokument(session, llm, dok1)
+            r5 = await enrich_dokument(session, llm, dok5)
+
+        assert r1.dokument.hash_ != r5.dokument.hash_
+        # Neither equals the raw file digest — the anchor is folded in.
+        assert r1.dokument.hash_ != SAMPLE_HASH
+        assert r5.dokument.hash_ != SAMPLE_HASH
+
+    @pytest.mark.asyncio
+    async def test_redeprotokoll_page_anchor_does_not_change_hash(self):
+        """Issue #72 counter-case: a REDEPROTOKOLL is deliberately shared across
+        the bills debated in a sitting (DD-036), each anchored to a different
+        page. Its hash must stay the plain file digest so those bills keep
+        sharing one Dokument row (and one semantics cache entry)."""
+        base = "https://www.landtag-bw.de/files/plp/17_141.pdf"
+        dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link=f"{base}#page=33")
+        session = MagicMock()
+        llm = _make_llm_mock()
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC):
+            result = await enrich_dokument(session, llm, dok)
+
+        assert result.dokument.hash_ == SAMPLE_HASH
+
+    @pytest.mark.asyncio
     async def test_metadata_only_fallback_on_download_failure(self):
         """PDF download fails → original Dokument unchanged, no trojanergefahr."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
