@@ -128,6 +128,9 @@ class TestGesetzgebungFullLifecycle:
 
         station = vg["stationen"][0]
         assert station["typ"] == Stationstyp.PREPARL_REGBSL.value
+        # Issue #10: cabinet-stage station must use the reserved `regierung`
+        # gremium, not the `plenum` default.
+        assert station["gremium"]["name"] == "regierung"
 
 
 # ===================================================================
