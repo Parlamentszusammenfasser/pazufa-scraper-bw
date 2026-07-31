@@ -924,6 +924,30 @@ class TestBuildVorgang:
         assert gsblt_stations[0].gremium.name == "gesetzesblatt"
 
     @pytest.mark.asyncio
+    async def test_preparl_regbsl_station_uses_regierung_gremium(self, scraper_build_vorgang):
+        """Issue #10: preparl-regbsl (Regierungsbeschluss/Kabinettsbeschluss) is a
+        cabinet-stage station, not a Landtag action — it must use the reserved
+        `regierung` name, not fall through to the `plenum` default (DD-021)."""
+        raw = _make_raw_vorgang(
+            "V-063",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  01.03.2026 Drucksache 17/11000   (5 S.)",
+                    "datum": "01.03.2026",
+                    "drucksache": "17/11000",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/doc.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        station = vorgang.stationen[0]
+        assert station.typ == Stationstyp.PREPARL_REGBSL
+        assert station.gremium.name == "regierung"
+
+    @pytest.mark.asyncio
     async def test_fallback_to_raw_text_when_station_typ_missing(self, scraper_build_vorgang):
         """When regex fails to extract station_typ, raw text is used for enum mapping."""
         raw = _make_raw_vorgang(
@@ -983,6 +1007,74 @@ class TestBuildVorgang:
         station = vorgang.stationen[0]
         assert station.typ == Stationstyp.PARL_AKZEPTANZ
         assert station.dokumente[0].typ == Doktyp.MITTEILUNG
+
+
+class TestDetermineGremiumRouting:
+    """Direct coverage of `_determine_gremium`'s routing table (DD-021, issue #10).
+
+    Only `preparl-regbsl` is reachable through real PARLIS Fundstelle text today
+    (see test_preparl_regbsl_station_uses_regierung_gremium above) — the general
+    fix routes *any* preparl-* Stationstyp to `regierung`, so the other three
+    preparl-* values are exercised here directly. That way the routing rule
+    already protects them if a future Fundstelle pattern ever maps to one,
+    instead of requiring another one-off patch per enum value.
+    """
+
+    @pytest.fixture()
+    def scraper(self):
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+        return scraper
+
+    @pytest.mark.parametrize(
+        "station_typ",
+        [
+            Stationstyp.PREPARL_REGBSL,
+            Stationstyp.PREPARL_REGENT,
+            Stationstyp.PREPARL_ECKPUP,
+            Stationstyp.PREPARL_VBEGDE,
+        ],
+    )
+    def test_preparl_station_types_use_regierung(self, scraper, station_typ):
+        gremium = scraper._determine_gremium({}, station_typ)
+        assert gremium.name == "regierung"
+
+    @pytest.mark.parametrize(
+        "station_typ",
+        [
+            Stationstyp.PARL_INITIATIV,
+            Stationstyp.PARL_VOLLVLSGN,
+            Stationstyp.PARL_AUSSCHBER,
+            Stationstyp.PARL_AKZEPTANZ,
+            Stationstyp.PARL_ABLEHNUNG,
+            Stationstyp.PARL_ZURUECKGZ,
+            Stationstyp.PARL_GGENTWURF,
+            Stationstyp.POSTPARL_KRAFT,
+            Stationstyp.POSTPARL_VESJA,
+            Stationstyp.POSTPARL_VESNE,
+            Stationstyp.SONSTIG,
+        ],
+    )
+    def test_non_preparl_station_types_still_default_to_plenum(self, scraper, station_typ):
+        """Regression guard: the preparl-* routing must not widen and swallow
+        unrelated station types into `regierung`."""
+        gremium = scraper._determine_gremium({}, station_typ)
+        assert gremium.name == "plenum"
+
+    def test_postparl_gsblt_still_uses_gesetzesblatt(self, scraper):
+        gremium = scraper._determine_gremium({}, Stationstyp.POSTPARL_GSBLT)
+        assert gremium.name == "gesetzesblatt"
+
+    def test_named_ausschuss_overrides_preparl_routing(self, scraper):
+        """Edge case: a named committee always wins, even on a preparl-* type.
+        Not observed from PARLIS today, but the priority order is documented
+        (DD-021) and worth pinning explicitly so it can't silently invert."""
+        gremium = scraper._determine_gremium({"ausschuss": "Ausschuss für Wirtschaft"}, Stationstyp.PREPARL_REGBSL)
+        assert gremium.name == "Ausschuss für Wirtschaft"
+
+    def test_named_ausschuss_overrides_gsblt_routing(self, scraper):
+        gremium = scraper._determine_gremium({"ausschuss": "Ausschuss für Wirtschaft"}, Stationstyp.POSTPARL_GSBLT)
+        assert gremium.name == "Ausschuss für Wirtschaft"
 
 
 def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(2021, 4, 26)):

@@ -908,7 +908,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
           1. Named committee (Ausschuss) → use the specific committee name.
           2. postparl-gsblt stations → reserved name `gesetzesblatt`
              (wiki + BY-scraper convention, see DD-021).
-          3. Everything else → reserved name `plenum`, which the DoD defines
+          3. preparl-* stations (Regierungsbeschluss, Regierungsentwurf, ...) →
+             reserved name `regierung` — these are cabinet-stage actions, not
+             Landtag ones (issue #10, DD-021 update).
+          4. Everything else → reserved name `plenum`, which the DoD defines
              as the default "wenn etwas 'irgendwie passiert'".
         """
         ausschuss = fund.get("ausschuss", "")
@@ -916,6 +919,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
             name: str = ausschuss
         elif station_typ == Stationstyp.POSTPARL_GSBLT:
             name = ReservedGremium.GESETZESBLATT
+        elif station_typ.value.startswith("preparl-"):
+            name = ReservedGremium.REGIERUNG
         else:
             name = ReservedGremium.PLENUM
         return Gremium(parlament=Parlament.BW, name=name, wahlperiode=self._wahlperiode)
