@@ -86,6 +86,15 @@ class TestEntryExists:
         assert client.entry_exists(2026, 99) is False
 
     @responses.activate
+    def test_raises_on_server_error_instead_of_reading_as_not_found(self, client):
+        """A transient 5xx must not be silently read as "not found" — that would
+        bias find_max_number's binary search downward with no indication."""
+        responses.add(responses.HEAD, _detail_url(2026, 19), status=500)
+
+        with pytest.raises(requests.HTTPError):
+            client.entry_exists(2026, 19)
+
+    @responses.activate
     def test_retries_on_429(self, client):
         responses.add(responses.HEAD, _detail_url(2026, 19), status=429)
         responses.add(responses.HEAD, _detail_url(2026, 19), status=200)

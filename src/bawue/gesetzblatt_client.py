@@ -74,9 +74,17 @@ class GesetzblattClient:
         return resp.text
 
     def entry_exists(self, year: int, num: int) -> bool:
-        """Return True when the detail page for YYYY-N responds with HTTP 200."""
+        """Return True when the detail page for YYYY-N responds with HTTP 200.
+
+        Raises for any error status other than 404 (e.g. a transient 5xx),
+        mirroring ``fetch_detail``'s ``_get`` — otherwise a server error would
+        be silently read as "not found" and bias the binary search downward.
+        """
         url = f"{_DETAIL_BASE}/{year}-{num}"
         resp = self._head(url, timeout=15)
+        if resp.status_code == 404:
+            return False
+        resp.raise_for_status()
         return resp.status_code == 200
 
     def find_max_number(self, year: int) -> int:

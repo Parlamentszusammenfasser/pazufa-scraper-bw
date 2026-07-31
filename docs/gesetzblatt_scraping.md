@@ -18,7 +18,7 @@ Roadmap zur vollständigen Lifecycle-Abdeckung fest. Bezug:
 | Detail-URL-Pattern | `/de/service/gesetze-und-verordnungen/gesetzblatt/detail/<JAHR>-<NUMMER>` |
 | API / RSS | Keine — reines HTML-Scraping |
 | Digital verfügbar seit | 01.01.2024 (vorher Papier; Archiv über LEO-BW / Staatsanzeiger) |
-| Index-Größe pro Fetch | 10 Einträge (neueste zuerst) |
+| Entdeckung | Binärsuche über `detail/<JAHR>-N` per HEAD-Requests (kein Index-Page-Crawling, keine Pagination-Begrenzung) |
 | `robots.txt` | `/system/pdf/` und `/de/system/suchergebnisseite` blockiert; Detail-Pfade frei |
 | User-Agent | `PaZuFa-BaWue-Scraper/0.1` |
 | Default Rate-Limit | 1.0 s zwischen Requests (konfigurierbar in `[gesetzblatt]`) |
@@ -43,12 +43,18 @@ Phase 2 / Phase 3 erschlossen (siehe Roadmap unten).
 
 ## Architektur (MVP)
 
-Drei neue Module nach dem etablierten Beteiligungsportal-Muster:
+Drei neue Module nach dem etablierten Beteiligungsportal-Muster. Es gibt **kein**
+Index-Page-Crawling: `listing_page_extractor` iteriert `start_year..current_year`
+und findet pro Jahr die höchste vergebene Nummer per Binärsuche
+(`GesetzblattClient.find_max_number`, HEAD-Requests gegen `detail/<JAHR>-N`);
+jede Nummer `1..max` wird anschließend einzeln per GET abgerufen. Das deckt ein
+Jahr immer vollständig ab, unabhängig davon, wie viele Einträge die Index-Seite
+der Website anzeigen würde.
 
 | Datei | Rolle |
 |---|---|
-| `src/bawue/gesetzblatt_client.py` | Synchroner `requests`-Client mit `AdaptiveRateLimiter` und 429-Retry |
-| `src/bawue/gesetzblatt_parser.py` | Stateless lxml/XPath-Parser für Index- und Detail-HTML |
+| `src/bawue/gesetzblatt_client.py` | Synchroner `requests`-Client mit `AdaptiveRateLimiter`, 429-Retry und der Binärsuche (`find_max_number`) |
+| `src/bawue/gesetzblatt_parser.py` | Stateless lxml/XPath-Parser für Detail-HTML |
 | `src/bawue/bawue_gesetzblatt_scraper.py` | `VorgangsScraper`-Subklasse: Listing → Item → `Vorgang` mit `postparl-gsblt`-Station |
 
 ### Vorgang-Mapping
@@ -57,7 +63,7 @@ Drei neue Module nach dem etablierten Beteiligungsportal-Muster:
 |---|---|
 | `api_id` | `uuid5(NAMESPACE_URL, f"gsblt-{jahr}-{nummer}")` |
 | `kurztitel` | `gsblt-{jahr}-{nummer}` |
-| `typ` | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL` |
+| `typ` | `Vorgangstyp.GG_LAND_PARL` |
 | `wahlperiode` | aus `[gesetzblatt] wahlperiode` (Default: 17) |
 | `verfassungsaendernd` | `False` |
 | `initiatoren` | `[Autor(organisation=federfuehrung)]`, Fallback `"Landesregierung"` |
@@ -67,7 +73,7 @@ Drei neue Module nach dem etablierten Beteiligungsportal-Muster:
 
 | Feld | Wert |
 |---|---|
-| `typ` | `Stationstyp.POSTPARL_MINUS_GSBLT` |
+| `typ` | `Stationstyp.POSTPARL_GSBLT` |
 | `zp_start` | Publikationsdatum |
 | `gremium` | `Gremium(parlament=BW, name="Gesetzblatt", wahlperiode=…)` |
 | `dokumente` | Eine PDF-Referenz (Doktyp `MITTEILUNG`, `zp_referenz` = Ausfertigungsdatum) |
@@ -156,14 +162,14 @@ abschließen.
   Wahlperioden (insb. WP16)
 - Eigener Client/Parser, da andere Datenquelle und -struktur
 
-### Optional — Pagination
+### Pagination — nicht erforderlich
 
-- Standardmäßig liefert die Index-Seite nur die letzten 10 Einträge.
-  Bei einer langen Pause oder einem Bulk-Backfill müssen ältere Einträge
-  über die TYPO3-Solr-Pagination geholt werden (`?lawsheetData=1&page=N&…`)
-  — diese Requests benötigen den `cHash`-Cache-Hash, der serverseitig
-  generiert wird. Workaround: bei Bedarf Crawling mehrerer Index-Seiten
-  via Folge-Links aus der Pagination des HTML.
+Die Entdeckung läuft nicht über die Index-Seite (die serverseitig nur die
+letzten 10 Einträge liefert), sondern über die Binärsuche in
+`GesetzblattClient.find_max_number` gegen die Detail-URLs. Ein Bulk-Backfill
+oder eine lange Pause erfordert daher **keine** TYPO3-Solr-Pagination
+(`?lawsheetData=1&page=N&…`, `cHash`-pflichtig) — jedes Jahr in
+`start_year..current_year` wird beim nächsten Lauf vollständig neu durchsucht.
 
 ## Offene Punkte / Designfragen
 

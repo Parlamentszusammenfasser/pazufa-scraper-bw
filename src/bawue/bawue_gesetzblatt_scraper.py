@@ -67,7 +67,7 @@ def _current_year() -> int:
 
 
 class BawueGesetzblattScraper(VorgangsScraper):
-    """Scrapes the Gesetzblatt Baden-Württemberg index + detail pages."""
+    """Scrapes the Gesetzblatt Baden-Württemberg via binary-searched detail pages."""
 
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         gsblt_config = load_toml_section(config, "gesetzblatt")
