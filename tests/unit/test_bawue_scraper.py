@@ -561,6 +561,49 @@ class TestBuildVorgang:
         assert run1 == run2  # ids survive documents arriving/changing
 
     @pytest.mark.asyncio
+    async def test_synthetic_initiativ_id_survives_arrival_of_first_reading(self, scraper_build_vorgang):
+        """V-247045: the synthetic parl-initiativ keeps its api_id when a later
+        scrape adds the first reading.
+
+        `_ensure_initiativ_after_regbsl` dates the synthetic station from the
+        earliest station following the regbsl, so its zp_start moves as soon as
+        the Erste Beratung Fundstelle appears (30.06. → 23.07.). A zp_start-derived
+        api_id changes with it, the backend cannot match the persisted row and
+        keeps both — the staging upload was rejected with an ``SSIL`` ordering
+        (HTTP 400 Track validation). The identity must not depend on dates that
+        later Fundstellen can move.
+        """
+        gesetzentwurf = {
+            "raw": "Gesetzentwurf    Landesregierung  30.06.2026 Drucksache 18/191",
+            "datum": "30.06.2026",
+            "drucksache": "18/191",
+            "station_typ": "Gesetzentwurf",
+            "autor_text": "Landesregierung",
+            "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Drucksachen/0000/18%5F0191.pdf",
+        }
+        erste_beratung = {
+            "raw": "Erste Beratung   Plenarprotokoll 18/10 23.07.2026",
+            "datum": "23.07.2026",
+            "plenarprotokoll": "18/10",
+            "station_typ": "Erste Beratung",
+            "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Plp/18%5F0010%5F23072026.pdf",
+        }
+
+        def _raw(fundstellen):
+            return _make_raw_vorgang("V-247045", initiative="Landesregierung", fundstellen=fundstellen)
+
+        before = await scraper_build_vorgang(_raw([gesetzentwurf]))
+        after = await scraper_build_vorgang(_raw([gesetzentwurf, erste_beratung]))
+
+        def _station_id(vorgang, typ):
+            return next(s.api_id for s in vorgang.stationen if s.typ == typ)
+
+        # The synthetic parl-initiativ moved in time between the two scrapes ...
+        assert _station_id(before, Stationstyp.PARL_INITIATIV) == _station_id(after, Stationstyp.PARL_INITIATIV)
+        # ... and the real regbsl station keeps its identity too.
+        assert _station_id(before, Stationstyp.PREPARL_REGBSL) == _station_id(after, Stationstyp.PREPARL_REGBSL)
+
+    @pytest.mark.asyncio
     async def test_ids_omit_initiativdrucksache_by_default(self, scraper_build_vorgang):
         """DD-041: the Initiativdrucksache (Issue #26) is NOT emitted by default.
 
@@ -4780,3 +4823,141 @@ class TestInitiativDrucksnrFromFundstellen:
             },
         ]
         assert _initiativ_drucksnr_from_fundstellen(fundstellen, "Fraktion GRÜNE") == "17/530"
+
+
+_LTBW_FILES = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente"
+
+_GBL_GESETZENTWURF = {
+    "raw": "Gesetzentwurf    Landesregierung  25.11.2025 Drucksache 17/9952   (73 S.)",
+    "datum": "25.11.2025",
+    "drucksache": "17/9952",
+    "station_typ": "Gesetzentwurf",
+    "autor_text": "Landesregierung",
+    "pdf_url": f"{_LTBW_FILES}/WP17/Drucksachen/9000/17%5F9952.pdf",
+}
+# The parliamentary steps between Entwurf and Verkuendung. They are part of the real
+# Vorgang and keep the synthetic parl-initiativ (DD-012) off the Gesetzblatt date,
+# so no tie-breaking bump (DD-034) obscures the assertions.
+_GBL_ZWISCHENSTATIONEN = [
+    {
+        "raw": "Erste Beratung   Plenarprotokoll 17/137 10.12.2025  S. 8347-8353",
+        "datum": "10.12.2025",
+        "plenarprotokoll": "17/137",
+        "station_typ": "Erste Beratung",
+        "pdf_url": f"{_LTBW_FILES}/WP17/Plp/17%5F0137%5F10122025.pdf#page=82",
+    },
+    {
+        "raw": (
+            "Beschlussempfehlung und Bericht    Ausschuss für Soziales, Gesundheit "
+            "und Integration  28.01.2026 Drucksache 17/10221"
+        ),
+        "datum": "28.01.2026",
+        "drucksache": "17/10221",
+        "station_typ": "Beschlussempfehlung und Bericht",
+        "ausschuss": "Ausschuss für Soziales, Gesundheit und Integration",
+        "pdf_url": f"{_LTBW_FILES}/WP17/Drucksachen/10000/17%5F10221.pdf",
+    },
+    {
+        "raw": "Zweite Beratung   Plenarprotokoll 17/140 04.02.2026  S. 8610-8611",
+        "datum": "04.02.2026",
+        "plenarprotokoll": "17/140",
+        "station_typ": "Zweite Beratung",
+        "pdf_url": f"{_LTBW_FILES}/WP17/Plp/17%5F0140%5F04022026.pdf#page=59",
+    },
+]
+# parse_fundstelle_text output for the real Gesetzblatt Fundstelle
+_GBL_FUNDSTELLE = {
+    "raw": "Gesetz  vom 10. Februar 2026 Gesetzblatt für Baden-Württemberg 2026 Nr. 14     S. 1-9",
+    "datum": "10.02.2026",
+    "station_typ": "Gesetz",
+    "gesetzblatt_jahr": 2026,
+    "gesetzblatt_nr": 14,
+    "pdf_url": f"{_LTBW_FILES}/gesetzblaetter/2026/GBl2026014.pdf#page=1",
+}
+_GBL_AUSGABEDATUM = datetime(2026, 2, 27, tzinfo=UTC)
+_GBL_AUSFERTIGUNG = datetime(2026, 2, 10, tzinfo=UTC)
+
+
+class TestIssue9GesetzblattAusgabedatum:
+    """DD-047: the postparl-gsblt station is dated by the Gesetzblatt Ausgabedatum.
+
+    Real case V-244420 (Landesnichtraucherschutzgesetz): PARLIS carries only
+    "Gesetz vom 10. Februar 2026", the Ausfertigung -- the Gesetzblatt was actually
+    issued on 27.02.2026. Dating the station from the Fundstelle puts the
+    Verkuendung 17 days early (issue #9).
+    """
+
+    def _scraper(self, lookup=None):
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+        scraper._llm_enabled = False
+        scraper._llm = None
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        if lookup is not None:
+            scraper._gsblt_dates = lookup
+        return scraper
+
+    def _lookup(self, result):
+        lookup = MagicMock()
+        lookup.publikationsdatum = AsyncMock(return_value=result)
+        return lookup
+
+    def _raw(self):
+        return _make_raw_vorgang(
+            "V-244420",
+            titel="Landesnichtraucherschutzgesetz (LNRSchG)",
+            initiative="Landesregierung",
+            fundstellen=[_GBL_GESETZENTWURF, *_GBL_ZWISCHENSTATIONEN, _GBL_FUNDSTELLE],
+        )
+
+    @staticmethod
+    def _gsblt(vorgang):
+        return next(s for s in vorgang.stationen if s.typ == Stationstyp.POSTPARL_GSBLT)
+
+    @pytest.mark.asyncio
+    async def test_station_uses_gesetzblatt_ausgabedatum(self):
+        scraper = self._scraper(self._lookup(_GBL_AUSGABEDATUM))
+        vorgang = await scraper._build_vorgang(self._raw())
+
+        assert self._gsblt(vorgang).zp_start == _GBL_AUSGABEDATUM
+
+    @pytest.mark.asyncio
+    async def test_lookup_is_keyed_on_the_cited_entry(self):
+        lookup = self._lookup(_GBL_AUSGABEDATUM)
+        await self._scraper(lookup)._build_vorgang(self._raw())
+
+        lookup.publikationsdatum.assert_awaited_once_with(2026, 14)
+
+    @pytest.mark.asyncio
+    async def test_document_keeps_the_ausfertigung_as_zp_referenz(self):
+        """Only the station moves; the document still references the Gesetz vom …"""
+        scraper = self._scraper(self._lookup(_GBL_AUSGABEDATUM))
+        vorgang = await scraper._build_vorgang(self._raw())
+
+        dokumente = self._gsblt(vorgang).dokumente
+        assert dokumente and all(d.zp_referenz == _GBL_AUSFERTIGUNG for d in dokumente)
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_parlis_date_when_entry_unresolvable(self):
+        """Pre-2024 Gesetzblätter are not digitally available."""
+        scraper = self._scraper(self._lookup(None))
+        vorgang = await scraper._build_vorgang(self._raw())
+
+        assert self._gsblt(vorgang).zp_start == _GBL_AUSFERTIGUNG
+
+    @pytest.mark.asyncio
+    async def test_no_lookup_configured_keeps_parlis_date(self):
+        """dry_run and unit tests construct the scraper without a lookup."""
+        vorgang = await self._scraper()._build_vorgang(self._raw())
+
+        assert self._gsblt(vorgang).zp_start == _GBL_AUSFERTIGUNG
+
+    @pytest.mark.asyncio
+    async def test_non_gesetzblatt_stations_never_trigger_a_lookup(self):
+        lookup = self._lookup(_GBL_AUSGABEDATUM)
+        raw = _make_raw_vorgang("V-1", fundstellen=[_GBL_GESETZENTWURF])
+        await self._scraper(lookup)._build_vorgang(raw)
+
+        lookup.publikationsdatum.assert_not_awaited()

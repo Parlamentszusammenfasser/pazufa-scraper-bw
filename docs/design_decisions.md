@@ -65,8 +65,10 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 | 041    | WORKAROUND (togglebar): Initiativdrucksache standardmäßig **nicht** als `vg_ident` senden (`emit-initdrucks-ident`, Default `false`; deaktiviert Issue #26) — *Backend `vorgang_merge_candidates` führt fremde Vorgänge über geteilten `initdrucks` zusammen → HTTP500 `rel_station_dokument_pkey` / stille Titel-Korruption; Backend-Issue #150* | `_build_vorgang` (ids), `_emit_initdrucks_ident`, `_initiativ_drucksnr`                     |
 | 042    | `Dokument.autoren`: Ausschuss der Fundstelle vor Initiator-Fallback (Issue #71) — *Beschlussempfehlung erbte „Landesregierung"; Redeprotokoll/Gesetzesbeschluss/GBl behalten bewusst den Initiator* | `_build_dokumente`, `_parse_autoren` |
 | 043    | Geteilte Sammeldrucksache: Dedup-Schlüssel und `hash_` berücksichtigen den `#page=N`-Anker (Issue #72) — *mehrere Änderungsanträge in einer Drucksache, adoptierter Antrag fällt weg; REDEPROTOKOLL bewusst ausgenommen (DD-036)* | `_dedup_drucks`, `enrich_dokument` |
-| 044    | Dedizierter Gesetzblatt-Scraper: `postparl-gsblt.zp_start` = Publikationsdatum (echtes Ausgabedatum), Dok-`zp_referenz` = Ausfertigungsdatum (Issue #9) — *GBl-Station mit Gesetzesbeschluss-Datum statt Ausgabedatum; nur Gbl-Typ „Gesetz"; eigenständige Vorgänge, kein `initdrucks`-Merge (DD-041/DD-034); digital erst ab 2024* | `bawue_gesetzblatt_scraper.py`, `gesetzblatt_parser.py`, `gesetzblatt_client.py` |
+| 044 ♻️ | *(abgelöst durch DD-047 — der eigenständige GBl-Vorgang scheitert immer an der Track-Validierung)* Dedizierter Gesetzblatt-Scraper: `postparl-gsblt.zp_start` = Publikationsdatum (echtes Ausgabedatum), Dok-`zp_referenz` = Ausfertigungsdatum (Issue #9) — *GBl-Station mit Gesetzesbeschluss-Datum statt Ausgabedatum; nur Gbl-Typ „Gesetz"; eigenständige Vorgänge, kein `initdrucks`-Merge (DD-041/DD-034); digital erst ab 2024* | `bawue_gesetzblatt_scraper.py`, `gesetzblatt_parser.py`, `gesetzblatt_client.py` |
 | 045    | `preparl-*`-Stationen (nicht nur `preparl-regbsl`) routen auf `regierung` statt `plenum` (Issue #10, Korrektur zu DD-021) — *Kabinettsstationen fälschlich im Landtags-Default* | `_determine_gremium` |
+| 046    | Datumsfreie `api_id` für die synthetische `parl-initiativ` (V-247045; Ergänzung zu DD-028/DD-034) — *HTTP400 Track `SSIL`, doppelte Station nach neuer Fundstelle, wanderndes `zp_start`* | `_synthetic_initiativ_api_id`, `_ensure_initiativ_after_regbsl` |
+| 047 ♻️ | Gesetzblatt ist Datums-Lookup, keine eigene Vorgangsquelle (löst DD-044 ab; Issue #9) — *HTTP400 Track bei `postparl-gsblt`-Only-Vorgang, falsches Ausgabedatum, kein `initdrucks` im GBl-PDF, geteilte GBl-Nr./PDF* | `parlis_parser._GESETZBLATT_REF_RE`, `gesetzblatt_lookup.GesetzblattDateLookup`, `_gesetzblatt_ausgabedatum` |
 
 ---
 
@@ -2387,6 +2389,14 @@ den anker-spezifischen Hash.
 
 ## DD-044: Dedizierter Gesetzblatt-Scraper — korrektes Ausgabedatum der `postparl-gsblt`-Station
 
+> ♻️ **Abgelöst durch [DD-047](#dd-047).** Der hier beschlossene eigenständige
+> Gesetzblatt-Vorgang besteht nur aus einer `postparl-gsblt`-Station und kann die
+> BW-Track-Validierung (obligatorisches `parl-initiativ`) grundsätzlich nie
+> bestehen; der als Phase 2 vorgesehene `initdrucks`-Merge ist zudem nicht
+> umsetzbar, da die Drucksachennummer auch im PDF-Volltext nicht vorkommt. Der
+> Abschnitt bleibt als historischer Verlauf stehen. Die Aussagen zu
+> Publikations- vs. Ausfertigungsdatum gelten unverändert und leben in DD-047 fort.
+
 **Kontext (Issue #9):** Die `postparl-gsblt`-Station, die der PARLIS-Scraper baut, wird
 mit dem **Gesetzesbeschluss-/Ausfertigungsdatum** datiert, nicht mit dem tatsächlichen
 Ausgabedatum des Gesetzblatts. Ursache: Die PARLIS-Fundstelle einer Gesetzblatt-Zeile
@@ -2498,3 +2508,174 @@ Einbringung), keine `preparl-*`-Typen, und fallen damit korrekt weiter unter den
   Gesetzblatt-Route; `test_named_ausschuss_overrides_preparl_routing` und
   `test_named_ausschuss_overrides_gsblt_routing` pinnen die Prioritätsreihenfolge
   (Ausschuss schlägt beide Spezialfälle).
+
+---
+
+## DD-046: Datumsfreie `api_id` für die synthetische `parl-initiativ`-Station (V-247045)
+
+**Datum:** 31.07.2026
+
+**Kontext:** Ein Staging-Lauf gegen WP18 lehnte den Vorgang V-247045 („Gesetz zu dem
+Zweiten Staatsvertrag zur Änderung des Glücksspielstaatsvertrags 2021") mit
+HTTP 400 Track validation ab. Die vom Backend gemeldete Stationsfolge war
+`S S I L` — ein doppeltes `preparl-regbsl` —, obwohl der Scraper lokal ein
+korrektes `S I L` baut. Ursache ist keine fehlerhafte Stationsbildung, sondern eine
+*instabile Stationsidentität* über Läufe hinweg:
+
+`_ensure_initiativ_after_regbsl` datiert die synthetische `parl-initiativ`-Station auf
+das früheste `zp_start` der dem `preparl-regbsl` folgenden Stationen (DD-035). Dieses
+Datum ist keine Eigenschaft der Station selbst, sondern hängt davon ab, welche
+Fundstellen zum Scrape-Zeitpunkt bereits existieren: Solange nur der Gesetzentwurf
+vorlag, fiel die Station auf den 30.06.2026 (durch `_enforce_total_ordering` auf
+`01:00` gestoßen); nachdem die Erste Beratung erschien, auf den 23.07.2026. Der
+DD-028-Schlüssel `bawue-station-{vid}-{typ}-{zp_start}` enthält genau dieses
+`zp_start`, die `api_id` wanderte also mit (`3320efb1-…` → `be263aec-…`). Das Backend
+konnte die persistierte Zeile nicht mehr zuordnen und behielt beide — dieselbe
+Fehlerklasse, die DD-034/Issue #66 bereits für dokumentabhängige Schlüssel beschrieb,
+hier nur über das Datum statt über die Dokumente.
+
+Verschärfend kommt hinzu, dass die synthetische Station die Dokumente des
+`preparl-regbsl` per Deepcopy übernimmt (Issue #47). Beide Stationen tragen damit
+denselben Dokument-Hash, sodass auch der Hash-basierte Fallback des Backends
+(`station_merge_candidates`) nicht eindeutig auflösen kann, welche der beiden Zeilen
+gemeint ist.
+
+**Entscheidung:** Die synthetische `parl-initiativ` erhält ihre `api_id` **bei der
+Erzeugung** und **datumsfrei** aus `uuid5(NAMESPACE_URL, f"bawue-synth-initiativ-{vorgang_id}")`
+— exakt das Vorgehen, das die synthetische `parl-ablehnung` seit DD-010 nutzt. Pro
+Vorgang existiert höchstens eine solche Station (sie wird nur eingefügt, wenn dem
+`preparl-regbsl` keine `parl-initiativ` folgt), der Vorgangsbezug allein scopet die
+Identität also eindeutig. Für `vorgang_id == "unknown"` bleibt die `api_id` UNSET,
+konsistent mit `_assign_stable_station_ids`, das ohne Vorgangs-ID ebenfalls keinen
+Schlüssel bilden kann.
+
+**Bewusst eng gehalten:** Der DD-028-Schlüssel für *reale*, aus Fundstellen gebaute
+Stationen bleibt unverändert. Deren `zp_start` stammt aus dem Fundstellentext und ist
+über Läufe stabil; ein Umstellen auch dieser Schlüssel würde alle bereits
+persistierten Zeilen neu verschlüsseln und damit genau das Duplikat-Problem
+auslösen, das diese DD behebt (die Issue-#66-Zusage
+`test_station_id_matches_persisted_docless_row_after_document_arrives` bleibt grün).
+
+**Einmalige Folge:** Bereits persistierte synthetische `parl-initiativ`-Zeilen wurden
+unter dem alten, datumsabhängigen Schlüssel gespeichert und werden beim nächsten
+Upload einmalig nicht wiedergefunden. Diese Zeilen sind durch den beschriebenen Bug
+ohnehin bereits nicht mehr zuverlässig zuordenbar; Altbestände müssen backendseitig
+bereinigt werden (der Collector-Key hat keine Delete-Rechte).
+
+**Implementierung:** `bawue_vorgaenge_scraper.py` — `_synthetic_initiativ_api_id()`,
+`_ensure_initiativ_after_regbsl(stationen, vorgang_id)` und deren Aufrufstelle in
+`_build_vorgang`.
+
+**Tests** (`tests/unit/test_bawue_scraper.py`):
+`TestBuildVorgang::test_synthetic_initiativ_id_survives_arrival_of_first_reading` —
+Regression über die realen V-247045-Fundstellen: derselbe Vorgang einmal nur mit dem
+Gesetzentwurf und einmal zusätzlich mit der Ersten Beratung gebaut; die `api_id` der
+synthetischen `parl-initiativ` (und die des realen `preparl-regbsl`) muss identisch
+bleiben.
+
+---
+
+## DD-047: Gesetzblatt als Datums-Lookup statt eigener Vorgangsquelle (löst DD-044 ab)
+
+**Datum:** 31.07.2026
+
+**Kontext:** Ein Staging-Lauf gegen WP18 lehnte **alle 15** vom
+`BawueGesetzblattScraper` erzeugten Vorgänge mit HTTP 400 Track validation ab:
+
+```
+station ordering: ["(2026-02-27 00:00:00 UTC / postparl-gsblt)"] has at least one
+station that is not adhering to the track for parliament BW and vgtyp gg-land-parl
+```
+
+Der maßgebliche BW-Track (DD-040) lautet
+`((E*R+)?S)?I((LA*(Z|LJGA*KA*|LN|LA*(Z|LJGA*KA*|LN)))|Z)`. Das `I`
+(`parl-initiativ`) ist **obligatorisch**; ein `G` allein ist kein zulässiges Präfix.
+Ein Vorgang, der nur aus einer `postparl-gsblt`-Station besteht, ist damit
+**strukturell nicht validierbar** — nicht in Einzelfällen, sondern immer. Die
+Kernannahme von [DD-044](#dd-044) („eigenständige, via `kurztitel` gekennzeichnete
+Vorgänge sind akzeptabel") ist unhaltbar. Gegen den lokalen Backend-Stand 0.2.15
+(identischer Commit wie Staging) wurde die Ablehnung wortgleich reproduziert.
+
+**Auch der in DD-044 skizzierte Phase-2-Ausweg trägt nicht.** DD-044 verschob den
+Cross-Source-Merge mit der Begründung, die Drucksachennummer stehe „nur im
+PDF-Volltext". Eine Volltextextraktion zweier realer Gesetz-PDFs (GBl 2026 Nr. 11
+und Nr. 14, 39.526 bzw. 16.273 Zeichen) findet **keinerlei** Drucksachenbezug —
+weder „Drucksache" noch ein `NN/NNNN`-Muster. Ein `initdrucks` ist aus der
+Gesetzblatt-Quelle schlicht nicht gewinnbar.
+
+**Ein `vg_ident` auf Basis der Gesetzblatt-Fundstelle wäre aktiv schädlich.**
+Naheliegend wäre, `(Jahr, Nr.)` beidseitig als `VgIdent` zu emittieren. Eine
+Auswertung aller 235 WP17-Vorgänge (170 Gesetzblatt-Fundstellen) zeigt jedoch:
+**18 `(Jahr, Nr.)`-Schlüssel werden von mehreren Vorgängen zitiert** — GBl 2023
+Nr. 21 allein von fünf Gesetzen, da eine Gesetzblatt-Ausgabe mehrere Gesetze
+enthalten kann. Der Schlüssel ist also **nicht** 1:1. Ein Experiment gegen
+Backend 0.2.15 bestätigt die Folge: Zwei verschiedene Gesetze mit demselben
+`VgIdent` führen dazu, dass der zweite PUT mit HTTP 400 scheitert (verdoppelte
+Stationsliste `I I L L …`) und der zweite Vorgang anschließend **nicht mehr
+existiert** (HTTP 404) — er wurde in den ersten hineingemerged. Das ist exakt der
+in [DD-041](#dd-041) beschriebene Schaden.
+
+**Der geteilte Gesetzblatt-PDF ist dagegen unkritisch** (ebenfalls gegen 0.2.15
+verifiziert): Zwei Vorgänge mit identischem `hash_` *und* identischem Link
+(inkl. `#page=`-Anker, DD-043) werden beide mit HTTP 201 angenommen und behalten
+je eine eigene `postparl-gsblt`-Station — mit *und* ohne stabile Stations-`api_id`.
+Vorgangs-Matching läuft über geteilte `vg_ident`s (`vorgang_merge_candidates`);
+der Dokument-Hash führt Stationen nur **innerhalb** eines bereits gematchten
+Vorgangs zusammen (`station_merge_candidates`, DD-034). Zwei fremde Vorgänge
+werden also nie über ein gemeinsames PDF verglichen. Die drei real geteilten
+GBl-PDFs in WP17 sind damit ungefährlich.
+
+**Entscheidung:** Das Gesetzblatt ist **keine eigene Vorgangsquelle**, sondern ein
+`(Jahr, Nr.) → Publikationsdatum`-Lookup für den PARLIS-Scraper.
+
+- `BawueGesetzblattScraper` wird aus `SCRAPERS` entfernt; das Modul und seine
+  Tests entfallen. Es werden keine `postparl-*`-Only-Vorgänge mehr emittiert.
+- `parse_fundstelle_text` hält den Gesetzblatt-Bezug als `gesetzblatt_jahr` /
+  `gesetzblatt_nr` strukturiert fest (bisher wurde er nur als Jahres-Fallback für
+  `datum` verwendet und danach verworfen). Die Regex ist die bereits vorhandene
+  des Fallbacks; sie greift auf **allen 170** WP17-Gesetzblatt-Fundstellen.
+- `GesetzblattDateLookup` löst diesen Bezug bei Bedarf gegen die Detailseite auf.
+  Treffer **und Fehlschläge** werden gecacht, da eine Ausgabe von mehreren
+  Vorgängen zitiert wird.
+- `_build_station` datiert eine `postparl-gsblt`-Station mit dem gefundenen
+  Ausgabedatum. Das Dokument behält bewusst die PARLIS-Datierung als
+  `zp_referenz` (das Ausfertigungsdatum) — nur die Station wandert.
+
+Damit wird **Issue #9 an seiner Wurzel** gelöst: Der PARLIS-Scraper baut die
+`postparl-gsblt`-Station ohnehin aus seiner eigenen Fundstelle, er datierte sie nur
+falsch. An 12 real geprüften Gesetzen datiert PARLIS durchgehend auf den
+10.02.2026 (Ausfertigung), während die Ausgabe am 27.02.2026 erfolgte.
+
+**Fällt ersatzlos weg:** Der Wahlperioden-Bezug des alten Scrapers. `[gesetzblatt]
+wahlperiode` stempelte eine feste WP auf jeden Eintrag — im Staging-Lauf WP18 auf
+Gesetze, die im Februar 2026 und damit **vor** der Konstituierung des 18. Landtags
+(01.05.2026) verkündet wurden, also WP17-Gesetze waren. Da die Station nun am
+PARLIS-Vorgang hängt, erbt sie dessen korrekte Wahlperiode; `wahlperiode` und
+`start-year` entfallen aus der `[gesetzblatt]`-Sektion.
+
+**Bewusst nicht gelöst:** Gesetzblatt-Einträge **ohne** PARLIS-Vorgang (z. B.
+Verordnungen) erscheinen nicht mehr — sie wurden zuvor gefiltert bzw. abgelehnt und
+waren nie im Bestand. Vor 2024 ist das elektronische Gesetzblatt nicht verfügbar;
+solche Zitate liefern `None`, die PARLIS-Datierung bleibt dann unverändert stehen.
+
+**Implementierung:**
+- `parlis_parser.py` — `_GESETZBLATT_REF_RE`, `parse_fundstelle_text`
+- `gesetzblatt_lookup.py` (neu) — `GesetzblattDateLookup`, `parse_german_date`
+- `gesetzblatt_client.py` — `fetch_detail_for`, `base_url`; die nur für die
+  Jahres-Enumeration nötigen `entry_exists`/`find_max_number`/`_head` entfallen
+- `bawue_vorgaenge_scraper.py` — `_gsblt_dates`, `_gesetzblatt_ausgabedatum`,
+  `_build_station`
+- `__main__.py` — `SCRAPERS` ohne `BawueGesetzblattScraper`
+- entfernt: `bawue_gesetzblatt_scraper.py`, `tests/unit/test_gesetzblatt_scraper.py`
+
+**Tests:**
+- `tests/unit/test_parlis_parser.py::TestParseFundstelleGesetzblattReference` —
+  `(Jahr, Nr.)` wird erfasst, auch ohne explizites Datum; nicht-Gesetzblatt-
+  Fundstellen setzen die Felder nicht.
+- `tests/unit/test_gesetzblatt_lookup.py` — Publikations- statt Ausfertigungsdatum,
+  Caching von Treffern und Fehlschlägen (GBl 2023 Nr. 21 = 5 Zitate → 1 Fetch),
+  nicht auflösbare Einträge liefern `None`.
+- `tests/unit/test_bawue_scraper.py::TestIssue9GesetzblattAusgabedatum` —
+  Regression am realen V-244420: Station trägt den 27.02.2026, das Dokument
+  behält den 10.02.2026; ohne Lookup bzw. bei nicht auflösbarem Eintrag bleibt die
+  PARLIS-Datierung; Nicht-Gesetzblatt-Stationen lösen keinen Lookup aus.

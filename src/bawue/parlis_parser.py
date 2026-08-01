@@ -147,6 +147,12 @@ _GERMAN_DATE_RE = re.compile(
 )
 
 
+# "Gesetzblatt für Baden-Württemberg 2026 Nr. 20". The lazy ``.*?`` (rather than a
+# stricter class) is the expression the year fallback has always used; both forms
+# agree on all 170 Gesetzblatt Fundstellen of WP17, so it is kept as-is.
+_GESETZBLATT_REF_RE = re.compile(r"Gesetzblatt.*?(\d{4})\s+Nr\.\s*(\d+)")
+
+
 def parse_fundstelle_text(text: str) -> dict:
     """Parse a Fundstelle text entry into structured station data."""
     result: dict = {"raw": text}
@@ -165,12 +171,21 @@ def parse_fundstelle_text(text: str) -> dict:
             year = de_match.group(3)
             result["datum"] = f"{day}.{month}.{year}"
 
-    if "datum" not in result:
+    # Gesetzblatt citation, e.g.
+    # "Gesetz  Gesetzblatt für Baden-Württemberg 2026 Nr. 20  S. 1  10.02.2026".
+    # (Jahr, Nr.) is the join key to the Gesetzblatt entry that carries the real
+    # Ausgabedatum — PARLIS itself only dates the Fundstelle by the Ausfertigung
+    # (DD-047), so the pair is kept as structured data rather than only being
+    # consumed as the year fallback below.
+    gb_match = _GESETZBLATT_REF_RE.search(text)
+    if gb_match:
+        result["gesetzblatt_jahr"] = int(gb_match.group(1))
+        result["gesetzblatt_nr"] = int(gb_match.group(2))
+
+    if "datum" not in result and gb_match:
         # Fallback: extract year from Gesetzblatt reference when no explicit date exists.
         # "Berichtigung des Gesetzes  Gesetzblatt für Baden-Württemberg 2022 Nr. 37  S. 595"
-        gb_match = re.search(r"Gesetzblatt.*?(\d{4})\s+Nr\.", text)
-        if gb_match:
-            result["datum"] = f"01.01.{gb_match.group(1)}"
+        result["datum"] = f"01.01.{gb_match.group(1)}"
 
     # Drucksache number: "Drucksache 17/1234"
     ds_match = re.search(r"Drucksache\s+(\d+/\d+)", text)

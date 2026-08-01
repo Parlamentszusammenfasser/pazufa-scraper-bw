@@ -13,7 +13,6 @@ import aiohttp
 from dotenv import load_dotenv
 
 from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
-from bawue.bawue_gesetzblatt_scraper import BawueGesetzblattScraper
 from bawue.bawue_sitzungen_scraper import BawueSitzungenScraper
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.config import BawueConfig
@@ -27,7 +26,7 @@ import litellm  # noqa: E402, F401
 
 logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
-SCRAPERS = [BawueVorgaengeScraper, BawueBeteiligungScraper, BawueSitzungenScraper, BawueGesetzblattScraper]
+SCRAPERS = [BawueVorgaengeScraper, BawueBeteiligungScraper, BawueSitzungenScraper]
 
 
 def load_scrapers(config: BawueConfig, session: aiohttp.ClientSession) -> list[Scraper]:
