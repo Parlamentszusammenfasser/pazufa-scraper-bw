@@ -19,6 +19,8 @@ from bawue.bawue_dok import LLMMetrics, clear_hash_cache
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
+from bawue.gesetzblatt_client import GesetzblattClient
+from bawue.gesetzblatt_lookup import GesetzblattDateLookup
 from bawue.log_context import get_vorgangs_id, reset_vorgangs_id, set_vorgangs_id
 from bawue.notifications import send_mattermost_summary
 from bawue.parlis_client import ParlisClient
@@ -92,6 +94,7 @@ DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [
 DEFAULT_WAHLPERIODE = 17
 DEFAULT_WAHLPERIODE_START = date(2021, 4, 26)  # WP 17 BW: Landtag constituted
 DEFAULT_PARLIS_DELAY = 1.0
+DEFAULT_GSBLT_DELAY = 1.0
 
 # Same-committee `parl-ausschber` fundstellen belonging to one deliberation round
 # (e.g. a Beschlussempfehlung plus its Bericht) fall days apart and are merged into
@@ -116,6 +119,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
     # other manual-construction paths inherit the safe value without setting it.
     # see backend issue: https://codeberg.org/PaZuFa/pazufa-backend/issues/150
     _emit_initdrucks_ident: bool = False
+
+    # Resolves a Gesetzblatt citation to its real Ausgabedatum (DD-047). Class-level
+    # default of None so manual-construction paths (dry_run, unit tests) simply keep
+    # the PARLIS date instead of reaching for the network.
+    _gsblt_dates: "GesetzblattDateLookup | None" = None
 
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         # Load BaWue-specific config from TOML
@@ -148,6 +156,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         self._upload_limiter = create_upload_limiter()
         self._client = build_client(config.database_url, config.api_key)
+
+        # DD-047: PARLIS dates a Gesetzblatt Fundstelle by the Ausfertigung, so the
+        # postparl-gsblt station needs the Ausgabedatum from the Gesetzblatt itself.
+        gsblt_config = load_toml_section(config, "gesetzblatt")
+        self._gsblt_dates = GesetzblattDateLookup(
+            GesetzblattClient(request_delay_s=gsblt_config.get("request-delay-s", DEFAULT_GSBLT_DELAY))
+        )
 
         # vorgnrs whose enrichment hit a not-yet-published PDF this cycle
         # (issue #66) — excluded from caching so the next cycle retries.
@@ -352,7 +367,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 [f.get("raw", "")[:100] for f in fundstellen_parsed],
             )
 
-        self._ensure_initiativ_after_regbsl(stationen)
+        self._ensure_initiativ_after_regbsl(stationen, vorgang_id)
 
         # Retime any out-of-order ausschber before anchoring the synthetic
         # ablehnung station on the chronological last station, so the ablehnung
@@ -592,7 +607,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             vorgang_id,
         )
 
-    def _ensure_initiativ_after_regbsl(self, stationen: list[Station]) -> None:
+    def _ensure_initiativ_after_regbsl(self, stationen: list[Station], vorgang_id: str = "unknown") -> None:
         """Insert a synthetic parl-initiativ station after preparl-regbsl if missing.
 
         PARLIS uses a single Fundstelle "Gesetzentwurf" for government bills, which
@@ -638,6 +653,15 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         synthetic = Station(
             typ=Stationstyp.PARL_INITIATIV,
+            # Date-independent identity (DD-046). `zp_start` above is derived from
+            # whichever stations currently follow the regbsl, so it moves as soon as
+            # a later scrape picks up the first reading (V-247045: 30.06. → 23.07.).
+            # The DD-028 key includes zp_start, so the api_id would move with it, the
+            # backend could not match the persisted row and would keep both — an
+            # invalid duplicate that fails track validation on every later upload.
+            # There is at most one synthetic parl-initiativ per Vorgang, so the
+            # Vorgang id alone scopes it (same approach as the ablehnung, DD-010).
+            api_id=_synthetic_initiativ_api_id(vorgang_id),
             # Deep-copy so the synthetic parl-initiativ owns its documents rather
             # than aliasing the regbsl's Dokument objects (issue #47). A shared
             # object would let per-station mutation (e.g. the stable api_id keyed
@@ -845,6 +869,25 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 vorgang_id,
             )
 
+    async def _gesetzblatt_ausgabedatum(self, fund: RawFundstelle) -> datetime | None:
+        """Resolve a Gesetzblatt Fundstelle to the day the Gesetzblatt was issued (DD-047).
+
+        PARLIS carries only the "Gesetz vom <Datum>" Ausfertigungsdatum, which is
+        typically two to three weeks before the actual Ausgabedatum (issue #9).
+        Returns None when the citation is missing or unresolvable, leaving the
+        caller's PARLIS date untouched.
+        """
+        if self._gsblt_dates is None:
+            return None
+        jahr = fund.get("gesetzblatt_jahr")
+        nummer = fund.get("gesetzblatt_nr")
+        if jahr is None or nummer is None:
+            return None
+        zp = await self._gsblt_dates.publikationsdatum(jahr, nummer)
+        if zp is not None:
+            logger.info("Gesetzblatt %d Nr. %d issued %s (PARLIS: Ausfertigung)", jahr, nummer, zp.date())
+        return zp
+
     async def _build_station(
         self, fund: RawFundstelle, initiative: str, vorgang_titel: str = "", vorgang_vnr: str | None = None
     ) -> Station | None:
@@ -888,10 +931,15 @@ class BawueVorgaengeScraper(VorgangsScraper):
             )
             return None
 
+        # The document keeps the PARLIS date as its `zp_referenz` (the Ausfertigung),
+        # so `_build_dokumente` is deliberately still given the unmodified zp_start.
         gremium = self._determine_gremium(fund, station_typ)
         dokumente, trojanergefahr = await self._build_dokumente(
             fund, station_typ_str, mapping_text, station_typ, initiative, zp_start, vorgang_titel, vorgang_vnr
         )
+
+        if station_typ == Stationstyp.POSTPARL_GSBLT:
+            zp_start = await self._gesetzblatt_ausgabedatum(fund) or zp_start
 
         return Station(
             typ=station_typ,
@@ -1157,6 +1205,21 @@ def _vorgang_kurztitel(stationen: list[Station]) -> str | None:
                 if kurztitel:
                     return kurztitel
     return None
+
+
+def _synthetic_initiativ_api_id(vorgang_id: str) -> str | Unset:
+    """Deterministic, date-free api_id for the synthetic parl-initiativ (DD-046).
+
+    Mirrors the synthetic ablehnung (DD-010): the station carries no Fundstelle of
+    its own, so nothing about it is stable except the Vorgang it belongs to. Keying
+    it on ``zp_start`` like a real station (DD-028) breaks on the next scrape,
+    because the date is inferred from the stations that happen to follow the regbsl
+    at that moment. Left UNSET for "unknown" Vorgänge, matching
+    ``_assign_stable_station_ids``, which cannot scope an id without a Vorgang id.
+    """
+    if vorgang_id == "unknown":
+        return UNSET
+    return str(uuid5(NAMESPACE_URL, f"bawue-synth-initiativ-{vorgang_id}"))
 
 
 def _assign_stable_station_ids(stationen: list[Station], vorgang_id: str) -> None:

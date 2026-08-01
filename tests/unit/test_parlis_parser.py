@@ -543,6 +543,39 @@ class TestParseFundstelleGesetzblattYearFallback:
         assert result["datum"] == "10.02.2026"
 
 
+class TestParseFundstelleGesetzblattReference:
+    """DD-047: the (Jahr, Nr.) of a Gesetzblatt citation is kept as structured data.
+
+    It is the join key from a PARLIS Fundstelle to the Gesetzblatt entry, which
+    carries the real Ausgabedatum. Previously the reference was only consumed as
+    a year fallback for ``datum`` and then discarded.
+    """
+
+    def test_extracts_jahr_and_nummer(self):
+        text = "Gesetz  Gesetzblatt für Baden-Württemberg 2026 Nr. 20  S. 1  10.02.2026"
+        result = parse_fundstelle_text(text)
+        assert result["gesetzblatt_jahr"] == 2026
+        assert result["gesetzblatt_nr"] == 20
+
+    def test_extracts_reference_without_explicit_date(self):
+        text = "Berichtigung des Gesetzes  Gesetzblatt für Baden-Württemberg 2022 Nr. 37     S. 595"
+        result = parse_fundstelle_text(text)
+        assert result["gesetzblatt_jahr"] == 2022
+        assert result["gesetzblatt_nr"] == 37
+        assert result["datum"] == "01.01.2022"  # year fallback still applies
+
+    def test_multi_digit_nummer(self):
+        text = "Gesetz  vom 16. Dezember 2025 Gesetzblatt für Baden-Württemberg 2025 Nr. 147  S. 1-3"
+        result = parse_fundstelle_text(text)
+        assert result["gesetzblatt_jahr"] == 2025
+        assert result["gesetzblatt_nr"] == 147
+
+    def test_absent_for_non_gesetzblatt_fundstelle(self):
+        result = parse_fundstelle_text("Erste Beratung   Plenarprotokoll 18/10 23.07.2026")
+        assert "gesetzblatt_jahr" not in result
+        assert "gesetzblatt_nr" not in result
+
+
 SAMPLE_HTML_TIME_ELEMENT = """<html><body>
 <div class="efxRecordRepeater">
   <a class="efxZoomShort-Vorgang">Gesetz zur Änderung XY</a>

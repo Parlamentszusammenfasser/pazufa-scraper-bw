@@ -1,9 +1,15 @@
-# Gesetzblatt-Baden-Württemberg-Scraper
+# Gesetzblatt Baden-Württemberg
 
-`BawueGesetzblattScraper` ist die vierte `VorgangsScraper`-Subklasse (registriert
-im statischen `SCRAPERS`-Registry in `__main__.py`) und liefert die
-nachparlamentarische Phase (`postparl-gsblt`) aus dem offiziellen elektronischen
-Gesetzblatt Baden-Württemberg. Siehe DD-044.
+> ♻️ **Seit DD-047 ist das Gesetzblatt keine eigene Vorgangsquelle mehr.** Der
+> frühere `BawueGesetzblattScraper` (DD-044) erzeugte Vorgänge, die nur aus einer
+> `postparl-gsblt`-Station bestanden — die BW-Track-Validierung verlangt jedoch
+> zwingend ein `parl-initiativ`, sodass **jeder** dieser Vorgänge mit HTTP 400
+> abgelehnt wurde. Das Gesetzblatt wird stattdessen als
+> `(Jahr, Nr.) → Publikationsdatum`-Lookup (`GesetzblattDateLookup`) vom
+> `BawueVorgaengeScraper` genutzt, der die `postparl-gsblt`-Station ohnehin aus
+> seiner eigenen PARLIS-Fundstelle baut und sie bislang nur falsch datierte
+> (Issue #9). Die Abschnitte unten beschreiben Datenquelle und Seitenaufbau und
+> gelten unverändert; die Beschreibungen des Scrapers/Registrys sind historisch.
 
 Diese Dokumentation hält die Datenquelle, die MVP-Implementierung und die
 Roadmap zur vollständigen Lifecycle-Abdeckung fest. Bezug:

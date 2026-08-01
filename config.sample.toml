@@ -64,10 +64,10 @@ ics-url = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkal
 # Gesetzblatt Baden-Württemberg-specific configuration
 # Source: https://www.baden-wuerttemberg.de/de/service/gesetze-und-verordnungen/gesetzblatt
 # The site is digital only since 2024 (start-year default); earlier years are paper.
+# Gesetzblatt: resolves a PARLIS Gesetzblatt citation to its real Ausgabedatum
+# for the postparl-gsblt station (DD-047). Not a Vorgangs-source of its own.
 [gesetzblatt]
-# wahlperiode = 17
 # request-delay-s = 1.0
-# start-year = 2024
 
 [notifications]
 mattermost-hook = "https://chat.pazufa.de/hooks/wnubdt65npd5z8jyazjz5yrd8y"
