@@ -378,31 +378,65 @@ def _sanitize_llm_strings(values: list[str] | None) -> list[str] | None:
 # ---------------------------------------------------------------------------
 
 _GARBLED_LATIN_EXT_THRESHOLD = 0.05  # 5% of alpha chars in Latin Extended → garbled
+# C1 controls never occur in properly extracted text, so any recurring share is a
+# defect. 0.5% sits an order of magnitude above the "one stray char" noise floor
+# and well below the ~1.0-2.0% measured on real Muster-2 documents (DS 17/1201).
+_GARBLED_C1_THRESHOLD = 0.005
 
 
 def _is_garbled(text: str) -> bool:
-    """Detect garbled PDF text from broken font encodings.
+    """Detect garbled PDF text from broken font encodings (DD-015).
 
-    Returns True when the ratio of Latin Extended characters (U+0100-U+024F)
-    to total alphabetic characters exceeds 5%.  These characters appear when
-    a PDF font lacks a proper ToUnicode CMap and kreuzberg maps glyph IDs to
-    wrong Unicode code points.
+    Flags both patterns DD-015 documents, because both are recoverable by the
+    OCR retry that this function gates:
+
+    * *Muster 1* — Latin Extended characters (U+0100-U+024F) above 5% of all
+      alphabetic characters. They appear when a PDF font lacks a proper
+      ToUnicode CMap and kreuzberg maps glyph IDs to wrong Unicode code points.
+    * *Muster 2* — C1 control characters (0x80-0x9F) above 0.5%, the by-product
+      of the constant ASCII shift (``bQGHUXQJVDQWUDJ`` → ``Änderungsantrag``).
+      Mirrors ``_paragraph_quality_score``'s signal 1, but one layer earlier:
+      that scorer only *strips* such paragraphs, leaving the document empty
+      (GitHub issue #20).
+
+    Both ratios are measured over the whole document, so a long, mostly clean
+    PDF with only a few garbled pages stays below the thresholds; those are
+    still caught (and dropped) by ``normalize_volltext``.
     """
     if not text or len(text) < MIN_TEXT_LENGTH:
         return False
 
     alpha_count = 0
     latin_ext_count = 0
+    c1_count = 0
     for c in text:
+        code = ord(c)
         if c.isalpha():
             alpha_count += 1
-            if 0x0100 <= ord(c) <= 0x024F:
+            if 0x0100 <= code <= 0x024F:
                 latin_ext_count += 1
+        elif 0x80 <= code <= 0x9F:
+            c1_count += 1
 
     if alpha_count == 0:
         return False
 
-    return (latin_ext_count / alpha_count) > _GARBLED_LATIN_EXT_THRESHOLD
+    return (latin_ext_count / alpha_count) > _GARBLED_LATIN_EXT_THRESHOLD or (
+        c1_count / alpha_count
+    ) > _GARBLED_C1_THRESHOLD
+
+
+def _usable_length(text: str) -> int:
+    """How many characters of *text* survive :func:`normalize_volltext`.
+
+    ``_is_garbled`` measures the whole document, so it also fires on PDFs where
+    only part of the text is broken (measured: ~15 % of the affected corpus keeps
+    40-97 % of its content). OCR replaces *everything*, including the pages that
+    extracted cleanly, and is itself lossy on tables — so "not garbled" alone is
+    too weak a bar for accepting the OCR result. Comparing what actually survives
+    normalization on both sides makes the swap a measured decision.
+    """
+    return len(normalize_volltext(text))
 
 
 # ---------------------------------------------------------------------------
@@ -500,6 +534,16 @@ _OCR_CONFIG = ExtractionConfig(
     ocr=OcrConfig(backend="tesseract", language="deu"),
     concurrency=ConcurrencyConfig(max_threads=_OCR_MAX_THREADS),
 )
+# OCR replaces the whole extracted text, so it has to carry the page markers too
+# when a ``#page=N`` hint is in play — otherwise _extract_relevant_pages finds
+# none and silently returns the entire document, giving every Antrag of a
+# Sammeldrucksache the same volltext (GitHub issue #20).
+_OCR_CONFIG_PAGE_MARKERS = ExtractionConfig(
+    force_ocr=True,
+    ocr=OcrConfig(backend="tesseract", language="deu"),
+    concurrency=ConcurrencyConfig(max_threads=_OCR_MAX_THREADS),
+    pages=PageConfig(insert_page_markers=True),
+)
 
 
 async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tuple[str, str]:
@@ -522,8 +566,10 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tupl
 
     if page_hint is not None:
         config = ExtractionConfig(force_ocr=False, pages=PageConfig(insert_page_markers=True))
+        ocr_config = _OCR_CONFIG_PAGE_MARKERS
     else:
         config = ExtractionConfig(force_ocr=False)
+        ocr_config = _OCR_CONFIG
 
     result = await extract_file(pdf_path, config=config)
     text = result.content or ""
@@ -531,15 +577,15 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tupl
     if len(text) < MIN_TEXT_LENGTH:
         logger.warning("Normal text extraction yielded <%d chars, retrying with OCR", MIN_TEXT_LENGTH)
         async with _OCR_SEMAPHORE:
-            ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
+            ocr_result = await extract_file(pdf_path, config=ocr_config)
         text = ocr_result.content or ""
     elif _is_garbled(text):
         logger.warning("Garbled text detected (broken font encoding), retrying with OCR")
         try:
             async with _OCR_SEMAPHORE:
-                ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
+                ocr_result = await extract_file(pdf_path, config=ocr_config)
             ocr_text = ocr_result.content or ""
-            if ocr_text and not _is_garbled(ocr_text):
+            if ocr_text and not _is_garbled(ocr_text) and _usable_length(ocr_text) > _usable_length(text):
                 text = ocr_text
             else:
                 logger.warning("OCR did not improve garbled text, keeping original")
