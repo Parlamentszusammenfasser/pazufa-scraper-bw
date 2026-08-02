@@ -1,5 +1,6 @@
 """Internal data structures for raw PARLIS data before conversion to framework models."""
 
+import hashlib
 import re
 from enum import StrEnum
 from typing import TypedDict
@@ -56,6 +57,7 @@ __all__ = [
     "canonicalize_organisation",
     "is_verfassungsaendernd",
     "none_if_blank",
+    "placeholder_hash",
     "todo_if_blank",
 ]
 
@@ -145,6 +147,27 @@ def todo_if_blank(value: str | None) -> str:
     if value and value.strip():
         return value
     return TODO_MARKER
+
+
+def placeholder_hash(link: str) -> str:
+    """Stand-in ``Dokument.hash_`` for a document whose content could not be read (DD-048).
+
+    ``hash_`` is normally the SHA-256 of the PDF bytes, filled in by
+    :func:`bawue.bawue_dok.enrich_dokument`. When the download or text extraction
+    fails — or LLM enrichment is off entirely, which is the default — the document
+    is still uploaded for its metadata, and previously carried the literal
+    ``TODO`` marker. That is unusable as an identity: the backend matches
+    document-bearing Stationen on a shared document hash, so every unreadable
+    document collided across Vorgänge (HTTP 500 ``rel_station_dokument_pkey``,
+    the same failure mode DD-028/DD-034 fixed for Stationen). Backend v0.3.0
+    additionally validates the field as hex digits, which ``TODO`` is not.
+
+    The link is the document's stable identity and already carries the ``#page=N``
+    anchor that keeps sections of a shared Sammeldrucksache distinct (DD-043), so
+    hashing it yields a valid, deterministic, per-document value. A real content
+    digest replaces it as soon as extraction succeeds.
+    """
+    return hashlib.sha256(link.encode()).hexdigest()
 
 
 def none_if_blank(value: str | None) -> str | None:

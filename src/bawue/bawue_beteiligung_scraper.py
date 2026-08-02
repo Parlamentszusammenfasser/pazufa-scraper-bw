@@ -37,6 +37,7 @@ from bawue.types import (
     Vorgangstyp,
     canonicalize_organisation,
     is_verfassungsaendernd,
+    placeholder_hash,
     todo_if_blank,
 )
 from bawue.upload_throttle import upload_vorgang
@@ -196,7 +197,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             dok = Dokument(
                 titel=todo_if_blank(pdf["title"]),
                 volltext=TODO_MARKER,
-                hash_=TODO_MARKER,
+                hash_=placeholder_hash(pdf["url"]),
                 typ=Doktyp.PREPARL_ENTWURF,
                 zp_modifiziert=zp_start,
                 zp_referenz=zp_start,
