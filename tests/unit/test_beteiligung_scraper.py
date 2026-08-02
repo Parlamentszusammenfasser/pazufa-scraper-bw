@@ -11,7 +11,7 @@ import pytest
 from bawue.bawue_beteiligung_scraper import DEFAULT_WAHLPERIODE, BawueBeteiligungScraper
 from bawue.bawue_dok import LLMMetrics
 from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
-from bawue.types import Doktyp, Parlament, Stationstyp, Vorgangstyp
+from bawue.types import Doktyp, Parlament, Stationstyp, Vorgangstyp, placeholder_hash
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
 
@@ -143,15 +143,16 @@ class TestBuildVorgang:
         assert vorgang.stationen[0].dokumente[0].autoren == []
 
     @pytest.mark.asyncio
-    async def test_dokument_volltext_and_hash_are_todo_when_llm_disabled(self):
-        """Without LLM enrichment, volltext + hash carry the TODO marker (never empty)."""
+    async def test_dokument_placeholders_when_llm_disabled(self):
+        """Without LLM enrichment, volltext carries the TODO marker (never empty)."""
         scraper = _make_scraper()
         detail = _make_detail()
         vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
         dok = vorgang.stationen[0].dokumente[0]
         assert dok.volltext == "TODO"
-        assert dok.hash_ == "TODO"
+        # hash_ is link-derived, not a shared marker (DD-048).
+        assert dok.hash_ == placeholder_hash(dok.link)
 
     @pytest.mark.asyncio
     async def test_empty_detail_title_falls_back_to_todo_marker(self):

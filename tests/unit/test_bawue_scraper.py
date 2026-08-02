@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -23,7 +24,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _vorgang_kurztitel,
 )
 from bawue.parlis_parser import parse_fundstelle_text
-from bawue.types import UNSET, Doktyp, Stationstyp, Vorgangstyp
+from bawue.types import UNSET, Doktyp, Stationstyp, Vorgangstyp, placeholder_hash
 
 
 def _make_raw_vorgang(
@@ -860,8 +861,8 @@ class TestBuildVorgang:
         assert vorgang.titel == "TODO"
 
     @pytest.mark.asyncio
-    async def test_dokument_volltext_and_hash_are_todo_when_llm_disabled(self, scraper_build_vorgang):
-        """Without LLM enrichment, volltext + hash carry the TODO marker (never empty)."""
+    async def test_dokument_placeholders_when_llm_disabled(self, scraper_build_vorgang):
+        """Without LLM enrichment, volltext carries the TODO marker (never empty)."""
         raw = _make_raw_vorgang(
             "V-054",
             fundstellen=[
@@ -878,7 +879,8 @@ class TestBuildVorgang:
 
         dok = vorgang.stationen[0].dokumente[0]
         assert dok.volltext == "TODO"
-        assert dok.hash_ == "TODO"
+        # hash_ is link-derived, not a shared marker (DD-048) — see TestPlaceholderHash.
+        assert dok.hash_ == placeholder_hash("https://example.com/doc.pdf")
 
     @pytest.mark.asyncio
     async def test_empty_drucksnr_becomes_none(self, scraper_build_vorgang):
@@ -4961,3 +4963,70 @@ class TestIssue9GesetzblattAusgabedatum:
         await self._scraper(lookup)._build_vorgang(raw)
 
         lookup.publikationsdatum.assert_not_awaited()
+
+
+class TestPlaceholderHash:
+    """DD-048: an unreadable document must still carry a unique, valid hash.
+
+    Documents whose PDF cannot be downloaded or extracted — and every document
+    when LLM enrichment is off, which is the default — used to be uploaded with
+    the literal ``TODO`` as ``hash_``. The backend matches document-bearing
+    Stationen on a shared document hash, so those all collided across Vorgänge;
+    backend v0.3.0 additionally rejects a non-hex hash.
+    """
+
+    def test_placeholder_hash_is_a_hex_sha256(self):
+        digest = placeholder_hash("https://example.org/doc.pdf")
+
+        assert re.fullmatch(r"[0-9a-f]{64}", digest)
+
+    def test_placeholder_hash_is_deterministic(self):
+        link = "https://example.org/doc.pdf"
+
+        assert placeholder_hash(link) == placeholder_hash(link)
+
+    def test_distinct_links_get_distinct_hashes(self):
+        assert placeholder_hash("https://example.org/a.pdf") != placeholder_hash("https://example.org/b.pdf")
+
+    def test_page_anchor_distinguishes_sections_of_one_pdf(self):
+        """DD-043: the ``#page=N`` anchor is part of the document identity."""
+        base = "https://www.landtag-bw.de/files/WP17/Plp/17_0139_28012026.pdf"
+
+        assert placeholder_hash(f"{base}#page=36") != placeholder_hash(f"{base}#page=37")
+
+    @pytest.mark.asyncio
+    async def test_unenriched_document_hash_is_valid_and_link_derived(self, scraper_build_vorgang):
+        """The fixture runs with _llm_enabled=False — the default configuration."""
+        raw = _make_raw_vorgang("V-001")
+        vorgang = await scraper_build_vorgang(raw)
+
+        dokumente = [d for st in vorgang.stationen for d in st.dokumente]
+        assert dokumente, "expected at least one document to assert on"
+        for dok in dokumente:
+            assert dok.hash_ == placeholder_hash(dok.link)
+            assert re.fullmatch(r"[0-9a-f]{64}", dok.hash_)
+
+    @pytest.mark.asyncio
+    async def test_documents_do_not_share_a_hash_across_vorgaenge(self, scraper_build_vorgang):
+        """The collision that produced HTTP 500 rel_station_dokument_pkey."""
+        first = await scraper_build_vorgang(_make_raw_vorgang("V-001"))
+        second = await scraper_build_vorgang(
+            _make_raw_vorgang(
+                "V-002",
+                fundstellen=[
+                    {
+                        "raw": "Gesetzentwurf Fraktion GRUENE 04.02.2026 Drucksache 17/99999 (5 S.)",
+                        "datum": "04.02.2026",
+                        "drucksache": "17/99999",
+                        "station_typ": "Gesetzentwurf",
+                        "seiten": 5,
+                        "pdf_url": "https://www.landtag-bw.de/resource/blob/99999/other.pdf",
+                    }
+                ],
+            )
+        )
+
+        hashes_first = {d.hash_ for st in first.stationen for d in st.dokumente}
+        hashes_second = {d.hash_ for st in second.stationen for d in st.dokumente}
+        assert hashes_first and hashes_second
+        assert hashes_first.isdisjoint(hashes_second)

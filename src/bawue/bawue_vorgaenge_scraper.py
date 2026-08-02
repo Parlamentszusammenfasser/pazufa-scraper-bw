@@ -46,6 +46,7 @@ from bawue.types import (
     canonicalize_organisation,
     is_verfassungsaendernd,
     none_if_blank,
+    placeholder_hash,
     todo_if_blank,
 )
 from bawue.upload_throttle import upload_vorgang
@@ -1020,13 +1021,14 @@ class BawueVorgaengeScraper(VorgangsScraper):
         autor_text = fund.get("autor_text", "") or fund.get("ausschuss", "")
         autoren = _parse_autoren(autor_text) if autor_text else _parse_autoren(initiative)
 
-        # volltext + hash carry the TODO marker until LLM enrichment fills
-        # them with extracted PDF text and a content hash. The new backend
-        # rejects empty strings; without LLM, the placeholder remains.
+        # volltext carries the TODO marker until LLM enrichment fills it with
+        # extracted PDF text. The new backend rejects empty strings; without
+        # LLM, the placeholder remains. hash_ gets a link-derived placeholder
+        # instead — a shared literal would collide across Vorgänge (DD-048).
         dok = Dokument(
             titel=station_typ_str or "Dokument",
             volltext=TODO_MARKER,
-            hash_=TODO_MARKER,
+            hash_=placeholder_hash(pdf_url),
             typ=doc_typ,
             zp_modifiziert=zp_start,
             zp_referenz=zp_start,
