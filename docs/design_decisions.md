@@ -568,11 +568,32 @@ schlugen mit HTTP 400 (`xss detected`) fehl. Zwei Ursachen:
    17/1201 (nur Muster 2 betroffen, Latin-Extended-Anteil 0 %) lief daher am
    OCR-Retry vorbei; Stufe 2 entfernte die garbled Absätze, und die Stationen
    landeten mit leerem Volltext (`TODO_MARKER`) statt mit dem per OCR
-   rekonstruierbaren Inhalt. Schwellenwert-Kalibrierung an realen Dokumenten:
-   saubere PDFs liegen bei 0,000–0,035 % C1, Muster-2-Dokumente bei
-   0,8–2,0 %. Beide Ratios werden über das *gesamte* Dokument gemessen; ein
-   langes, überwiegend sauberes PDF mit wenigen garbled Seiten bleibt unter
-   der Schwelle und wird weiterhin nur von Stufe 2 abgefangen.
+   rekonstruierbaren Inhalt.
+
+   *Schwellenwert-Kalibrierung* an 925 realen Landtag-BW-PDFs (alle
+   Dokument-URLs aus einem WP17-Lauf): 85,7 % der Dokumente enthalten
+   **kein einziges** C1-Zeichen — C1 ist in diesem Korpus kein Rauschen,
+   sondern markiert ausnahmslos echte Garbling-Stellen. Die Trefferquote
+   steigt durch die neue Prüfung von 0,4 % auf 7,5 % (65 zusätzliche
+   Dokumente). Alle 65 wurden nachgemessen: 84 % verlieren durch Stufe 2
+   mehr als 60 % ihres Textes, 98 % mehr als 30 % — es sind keine
+   False Positives, sondern echte Rettungsfälle. Referenzmessung an
+   Drucksache 17/1104: nativ 204 780 Zeichen, davon nur 46 660 (22,8 %)
+   nach Normalisierung übrig; per OCR 216 097 Zeichen, davon 213 871
+   (99,0 %) — Faktor 4,6 mehr Inhalt, Kosten 120,8 s statt 0,2 s bei
+   0,85 GB Peak-RSS.
+
+   Beide Ratios werden über das *gesamte* Dokument gemessen. Das hat zwei
+   Konsequenzen: ein langes, überwiegend sauberes PDF mit wenigen garbled
+   Seiten bleibt unter der Schwelle (und wird weiterhin nur von Stufe 2
+   abgefangen); umgekehrt schlägt die Prüfung auch bei nur *teilweise*
+   kaputten PDFs an (gemessen ~15 % des betroffenen Korpus behalten
+   40–97 % ihres Inhalts). Da OCR den **kompletten** Text ersetzt — auch
+   die sauber extrahierten Seiten — und bei Tabellen selbst verlustbehaftet
+   ist, reicht „nicht garbled" als Annahmekriterium nicht aus. Das
+   OCR-Ergebnis wird deshalb zusätzlich nur übernommen, wenn
+   `_usable_length()` (Zeichen, die `normalize_volltext()` überleben) auf
+   der OCR-Seite *größer* ist als beim Originaltext.
 
 2. **Paragraph-Quality-Scoring:** `normalize_volltext()` teilt den Text in
    Absätze und bewertet jeden mit `_paragraph_quality_score()`. Die Bewertung
@@ -599,6 +620,7 @@ in denen OCR nicht verfügbar ist oder fehlschlägt.
   Alpha-Zeichen
 - `extract_pdf_text()` — OCR-Retry mit `_OCR_CONFIG` bzw.
   `_OCR_CONFIG_PAGE_MARKERS` (bei `#page=N`-Hint) bei garbled Text
+- `_usable_length()` — Annahmekriterium für das OCR-Ergebnis
 - `_paragraph_quality_score()` — Multi-Signal-Bewertung pro Absatz
 - `normalize_volltext()` — Absatzfilterung, NFKC, C1-Stripping,
   CRLF-Normalisierung, Angle-Bracket-Ersetzung

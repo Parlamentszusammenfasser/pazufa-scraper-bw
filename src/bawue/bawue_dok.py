@@ -426,6 +426,19 @@ def _is_garbled(text: str) -> bool:
     ) > _GARBLED_C1_THRESHOLD
 
 
+def _usable_length(text: str) -> int:
+    """How many characters of *text* survive :func:`normalize_volltext`.
+
+    ``_is_garbled`` measures the whole document, so it also fires on PDFs where
+    only part of the text is broken (measured: ~15 % of the affected corpus keeps
+    40-97 % of its content). OCR replaces *everything*, including the pages that
+    extracted cleanly, and is itself lossy on tables — so "not garbled" alone is
+    too weak a bar for accepting the OCR result. Comparing what actually survives
+    normalization on both sides makes the swap a measured decision.
+    """
+    return len(normalize_volltext(text))
+
+
 # ---------------------------------------------------------------------------
 # Page-hint extraction for plenary protocols
 # ---------------------------------------------------------------------------
@@ -572,7 +585,7 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tupl
             async with _OCR_SEMAPHORE:
                 ocr_result = await extract_file(pdf_path, config=ocr_config)
             ocr_text = ocr_result.content or ""
-            if ocr_text and not _is_garbled(ocr_text):
+            if ocr_text and not _is_garbled(ocr_text) and _usable_length(ocr_text) > _usable_length(text):
                 text = ocr_text
             else:
                 logger.warning("OCR did not improve garbled text, keeping original")

@@ -1839,6 +1839,39 @@ class TestExtractPdfTextOcrRetry:
         assert text == garbled_text
 
     @pytest.mark.asyncio
+    async def test_ocr_rejected_when_it_yields_less_usable_text(self, tmp_path):
+        """A clean-but-shorter OCR result must not replace a partly garbled original.
+
+        `_is_garbled` measures the whole document, so it also fires on PDFs whose
+        text is only partly broken. OCR replaces everything — including the pages
+        that extracted cleanly — so "not garbled" alone is too weak a bar.
+        """
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+
+        # Mostly clean German prose, with a garbled tail that trips _is_garbled.
+        clean_body = "Der Landtag wolle beschließen, den Gesetzentwurf unverändert anzunehmen. " * 10
+        garbled_tail = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 3
+        partly_garbled = f"{clean_body}\n\n{garbled_tail}"
+        # OCR came back clean but recovered far less of the document.
+        sparse_ocr = "Der Landtag wolle beschließen, den Gesetzentwurf anzunehmen."
+
+        assert _is_garbled(partly_garbled) is True
+        assert _is_garbled(sparse_ocr) is False
+
+        with patch(
+            "bawue.bawue_dok.extract_file",
+            new_callable=AsyncMock,
+            side_effect=[
+                _mock_extraction_result(content=partly_garbled),
+                _mock_extraction_result(content=sparse_ocr),
+            ],
+        ):
+            text, _ = await extract_pdf_text(pdf_file)
+
+        assert text == partly_garbled
+
+    @pytest.mark.asyncio
     async def test_ocr_exception_keeps_original_text(self, tmp_path):
         """If OCR retry raises an exception, keep original text."""
         pdf_file = tmp_path / "test.pdf"
