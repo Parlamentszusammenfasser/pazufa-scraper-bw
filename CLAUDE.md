@@ -16,7 +16,20 @@ submits them to the [Parlamentszusammenfasser](https://codeberg.org/PaZuFa/parla
 - Owns its entry point (`bawue.__main__`), config loader, Redis cache, and scraping loop.
   Depends only on [pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core)
   ("corelib" — httpx API client, generated OpenAPI models, LLM enrichment), pinned to a git tag.
-- **Hosted on Codeberg**; issues at https://codeberg.org/PaZuFa/pazufa-scraper-bw/issues.
+- **Hosted on GitHub**: https://github.com/Parlamentszusammenfasser/pazufa-scraper-bw.
+  Issues and PRs live there; use the `gh` CLI. Everything else in the PaZuFa
+  ecosystem (backend, spec, corelib) is still on **Codeberg** — see the links above.
+
+  **Issue numbers are ambiguous across the migration** — the old Codeberg repo
+  ([PaZuFa/pazufa-scraper-bw](https://codeberg.org/PaZuFa/pazufa-scraper-bw)) still
+  exists and its issues were *not* renumbered into GitHub. GitHub restarted at 1.
+  When code or a DD cites an issue:
+  - **`#20` and above → Codeberg** (all the historical ones: #25, #26, #31, #32,
+    #47, #48, #49, #50, #54, #71, #72 …). GitHub has no such issues — those numbers
+    are PRs there.
+  - **`#9` / `#10` → GitHub** (post-migration work: DD-045, DD-047). Note both
+    numbers *also* exist on Codeberg with unrelated content, so don't resolve a low
+    number by guessing — check the DD or commit that introduced the reference.
 
 Three scrapers (all in `src/bawue/`), run from a static registry:
 
@@ -75,7 +88,8 @@ TDD is the norm here, and each fixed issue leaves a **regression test**:
 3. Keep the regression test named for the issue/Drucksache so it pins the fix.
 
 Git workflow: branch `fix/issue-<N>-<slug>` off `main`, commit `fix: issue #<N> <summary>`,
-PR into `main` on Codeberg. Don't commit or push unless asked.
+PR into `main` on GitHub (`gh pr create --base main`). Work that doesn't trace to an
+issue uses a descriptive slug instead (`fix/<slug>`). Don't commit or push unless asked.
 
 ## Commands
 
@@ -83,7 +97,7 @@ PR into `main` on Codeberg. Don't commit or push unless asked.
 make install         # venv + poetry install (fetches corelib from its pinned git tag)
 make test            # unit tests
 make test-all        # unit + integration (integration needs a backend)
-make lint            # ruff lint (CI enforces: ruff-lint + ruff-format + pytest + pip-audit)
+make lint            # ruff lint (CI gates: trivy audit → ruff-lint + ruff-format → pytest)
 make format          # ruff format (black-compatible)
 make run             # run the scraper (needs config.toml + Redis)
 
@@ -109,6 +123,11 @@ Syntax:
 
 Types: `feat`, `fix`, `build`, `chore`, `ci`, `docs`, `style`, `refactor`, `perf`, `test`  
 Breaking changes: a commit that has a footer `BREAKING CHANGE:`
+
+On push to `main`, python-semantic-release derives the next version from these
+commits, pushes a bare semver tag, and publishes **GitHub Releases** with the
+generated notes (no `CHANGELOG.md` on protected `main`); the `docker` job then
+builds a multi-arch image from that tag.
 
 ## Local dev data / logs
 
