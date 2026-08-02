@@ -1448,14 +1448,38 @@ class TestIsGarbled:
         text = clean + garbled
         assert _is_garbled(text) is True
 
-    def test_shifted_ascii_not_latin_extended(self):
-        """ASCII shift garbling (ROT-29 type) doesn't have Latin Extended chars.
+    def test_shifted_ascii_without_c1_chars_not_garbled(self):
+        """ASCII shift garbling has no Latin Extended chars, and this sample no C1 chars.
 
-        This type is caught by normalize_volltext's paragraph quality scoring
-        (C1 control chars + vowelless words), not by _is_garbled.
+        Stripped of its C1 characters there is no reliable signal left, so
+        _is_garbled cannot flag it; normalize_volltext's paragraph quality
+        scoring (vowelless words + uppercase ratio) still removes it.
         """
         text = "6WlGWHWDJ%DGHQUWWHPEHUJ3RVWIDFK6WXWWJDUW )UDNWLRQGHU)'3'93]XU:LHGHUHLQIKUXQJ"
         assert _is_garbled(text) is False
+
+    def test_shifted_ascii_with_c1_chars_detected(self):
+        """DD-015 Muster 2 (GitHub issue #20): ASCII shift emitting C1 controls.
+
+        Verbatim kreuzberg output for page 2 of Drucksache 17/1201 — every glyph
+        shifted (``bQGHUXQJVDQWUDJ`` → ``Änderungsantrag``), umlauts landing in
+        the C1 range. 5 C1 chars / 367 alphabetic ≈ 1.4%.
+        """
+        text = (
+            "6HLWHYRQ\n/DQGWDJ-YRQ%DGHQ:\x81UWWHPEHUJ  'UXFNVDFKH\n:DKOSHULRGH  (LQJDQJ\n\n\n\n"
+            "bQGHUXQJVDQWUDJ GHU)UDNWLRQ*5h1(XQG\nGHU)UDNWLRQ-GHU&'8\n\n\n"
+            "]X-GHU%HVFKOXVVHPSIHKOXQJ-GHV$XVVFKXVVHV-I\x81U)LQDQ]HQ\n±'UXFNVDFKH1XPPHU\n\n\n"
+            "]X-GHP(QWZXUI-GHV-6WDDWVKDXVKDOWVSODQV-I\x81U\n\n\n'HU/DQGWDJ-ZROOH-EHVFKOLH\x89HQ\n\n"
+            "(LQ]HOSODQ /DQGWDJ\n\n.DSLWHO $OOJHPHLQH%HZLOOLJXQJHQ\n\n=X-lQGHUQ\n6\n\n"
+            "7LWHO\n7LW*U ).= =ZHFNEHVWLPPXQJ\n%HWUDJ\nI\x81U\n\n7VG(85\n"
+            "   %HLKLOIHQ-DXIJUXQG-GHU%HLKLOIHYHURUGQXQJ-XGJORKQH-9HU\nVRUJXQJVHPSIlQJHU-LQQHQ\n"
+        )
+        assert _is_garbled(text) is True
+
+    def test_c1_chars_below_threshold_not_garbled(self):
+        """A stray C1 char in otherwise clean text must not trigger the OCR retry."""
+        text = "Landtag von Baden-Württemberg, Drucksache 17/1201, Änderungsanträge zum Haushalt. " * 4
+        assert _is_garbled(text + "\x81") is False
 
     def test_empty_text_not_garbled(self):
         assert _is_garbled("") is False
@@ -1744,6 +1768,36 @@ class TestExtractPdfTextOcrRetry:
         assert ocr_call_config.force_ocr is True
         assert ocr_call_config.ocr is not None
         assert ocr_call_config.ocr.language == "deu"
+        # No page hint → no page markers needed.
+        assert ocr_call_config.pages is None or ocr_call_config.pages.insert_page_markers is False
+
+    @pytest.mark.asyncio
+    async def test_ocr_retry_keeps_page_markers_when_page_hint_set(self, tmp_path):
+        """With a #page=N hint the OCR retry must insert page markers too.
+
+        OCR replaces the whole text; without markers _extract_relevant_pages
+        falls back to the full document, so every Antrag of a Sammeldrucksache
+        would share one volltext (GitHub issue #20).
+        """
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+
+        garbled_text = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10
+        clean_page_2 = "Änderungsantrag der Fraktion GRÜNE zum Staatshaushaltsplan für 2022."
+        ocr_text = f"<!-- PAGE 1 -->\n\nDeckblatt des Landtags\n\n<!-- PAGE 2 -->\n\n{clean_page_2}"
+
+        with patch(
+            "bawue.bawue_dok.extract_file",
+            new_callable=AsyncMock,
+            side_effect=[_mock_extraction_result(content=garbled_text), _mock_extraction_result(content=ocr_text)],
+        ) as mock_extract:
+            text, _hash = await extract_pdf_text(pdf_file, page_hint=2)
+
+        ocr_call_config = mock_extract.call_args_list[1].kwargs["config"]
+        assert ocr_call_config.force_ocr is True
+        assert ocr_call_config.pages.insert_page_markers is True
+        # The hint window survived: page 2 only, not the whole OCR output.
+        assert text.strip() == clean_page_2
 
     @pytest.mark.asyncio
     async def test_clean_text_no_ocr_retry(self, tmp_path):

@@ -36,7 +36,7 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 | 012    | Synthetische `parl-initiativ` nach `preparl-regbsl` — *Regierungsentwurf, fehlendes `I`*                                                                                                                                                                  | `_ensure_initiativ_after_regbsl`                                                            |
 | 013 ⛔  | Token-Kürzung vor LLM (aufgehoben → DD-029) — *historisch*                                                                                                                                                                                                | `truncate_text` (entfernt)                                                                  |
 | 014    | PARLIS: JSON-Kommentare primär, HTML/XPath als Fallback — *Suchergebnis-Parsing*                                                                                                                                                                          | `parse_results`, `_extract_json_comments`, `_parse_results_from_html`                       |
-| 015    | Volltext-Normalisierung: Garbled-Erkennung, OCR-Retry, XSS-Guard — *PDF garbled, „xss detected", OCR*                                                                                                                                                     | `_is_garbled`, `extract_pdf_text`, `normalize_volltext`                                     |
+| 015    | Volltext-Normalisierung: Garbled-Erkennung, OCR-Retry, XSS-Guard — *PDF garbled, „xss detected", OCR, C1-Steuerzeichen, ASCII-Verschiebung*                                                                                                                                                     | `_is_garbled`, `extract_pdf_text`, `normalize_volltext`                                     |
 | 016    | BW nutzt BY-Track unverändert (`gg-land-parl`-Regex) — *Track-Validierung, DFA, gültige Sequenzen*                                                                                                                                                        | `deploy/tracks.toml`                                                                        |
 | 017    | Konfigurierbares Filtern von `sonstig`-Stationen — *Backend-Panic bei sonstig*                                                                                                                                                                            | `_collect_stationen`, `filter-sonstig-stations`                                             |
 | 018 ⛔  | *(entfernt)*                                                                                                                                                                                                                                              | —                                                                                           |
@@ -503,7 +503,7 @@ fällt bei leerem Ergebnis auf `_parse_results_from_html()` zurück.
 
 ## DD-015: Volltext-Normalisierung — Garbled-Text-Erkennung, OCR-Retry und XSS-Prävention
 
-**Datum:** 02.04.2026
+**Datum:** 02.04.2026 | **Aktualisiert:** 02.08.2026
 
 **Kontext:** PDFs aus dem Baden-Württemberger Landtag — insbesondere
 Anhörungsdokumente (Drucksachen mit angehängten Stellungnahmen) — enthalten
@@ -539,18 +539,40 @@ schlugen mit HTTP 400 (`xss detected`) fehl. Zwei Ursachen:
 **Entscheidung:** Dreistufige Absicherung:
 
 1. **Garbled-Text-Erkennung + OCR-Retry:** Nach der normalen Textextraktion
-   prüft `_is_garbled()`, ob mehr als 5 % der alphabetischen Zeichen im
-   Latin-Extended-Bereich (U+0100–U+024F) liegen. Bei positivem Befund wird
-   die Extraktion mit Tesseract-OCR (Sprache: `deu`) wiederholt. OCR rendert
-   jede Seite als Bild und erkennt die Zeichen visuell — die fehlerhaften
-   Font-Mappings werden damit umgangen. Das OCR-Ergebnis wird nur übernommen,
-   wenn es tatsächlich besser ist (nicht selbst garbled); andernfalls bleibt
-   der Originaltext erhalten.
+   prüft `_is_garbled()` beide oben beschriebenen Muster:
+    - **Muster 1:** mehr als 5 % der alphabetischen Zeichen im
+      Latin-Extended-Bereich (U+0100–U+024F).
+    - **Muster 2:** mehr als 0,5 % C1-Steuerzeichen (0x80–0x9F), bezogen auf
+      die alphabetischen Zeichen.
+
+   Bei positivem Befund wird die Extraktion mit Tesseract-OCR (Sprache: `deu`)
+   wiederholt. OCR rendert jede Seite als Bild und erkennt die Zeichen visuell
+   — die fehlerhaften Font-Mappings werden damit umgangen. Das OCR-Ergebnis
+   wird nur übernommen, wenn es tatsächlich besser ist (nicht selbst garbled);
+   andernfalls bleibt der Originaltext erhalten.
 
    **Wichtig:** `ExtractionConfig(force_ocr=True)` allein löst in kreuzberg
    4.x kein OCR aus — es muss zusätzlich `ocr=OcrConfig(backend="tesseract",
    language="deu")` gesetzt werden. Ohne explizite OCR-Konfiguration gibt
    kreuzberg identischen (garbled) Text zurück.
+
+   Ebenso muss der OCR-Retry bei gesetztem `#page=N`-Hint
+   `pages=PageConfig(insert_page_markers=True)` mitführen
+   (`_OCR_CONFIG_PAGE_MARKERS`): OCR ersetzt den kompletten Text, und ohne
+   Marker fällt `_extract_relevant_pages()` stillschweigend auf das
+   Gesamtdokument zurück — alle Anträge einer Sammeldrucksache bekämen
+   denselben Volltext.
+
+   **Nachtrag (GitHub-Issue #20, 02.08.2026):** Die Muster-2-Prüfung fehlte
+   ursprünglich, `_is_garbled()` maß nur die Latin-Extended-Ratio. Drucksache
+   17/1201 (nur Muster 2 betroffen, Latin-Extended-Anteil 0 %) lief daher am
+   OCR-Retry vorbei; Stufe 2 entfernte die garbled Absätze, und die Stationen
+   landeten mit leerem Volltext (`TODO_MARKER`) statt mit dem per OCR
+   rekonstruierbaren Inhalt. Schwellenwert-Kalibrierung an realen Dokumenten:
+   saubere PDFs liegen bei 0,000–0,035 % C1, Muster-2-Dokumente bei
+   0,8–2,0 %. Beide Ratios werden über das *gesamte* Dokument gemessen; ein
+   langes, überwiegend sauberes PDF mit wenigen garbled Seiten bleibt unter
+   der Schwelle und wird weiterhin nur von Stufe 2 abgefangen.
 
 2. **Paragraph-Quality-Scoring:** `normalize_volltext()` teilt den Text in
    Absätze und bewertet jeden mit `_paragraph_quality_score()`. Die Bewertung
@@ -573,8 +595,10 @@ in denen OCR nicht verfügbar ist oder fehlschlägt.
 
 **Implementierung:** `bawue_dok.py`:
 
-- `_is_garbled()` — Latin-Extended-Ratio > 5 % der Alpha-Zeichen
-- `extract_pdf_text()` — OCR-Retry mit `_OCR_CONFIG` bei garbled Text
+- `_is_garbled()` — Latin-Extended-Ratio > 5 % **oder** C1-Ratio > 0,5 % der
+  Alpha-Zeichen
+- `extract_pdf_text()` — OCR-Retry mit `_OCR_CONFIG` bzw.
+  `_OCR_CONFIG_PAGE_MARKERS` (bei `#page=N`-Hint) bei garbled Text
 - `_paragraph_quality_score()` — Multi-Signal-Bewertung pro Absatz
 - `normalize_volltext()` — Absatzfilterung, NFKC, C1-Stripping,
   CRLF-Normalisierung, Angle-Bracket-Ersetzung
