@@ -67,8 +67,10 @@ class CanonicalOrganisation(StrEnum):
     organizations appearing in `Autor.organisation` (DD-022).
 
     Scope is intentionally limited to entities with a stable, official name:
-    the five Landtag-BW Fraktionen (per https://www.landtag-bw.de/home/fraktionen/)
-    and the state government. Open-set organizations (individual ministries,
+    the five Landtag-BW Fraktionen (per https://www.landtag-bw.de/home/fraktionen/),
+    the state government, and the Landtag itself — the body that issues the
+    plenary documents PARLIS leaves unattributed (DD-042, issue #26).
+    Open-set organizations (individual ministries,
     external stakeholders, expert authors, …) are NOT listed — they pass
     through `canonicalize_organisation` unchanged, because enumerating them
     is both impractical and unnecessary: the backend already has a pg_trgm
@@ -89,6 +91,7 @@ class CanonicalOrganisation(StrEnum):
     FRAKTION_FDP_DVP = "Fraktion der FDP/DVP"
     FRAKTION_AFD = "Fraktion der AfD"
     LANDESREGIERUNG = "Landesregierung"
+    LANDTAG = "Landtag"
 
 
 # Lookup-normalized form (lower-case, non-alphanumeric stripped) → canonical.
@@ -120,6 +123,10 @@ _ORGANISATION_ALIASES: dict[str, CanonicalOrganisation] = {
     "landesregierungbadenwürttemberg": CanonicalOrganisation.LANDESREGIERUNG,
     "badenwürttembergischelandesregierung": CanonicalOrganisation.LANDESREGIERUNG,
     "regierungbadenwürttemberg": CanonicalOrganisation.LANDESREGIERUNG,
+    # Landtag — the plenum acting as a whole (DD-042 update, issue #26)
+    "landtag": CanonicalOrganisation.LANDTAG,
+    "landtagvonbadenwürttemberg": CanonicalOrganisation.LANDTAG,
+    "landtagbadenwürttemberg": CanonicalOrganisation.LANDTAG,
 }
 
 

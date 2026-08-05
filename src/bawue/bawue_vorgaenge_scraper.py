@@ -31,6 +31,7 @@ from bawue.types import (
     TODO_MARKER,
     UNSET,
     Autor,
+    CanonicalOrganisation,
     Doktyp,
     Dokument,
     Gremium,
@@ -85,6 +86,32 @@ def _parse_autoren(text: str) -> list[Autor]:
     if not text or not text.strip():
         return []
     return [Autor(organisation=canonicalize_organisation(part)) for part in _AUTOR_SPLIT_RE.split(text) if part.strip()]
+
+
+# The body a document belongs to when PARLIS names no author: whatever happens at
+# a plenary station is an act of the Landtag as a whole, and what is promulgated in
+# the Gesetzblatt is issued by the Landesregierung ("Die Regierung des Landes
+# Baden-Württemberg" signs it). Stations missing here have no such body — a
+# Zurückziehung or a Gegenentwurf is the initiator's act, not the plenum's — so they
+# keep the initiator fallback. See DD-042 (issue #26).
+_STATION_ORGAN: dict[Stationstyp, CanonicalOrganisation] = {
+    Stationstyp.PARL_VOLLVLSGN: CanonicalOrganisation.LANDTAG,
+    Stationstyp.PARL_AKZEPTANZ: CanonicalOrganisation.LANDTAG,
+    Stationstyp.PARL_ABLEHNUNG: CanonicalOrganisation.LANDTAG,
+    Stationstyp.POSTPARL_GSBLT: CanonicalOrganisation.LANDESREGIERUNG,
+}
+
+
+def _issuing_organ(doc_typ: Doktyp, station_typ: Stationstyp) -> CanonicalOrganisation | None:
+    """The body that issued a document, derived from where it was produced (DD-042).
+
+    A Plenarprotokoll is the Landtag's record of its own sitting wherever PARLIS
+    files it, so the Doktyp decides before the station does. Returns None when the
+    document is not attributable this way.
+    """
+    if doc_typ == Doktyp.REDEPROTOKOLL:
+        return CanonicalOrganisation.LANDTAG
+    return _STATION_ORGAN.get(station_typ)
 
 
 DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [
@@ -989,8 +1016,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         A document is only created when the Fundstelle includes a PDF link.
         Authors are taken from the Fundstelle's autor_text if available, else the
-        committee named in the Fundstelle, else the Vorgang-level initiative
-        (who initiated the process). See DD-042.
+        committee named in the Fundstelle, else the body issuing at this station
+        (Landtag / Landesregierung), else the Vorgang-level initiative (who
+        initiated the process). See DD-042.
 
         When LLM is enabled, enriches the document with PDF text extraction
         and LLM-based semantic extraction (summary, keywords, scores).
@@ -1015,11 +1043,19 @@ class BawueVorgaengeScraper(VorgangsScraper):
             doc_typ = Doktyp.REDEPROTOKOLL
 
         # Author priority (DD-042): the Fundstelle's own author, else the committee
-        # that produced the document, else the Vorgang initiator. The committee step
-        # matters for Beschlussempfehlungen, whose acting body PARLIS names in the
-        # Fundstelle but which previously inherited the initiator (issue #71).
+        # that produced the document, else the body issuing at this station, else the
+        # Vorgang initiator. The committee step matters for Beschlussempfehlungen,
+        # whose acting body PARLIS names in the Fundstelle but which previously
+        # inherited the initiator (issue #71); the station step keeps the initiator
+        # off documents they never wrote — a Gesetzblatt or a Gesetzesbeschluss
+        # (issue #26). PARLIS names an author for neither.
         autor_text = fund.get("autor_text", "") or fund.get("ausschuss", "")
-        autoren = _parse_autoren(autor_text) if autor_text else _parse_autoren(initiative)
+        if autor_text:
+            autoren = _parse_autoren(autor_text)
+        elif (organ := _issuing_organ(doc_typ, station_typ)) is not None:
+            autoren = [Autor(organisation=organ)]
+        else:
+            autoren = _parse_autoren(initiative)
 
         # volltext carries the TODO marker until LLM enrichment fills it with
         # extracted PDF text. The new backend rejects empty strings; without
