@@ -771,12 +771,15 @@ async def enrich_dokument(
     Vorgang-specific (issue #35).
 
     Exception: for ``REDEPROTOKOLL``, *vorgang_titel*/*vorgang_vnr* are deliberately
-    withheld. The backend stores one Dokument row per PDF hash, shared across every
-    bill debated in that plenary sitting, so a per-bill narrowed summary can never
-    survive more than one bill's upload — the last one silently overwrites the rest
-    (issue #49). Withholding bill identity collapses the cache key to
-    ``(doc_hash, doktyp)``, so every bill sharing the PDF reuses the same neutral,
-    session-level summary instead of computing (and overwriting with) its own.
+    withheld, so the summary describes the sitting rather than one bill (issue #49).
+    Its cache key therefore keys on the plain file digest instead of the anchored
+    ``hash_``: every Fundstelle of that protocol reuses the one session-level summary,
+    even though each Fundstelle gets its own Dokument row (issue #25).
+
+    ``hash_`` is the document's row identity in the backend and always carries the
+    ``#page=N`` anchor when the Fundstelle has one — one row per Fundstelle, so
+    ``titel``, ``link`` and ``autoren`` stay with the Vorgang that produced them
+    (issue #25, DD-043).
 
     Uses an in-memory hash cache to skip LLM calls for duplicate PDFs within
     the same scraper run.
@@ -800,17 +803,19 @@ async def enrich_dokument(
         full_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint)
         full_text = normalize_volltext(full_text)
 
-        # A #page=N anchor on a non-protocol document distinguishes separate
-        # logical documents packed into one shared Sammeldrucksache PDF (e.g.
-        # several Änderungsanträge under Drucksache 17/4495, issue #72). doc_hash
-        # is the whole-file digest, so those siblings would otherwise collide —
-        # the backend keys both the semantics cache and rel_station_dokument on
-        # the hash, so a shared hash re-collapses them into one. Folding the page
-        # anchor into the hash keeps them distinct. REDEPROTOKOLL is exempt: the
-        # same protocol PDF is deliberately shared across the bills debated in
-        # that sitting, where one shared hash (and cache entry) is the point
-        # (DD-036).
-        if page_hint is not None and dok.typ != Doktyp.REDEPROTOKOLL:
+        # A #page=N anchor marks one Fundstelle's window into a PDF that several
+        # references share: separate logical documents packed into one
+        # Sammeldrucksache (several Änderungsanträge under Drucksache 17/4495,
+        # issue #72), or the section of a plenary protocol that belongs to one
+        # bill (issue #25). doc_hash is the whole-file digest, so all of them
+        # would collide — the backend keys rel_station_dokument on the hash, so a
+        # shared hash collapses them into a single row that can only hold one
+        # set of titel/link/autoren. Folding the anchor into the persisted hash
+        # keeps one row per Fundstelle; file_hash stays available as the identity
+        # of the *file*, which is what the semantics cache keys on for
+        # REDEPROTOKOLL (DD-043).
+        file_hash = doc_hash
+        if page_hint is not None:
             doc_hash = hashlib.sha256(f"{doc_hash}#page={page_hint}".encode()).hexdigest()
 
         if not full_text:
@@ -826,29 +831,36 @@ async def enrich_dokument(
         # Document-identity context for the prompt: the Vorgang title (bill name)
         # or, as a fallback, the document's own title, plus the Drucksache.
         # REDEPROTOKOLL is withheld from this context (issue #49) — see the
-        # docstring's "Exception" paragraph.
+        # docstring's "Exception" paragraph. Its summary is therefore a
+        # session-level one, computed from the whole sitting rather than per bill,
+        # so it is cached against the plain file digest: every Fundstelle of that
+        # protocol reuses the one summary even though each now owns its own row
+        # (issue #25). Every other doktyp caches against the anchored hash, where
+        # a differing anchor means a genuinely different document.
         if dok.typ == Doktyp.REDEPROTOKOLL:
             context_titel = None
             context_vorgang_vnr = None
             context_drucksnr = None
+            cache_hash = file_hash
         else:
             context_titel = vorgang_titel or dok.titel
             context_vorgang_vnr = vorgang_vnr
             context_drucksnr = dok.drucksnr
+            cache_hash = doc_hash
 
         # Try LLM extraction (with two-tier cache deduplication, keyed by
-        # doc_hash + prompt_hash). The prompt hash includes the document identity
+        # cache_hash + prompt_hash). The prompt hash includes the document identity
         # so two bills sharing one protocol PDF don't collide (issue #32) — except
         # REDEPROTOKOLL, where it is deliberately omitted (issue #49).
         prompt_hash = _prompt_fingerprint(
             dok.typ, drucksnr=context_drucksnr, titel=context_titel, vorgang_vnr=context_vorgang_vnr
         )
-        cache_key = _cache_key(doc_hash, prompt_hash)
+        cache_key = _cache_key(cache_hash, prompt_hash)
         try:
             if cache_key in _hash_cache:
                 logger.info(
                     "In-memory cache hit for %s/%s, skipping LLM call",
-                    doc_hash[:12],
+                    cache_hash[:12],
                     prompt_hash[:8],
                 )
                 semantics = _hash_cache[cache_key]
@@ -857,7 +869,7 @@ async def enrich_dokument(
             elif (cached_json := _redis_get(cache, cache_key)) is not None:
                 logger.info(
                     "Redis cache hit for %s/%s, skipping LLM call",
-                    doc_hash[:12],
+                    cache_hash[:12],
                     prompt_hash[:8],
                 )
                 semantics = json.loads(cached_json)

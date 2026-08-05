@@ -175,6 +175,8 @@ class TestEnrichedSummaryIsNeutralAcrossBills:
         print(f"\nissue #49 shared summary (real LLM): {result_fishing.dokument.zusammenfassung!r}")
 
         assert result_fishing.dokument.zusammenfassung, "enrichment must produce a summary"
+        # Same PDF *and* same anchor here, so still one row (issue #25/DD-049 splits
+        # rows per #page=N anchor; both bills below cite the same window).
         assert result_fishing.dokument.hash_ == result_open_data.dokument.hash_, "same PDF must hash identically"
         # The actual issue #49 guarantee: whichever bill is enriched first computes
         # the summary and the second bill's differing identity must not recompute

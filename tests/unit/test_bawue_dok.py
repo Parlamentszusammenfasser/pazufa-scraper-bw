@@ -801,11 +801,15 @@ class TestEnrichDokument:
         assert r5.dokument.hash_ != SAMPLE_HASH
 
     @pytest.mark.asyncio
-    async def test_redeprotokoll_page_anchor_does_not_change_hash(self):
-        """Issue #72 counter-case: a REDEPROTOKOLL is deliberately shared across
-        the bills debated in a sitting (DD-036), each anchored to a different
-        page. Its hash must stay the plain file digest so those bills keep
-        sharing one Dokument row (and one semantics cache entry)."""
+    async def test_redeprotokoll_page_anchor_also_changes_hash(self):
+        """Issue #25: a REDEPROTOKOLL is no exception to the rule above.
+
+        The protocol PDF is shared across the bills debated in a sitting (DD-036),
+        but each cites *its own* ``#page=N`` window, and ``titel``/``link``/``autoren``
+        describe that window — so the anchor belongs in the row identity here too.
+        Only the semantics cache stays on the plain file digest (issue #49); see
+        TestPerVorgangProtocolRows.
+        """
         base = "https://www.landtag-bw.de/files/plp/17_141.pdf"
         dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link=f"{base}#page=33")
         session = MagicMock()
@@ -814,7 +818,7 @@ class TestEnrichDokument:
         with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC):
             result = await enrich_dokument(session, llm, dok)
 
-        assert result.dokument.hash_ == SAMPLE_HASH
+        assert result.dokument.hash_ != SAMPLE_HASH
 
     @pytest.mark.asyncio
     async def test_metadata_only_fallback_on_download_failure(self):
@@ -927,10 +931,15 @@ class TestSharedRedeprotokollNeutralSummary:
     the shared row's zusammenfassung described only the Kita bill.
 
     The fix makes the REDEPROTOKOLL LLM-semantics cache key collapse to
-    (doc_hash, doktyp) — identical for every bill sharing the PDF — so the
+    (file_hash, doktyp) — identical for every bill sharing the PDF — so the
     first bill enriched "wins" the cache entry and every other bill reuses it
     verbatim instead of computing (and then overwriting with) its own
     bill-narrowed version.
+
+    Issue #25 later split the *row* per Fundstelle (the anchored ``hash_``), which
+    is why the bills below no longer share a hash. The cache key stayed on the
+    plain file digest, so the guarantee this class pins is unchanged: one summary
+    per protocol PDF, whatever the anchor.
     """
 
     @pytest.fixture(autouse=True)
@@ -945,8 +954,12 @@ class TestSharedRedeprotokollNeutralSummary:
         llm = _make_llm_mock()
         shared_hash = SAMPLE_HASH
 
-        dok_kita = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, titel="Zweite Beratung")
-        dok_privatschule = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, titel="Zweite Beratung")
+        # Both bills cite Plp 17/0107, each with its own page window (issue #25).
+        plp = "https://www.landtag-bw.de/files/plp/17_0107.pdf"
+        dok_kita = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, titel="Zweite Beratung", link=f"{plp}#page=19")
+        dok_privatschule = _make_plain_dokument(
+            typ=Doktyp.REDEPROTOKOLL, titel="Zweite Beratung", link=f"{plp}#page=42"
+        )
 
         with (
             _patch_pdf_pipeline(text_and_hash=("Fenster um die Kita-Debatte", shared_hash)),
@@ -982,11 +995,141 @@ class TestSharedRedeprotokollNeutralSummary:
                 vorgang_vnr="17/1234",
             )
 
-        assert result_privatschule.dokument.hash_ == result_kita.dokument.hash_
+        # Separate rows (issue #25), one shared summary (issue #49).
+        assert result_privatschule.dokument.hash_ != result_kita.dokument.hash_
         assert result_privatschule.dokument.zusammenfassung == result_kita.dokument.zusammenfassung
         assert result_privatschule.dokument.schlagworte == result_kita.dokument.schlagworte
         assert result_privatschule.dokument.kurztitel == result_kita.dokument.kurztitel
         assert "FALSCHES THEMA" not in result_privatschule.dokument.zusammenfassung
+
+
+# ---------------------------------------------------------------------------
+# TestPerVorgangProtocolRows — issue #25
+# ---------------------------------------------------------------------------
+
+
+class TestPerVorgangProtocolRows:
+    """Issue #25: `titel`, `link` and `autoren` are per-Vorgang Fundstelle metadata,
+    so a shared REDEPROTOKOLL row cannot hold them — whichever Vorgang was uploaded
+    last won, and every sibling showed a wrong reading label and a deep link into an
+    unrelated debate.
+
+    Ground truth (verified against PARLIS and the PDF): Plenarprotokoll 17/137
+    (10.12.2025) is cited by 10 Vorgänge, among them
+
+      * V-244180 „Gesetz zur Änderung des Juristenausbildungsgesetzes",
+        Erste Beratung → `#page=70` (PDF page 70 names the Juristenausbildungsgesetz)
+      * V-243384 „Gesetz zur Änderung schulgesetzlicher Regelungen",
+        Zweite Beratung → `#page=31` (PDF page 31 is the Schulgesetz debate)
+
+    The staging row for V-244180 held V-243384's values (`titel: "Zweite Beratung"`,
+    `#page=31`). The fix folds the page anchor into `hash_` for REDEPROTOKOLL too, so
+    each Fundstelle becomes its own row; only the LLM semantics cache stays keyed on
+    the plain file digest (issue #49, covered by the sibling test below).
+
+    See tests/integration/test_issue25_shared_protocol_rows.py for the same case
+    driven from the real PARLIS Fundstellen and the real PDF.
+    """
+
+    PLP_17_137 = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17_0137_10122025.pdf"
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    async def _enrich_pair(self, llm_json=SAMPLE_LLM_RESPONSE_GENERIC):
+        """Enrich the two real Plp 17/137 Fundstellen off one shared PDF digest."""
+        juristen = _make_plain_dokument(
+            typ=Doktyp.REDEPROTOKOLL, titel="Erste Beratung", link=f"{self.PLP_17_137}#page=70"
+        )
+        schulgesetz = _make_plain_dokument(
+            typ=Doktyp.REDEPROTOKOLL, titel="Zweite Beratung", link=f"{self.PLP_17_137}#page=31"
+        )
+        session = MagicMock()
+        llm = _make_llm_mock()
+
+        with _patch_pdf_pipeline(), _patch_llm(llm_json) as mock_llm:
+            r_juristen = await enrich_dokument(
+                session, llm, juristen, vorgang_titel="Gesetz zur Änderung des Juristenausbildungsgesetzes"
+            )
+            r_schulgesetz = await enrich_dokument(
+                session, llm, schulgesetz, vorgang_titel="Gesetz zur Änderung schulgesetzlicher Regelungen"
+            )
+
+        return r_juristen, r_schulgesetz, mock_llm
+
+    @pytest.mark.asyncio
+    async def test_two_vorgaenge_sharing_one_protocol_get_distinct_hashes(self):
+        """Two Fundstellen of the same sitting must not collapse into one row."""
+        r_juristen, r_schulgesetz, _ = await self._enrich_pair()
+
+        assert r_juristen.dokument.hash_ != r_schulgesetz.dokument.hash_
+        # Neither is the plain file digest — the anchor is folded in.
+        assert r_juristen.dokument.hash_ != SAMPLE_HASH
+        assert r_schulgesetz.dokument.hash_ != SAMPLE_HASH
+
+    @pytest.mark.asyncio
+    async def test_each_row_keeps_its_own_fundstelle_metadata(self):
+        """titel, link and autoren stay with the Vorgang that produced them."""
+        r_juristen, r_schulgesetz, _ = await self._enrich_pair()
+
+        assert r_juristen.dokument.titel == "Erste Beratung"
+        assert r_juristen.dokument.link.endswith("#page=70")
+        assert r_schulgesetz.dokument.titel == "Zweite Beratung"
+        assert r_schulgesetz.dokument.link.endswith("#page=31")
+        assert r_juristen.dokument.autoren == r_schulgesetz.dokument.autoren  # same fixture author
+
+    @pytest.mark.asyncio
+    async def test_summary_still_computed_once_per_protocol_pdf(self):
+        """Issue #49 must not regress: the row splits, the LLM call does not.
+
+        The semantics cache stays keyed on the plain file digest, so the second
+        Fundstelle reuses the first one's session-level summary.
+        """
+        r_juristen, r_schulgesetz, mock_llm = await self._enrich_pair()
+
+        assert mock_llm.await_count == 1
+        assert r_schulgesetz.dokument.zusammenfassung == r_juristen.dokument.zusammenfassung
+        assert r_schulgesetz.dokument.schlagworte == r_juristen.dokument.schlagworte
+        assert r_schulgesetz.dokument.kurztitel == r_juristen.dokument.kurztitel
+
+    @pytest.mark.asyncio
+    async def test_identical_fundstelle_still_shares_one_row(self):
+        """DD-043's dedup intent survives: same PDF *and* same anchor → one row.
+
+        Two Vorgänge whose Fundstellen point at the same page of the same protocol
+        really are the same reference and must keep collapsing into one row.
+        """
+        link = f"{self.PLP_17_137}#page=70"
+        dok_a = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, titel="Erste Beratung", link=link)
+        dok_b = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, titel="Erste Beratung", link=link)
+        session = MagicMock()
+        llm = _make_llm_mock()
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC):
+            r_a = await enrich_dokument(session, llm, dok_a)
+            r_b = await enrich_dokument(session, llm, dok_b)
+
+        assert r_a.dokument.hash_ == r_b.dokument.hash_
+
+    @pytest.mark.asyncio
+    async def test_unanchored_protocol_keeps_plain_file_digest(self):
+        """Without a `#page=N` anchor there is nothing per-Vorgang to preserve.
+
+        The „Beschluss des Landtags in Zweiter Beratung" Drucksachen map to
+        REDEPROTOKOLL (enum_mapper) and are cited without an anchor by many
+        Vorgänge — genuinely one document, so the row stays shared.
+        """
+        dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link=self.PLP_17_137)
+        session = MagicMock()
+        llm = _make_llm_mock()
+
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC):
+            result = await enrich_dokument(session, llm, dok)
+
+        assert result.dokument.hash_ == SAMPLE_HASH
 
 
 # ---------------------------------------------------------------------------
