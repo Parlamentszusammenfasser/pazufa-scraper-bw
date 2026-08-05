@@ -513,6 +513,7 @@ class TestCanonicalOrganisation:
             "Fraktion der FDP/DVP",
             "Fraktion der AfD",
             "Landesregierung",
+            "Landtag",
         }
 
     def test_strenum_is_str_subclass(self):
@@ -546,6 +547,9 @@ class TestCanonicalOrganisation:
             # Landesregierung variants
             ("Baden-Württembergische Landesregierung", CanonicalOrganisation.LANDESREGIERUNG),
             ("Landesregierung Baden-Württemberg", CanonicalOrganisation.LANDESREGIERUNG),
+            # Landtag variants (issue #26)
+            ("Landtag von Baden-Württemberg", CanonicalOrganisation.LANDTAG),
+            ("Landtag Baden-Württemberg", CanonicalOrganisation.LANDTAG),
         ],
     )
     def test_known_variants_map_to_canonical(self, variant, canonical):
@@ -556,6 +560,8 @@ class TestCanonicalOrganisation:
         ministry = "Ministerium für Umwelt, Klima und Energiewirtschaft"
         assert canonicalize_organisation(ministry) == ministry
         assert canonicalize_organisation("Verband der Podologen") == "Verband der Podologen"
+        # The Landtag's president is an office of her own, not the plenum (issue #26).
+        assert canonicalize_organisation("Präsidentin des Landtags") == "Präsidentin des Landtags"
 
     def test_empty_and_whitespace(self):
         assert canonicalize_organisation("") == ""

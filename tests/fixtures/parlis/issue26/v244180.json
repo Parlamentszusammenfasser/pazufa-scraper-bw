@@ -1,0 +1,73 @@
+{
+  "titel": "Gesetz zur Änderung des Juristenausbildungsgesetzes",
+  "vorgangs_id": "V-244180",
+  "detail_url": "https://parlis.landtag-bw.de/parlis/vorgang/V-244180",
+  "Vorgangstyp": "Gesetzgebung",
+  "Initiative": "Fraktion der SPD",
+  "Aktueller Stand": "Verkündet",
+  "Sachgebiet": "Juristische Berufe; Öffentlicher Dienst",
+  "fundstellen_parsed": [
+    {
+      "raw": "Gesetzentwurf    Fraktion der SPD  13.11.2025 Drucksache 17/9871",
+      "datum": "13.11.2025",
+      "drucksache": "17/9871",
+      "station_typ": "Gesetzentwurf",
+      "autor_text": "Fraktion der SPD",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/9000/17%5F9871.pdf"
+    },
+    {
+      "raw": "Erste Beratung   Plenarprotokoll 17/137 10.12.2025  S. 8335-8341",
+      "datum": "10.12.2025",
+      "plenarprotokoll": "17/137",
+      "station_typ": "Erste Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0137%5F10122025.pdf#page=70"
+    },
+    {
+      "raw": "Mitteilung    Präsidentin des Landtags  09.01.2026 Drucksache 17/10130   (22 S.)",
+      "datum": "09.01.2026",
+      "drucksache": "17/10130",
+      "station_typ": "Mitteilung",
+      "autor_text": "Präsidentin des Landtags",
+      "seiten": 22,
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/10000/17%5F10130%5FD.pdf"
+    },
+    {
+      "raw": "Beschlussempfehlung und Bericht    Ständiger Ausschuss  29.01.2026 Drucksache 17/10218   (dazu Änderungsantrag Daniela Evers u. a. GRÜNE, Arnulf Freiherr von Eyb u. a. CDU, Dr. Boris Weirauch u. a. SPD und Nico Weinmann u. a. FDP/DVP Anlage)",
+      "datum": "29.01.2026",
+      "drucksache": "17/10218",
+      "station_typ": "Beschlussempfehlung und Bericht",
+      "ausschuss": "Ständiger Ausschuss",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/10000/17%5F10218.pdf"
+    },
+    {
+      "raw": "Entschließungsantrag    Fraktion der SPD  04.02.2026 Drucksache 17/10262",
+      "datum": "04.02.2026",
+      "drucksache": "17/10262",
+      "station_typ": "Entschließungsantrag",
+      "autor_text": "Fraktion der SPD",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/10000/17%5F10262%5FD.pdf"
+    },
+    {
+      "raw": "Zweite Beratung   Plenarprotokoll 17/140 04.02.2026  S. 8585-8592; 8593 @@ D-245591",
+      "datum": "04.02.2026",
+      "plenarprotokoll": "17/140",
+      "station_typ": "Zweite Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0140%5F04022026.pdf#page=34"
+    },
+    {
+      "raw": "Gesetzesbeschluss des Landtags      04.02.2026 Drucksache 17/10246",
+      "datum": "04.02.2026",
+      "drucksache": "17/10246",
+      "station_typ": "Gesetzesbeschluss des Landtags",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/10000/17%5F10246%5FD.pdf"
+    },
+    {
+      "raw": "Gesetz  vom 10. Februar 2026 Gesetzblatt für Baden-Württemberg 2026 Nr. 12     S. 1-2",
+      "datum": "10.02.2026",
+      "gesetzblatt_jahr": 2026,
+      "gesetzblatt_nr": 12,
+      "station_typ": "Gesetz",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/gesetzblaetter/2026/GBl2026012.pdf#page=1"
+    }
+  ]
+}

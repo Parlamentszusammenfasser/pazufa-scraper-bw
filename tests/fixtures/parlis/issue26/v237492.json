@@ -1,0 +1,54 @@
+{
+  "titel": "Staatshaushaltsplan 2025/2026 – Einzelplan 11: Rechnungshof",
+  "vorgangs_id": "V-237492",
+  "detail_url": "https://parlis.landtag-bw.de/parlis/vorgang/V-237492",
+  "Vorgangstyp": "Haushaltsgesetzgebung",
+  "Sachgebiet": "Öffentlicher Haushalt",
+  "fundstellen_parsed": [
+    {
+      "raw": "Gesetzentwurf    Landesregierung  22.10.2024 Drucksache 17/8000   (48 S.)",
+      "datum": "22.10.2024",
+      "drucksache": "17/8000",
+      "station_typ": "Gesetzentwurf",
+      "autor_text": "Landesregierung",
+      "seiten": 48,
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8000%5FD.pdf"
+    },
+    {
+      "raw": "Beschlussempfehlung und Bericht    Ausschuss für Finanzen  14.11.2024 Drucksache 17/8311",
+      "datum": "14.11.2024",
+      "drucksache": "17/8311",
+      "station_typ": "Beschlussempfehlung und Bericht",
+      "ausschuss": "Ausschuss für Finanzen",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8311%5FD.pdf"
+    },
+    {
+      "raw": "Zweite Beratung   Plenarprotokoll 17/109 11.12.2024  S. 6518",
+      "datum": "11.12.2024",
+      "plenarprotokoll": "17/109",
+      "station_typ": "Zweite Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0109%5F11122024.pdf#page=72"
+    },
+    {
+      "raw": "Beschluss des Landtags in Zweiter Beratung      12.12.2024 Drucksache 17/8420   S. 118",
+      "datum": "12.12.2024",
+      "drucksache": "17/8420",
+      "station_typ": "Beschluss des Landtags in Zweiter Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8420%5FD.pdf#page=118"
+    },
+    {
+      "raw": "Dritte Beratung   Plenarprotokoll 17/112 18.12.2024  S. 6778-6795",
+      "datum": "18.12.2024",
+      "plenarprotokoll": "17/112",
+      "station_typ": "Dritte Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0112%5F18122024.pdf#page=16"
+    },
+    {
+      "raw": "Beschluss des Landtags in Dritter Beratung      18.12.2024 Drucksache 17/8443   S. 118",
+      "datum": "18.12.2024",
+      "drucksache": "17/8443",
+      "station_typ": "Beschluss des Landtags in Dritter Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8443%5FD.pdf#page=118"
+    }
+  ]
+}
