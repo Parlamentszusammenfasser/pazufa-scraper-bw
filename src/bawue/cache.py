@@ -19,18 +19,26 @@ class BawueCache:
         redis_host: str | None,
         redis_port: int | None,
         disabled: bool = False,
+        redis_url: str | None = None,
     ) -> None:
         self.disabled = disabled
         self.redis_client: redis.Redis | None = None
-        if disabled or redis_host is None or redis_port is None:
+        if disabled or (not redis_url and (redis_host is None or redis_port is None)):
             self.disabled = True
             logger.warning("Caching disabled")
             return
 
         try:
-            self.redis_client = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+            if redis_url:
+                # Managed Redis (Upstash) requires TLS + auth, which only the URL
+                # form carries: rediss://default:<token>@<host>:6379
+                self.redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
+                target = redis_url.rsplit("@", 1)[-1]  # never log the token
+            else:
+                self.redis_client = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+                target = f"{redis_host}:{redis_port}"
             self.redis_client.ping()
-            logger.info("Connected to Redis at %s:%s", redis_host, redis_port)
+            logger.info("Connected to Redis at %s", target)
         except redis.ConnectionError as e:
             logger.error("Failed to connect to Redis: %s", e)
             sys.exit(1)
