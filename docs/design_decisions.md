@@ -64,12 +64,13 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 | 040    | Maßgebliche Track-Definition & Prefix-Match-Semantik (`parl-vollvlsgn` = `L` statt `V`, Ablehnung = `N`; Prefix- statt Full-Match; Korrektur zu DD-016/025/026/035) — *Track-Buchstaben, Prefix-Validierung, `SILAL`, „unvollständiger" Track gültig*     | `_TRACKS_TOML_STATIONS`, `_BW_GG_LAND_PARL_TRACK`, `_passes_bw_track_validation`            |
 | 041    | WORKAROUND (togglebar): Initiativdrucksache standardmäßig **nicht** als `vg_ident` senden (`emit-initdrucks-ident`, Default `false`; deaktiviert Issue #26) — *Backend `vorgang_merge_candidates` führt fremde Vorgänge über geteilten `initdrucks` zusammen → HTTP500 `rel_station_dokument_pkey` / stille Titel-Korruption; Backend-Issue #150* | `_build_vorgang` (ids), `_emit_initdrucks_ident`, `_initiativ_drucksnr`                     |
 | 042    | `Dokument.autoren`: Ausschuss der Fundstelle vor Initiator-Fallback (Issue #71) — *Beschlussempfehlung erbte „Landesregierung"; Redeprotokoll/Gesetzesbeschluss/GBl behalten bewusst den Initiator* | `_build_dokumente`, `_parse_autoren` |
-| 043    | Geteilte Sammeldrucksache: Dedup-Schlüssel und `hash_` berücksichtigen den `#page=N`-Anker (Issue #72) — *mehrere Änderungsanträge in einer Drucksache, adoptierter Antrag fällt weg; REDEPROTOKOLL bewusst ausgenommen (DD-036)* | `_dedup_drucks`, `enrich_dokument` |
+| 043 ⚠️ | Geteilte Sammeldrucksache: Dedup-Schlüssel und `hash_` berücksichtigen den `#page=N`-Anker (Issue #72) — *mehrere Änderungsanträge in einer Drucksache, adoptierter Antrag fällt weg; REDEPROTOKOLL-Ausnahme korrigiert durch DD-049* | `_dedup_drucks`, `enrich_dokument` |
 | 044 ♻️ | *(abgelöst durch DD-047 — der eigenständige GBl-Vorgang scheitert immer an der Track-Validierung)* Dedizierter Gesetzblatt-Scraper: `postparl-gsblt.zp_start` = Publikationsdatum (echtes Ausgabedatum), Dok-`zp_referenz` = Ausfertigungsdatum (Issue #9) — *GBl-Station mit Gesetzesbeschluss-Datum statt Ausgabedatum; nur Gbl-Typ „Gesetz"; eigenständige Vorgänge, kein `initdrucks`-Merge (DD-041/DD-034); digital erst ab 2024* | `bawue_gesetzblatt_scraper.py`, `gesetzblatt_parser.py`, `gesetzblatt_client.py` |
 | 045    | `preparl-*`-Stationen (nicht nur `preparl-regbsl`) routen auf `regierung` statt `plenum` (Issue #10, Korrektur zu DD-021) — *Kabinettsstationen fälschlich im Landtags-Default* | `_determine_gremium` |
 | 046    | Datumsfreie `api_id` für die synthetische `parl-initiativ` (V-247045; Ergänzung zu DD-028/DD-034) — *HTTP400 Track `SSIL`, doppelte Station nach neuer Fundstelle, wanderndes `zp_start`* | `_synthetic_initiativ_api_id`, `_ensure_initiativ_after_regbsl` |
 | 047 ♻️ | Gesetzblatt ist Datums-Lookup, keine eigene Vorgangsquelle (löst DD-044 ab; Issue #9) — *HTTP400 Track bei `postparl-gsblt`-Only-Vorgang, falsches Ausgabedatum, kein `initdrucks` im GBl-PDF, geteilte GBl-Nr./PDF* | `parlis_parser._GESETZBLATT_REF_RE`, `gesetzblatt_lookup.GesetzblattDateLookup`, `_gesetzblatt_ausgabedatum` |
 | 048    | Unlesbares Dokument bekommt `hash_ = sha256(link)` statt geteiltem `TODO`-Marker — *`hash_='TODO'`, LLM aus (Default), HTTP500 `rel_station_dokument_pkey`, Hash-Merge/Hex-Validierung ab Backend v0.3.0; `volltext` bleibt bewusst `TODO`* | `types.placeholder_hash`, `_build_dokumente`, `bawue_beteiligung_scraper._build_vorgang` |
+| 049    | Ein `Dokument`-Row je Fundstelle: `#page=N` gehört auch bei `REDEPROTOKOLL` in `hash_`, nur der Semantik-Cache bleibt auf dem Datei-Hash (Issue #25, Korrektur zu DD-043) — *geteiltes Plenarprotokoll, falsche Lesung im `titel`, `#page`-Anker fremder Debatte, `autoren` des letzten Uploads; Zusammenfassung weiterhin sitzungsbezogen (DD-037/Issue #49)* | `enrich_dokument` (`file_hash`/`doc_hash`/`cache_hash`) |
 
 ---
 
@@ -2113,7 +2114,7 @@ Summarization-Schritt weitergereicht — anders als bei jedem anderen Doktyp:
   Sitzungsabschnitt neutral zusammenzufassen und alle behandelten
   Tagesordnungspunkte gleichrangig zu nennen, statt sich auf einen Vorgang zu
   fokussieren.
-- **Cache-Schlüssel kollabiert auf `(doc_hash, doktyp-Prompt)`.** Da
+- **Cache-Schlüssel kollabiert auf `(Datei-Hash, doktyp-Prompt)`.** Da
   `_prompt_fingerprint()` ohne Titel/Drucksache/Vorgangs-Drucksache aufgerufen
   wird, erhalten alle Vorgänge, die dasselbe Protokoll-PDF teilen, denselben
   Cache-Eintrag. Der zuerst angereicherte Vorgang berechnet die Zusammenfassung
@@ -2129,6 +2130,10 @@ gespeicherte `volltext` selbst bleibt weiterhin abhängig davon, welcher Vorgang
 zuerst angereichert wird (sein `#page=N`-Fenster "gewinnt" ebenfalls); das ist
 eine kleinere, separate Inkonsistenz, die Issue #49 nicht adressiert (die
 Akzeptanzkriterien betreffen ausschließlich `zusammenfassung`).
+[DD-049](#dd-049) hat diese Inkonsistenz aufgelöst: seit dort jede Fundstelle ihren
+eigenen Row bekommt, trägt jeder Row sein eigenes Fenster als `volltext`. Der
+Cache-Schlüssel bleibt der Datei-Hash, die Zusammenfassung damit sitzungsbezogen —
+die Entscheidung dieses DDs gilt unverändert.
 
 **Implementierung:** `bawue_dok.py` — `BODY_PROMPT_REDEPROTOKOLL`,
 `_DOKTYP_PROMPT_MAP`, `enrich_dokument()` (Verzweigung `context_titel` /
@@ -2408,7 +2413,16 @@ Zwei Deduplizierungen ließen den angenommenen Antrag verschwinden:
   werden sowohl der persistierte `hash_` als auch der Cache-Schlüssel je Seite
   eindeutig.
 
-**Bewusst ausgenommen — `REDEPROTOKOLL`:** Ein Plenarprotokoll-PDF wird
+**Bewusst ausgenommen — `REDEPROTOKOLL`:**
+
+> ⚠️ **Korrigiert durch [DD-049](#dd-049) (Issue #25).** Der folgende Absatz war zu
+> weit gefasst: er begründet nur `hash_` und den Cache-Schlüssel, übersieht aber, dass
+> `titel`, `link` und `autoren` am geteilten Row mitfahren und dort **pro Vorgang**
+> unterschiedlich sein müssen. Seit DD-049 trägt `hash_` den Anker auch für
+> `REDEPROTOKOLL`; nur der Semantik-Cache-Schlüssel bleibt der reine Datei-Hash.
+> Es gibt damit keinen doktyp-abhängigen Zweig mehr im persistierten `hash_`.
+
+Ein Plenarprotokoll-PDF wird
 *absichtlich* über alle in der Sitzung behandelten Vorgänge geteilt (DD-036/DD-037),
 jeder Vorgang mit eigenem `#page=N`-Fenster. Dort ist **ein** geteilter Hash (ein
 Dokument-Row, ein Cache-Eintrag) der Zweck. Für `REDEPROTOKOLL` bleibt `hash_`
@@ -2426,8 +2440,8 @@ den anker-spezifischen Hash.
   17/4495 mit `#page=1`/`#page=5` überleben beide auf der Plenarstation).
 - Unit (`tests/unit/test_bawue_dok.py::TestEnrichDokument`):
   `test_page_anchored_siblings_get_distinct_hashes` (gleiche Datei, verschiedene
-  Anker → verschiedene `hash_`), `test_redeprotokoll_page_anchor_does_not_change_hash`
-  (REDEPROTOKOLL behält den Datei-Hash).
+  Anker → verschiedene `hash_`), `test_redeprotokoll_page_anchor_also_changes_hash`
+  (seit DD-049 gilt die Regel auch für REDEPROTOKOLL).
 - Integration (`tests/integration/test_scraper_pipeline.py::TestSharedAmendmentDrucksache`):
   voller Pipeline-Lauf (PARLIS-Fixture → Mock-Backend) belegt, dass beide
   `#page`-Varianten das Backend erreichen.
@@ -2788,3 +2802,95 @@ Dokumente — erwartete, gewollte Korrektur, aber sichtbar als neue Objekte.
 - `tests/unit/test_bawue_scraper.py::TestBuildVorgang::test_dokument_placeholders_when_llm_disabled`
   und `tests/unit/test_beteiligung_scraper.py::TestBuildVorgang::test_dokument_placeholders_when_llm_disabled`
   — `volltext` bleibt `TODO`, `hash_` ist link-abgeleitet.
+
+---
+
+## DD-049: Ein `Dokument`-Row je Fundstelle — der `#page=N`-Anker gilt auch für `REDEPROTOKOLL` (Issue #25)
+
+**Datum:** 05.08.2026
+
+**Kontext:** [DD-043](#dd-043) nahm `REDEPROTOKOLL` von der anker-spezifischen
+Hash-Bildung aus: ein Plenarprotokoll-PDF sollte **einen** Dokument-Row über alle in
+der Sitzung behandelten Vorgänge hinweg belegen (DD-036/DD-037, Issue #49). Für
+`hash_`, `volltext` und die LLM-Zusammenfassung ist das richtig — ein Row, ein
+Cache-Eintrag, eine sitzungsbezogene Zusammenfassung, die kein Geschwister-Gesetz
+überschreiben kann.
+
+Die Ausnahme war aber **zu weit gefasst**. Drei Felder dieses Rows sind
+Fundstellen-Metadaten *pro Vorgang*, nicht Inhalt *pro PDF*:
+
+| Feld | Warum pro Vorgang |
+|---|---|
+| `titel` | Die Lesung unterscheidet sich je Gesetz derselben Sitzung („Erste Beratung" für das eine, „Zweite Beratung" für das andere) |
+| `link` | Der `#page=N`-Anker zeigt auf den Abschnitt **dieses** Gesetzes |
+| `autoren` | Wird pro Vorgang abgeleitet (Initiator-Fallback, [DD-042](#dd-042)) |
+
+Da das Backend `rel_station_dokument` über den Hash schlüsselt, hielt der geteilte Row
+die Werte des zuletzt hochgeladenen Vorgangs. Jeder andere Vorgang der Sitzung zeigte
+eine falsche Lesung, und sein Deep-Link führte in eine fremde Debatte. Betroffen waren
+104 von 998 Dokumenten des BW-Listings; im letzten realen WP17-Lauf waren **89 von 133**
+Protokoll-Datei-Hashes an mehr als einen `#page=`-Link gebunden.
+
+**Nachweis an den Originalquellen** (Plenarprotokoll 17/137, 10.12.2025, von 10
+Vorgängen zitiert):
+
+| Vorgang | Gesetz | PARLIS-Fundstelle | Anker | PDF-Seite enthält |
+|---|---|---|---|---|
+| V-244180 | Juristenausbildungsgesetz | Erste Beratung | `#page=70` | „Juristenausbildungsgesetz" |
+| V-243384 | schulgesetzliche Regelungen | Zweite Beratung | `#page=31` | „Schulgesetz" |
+
+Gespeichert war für V-244180 `titel: "Zweite Beratung"` und `#page=31` — also die
+Werte von V-243384.
+
+**Entscheidung:** Row-Identität und Cache-Schlüssel werden getrennt. Beides leitete
+sich bisher aus derselben Variable ab; das war die eigentliche Ursache der Konflation.
+
+- **`hash_` (Row-Identität)** faltet den `#page=N`-Anker **immer** ein, sobald einer
+  vorliegt — ohne doktyp-Zweig. Eine Fundstelle, ein Row. Zwei Fundstellen auf
+  *dieselbe* Seite bleiben ein Row (echte Dublette, DD-043-Absicht bleibt erhalten).
+- **Der LLM-Semantik-Cache-Schlüssel** verwendet für `REDEPROTOKOLL` weiterhin den
+  reinen Datei-Hash (`file_hash`), für alle anderen doktypen den Anker-Hash. Damit
+  bleibt [DD-037](#dd-037)/Issue #49 unangetastet: die Zusammenfassung wird **einmal
+  je Protokoll-PDF** berechnet und von jedem Row unverändert übernommen — Issue #49
+  war ein Cache-Problem, kein Identitätsproblem.
+- `autoren` wird nicht angefasst: sobald jeder Vorgang seinen eigenen Row hat, kann
+  kein fremder Wert mehr einwandern. Ob der Initiator-Fallback (DD-042) für
+  Redeprotokolle inhaltlich passt, ist eine eigene Frage.
+
+**Warum das Backend N Rows über ein PDF verträgt:** Der Standardfall tut es längst.
+Ohne LLM-Anreicherung — der Default — trägt jedes Dokument `sha256(link)` inklusive
+Anker ([DD-048](#dd-048)), also einen Row je Fundstelle. [DD-047](#dd-047) hat
+zusätzlich geprüft, dass zwei Vorgänge, die ein PDF teilen, beide mit HTTP 201
+angenommen werden; Vorgangs-Matching läuft über `vg_ident`, nicht über Dokument-Hashes.
+
+**Bewusst nicht geändert:**
+
+- **Kein per-Gesetz-Narrowing.** Getrennte Rows machen bill-spezifische
+  Zusammenfassungen technisch wieder möglich (Issue #49s Überschreib-Problem entfällt),
+  aber das kostet einen LLM-Call je Gesetz statt je Sitzung. Bleibt beim
+  sitzungsbezogenen Text (DD-037). Folge: `volltext` eines Rows ist sein eigenes
+  Seitenfenster, `zusammenfassung` die der ganzen Sitzung.
+- **Fundstellen ohne Anker** (54 von 1 134 Protokoll-Referenzen im WP17-Lauf, sämtlich
+  „Beschluss des Landtags in Zweiter/Dritter Beratung"-Drucksachen, die der
+  `enum_mapper` auf `REDEPROTOKOLL` abbildet) behalten den reinen Datei-Hash und damit
+  einen geteilten Row. Dort gibt es nichts pro Vorgang zu erhalten — `titel` ist über
+  alle zitierenden Vorgänge identisch.
+
+**Migrationshinweis:** Aus je einem geteilten Protokoll-Row entstehen mehrere
+Dokumente mit korrekten Ankern — gewollte Korrektur, sichtbar als neue Objekte
+(wie bei DD-048). Die Redis-Cache-Einträge bleiben gültig, da ihr Schlüssel unverändert
+der Datei-Hash ist.
+
+**Code:** `bawue_dok.py::enrich_dokument` (`file_hash` vs. `doc_hash`, `cache_hash`)
+
+**Tests:**
+- `tests/unit/test_bawue_dok.py::TestPerVorgangProtocolRows` — zwei Fundstellen der
+  Sitzung 17/137 erhalten verschiedene `hash_`, behalten je `titel`/`link`/`autoren`,
+  teilen die Zusammenfassung (ein LLM-Call); gleiche Seite → ein Row; Fundstelle ohne
+  Anker behält den Datei-Hash.
+- `tests/integration/test_issue25_shared_protocol_rows.py` — dieselbe Kette gegen die
+  Originalquellen: PARLIS liefert beide Anker, die PDF-Fenster belegen sie inhaltlich,
+  die Anreicherung des echten PDFs ergibt zwei Rows bei einem LLM-Call.
+- `tests/unit/test_bawue_dok.py::TestSharedRedeprotokollNeutralSummary` (Issue #49)
+  unverändert in der Aussage, jetzt mit unterschiedlichen Ankern: verschiedene
+  `hash_`, identische Semantik.
