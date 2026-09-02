@@ -443,7 +443,15 @@ def _usable_length(text: str) -> int:
 # Page-hint extraction for plenary protocols
 # ---------------------------------------------------------------------------
 
-_PAGE_MARKER_RE = re.compile(r"\n\n<!-- PAGE (\d+) -->\n\n")
+
+# kreuzberg's marker template is "\n\n<!-- PAGE N -->\n\n", but the surrounding
+# "\n\n" only exists when a marker has page content on both sides. The marker
+# for the document's first page has nothing before it, and the marker for a
+# trailing empty page has nothing after it — in both cases the fixed \n\n is
+# missing, so anchor to the string boundary as an alternative (issue #27: this
+# silently dropped page 1's content for every #page=1-anchored document,
+# substituting whatever page followed it instead of falling back).
+_PAGE_MARKER_RE = re.compile(r"(?:\A|\n\n)<!-- PAGE (\d+) -->(?:\n\n|\Z)")
 
 
 def _parse_page_hint(url: str) -> int | None:
