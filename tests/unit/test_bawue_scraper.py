@@ -1762,18 +1762,54 @@ class TestBuildStationAutoren:
         assert [a.organisation for a in doc.autoren] == ["Ausschuss des Inneren, für Digitalisierung und Kommunen"]
 
     @pytest.mark.asyncio
-    async def test_initiative_fallback_kept_without_ausschuss_issue71(self, scraper_build_vorgang):
-        """Issue #71: the initiator fallback stays where nothing better is derivable.
+    async def test_gesetzesbeschluss_is_landtag_issue26(self, scraper_build_vorgang):
+        """Issue #26: a Gesetzesbeschluss belongs to the Landtag, not to the initiator.
 
-        A Gesetzesbeschluss names no acting body in its Fundstelle, so it keeps
-        the Vorgang initiator — a deliberate scope decision, see DD-042.
+        PARLIS names no acting body in its Fundstelle; the acceptance station does
+        (DD-042 step 3). The original DD-042 decision to keep the initiator here is
+        what issue #26 reverses.
         """
         fund = parse_fundstelle_text("Gesetzesbeschluss des Landtags     10.11.2021 Drucksache 17/1050")
         fund["pdf_url"] = "https://example.com/beschluss.pdf"
         raw = _make_raw_vorgang("V-711", initiative="Landesregierung", fundstellen=[fund])
 
         doc = (await scraper_build_vorgang(raw)).stationen[0].dokumente[0]
-        assert [a.organisation for a in doc.autoren] == ["Landesregierung"]
+        assert [a.organisation for a in doc.autoren] == ["Landtag"]
+
+    @pytest.mark.asyncio
+    async def test_unlabeled_plenarprotokoll_is_landtag_issue26(self, scraper_build_vorgang):
+        """Issue #26: a Plenarprotokoll is the Landtag's record wherever PARLIS files it.
+
+        Unlabeled protocol rows map to `sonstig` and are only rewritten to
+        parl-vollvlsgn *after* the document is built, so the Doktyp — not the station
+        — has to carry this one.
+        """
+        fund = parse_fundstelle_text("Plenarprotokoll 17/120 09.04.2025  S. 7217")
+        fund["pdf_url"] = "https://example.com/plp.pdf"
+        raw = _make_raw_vorgang("V-713", initiative="Landesregierung", fundstellen=[fund])
+
+        doc = (await scraper_build_vorgang(raw)).stationen[0].dokumente[0]
+        assert [a.organisation for a in doc.autoren] == ["Landtag"]
+
+    @pytest.mark.asyncio
+    async def test_aenderungsantrag_attached_to_a_reading_keeps_the_initiator(self, scraper_build_vorgang):
+        """Issue #26: the station step must not claim documents merely *tabled* there.
+
+        An Änderungsantrag is filed as its own Fundstelle and only afterwards attached
+        to the reading it belongs to (DD-019). It stays the proposer's document — here,
+        with no autor_text, the initiator fallback — while the protocol of that same
+        reading becomes the Landtag's.
+        """
+        antrag = parse_fundstelle_text("Änderungsantrag     10.11.2021 Drucksache 17/1051")
+        antrag["pdf_url"] = "https://example.com/aenderungsantrag.pdf"
+        beratung = parse_fundstelle_text("Zweite Beratung   Plenarprotokoll 17/20 11.11.2021  S. 1-2")
+        beratung["pdf_url"] = "https://example.com/plp.pdf"
+        raw = _make_raw_vorgang("V-712", initiative="Landesregierung", fundstellen=[antrag, beratung])
+
+        station = (await scraper_build_vorgang(raw)).stationen[0]
+        assert station.typ == Stationstyp.PARL_VOLLVLSGN
+        autoren = {d.titel: [a.organisation for a in d.autoren] for d in station.dokumente}
+        assert autoren == {"Zweite Beratung": ["Landtag"], "Änderungsantrag": ["Landesregierung"]}
 
     @pytest.mark.asyncio
     async def test_multiple_autoren_from_fundstelle(self, scraper_build_vorgang):

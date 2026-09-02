@@ -83,7 +83,7 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 | `zp_modifiziert`  | datetime      | Ja      | Fundstellen-Datum                                                                                                                                       |
 | `zp_referenz`     | datetime      | Ja      | Fundstellen-Datum                                                                                                                                       |
 | `link`            | URI           | Ja      |                                                                                                                                                         |
-| `autoren`         | list[Autor]   | Ja      | Aus Fundstelle-Text extrahiert; Fallback auf `Initiative`-Feld. Ausschuss- und Plenarprotokoll-Fundstellen ausgenommen.                                 |
+| `autoren`         | list[Autor]   | Ja      | Aus Fundstelle-Text extrahiert; sonst Ausschuss, sonst ausstellendes Organ (Landtag bzw. Landesregierung, DD-042), sonst Fallback auf `Initiative`-Feld. |
 | `drucksnr`        | string        | Nein    |                                                                                                                                                         |
 | `zusammenfassung` | string        | Nein    | LLM-generiert via `bawue_dok.py` (150–250 Worte). Leer wenn LLM deaktiviert.                                                                            |
 | `schlagworte`     | list[string]  | Nein    | LLM-generiert via `bawue_dok.py`. Leer wenn LLM deaktiviert.                                                                                            |

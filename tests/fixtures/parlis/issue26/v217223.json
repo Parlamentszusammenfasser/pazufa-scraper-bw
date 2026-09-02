@@ -1,0 +1,57 @@
+{
+  "titel": "Gesetz zu dem Zweiten Staatsvertrag zur Änderung medienrechtlicher Staatsverträge",
+  "vorgangs_id": "V-217223",
+  "detail_url": "https://parlis.landtag-bw.de/parlis/vorgang/V-217223",
+  "Vorgangstyp": "Gesetzgebung",
+  "Initiative": "Landesregierung",
+  "Aktueller Stand": "Verkündet",
+  "Sachgebiet": "Informationsgesellschaft, Medien; Menschen mit Behinderungen; Rundfunk, Fernsehen",
+  "fundstellen_parsed": [
+    {
+      "raw": "Gesetzentwurf    Landesregierung  22.02.2022 Drucksache 17/1984   (29 S.)",
+      "datum": "22.02.2022",
+      "drucksache": "17/1984",
+      "station_typ": "Gesetzentwurf",
+      "autor_text": "Landesregierung",
+      "seiten": 29,
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1984%5FD.pdf"
+    },
+    {
+      "raw": "Erste Beratung   Plenarprotokoll 17/31 09.03.2022  S. 1662-1666",
+      "datum": "09.03.2022",
+      "plenarprotokoll": "17/31",
+      "station_typ": "Erste Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0031%5F09032022.pdf#page=48"
+    },
+    {
+      "raw": "Beschlussempfehlung und Bericht    Ständiger Ausschuss  24.03.2022 Drucksache 17/2205",
+      "datum": "24.03.2022",
+      "drucksache": "17/2205",
+      "station_typ": "Beschlussempfehlung und Bericht",
+      "ausschuss": "Ständiger Ausschuss",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/2000/17%5F2205%5FD.pdf"
+    },
+    {
+      "raw": "Zweite Beratung   Plenarprotokoll 17/34 06.04.2022  S. 1896",
+      "datum": "06.04.2022",
+      "plenarprotokoll": "17/34",
+      "station_typ": "Zweite Beratung",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0034%5F06042022.pdf#page=70"
+    },
+    {
+      "raw": "Gesetzesbeschluss des Landtags      06.04.2022 Drucksache 17/2290",
+      "datum": "06.04.2022",
+      "drucksache": "17/2290",
+      "station_typ": "Gesetzesbeschluss des Landtags",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/2000/17%5F2290%5FD.pdf"
+    },
+    {
+      "raw": "Gesetz  vom 26. April 2022 Gesetzblatt für Baden-Württemberg 2022 Nr. 15     S. 244-251",
+      "datum": "26.04.2022",
+      "gesetzblatt_jahr": 2022,
+      "gesetzblatt_nr": 15,
+      "station_typ": "Gesetz",
+      "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/gesetzblaetter/2022/GBl202215.pdf#page=8"
+    }
+  ]
+}
