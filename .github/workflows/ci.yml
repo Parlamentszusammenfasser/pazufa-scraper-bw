@@ -1,8 +1,9 @@
 name: CI
 
 # Gates: trivy audit → ruff lint + format → pytest, then semantic-release and a
-# multi-arch (amd64 + arm64) Docker publish. arm/v7 is excluded — the dep stack
-# (tiktoken, cryptography, pillow) has no arm/v7 wheels.
+# multi-arch (amd64 + arm64) Docker publish. amd64 is what Cloud Run runs; arm64
+# keeps `docker compose up` native on Apple Silicon. 32-bit arm/v7 is excluded —
+# the dep stack (tiktoken, cryptography, pillow) has no arm/v7 wheels.
 #
 # Required secrets (Settings → Secrets and variables → Actions):
 #   DOCKER_USERNAME / DOCKER_PASSWORD (Hub access token) / DOCKER_REPO (full path).

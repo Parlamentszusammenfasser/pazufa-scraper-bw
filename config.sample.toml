@@ -7,6 +7,8 @@ max-concurrency = 5
 [cache]
 # redis-host = "localhost"
 # redis-port = 6379
+# Managed Redis (TLS + auth) — takes precedence over host/port. Env: REDIS_URL.
+# redis-url = "rediss://default:<token>@<endpoint>:6379"
 
 [backend]
 # ltzf-api-url = "http://localhost:80"
@@ -17,6 +19,8 @@ scraper-dir = "./src/bawue"
 # scrapers = []
 
 [logging]
+# Dumps one JSONL line per built API object. Off unless set — on a full run it
+# reaches a few hundred MB, which a container filesystem cannot absorb.
 ## api-obj-log = "locallogs"
 
 [llm]
@@ -32,12 +36,15 @@ model = "gpt-5-nano"
 #   gpt-5.4-mini   $0.75/$4.50   ~$0.0104/doc  (best quality in budget tier)
 
 # BaWue-specific configuration
+# The four keys below are the ones that differ per deployment, so each has an env
+# override (in brackets) — a cloud deployment ships this file unchanged and sets
+# those instead of baking its own TOML into the image.
 [bawue]
-parlis-request-delay-s = 1.0
+parlis-request-delay-s = 1.0            # env: PARLIS_REQUEST_DELAY_S
 # WP 17: Landtag constituted - 2021-04-26
 # WP 18: Landtag constituted - 2026-05-01
-wahlperiode = 17
-wahlperiode-start-date = "2021-04-26"
+wahlperiode = 17                        # env: WAHLPERIODE
+wahlperiode-start-date = "2021-04-26"   # env: WAHLPERIODE_START_DATE
 # Only scrape Vorgangstypen supported by the backend. Others map to SONSTIG and are rejected.
 # Available values: "Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag", "Antrag",
 #   "Kleine Anfrage", "Große Anfrage", "Anfrage", "Entschließungsantrag", "Dringlicher Antrag",
@@ -58,7 +65,7 @@ ics-url = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkal
 
 # Beteiligungsportal-specific configuration
 [beteiligung]
-# wahlperiode = 17
+# wahlperiode = 17                      # env: BETEILIGUNG_WAHLPERIODE
 # request-delay-s = 2.0
 
 # Gesetzblatt Baden-Württemberg-specific configuration
@@ -70,5 +77,7 @@ ics-url = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkal
 # request-delay-s = 1.0
 
 [notifications]
-mattermost-hook = "https://chat.pazufa.de/hooks/wnubdt65npd5z8jyazjz5yrd8y"
+# mattermost-hook is read from the MATTERMOST_HOOK env var (keep secrets out of
+# the file — this one is published to Docker Hub inside the image).
+# mattermost-hook = "SET_VIA_ENV"
 mattermost-username = "bawue-scraper"

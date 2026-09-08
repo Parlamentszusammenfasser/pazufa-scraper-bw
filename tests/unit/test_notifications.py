@@ -59,6 +59,19 @@ class TestExtractEnvironment:
         config.config_file = None
         assert _extract_environment(config) == "local"
 
+    def test_environment_env_var_wins(self, monkeypatch):
+        """Cloud deployments run the default config.toml, so the filename says nothing."""
+        monkeypatch.setenv("ENVIRONMENT", "staging")
+        config = MagicMock()
+        config.config_file = "config.toml"
+        assert _extract_environment(config) == "staging"
+
+    def test_empty_environment_env_var_is_ignored(self, monkeypatch):
+        monkeypatch.setenv("ENVIRONMENT", "")
+        config = MagicMock()
+        config.config_file = "config.production.toml"
+        assert _extract_environment(config) == "production"
+
 
 class TestSendMattermostSummary:
     @responses_lib.activate

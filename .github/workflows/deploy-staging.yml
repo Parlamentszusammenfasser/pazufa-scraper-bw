@@ -1,23 +1,37 @@
 name: Deploy staging
 
-# Deploys a released scraper image to the Cloud Run Job `bawue-scraper-staging`
-# and keeps its Cloud Scheduler trigger in sync. Manual on purpose — staging is
-# deployed when you want to test a specific tag, not on every push.
+# Points the Cloud Run Job `bawue-scraper-staging` at an image ci.yml already
+# published to Docker Hub, and keeps its daily Cloud Scheduler trigger in sync.
+# Nothing is built here — Cloud Run pulls the released image directly.
 #
-# One-time setup lives in deploy/gcp/bootstrap.sh (APIs, Artifact Registry,
-# service accounts, Workload Identity Federation, empty Secret Manager entries).
+# Manual on purpose: staging is deployed when you want to test a specific tag,
+# not on every push.
 #
-# Repository variables: GCP_PROJECT_ID, GCP_REGION, WIF_PROVIDER, WIF_SERVICE_ACCOUNT
-# Environment "staging" — variables: COLLECTOR_ID, LTZF_API_URL
-#                         secrets:   LTZF_API_KEY, LLM_PROVIDER_KEY, REDIS_URL
+# One-time setup lives in deploy/gcp/bootstrap.sh (APIs, service accounts,
+# Secret Manager entries, Workload Identity Federation).
+#
+# Repository variables: GCP_PROJECT_ID, GCP_REGION, DOCKER_IMAGE,
+#                       WIF_PROVIDER, WIF_SERVICE_ACCOUNT
+# Environment "staging" — variables: COLLECTOR_ID, LTZF_API_URL (required),
+#                                    WAHLPERIODE, WAHLPERIODE_START_DATE,
+#                                    PARLIS_REQUEST_DELAY_S,
+#                                    BETEILIGUNG_WAHLPERIODE (all optional —
+#                                    unset falls back to the image's config.toml)
+#
+# Secret *values* live only in Secret Manager (see bootstrap.sh); this workflow
+# references them by name and never handles them.
 
 on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Docker Hub tag of the scraper image to deploy'
+        description: 'Docker Hub tag to deploy (prefer an explicit semver over `latest`)'
         required: true
         default: latest
+      smoke_test:
+        description: 'Execute the job once after deploying (turn off for the first, cold-cache run)'
+        type: boolean
+        default: true
 
 concurrency:
   group: deploy-staging
@@ -34,72 +48,67 @@ jobs:
     env:
       JOB_NAME: bawue-scraper-staging
       SECRET_PREFIX: bawue-staging
+      ENVIRONMENT: staging
       REGION: ${{ vars.GCP_REGION }}
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      # Interpolated via env, never inline in a `run:` body (script injection).
+      IMAGE_TAG: ${{ inputs.image_tag }}
+      DOCKER_IMAGE: ${{ vars.DOCKER_IMAGE }}
 
     steps:
-      - uses: actions/checkout@v5
+      # gcloud accepts empty values, so an unset variable would deploy green and
+      # only fail at execution time. Fail here instead, where the cause is obvious.
+      - name: Check required configuration
+        env:
+          COLLECTOR_ID: ${{ vars.COLLECTOR_ID }}
+          LTZF_API_URL: ${{ vars.LTZF_API_URL }}
+        run: |
+          for var in REGION PROJECT_ID DOCKER_IMAGE IMAGE_TAG COLLECTOR_ID LTZF_API_URL; do
+            if [ -z "${!var}" ]; then echo "::error::$var is not set"; exit 1; fi
+          done
+          case "$IMAGE_TAG" in
+            *[!A-Za-z0-9._-]*) echo "::error::Invalid image tag: $IMAGE_TAG"; exit 1 ;;
+          esac
 
       - uses: google-github-actions/auth@v3
         with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v3
 
-      - name: Resolve image name
-        id: img
-        run: |
-          echo "image=${REGION}-docker.pkg.dev/${PROJECT_ID}/pazufa/bawue-scraper:${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
-
-      # Cloud Run cannot pull from Docker Hub, so the released image is rebuilt
-      # with the staging config baked in (see deploy/gcp/Dockerfile) and pushed to
-      # Artifact Registry. amd64 only — that is what Cloud Run runs.
-      - name: Build config-baked image
-        run: |
-          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-          docker build \
-            --file deploy/gcp/Dockerfile \
-            --build-arg BASE_IMAGE="${{ secrets.DOCKER_REPO }}:${{ inputs.image_tag }}" \
-            --build-arg CONFIG_FILE=config.staging.toml \
-            --tag "${{ steps.img.outputs.image }}" \
-            .
-          docker push "${{ steps.img.outputs.image }}"
-
-      # GitHub is the source of truth for secret values; Secret Manager is where
-      # the job reads them from. Adding an identical version is cheap and keeps
-      # this step idempotent.
-      - name: Sync secrets to Secret Manager
-        env:
-          LTZF_API_KEY: ${{ secrets.LTZF_API_KEY }}
-          LLM_PROVIDER_KEY: ${{ secrets.LLM_PROVIDER_KEY }}
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-        run: |
-          sync() {  # sync <secret-suffix> <value>
-            if [ -z "$2" ]; then echo "::error::Missing secret for $1"; exit 1; fi
-            printf '%s' "$2" | gcloud secrets versions add "${SECRET_PREFIX}-$1" --data-file=-
-          }
-          sync ltzf-api-key    "$LTZF_API_KEY"
-          sync llm-provider-key "$LLM_PROVIDER_KEY"
-          sync redis-url       "$REDIS_URL"
-
       # `jobs deploy` creates or updates, so no branch on first run.
       # 4Gi: the scraper caps itself at 2 GB with MAX_CONCURRENCY=3, and
       # Tesseract/poppler are memory-hungry.
+      # 6h task timeout: the steady-state run is ~20 min, but the first run against
+      # an empty cache is a full-Wahlperiode backfill.
+      # Env vars carry everything environment-specific; empty ones are ignored by
+      # the config loader, which then falls back to the image's config.toml.
       - name: Deploy Cloud Run Job
+        env:
+          COLLECTOR_ID: ${{ vars.COLLECTOR_ID }}
+          LTZF_API_URL: ${{ vars.LTZF_API_URL }}
+          WAHLPERIODE: ${{ vars.WAHLPERIODE }}
+          WAHLPERIODE_START_DATE: ${{ vars.WAHLPERIODE_START_DATE }}
+          PARLIS_REQUEST_DELAY_S: ${{ vars.PARLIS_REQUEST_DELAY_S }}
+          BETEILIGUNG_WAHLPERIODE: ${{ vars.BETEILIGUNG_WAHLPERIODE }}
         run: |
           gcloud run jobs deploy "$JOB_NAME" \
-            --image "${{ steps.img.outputs.image }}" \
+            --image "docker.io/${DOCKER_IMAGE}:${IMAGE_TAG}" \
             --region "$REGION" \
             --cpu 2 \
             --memory 4Gi \
-            --task-timeout 3600s \
+            --task-timeout 21600s \
             --max-retries 1 \
             --service-account "bawue-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
-            --set-env-vars "PYTHONUNBUFFERED=1,MAX_CONCURRENCY=3,COLLECTOR_ID=${{ vars.COLLECTOR_ID }},LTZF_API_URL=${{ vars.LTZF_API_URL }}" \
-            --set-secrets "LTZF_API_KEY=${SECRET_PREFIX}-ltzf-api-key:latest,LLM_PROVIDER_KEY=${SECRET_PREFIX}-llm-provider-key:latest,REDIS_URL=${SECRET_PREFIX}-redis-url:latest"
+            --set-env-vars "PYTHONUNBUFFERED=1,MAX_CONCURRENCY=3,ENVIRONMENT=${ENVIRONMENT},COLLECTOR_ID=${COLLECTOR_ID},LTZF_API_URL=${LTZF_API_URL},WAHLPERIODE=${WAHLPERIODE},WAHLPERIODE_START_DATE=${WAHLPERIODE_START_DATE},PARLIS_REQUEST_DELAY_S=${PARLIS_REQUEST_DELAY_S},BETEILIGUNG_WAHLPERIODE=${BETEILIGUNG_WAHLPERIODE}" \
+            --set-secrets "LTZF_API_KEY=${SECRET_PREFIX}-ltzf-api-key:latest,LLM_PROVIDER_KEY=${SECRET_PREFIX}-llm-provider-key:latest,REDIS_URL=${SECRET_PREFIX}-redis-url:latest,MATTERMOST_HOOK=${SECRET_PREFIX}-mattermost-hook:latest"
 
-      # Twice daily, matching the cadence the hosting decision assumed.
+      # Daily. --max-retry-attempts so one transient 5xx from the Run Admin API
+      # doesn't silently skip a day. `update` leaves a paused job paused, so
+      # resume explicitly — otherwise a deploy after `scheduler jobs pause` looks
+      # successful but never fires.
       - name: Ensure Cloud Scheduler trigger
         run: |
           URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/${JOB_NAME}:run"
@@ -110,19 +119,34 @@ jobs:
           fi
           gcloud scheduler jobs "$VERB" http "$JOB_NAME" \
             --location "$REGION" \
-            --schedule "0 3,15 * * *" \
+            --schedule "0 3 * * *" \
             --time-zone "Europe/Berlin" \
             --uri "$URI" \
             --http-method POST \
+            --max-retry-attempts 3 \
             --oauth-service-account-email "bawue-scheduler@${PROJECT_ID}.iam.gserviceaccount.com"
+          gcloud scheduler jobs resume "$JOB_NAME" --location "$REGION" >/dev/null 2>&1 || true
+
+      # Proves the image actually starts and the wiring (secrets, Redis, backend)
+      # holds, instead of waiting for 03:00 to find out. Also measures run
+      # duration, which is the entire cost driver.
+      # Bounded well under the job's 6h task timeout: a cold-cache backfill can
+      # outlast any sensible CI step. Timing out here does not stop the execution —
+      # it keeps running in Cloud Run — so turn the smoke test off for the first
+      # run against an empty cache and follow the logs instead.
+      - name: Smoke test
+        if: inputs.smoke_test
+        timeout-minutes: 45
+        run: gcloud run jobs execute "$JOB_NAME" --region "$REGION" --wait
 
       - name: Summary
+        if: always()
         run: |
           {
             echo "### Deployed \`$JOB_NAME\`"
             echo ""
-            echo "- image: \`${{ steps.img.outputs.image }}\`"
-            echo "- schedule: \`0 3,15 * * *\` Europe/Berlin"
+            echo "- image: \`docker.io/${DOCKER_IMAGE}:${IMAGE_TAG}\`"
+            echo "- schedule: \`0 3 * * *\` Europe/Berlin"
             echo ""
             echo "Run now: \`gcloud run jobs execute $JOB_NAME --region $REGION\`"
           } >> "$GITHUB_STEP_SUMMARY"

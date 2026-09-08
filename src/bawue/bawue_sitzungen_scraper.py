@@ -154,7 +154,7 @@ class BawueSitzungenScraper(SitzungsScraper):
             logger.error("API Error: %s", e)
             if e.status == 422:
                 logger.error("Unprocessable Entity for date %s", item[0])
-                self.log_item(item, True)
+                self.log_item(item)
             elif e.status == 401:
                 logger.critical("Authentication failed. Check your API key.")
             self._failed_dates += 1

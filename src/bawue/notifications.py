@@ -1,6 +1,7 @@
 """Mattermost webhook notifications for scraper run summaries."""
 
 import logging
+import os
 import re
 
 import requests
@@ -14,6 +15,11 @@ _ENV_PATTERN = re.compile(r"config\.(\w+)\.toml$")
 
 
 def _extract_environment(config: BawueConfig) -> str:
+    # Cloud deployments run the image's default config.toml, so the filename
+    # carries no environment — they set ENVIRONMENT instead.
+    env = os.getenv("ENVIRONMENT")
+    if env:
+        return env
     config_file = getattr(config, "config_file", None)
     if config_file:
         m = _ENV_PATTERN.search(str(config_file))

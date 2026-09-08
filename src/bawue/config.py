@@ -20,6 +20,9 @@ from bawue.cache import BawueCache
 
 logger = logging.getLogger(__name__)
 
+# Redacted by --dump-config. REDIS_URL carries the Upstash token in its userinfo.
+_SECRET_ATTRS = frozenset({"api_key", "llm_provider_key", "redis_url"})
+
 
 class ConfigProp:
     """Captures the parsing behaviour of a single config option."""
@@ -221,6 +224,7 @@ class BawueConfig:
         for config in self.configurations:
             name = config.cfg or config.attr
             missing = config.required and config.value is None
-            output += f"{config.value_set_by}{name:.>25}: {config.value}"
+            value = "***" if config.value and config.attr in _SECRET_ATTRS else config.value
+            output += f"{config.value_set_by}{name:.>25}: {value}"
             output += " MISSING\n" if missing else "\n"
         return output

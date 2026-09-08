@@ -1,33 +1,31 @@
 # Hosting the BaWue Scraper
 
 **Decision: GCP Cloud Run Jobs (`europe-west3`) + Upstash Redis (`eu-central-1`),
-triggered by Cloud Scheduler, logs to Cloud Logging.**
+triggered daily by Cloud Scheduler, logs to Cloud Logging.**
 
 *Prices checked 2026-09-02. Supersedes the earlier netcup VPS decision.*
+Runbook: [`deploy/gcp/README.md`](../deploy/gcp/README.md).
 
 ## Why
 
-The scraper is a batch job, not a server: `config.staging.toml` already sets `once = true`,
-and the intended cadence is twice daily. Paying for a VPS 24/7 to run ~20 minutes a day is
-paying for idle. Cloud Run Jobs bill only while a task executes.
+The scraper is a batch job, not a server: it runs with `--once` and the intended
+cadence is daily. Paying for a VPS 24/7 to run ~20 minutes a day is paying for idle.
+Cloud Run Jobs bill only while a task executes.
 
-It also buys real IaC. netcup has **no server-provisioning API** — their CCP webservice covers
-DNS only, so ordering a VPS is a manual browser checkout that Terraform can never reproduce.
-GCP has a first-class Terraform provider, so the entire GCP stack — job, scheduler, secrets,
-IAM — is declared in the repo and applied from GitHub Actions. The Upstash databases are
-created by hand and referenced as secrets.
+The runner-up was a VPS. netcup has **no server-provisioning API** — their CCP
+webservice covers DNS only, so ordering a VPS is a manual browser checkout that no
+tooling can reproduce. On GCP the whole stack is a `gcloud` script in the repo
+(`deploy/gcp/bootstrap.sh`) plus a workflow, both idempotent. The Upstash databases
+are created by hand and referenced as secrets.
 
-`cloudbuild.yaml` in the repo root already targets a Cloud Run Job named `bawue-scraper` in
-`europe-west3`, so this is a return to a previously scaffolded path, not a greenfield one.
-
-The tradeoff accepted: two vendors instead of one, US-owned hyperscaler, and a variable bill
-instead of a fixed one.
+The tradeoff accepted: two vendors instead of one, a US-owned hyperscaler, and a
+variable bill instead of a fixed one.
 
 ## Alternatives considered
 
 | Option | €/mo | Verdict |
 |---|---|---|
-| **Cloud Run Jobs + Upstash** | **~2–5 variabel** | chosen — IaC end to end, no idle cost |
+| **Cloud Run Jobs + Upstash** | **~0–2 variabel** | chosen — scriptable end to end, no idle cost |
 | netcup VPS 500 G12 | 5,91 | previously chosen; no provisioning API, pays for idle |
 | Hetzner CX23 | ~7,13 | good API + Terraform provider, but still a 24/7 box |
 | Strato VPS M | 8,00 + 9 setup | existing account, worst value, 12 mo lock-in |
@@ -36,8 +34,8 @@ instead of a fixed one.
 ## Architecture
 
 ```
-Cloud Scheduler (0 3,15 * * *)
-    → Cloud Run Job `bawue-scraper-{staging,prod}`   2 vCPU / 4 GiB, once = true
+Cloud Scheduler (0 3 * * *)
+    → Cloud Run Job `bawue-scraper-{staging,prod}`   2 vCPU / 4 GiB, --once
         → Upstash Redis (one DB per environment, eu-central-1)
         → PaZuFa backend  (staging.api.pazufa.de / api.pazufa.de)
         → LLM API
@@ -45,97 +43,93 @@ Cloud Scheduler (0 3,15 * * *)
 ```
 
 4 GiB is the floor: the scraper is capped at 2 GB with `MAX_CONCURRENCY: 3`, and
-Tesseract/poppler are memory-hungry. Cloud Run Jobs allow up to 32 GiB and a 24 h task
-timeout, so there is headroom.
+Tesseract/poppler are memory-hungry. Cloud Run Jobs allow up to 32 GiB and a 168 h
+task timeout, so there is headroom.
 
-**Image**: Cloud Run cannot pull from Docker Hub. CI must additionally push to Artifact
-Registry (`europe-west3-docker.pkg.dev/...`), or an Artifact Registry remote repository must
-mirror the Hub image. The existing Docker Hub publish stays for the Raspberry Pi path.
+**Image**: Cloud Run pulls the multi-arch image `ci.yml` already publishes to Docker
+Hub — no Artifact Registry, no cloud-specific rebuild. Google recommends an Artifact
+Registry remote repository in front of Docker Hub for higher availability; that is a
+one-line change to `--image` if Hub availability ever bites.
+
+**Config**: the image ships `config.sample.toml` as its `config.toml`, and everything
+environment-specific is an env var on the job. Cloud Run has no bind mounts, so the
+alternative would have been baking a per-environment TOML into a derived image — a
+second artifact to build, scan and keep in sync, for four scalar values.
 
 ## Redis — one Upstash DB per environment
 
-Staging and production each get their own Upstash database, created manually in the console.
-Full isolation, and no shared command budget. Upstash has **no logical databases**
-(`SELECT n` is unsupported — only db 0 exists), so a shared instance would have needed key
-prefixes; separate databases make that unnecessary.
-
-One code change is required. `cache.py:31` constructs `redis.Redis(host=..., port=...)` with
-no password and no TLS; Upstash requires both. Add a `cache.redis-url` / `REDIS_URL` config
-prop and use `redis.Redis.from_url(url, decode_responses=True)`. Keep the existing host/port
-props so the local Docker Compose Redis still works unchanged.
+Staging and production each get their own Upstash database, created manually in the
+console. Full isolation, and no shared command budget. Upstash has **no logical
+databases** (`SELECT n` is unsupported — only db 0 exists), so a shared instance would
+have needed key prefixes; separate databases make that unnecessary.
 
 Use Upstash's **native TLS endpoint** (`rediss://default:<token>@<endpoint>.upstash.io:6379`),
-not the REST endpoint — the Python `redis` client speaks the Redis protocol, not Upstash's
-REST API.
+not the REST endpoint — the Python `redis` client speaks the Redis protocol. The
+`cache.redis-url` / `REDIS_URL` config prop exists for exactly this: host/port carries
+neither TLS nor auth, so the URL form is required, and it takes precedence when set.
 
-Free tier per database: 256 MB, 500 K commands/month. Storage is not the constraint; command
-volume is, at ~60 runs/month.
+Free tier per database: 256 MB storage, 500 K commands/month, **10 GB/month egress**.
+Storage is not the constraint. Command volume is not either at ~30 runs/month — but
+the pipeline issues a `GET` per listed item on every run, cached ones included, so
+egress is the one to watch. Measure it on the first staging runs.
 
 ## Cost
 
-Cloud Run tier-1 rates at 2 vCPU / 4 GiB work out to ~$0.21 per execution-hour. At 60 runs
-per month:
+`europe-west3` is a **Tier 2** region, and Cloud Run Jobs bill **instance-based**
+(all jobs do, unlike services). The instance-based free tier — 240 K vCPU-seconds and
+450 K GiB-seconds per month — is the number that matters here.
 
-| Run length | $/mo per environment |
-|---|---|
-| 10 min | ~2.10 |
-| 20 min | ~4.20 |
+At 2 vCPU / 4 GiB, 30 runs/month:
 
-Upstash free tier: €0. Cloud Logging free tier: 50 GiB/month ingest, 30-day retention, €0.
+| Run length | vCPU-s | GiB-s | vs. free tier |
+|---|---|---|---|
+| 10 min | 36 K | 72 K | ~16 % |
+| 20 min | 72 K | 144 K | ~32 % |
 
-Cloud Run's monthly free tier (180 K vCPU-s / 360 K GiB-s) would cover roughly the first 25
-execution-hours and make this nearly free — **verify it applies to Jobs and not only Services
-before relying on it.** The figures above assume it does not.
+So staging alone is **€0**. Two caveats before treating that as permanent:
 
-Actual run duration is the whole cost driver and is not yet measured. Measure it on the first
-staging runs before extrapolating to production.
+- The free tier is per **billing account**, aggregated across projects. Staging plus
+  production roughly doubles the usage — still inside the cap at these run lengths,
+  but not with much room if runs get longer.
+- The free tier is applied as a discount computed at **Tier 1** rates, so a Tier 2
+  region owes the delta. Confirm the Tier 2 rate in the console before writing a
+  figure down.
+
+Upstash free tier: €0. Cloud Logging free tier: 50 GiB/month ingest, 30-day
+retention, €0.
+
+Actual run duration is the whole cost driver and is not yet measured — the deploy
+workflow's smoke test executes the job once and reports it.
 
 ## Logging — Cloud Logging
 
-stdout from a Cloud Run Job is captured natively. No Alloy sidecar, no Grafana Cloud account,
-no `logrotate` — this drops an entire moving part versus the VPS design, and 30-day retention
-beats Grafana Cloud Free's 14 days.
+stdout from a Cloud Run Job is captured natively. No Alloy sidecar, no Grafana Cloud
+account, no `logrotate` — this drops an entire moving part versus the VPS design, and
+30-day retention beats Grafana Cloud Free's 14 days.
 
-The entrypoint's `| tee /app/locallogs/stdout.log` becomes redundant on Cloud Run (the
-container filesystem is ephemeral) but is harmless and still serves the Docker Compose path.
-The `locallogs/*.jsonl` API-object dumps written when `api-obj-log = "locallogs"` **do not
-survive** a job execution — set `api-obj-log` to empty in the cloud config, or ship them to
-GCS if they are wanted.
+The `locallogs/*.jsonl` API-object dumps are off unless `api-obj-log` is configured,
+and the job does not set it: the container filesystem is in-memory, so those writes
+would consume the task's own memory budget for a file discarded when it exits.
 
 ## Secrets
 
-Secret Manager, referenced by the job definition — never baked into the image or the
-Terraform state as plaintext:
+Secret Manager, referenced by name from the job definition — never baked into an
+image and never copied through CI:
 
 `LTZF_API_KEY` · `LLM_PROVIDER_KEY` · `REDIS_URL` (contains the Upstash token) ·
 `MATTERMOST_HOOK`
 
-The Mattermost webhook is currently **hardcoded at `config.staging.toml:57` in a public
-repo** and has no env override in `config.py` — it needs a `MATTERMOST_HOOK` prop and
-rotation.
+Each is readable only by the runtime service account, granted per secret rather than
+project-wide. GitHub Actions never sees a value, so rotation is a
+`gcloud secrets versions add` that takes effect on the next run without a redeploy.
 
-## Deployment — gcloud from GitHub Actions
-
-No Terraform. `deploy/gcp/bootstrap.sh` is a one-time script (APIs, Artifact
-Registry, service accounts, Secret Manager entries, Workload Identity Federation),
-and `.github/workflows/deploy-staging.yml` uses `gcloud` directly — `run jobs
-deploy` and `scheduler jobs create/update` are both create-or-update, so no state
-file is needed to stay idempotent.
-
-GitHub Actions authenticates via **Workload Identity Federation**, not a
-long-lived service-account JSON key. `staging` and `production` are GitHub
-Environments so production can require manual approval.
-
-Cloud Run cannot pull from Docker Hub, and it has no bind mounts — so the deploy
-workflow rebuilds the released image with the environment's TOML baked in
-(`deploy/gcp/Dockerfile`, a two-line layer on top of the CI-built image) and
-pushes it to Artifact Registry.
-
-See `deploy/gcp/README.md` for the runbook.
+> **The Mattermost webhook committed at `config.sample.toml:73` was published to a
+> public repo and baked into every Docker Hub image. It has been replaced with a
+> placeholder here — the URL itself still needs rotating.**
 
 ## Deferred
 
 - **Auto-deploy on release.** The staging workflow is `workflow_dispatch` only.
 - **Production.** The same workflow with the environment names swapped.
-- **`MATTERMOST_HOOK` config prop.** The webhook is config-file-only today, so it
-  is baked into the image; it has no env override and the current URL is public.
+- **Artifact Registry remote repository** in front of Docker Hub, if Hub
+  availability or rate limits ever affect a run.
