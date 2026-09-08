@@ -2156,6 +2156,39 @@ class TestPageHintExtraction:
         assert "Seiteninhalt Nummer 1" not in result
         assert result != text
 
+    def test_extract_relevant_pages_first_marker_at_string_start_issue27(self):
+        """Issue #27: a #page=1 anchor must return page 1, not silently substitute
+        whatever page follows it.
+
+        Real-world regression: GBl2026012.pdf (V-244180) has no preamble before the
+        page-1 marker (kreuzberg emits it as the very first thing in the extracted
+        text), so the marker's required leading "\\n\\n" never existed. The old regex
+        failed to match it, `_extract_relevant_pages` treated the whole of page 1 as
+        unlabeled "text before the first marker" and discarded it outright — leaving
+        only the page 2 signature block, which was then persisted as `volltext` and
+        summarized by the LLM as if it were the law's content.
+        """
+        text = (
+            "<!-- PAGE 1 -->\n\n"
+            "Gesetz zur Änderung des Juristenausbildungsgesetzes. Artikel 1 regelt ..."
+            "\n\n<!-- PAGE 2 -->\n\n"
+            "Stuttgart, den 10. Februar 2026\nDie Regierung des Landes Baden-Württemberg:"
+        )
+        result = _extract_relevant_pages(text, start_page=1, max_pages=1)
+        assert "Artikel 1" in result
+        assert "Die Regierung des Landes" not in result
+
+    def test_extract_relevant_pages_trailing_marker_without_content_issue27(self):
+        """Issue #27 (symmetric edge): a marker with nothing after it (last page has
+        no extracted content) must not leak its raw "<!-- PAGE N -->" syntax into the
+        previous page's text.
+        """
+        page_one = "Seite eins mit ausreichend langem Inhalt, damit der MIN_TEXT_LENGTH-Rückfall nicht greift."
+        text = f"\n\n<!-- PAGE 1 -->\n\n{page_one}\n\n<!-- PAGE 2 -->"
+        result = _extract_relevant_pages(text, start_page=1, max_pages=1)
+        assert "<!-- PAGE 2 -->" not in result
+        assert result.strip() == page_one
+
 
 # ---------------------------------------------------------------------------
 # TestClearHashCache
