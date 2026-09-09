@@ -70,7 +70,6 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 | `gremium`        | Gremium                     | Ja      | Aus PARLIS-Fundstellen abgeleitet — siehe [architecture.md](architecture.md) |
 | `titel`          | string                      | Nein    |                                                                              |
 | `schlagworte`    | list[string]                | Nein    |                                                                              |
-| `trojanergefahr` | integer (1–10)              | Nein    |                                                                              |
 
 ### Dokument
 

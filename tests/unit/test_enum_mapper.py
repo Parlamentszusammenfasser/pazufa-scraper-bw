@@ -340,10 +340,10 @@ class TestDokumententypMapping:
             ("Beschluss des Landtags", False, Doktyp.MITTEILUNG),
             ("Zustimmung", False, Doktyp.MITTEILUNG),
             ("Annahme", False, Doktyp.MITTEILUNG),
-            # Gesetzblatt → mitteilung
-            ("Gesetzblatt", False, Doktyp.MITTEILUNG),
+            # Gesetzblatt → gesetz (DD-051)
+            ("Gesetzblatt", False, Doktyp.GESETZ),
             ("Bekanntmachung", False, Doktyp.MITTEILUNG),
-            ("Gesetz", False, Doktyp.MITTEILUNG),
+            ("Gesetz", False, Doktyp.GESETZ),
         ],
     )
     def test_known_patterns(self, context, is_vorparl, expected):
@@ -444,6 +444,10 @@ class TestEnumValuesExistInFramework:
             "tops-aend",
             "tops-ergz",
             "sonstig",
+            # Added by spec 0.2.5: "gesetz" is mapped (Gesetzblatt publication,
+            # DD-051), "eckpunktepapier" is known but currently unmapped.
+            "gesetz",
+            "eckpunktepapier",
         }
         framework_values = {m.value for m in Doktyp}
         assert bawue_values == framework_values

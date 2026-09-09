@@ -69,12 +69,14 @@ def put_kalender(
     sitzungen: list[Sitzung],
 ) -> None:
     """PUT all sessions for a date; raise :class:`BawueApiError` on a non-201/204 status."""
+    # Spec 0.2.5 dropped the X-Scraper-Id header from this endpoint while
+    # PUT /api/v2/vorgang kept it, so *scraper_id* is accepted for call-site
+    # symmetry but no longer sent.
     r = _kal_date_put.sync_detailed(
         parlament,
         datum,
         client=client,
         body=sitzungen,
-        x_scraper_id=str(scraper_id),
     )
     if r.status_code not in (201, 204):
         raise BawueApiError(int(r.status_code), r.content, "kal_date_put")

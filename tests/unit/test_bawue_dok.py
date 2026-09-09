@@ -49,7 +49,6 @@ SAMPLE_LLM_RESPONSE_ENTWURF = json.dumps(
         "schlagworte": ["umwelt", "klimaschutz", "energie"],
         "zusammenfassung": "Ein Gesetzentwurf zur Förderung erneuerbarer Energien.",
         "kurztitel": "Erneuerbare-Energien-Gesetz",
-        "trojanergefahr": 3,
         "vorwort": "Ziel dieses Gesetzentwurfs ist die Förderung erneuerbarer Energien.",
     }
 )
@@ -69,7 +68,6 @@ SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF = json.dumps(
         "zusammenfassung": "Empfehlung zur Annahme des Haushaltsgesetzes.",
         "kurztitel": "Haushaltsgesetz",
         "meinung": 5,
-        "trojanergefahr": 2,
     }
 )
 
@@ -339,7 +337,7 @@ class TestExtractSemantics:
         assert result["schlagworte"] == ["umwelt", "klimaschutz", "energie"]
         assert "Gesetzentwurf" in result["zusammenfassung"]
         assert result["kurztitel"] == "Erneuerbare-Energien-Gesetz"
-        assert result["trojanergefahr"] == 3
+        assert "Förderung" in result["vorwort"]
 
     @pytest.mark.asyncio
     async def test_raises_on_invalid_json_from_provider(self):
@@ -614,9 +612,9 @@ class TestParseLlmResponse:
 
 
 class TestPromptForDoktyp:
-    def test_entwurf_prompt_has_trojanergefahr(self):
+    def test_entwurf_prompt_has_vorwort(self):
         prompt = _prompt_for_doktyp(Doktyp.ENTWURF)
-        assert "trojanergefahr" in prompt.lower() or "Trojanergefahr" in prompt
+        assert "vorwort" in prompt.lower()
 
     def test_preparl_entwurf_uses_entwurf_prompt(self):
         assert _prompt_for_doktyp(Doktyp.PREPARL_ENTWURF) == _prompt_for_doktyp(Doktyp.ENTWURF)
@@ -624,18 +622,15 @@ class TestPromptForDoktyp:
     def test_stellungnahme_prompt_has_meinung(self):
         prompt = _prompt_for_doktyp(Doktyp.STELLUNGNAHME)
         assert "meinung" in prompt.lower() or "Meinung" in prompt
-        assert "trojanergefahr" not in prompt.lower()
 
-    def test_beschlussempf_prompt_has_both(self):
+    def test_beschlussempf_prompt_has_meinung(self):
         prompt = _prompt_for_doktyp(Doktyp.BESCHLUSSEMPF)
         assert "meinung" in prompt.lower() or "Meinung" in prompt
-        assert "trojanergefahr" in prompt.lower() or "Trojanergefahr" in prompt
 
     def test_redeprotokoll_uses_dedicated_neutral_prompt(self):
         """Issue #49: REDEPROTOKOLL gets its own prompt (not the generic one),
         asking for a session-level summary rather than a single-bill one."""
         prompt = _prompt_for_doktyp(Doktyp.REDEPROTOKOLL)
-        assert "trojanergefahr" not in prompt.lower()
         assert "meinung" not in prompt.lower()
         assert prompt != _prompt_for_doktyp(Doktyp.SONSTIG)
 
@@ -672,7 +667,7 @@ class TestEnrichDokument:
         assert result.dokument.zusammenfassung == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
         assert result.dokument.schlagworte == ["umwelt", "klimaschutz", "energie"]
         assert result.dokument.kurztitel == "Erneuerbare-Energien-Gesetz"
-        assert result.trojanergefahr == 3
+        assert result.dokument.vorwort is not None
 
     @pytest.mark.asyncio
     async def test_preserves_parlis_metadata(self):
@@ -700,10 +695,9 @@ class TestEnrichDokument:
             result = await enrich_dokument(session, llm, dok)
 
         assert result.dokument.meinung == 4
-        assert result.trojanergefahr is None
 
     @pytest.mark.asyncio
-    async def test_beschlussempf_gets_meinung_and_trojanergefahr(self):
+    async def test_beschlussempf_gets_meinung(self):
         dok = _make_plain_dokument(typ=Doktyp.BESCHLUSSEMPF)
         session = MagicMock()
         llm = _make_llm_mock()
@@ -712,22 +706,10 @@ class TestEnrichDokument:
             result = await enrich_dokument(session, llm, dok)
 
         assert result.dokument.meinung == 5
-        assert result.trojanergefahr == 2
-
-    @pytest.mark.asyncio
-    async def test_generic_has_no_trojanergefahr(self):
-        dok = _make_plain_dokument(typ=Doktyp.MITTEILUNG)
-        session = MagicMock()
-        llm = _make_llm_mock()
-
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC):
-            result = await enrich_dokument(session, llm, dok)
-
-        assert result.trojanergefahr is None
 
     @pytest.mark.asyncio
     async def test_text_only_fallback_on_llm_failure(self):
-        """LLM fails → volltext+hash set, no LLM fields, no trojanergefahr."""
+        """LLM fails → volltext+hash set, no LLM fields."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
         llm = _make_llm_mock()
@@ -746,7 +728,6 @@ class TestEnrichDokument:
         # No LLM fields
         assert result.dokument.zusammenfassung is UNSET
         assert result.dokument.schlagworte is UNSET
-        assert result.trojanergefahr is None
 
     @pytest.mark.asyncio
     async def test_enrich_dokument_with_page_hint(self):
@@ -822,7 +803,7 @@ class TestEnrichDokument:
 
     @pytest.mark.asyncio
     async def test_metadata_only_fallback_on_download_failure(self):
-        """PDF download fails → original Dokument unchanged, no trojanergefahr."""
+        """PDF download fails → original Dokument unchanged."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
         llm = AsyncMock()
@@ -834,7 +815,6 @@ class TestEnrichDokument:
         assert result.dokument.volltext == ""
         assert result.dokument.hash_ == ""
         assert result.dokument.zusammenfassung is UNSET
-        assert result.trojanergefahr is None
 
     @pytest.mark.asyncio
     async def test_metadata_only_fallback_on_empty_extracted_text(self):
@@ -853,7 +833,6 @@ class TestEnrichDokument:
             result = await enrich_dokument(session, llm, dok)
 
         assert result.dokument is dok
-        assert result.trojanergefahr is None
         mock_llm.assert_not_called()
 
     @pytest.mark.asyncio
@@ -1160,7 +1139,7 @@ class TestHashCache:
         # Both results have the same semantics
         assert first.dokument.zusammenfassung == second.dokument.zusammenfassung
         assert first.dokument.schlagworte == second.dokument.schlagworte
-        assert first.trojanergefahr == second.trojanergefahr
+        assert first.dokument.kurztitel == second.dokument.kurztitel
 
     @pytest.mark.asyncio
     async def test_cache_miss_calls_llm(self):
@@ -1201,7 +1180,7 @@ class TestHashCache:
 
         Regression: the cache key used to depend only on the PDF hash, so enriching
         the same PDF as ENTWURF then as STELLUNGNAHME returned the Entwurf's semantics
-        (with trojanergefahr) instead of running the Stellungnahme prompt (with meinung).
+        (with vorwort) instead of running the Stellungnahme prompt (with meinung).
         """
         session = MagicMock()
         llm = _make_llm_mock()
@@ -1547,7 +1526,6 @@ class TestEnrichDokumentSanitization:
                 "schlagworte": ["umwelt"],
                 "zusammenfassung": "Der Landtag hat das Gesetz beschlossen.</narrow>",
                 "kurztitel": "Klima",
-                "trojanergefahr": 3,
                 "vorwort": "Ziel: Klimaschutz <hr/>",
             }
         )
@@ -1738,32 +1716,7 @@ class TestJsonStructuredOutput:
 
 
 class TestValidateScores:
-    """Post-extraction validation of trojanergefahr (1-10) and meinung (1-5)."""
-
-    def test_valid_trojanergefahr_unchanged(self):
-        data = {"trojanergefahr": 5, "schlagworte": ["test"]}
-        result = _validate_scores(data)
-        assert result["trojanergefahr"] == 5
-
-    def test_trojanergefahr_clamped_to_min(self):
-        data = {"trojanergefahr": 0}
-        result = _validate_scores(data)
-        assert result["trojanergefahr"] == 1
-
-    def test_trojanergefahr_clamped_to_max(self):
-        data = {"trojanergefahr": 15}
-        result = _validate_scores(data)
-        assert result["trojanergefahr"] == 10
-
-    def test_trojanergefahr_negative_clamped(self):
-        data = {"trojanergefahr": -3}
-        result = _validate_scores(data)
-        assert result["trojanergefahr"] == 1
-
-    def test_trojanergefahr_non_int_removed(self):
-        data = {"trojanergefahr": "hoch", "schlagworte": ["test"]}
-        result = _validate_scores(data)
-        assert result.get("trojanergefahr") is None
+    """Post-extraction validation of the meinung (1-5) range."""
 
     def test_valid_meinung_unchanged(self):
         data = {"meinung": 3}
@@ -1785,21 +1738,15 @@ class TestValidateScores:
         result = _validate_scores(data)
         assert result.get("meinung") is None
 
-    def test_both_scores_validated(self):
-        data = {"trojanergefahr": 0, "meinung": 10}
-        result = _validate_scores(data)
-        assert result["trojanergefahr"] == 1
-        assert result["meinung"] == 5
-
     def test_no_scores_present(self):
         data = {"schlagworte": ["test"], "zusammenfassung": "Test."}
         result = _validate_scores(data)
         assert result == data
 
-    def test_float_trojanergefahr_truncated(self):
-        data = {"trojanergefahr": 3.7}
+    def test_float_meinung_truncated(self):
+        data = {"meinung": 3.7}
         result = _validate_scores(data)
-        assert result["trojanergefahr"] == 3
+        assert result["meinung"] == 3
 
 
 # ---------------------------------------------------------------------------

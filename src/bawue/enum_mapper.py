@@ -144,10 +144,11 @@ DOKUMENTENTYP_MAP: dict[str, Doktyp] = {
     "Beschluss des Landtags": Doktyp.MITTEILUNG,
     "Zustimmung": Doktyp.MITTEILUNG,
     "Annahme": Doktyp.MITTEILUNG,
-    # Gesetzblatt publication → mitteilung
-    "Gesetzblatt": Doktyp.MITTEILUNG,
+    # Gesetzblatt publication → gesetz (the promulgated law text itself, DD-051);
+    # the announcement of a publication stays a mitteilung.
+    "Gesetzblatt": Doktyp.GESETZ,
     "Bekanntmachung": Doktyp.MITTEILUNG,
-    "Gesetz": Doktyp.MITTEILUNG,
+    "Gesetz": Doktyp.GESETZ,
 }
 
 _DOKUMENTENTYP_KEYS_SORTED = sorted(DOKUMENTENTYP_MAP.keys(), key=len, reverse=True)

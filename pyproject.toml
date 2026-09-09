@@ -15,7 +15,7 @@ packages = [{include = "bawue", from = "src"}]
 # break this image build — see migration doc §6 D5 / success criterion C6.
 # For local iteration against a sibling checkout, uncomment the dev-group
 # override below.
-pazufa-corelib = {git = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git", rev = "v0.1.2"}
+pazufa-corelib = {git = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git", rev = "v0.2.1"}
 httpx = ">=0.28"          # via corelib transitively; pinned explicitly (used by bawue.api)
 redis = ">=7.4"           # was transitively provided by collector; used by bawue.cache
 python-dotenv = ">=1.0"   # was transitively provided by collector; used by bawue.__main__

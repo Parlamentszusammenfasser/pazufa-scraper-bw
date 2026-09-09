@@ -962,7 +962,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # The document keeps the PARLIS date as its `zp_referenz` (the Ausfertigung),
         # so `_build_dokumente` is deliberately still given the unmodified zp_start.
         gremium = self._determine_gremium(fund, station_typ)
-        dokumente, trojanergefahr = await self._build_dokumente(
+        dokumente = await self._build_dokumente(
             fund, station_typ_str, mapping_text, station_typ, initiative, zp_start, vorgang_titel, vorgang_vnr
         )
 
@@ -974,7 +974,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
             dokumente=dokumente,
             zp_start=zp_start,
             gremium=gremium,
-            trojanergefahr=trojanergefahr,
         )
 
     def _determine_gremium(self, fund: RawFundstelle, station_typ: Stationstyp) -> Gremium:
@@ -1011,7 +1010,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         zp_start: datetime,
         vorgang_titel: str = "",
         vorgang_vnr: str | None = None,
-    ) -> tuple[list[Dokument], int | None]:
+    ) -> list[Dokument]:
         """Build the document list for a station (0 or 1 documents).
 
         A document is only created when the Fundstelle includes a PDF link.
@@ -1023,8 +1022,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         When LLM is enabled, enriches the document with PDF text extraction
         and LLM-based semantic extraction (summary, keywords, scores).
 
-        Returns (dokumente, trojanergefahr) where trojanergefahr is a Station-level
-        score extracted by the LLM (or None).
+        Returns the document list (at most one document per Fundstelle).
         """
         pdf_url = fund.get("pdf_url", "")
         if not pdf_url:
@@ -1033,7 +1031,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             # the Drucksache number and verify it resolves before using it.
             pdf_url = await self._fallback_pdf_url(fund.get("drucksache"))
             if not pdf_url:
-                return [], None
+                return []
 
         doc_typ = map_dokumententyp(
             mapping_text,
@@ -1073,7 +1071,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
             drucksnr=none_if_blank(fund.get("drucksache")),
         )
 
-        trojanergefahr = None
         if self._llm_enabled and self._llm is not None:
             try:
                 from bawue.bawue_dok import enrich_dokument
@@ -1089,13 +1086,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     cache=self.config.cache,
                 )
                 dok = result.dokument
-                trojanergefahr = result.trojanergefahr
                 if result.download_failed and (vorgnr := get_vorgangs_id()):
                     self._pending_pdf_downloads.add(vorgnr)
             except Exception:
                 logger.warning("Document enrichment failed for %s", pdf_url)
 
-        return [dok], trojanergefahr
+        return [dok]
 
     async def _fallback_pdf_url(self, drucksache: str | None) -> str | None:
         """Reconstruct and verify a Landtag-BW PDF URL when PARLIS omits it.

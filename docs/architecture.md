@@ -133,7 +133,7 @@ Dashed lines mark stages not yet implemented. See [status.md](status.md) for imp
 | `icalendar`           | ICS calendar feed parsing for Sitzungen                         | BaWue scraper |
 | `aiohttp`             | Async HTTP sessions for the scraping loop                       | BaWue scraper |
 | `httpx`               | Transport for the PaZuFa API client                             | scraper-core  |
-| `pazufa-scraper-core` | API client + models (spec v0.2.3), `LLMConnector`, normalisation | Shared library |
+| `pazufa-scraper-core` | API client + models (spec v0.2.5), `LLMConnector`, normalisation | Shared library |
 | `kreuzberg`           | PDF text extraction (normal + OCR fallback)                     | BaWue scraper |
 | `redis`               | Caching of processed Vorgänge/Dokumente (`bawue.cache`)         | BaWue scraper |
 | `litellm`             | LLM integration: token counting + LLM calls                     | BaWue + scraper-core |
@@ -444,7 +444,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 
 **LLM pipeline:**
 - Document-type-specific German prompts (4 variants: ENTWURF, STELLUNGNAHME, BESCHLUSSEMPF, GENERIC)
-- Extracts: `zusammenfassung`, `schlagworte`, `kurztitel`, and optionally `meinung` (1–5 score) and `trojanergefahr` (1–10 score, passed to Station via `EnrichmentResult`)
+- Extracts: `zusammenfassung`, `schlagworte`, `kurztitel`, and optionally `meinung` (1–5 score) and `vorwort`
 - JSON response with up to 3 retries on parse failures
 - Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
 - In-memory SHA256 hash cache skips LLM calls for duplicate PDFs within a run (cache key includes document identity, DD-029)
@@ -459,9 +459,9 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 | 2 — Text-only     | PDF succeeds, LLM fails | Dokument with volltext + hash, no LLM fields     |
 | 3 — Metadata-only | PDF download fails      | Original Dokument unchanged                      |
 
-`trojanergefahr` (extracted for ENTWURF and BESCHLUSSEMPF) is a Station-level field. `enrich_dokument()` returns an
-`EnrichmentResult(dokument, trojanergefahr)` NamedTuple so callers can set it on the Station. When a Station has
-multiple enriched documents, the maximum score across all documents is used.
+Spec 0.2.5 dropped `Station.trojanergefahr`, so the score is no longer extracted at all (DD-051).
+`enrich_dokument()` returns an `EnrichmentResult(dokument, download_failed)` NamedTuple; all
+LLM-derived values now live on the `Dokument` itself.
 
 ### Types
 

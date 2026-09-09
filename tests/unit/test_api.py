@@ -60,13 +60,12 @@ class TestPutKalender:
         with patch("bawue.api._kal_date_put.sync_detailed", return_value=_resp(status)):
             put_kalender(MagicMock(), uuid4(), Parlament.BW, date(2026, 2, 25), [])
 
-    def test_path_params_positional_body_and_scraper_id_kwargs(self):
+    def test_path_params_positional_body_kwarg_and_no_scraper_id(self):
+        """Spec 0.2.5 dropped X-Scraper-Id from this endpoint (DD-051)."""
         scraper_id = uuid4()
         client = MagicMock()
         sitzungen = [MagicMock()]
         datum = date(2026, 2, 25)
         with patch("bawue.api._kal_date_put.sync_detailed", return_value=_resp(201)) as mock_put:
             put_kalender(client, scraper_id, Parlament.BW, datum, sitzungen)
-        mock_put.assert_called_once_with(
-            Parlament.BW, datum, client=client, body=sitzungen, x_scraper_id=str(scraper_id)
-        )
+        mock_put.assert_called_once_with(Parlament.BW, datum, client=client, body=sitzungen)
