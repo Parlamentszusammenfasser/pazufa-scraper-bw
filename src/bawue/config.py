@@ -20,6 +20,9 @@ from bawue.cache import BawueCache
 
 logger = logging.getLogger(__name__)
 
+# Redacted by --dump-config. REDIS_URL carries the Upstash token in its userinfo.
+_SECRET_ATTRS = frozenset({"api_key", "llm_provider_key", "redis_url"})
+
 
 class ConfigProp:
     """Captures the parsing behaviour of a single config option."""
@@ -89,6 +92,9 @@ class BawueConfig:
             # cache
             ConfigProp("redis_host", "cache.redis-host", "REDIS_HOST", None, "localhost"),
             ConfigProp("redis_port", "cache.redis-port", "REDIS_PORT", None, 6379),
+            # Takes precedence over host/port. Managed Redis (Upstash on Cloud Run)
+            # needs TLS + auth, which only the URL form carries.
+            ConfigProp("redis_url", "cache.redis-url", "REDIS_URL"),
             # backend
             ConfigProp("database_url", "backend.ltzf-api-url", "LTZF_API_URL", None, "http://localhost:80"),
             ConfigProp(
@@ -143,7 +149,12 @@ class BawueConfig:
                 config.value_set_by = "env"
 
     def _init_secondary_objects(self) -> None:
-        self.cache = BawueCache(self.redis_host, self.redis_port, disabled=self.dry_run)
+        self.cache = BawueCache(
+            self.redis_host,
+            self.redis_port,
+            disabled=self.dry_run,
+            redis_url=self.redis_url,
+        )
 
     def load(self) -> None:
         parser = ArgumentParser(prog="bawue", description="Bundled BaWue Scrapers")
@@ -213,6 +224,7 @@ class BawueConfig:
         for config in self.configurations:
             name = config.cfg or config.attr
             missing = config.required and config.value is None
-            output += f"{config.value_set_by}{name:.>25}: {config.value}"
+            value = "***" if config.value and config.attr in _SECRET_ATTRS else config.value
+            output += f"{config.value_set_by}{name:.>25}: {value}"
             output += " MISSING\n" if missing else "\n"
         return output

@@ -96,7 +96,7 @@ def upload_vorgang(
         if e.status == 422:
             logger.error("Unprocessable Entity for Vorgang '%s'", item.titel)
             if log_item:
-                log_item(item, True)
+                log_item(item)
         elif e.status == 401:
             logger.critical("Authentication failed. Check your API key.")
         return UploadOutcome(vorgang=None, error=api_exception_reason(e))

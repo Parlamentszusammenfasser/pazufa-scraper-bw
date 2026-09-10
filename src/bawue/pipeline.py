@@ -182,7 +182,7 @@ class Scraper(ABC):
     async def make_cache_key(self, item: Any) -> str | None: ...
 
     @abstractmethod
-    def log_item(self, item: Any, override: bool = True) -> None: ...
+    def log_item(self, item: Any) -> None: ...
 
     @abstractmethod
     async def send_result(self, item: Any) -> Any | None: ...
@@ -195,9 +195,9 @@ class Scraper(ABC):
 
 
 class VorgangsScraper(Scraper):
-    def log_item(self, item: Any, override: bool = True) -> None:
-        logdir = self.config.api_obj_log if self.config.api_obj_log else ("locallogs" if override else None)
-        if logdir is None:
+    def log_item(self, item: Any) -> None:
+        logdir = self.config.api_obj_log
+        if not logdir:
             return
         logger.debug("Logging Item to %s", logdir)
         try:
@@ -224,9 +224,9 @@ class VorgangsScraper(Scraper):
 
 
 class SitzungsScraper(Scraper):
-    def log_item(self, item: Any, override: bool = True) -> None:
-        logdir = self.config.api_obj_log if self.config.api_obj_log else ("locallogs" if override else None)
-        if logdir is None:
+    def log_item(self, item: Any) -> None:
+        logdir = self.config.api_obj_log
+        if not logdir:
             return
         logger.info("Logging Item to %s", logdir)
         try:

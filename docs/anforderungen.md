@@ -238,7 +238,7 @@ Konkret:
 
 1. **Vorgänge + Sitzungen** im PaZuFa-Format erzeugen (alle drei Scraper)
 2. **Einlieferung** ans Backend (über `bawue.api`)
-3. **Automatisierung** (Docker-Compose mit `CYCLE_TIME_S`, Cloud-Run-Job, Raspberry-Pi-Cron)
+3. **Automatisierung** (Cloud-Run-Job mit Cloud Scheduler; lokal Docker-Compose mit `CYCLE_TIME_S`)
 4. **Abdeckung der aktuellen Wahlperiode** (`wahlperiode = 17`, `wahlperiode-start-date = 2021-04-26`)
 
 ### Coding-Regeln
