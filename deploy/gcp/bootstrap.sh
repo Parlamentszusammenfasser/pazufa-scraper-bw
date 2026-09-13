@@ -102,7 +102,7 @@ WIF_ARGS=(
   --location=global
   --workload-identity-pool="$POOL"
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.environment=assertion.environment"
-  --attribute-condition="assertion.repository == '${GITHUB_REPO}' && assertion.environment in ['staging', 'production']"
+  --attribute-condition="assertion.repository == '${GITHUB_REPO}' && assertion.environment in ['staging', 'prod']"
 )
 if gcloud iam workload-identity-pools providers describe "$PROVIDER" \
      --location=global --workload-identity-pool="$POOL" >/dev/null 2>&1; then
