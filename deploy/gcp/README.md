@@ -123,5 +123,6 @@ gcloud scheduler jobs resume bawue-scraper-staging --location $REGION
   an Artifact Registry remote repository in front of it and change only the
   `--image` value.
 - **Production** reuses all of this: run `bootstrap.sh` with `ENVIRONMENT=prod`,
-  copy the workflow, and swap `staging` → `prod` in `JOB_NAME`, `SECRET_PREFIX`,
-  `ENVIRONMENT` and the GitHub environment name.
+  set up GitHub environment **`prod`** the same way, then Actions → **Deploy prod**
+  (`deploy-prod.yml` — job `bawue-scraper-prod`, secrets `bawue-prod-*`). Its image
+  tag has no default: deploy a semver already verified on staging.
