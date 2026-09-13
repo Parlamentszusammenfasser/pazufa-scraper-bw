@@ -192,7 +192,6 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
         # Build documents
         dokumente: list[Dokument] = []
-        trojaner_scores: list[int] = []
         for pdf in detail.pdf_links:
             dok = Dokument(
                 titel=todo_if_blank(pdf["title"]),
@@ -218,8 +217,6 @@ class BawueBeteiligungScraper(VorgangsScraper):
                         cache=self.config.cache,
                     )
                     dok = result.dokument
-                    if result.trojanergefahr is not None:
-                        trojaner_scores.append(result.trojanergefahr)
                 except Exception:
                     logger.warning("Document enrichment failed for %s", pdf["url"])
 
@@ -236,7 +233,6 @@ class BawueBeteiligungScraper(VorgangsScraper):
             dokumente=dokumente,
             zp_start=zp_start,
             gremium=gremium,
-            trojanergefahr=max(trojaner_scores) if trojaner_scores else None,
         )
 
         # Pre-parliamentary drafts have no Vorgangsnummer yet. Expose the source

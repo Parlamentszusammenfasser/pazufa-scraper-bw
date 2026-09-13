@@ -33,10 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 class EnrichmentResult(NamedTuple):
-    """Result of document enrichment: enriched Dokument + optional Station-level fields."""
+    """Result of document enrichment: enriched Dokument + download status."""
 
     dokument: Dokument
-    trojanergefahr: int | None = None
     # True when the PDF download itself failed (e.g. a Plenarprotokoll that is
     # not published yet, issue #66). Retryable — the scraper must not cache the
     # Vorgang so the next cycle attempts the download again. Content-level
@@ -108,8 +107,7 @@ Extrahiere aus dem folgenden Gesetzestext die folgenden Informationen als JSON:
 {"schlagworte": ["Liste inhaltlich bedeutsamer Schlagworte"],
  "zusammenfassung": "Zusammenfassung in 150-250 Worten",
  "kurztitel": "Kurzer verständlicher Titel in einfacher Sprache",
- "vorwort": "Präambel oder Intentionsbeschreibung des Entwurfs, falls vorhanden",
- "trojanergefahr": <1-10, Wahrscheinlichkeit versteckter Zwecke>}
+ "vorwort": "Präambel oder Intentionsbeschreibung des Entwurfs, falls vorhanden"}
 Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
 
 BODY_PROMPT_STELLUNGNAHME = """\
@@ -125,8 +123,7 @@ Extrahiere aus der folgenden Beschlussempfehlung die folgenden Informationen als
 {"schlagworte": ["Liste inhaltlich bedeutsamer Schlagworte"],
  "zusammenfassung": "Zusammenfassung in 150-250 Worten",
  "kurztitel": "Kurzer verständlicher Titel in einfacher Sprache",
- "meinung": <1-5, Meinungsbild: 1=Ablehnung empfohlen, 5=Zustimmung empfohlen>,
- "trojanergefahr": <1-10, Wahrscheinlichkeit versteckter Zwecke>}
+ "meinung": <1-5, Meinungsbild: 1=Ablehnung empfohlen, 5=Zustimmung empfohlen>}
 Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
 
 BODY_PROMPT_GENERIC = """\
@@ -215,13 +212,12 @@ def _prompt_fingerprint(
 # ---------------------------------------------------------------------------
 
 _SCORE_RANGES: dict[str, tuple[int, int]] = {
-    "trojanergefahr": (1, 10),
     "meinung": (1, 5),
 }
 
 
 def _validate_scores(data: dict) -> dict:
-    """Validate and clamp trojanergefahr (1-10) and meinung (1-5) ranges.
+    """Validate and clamp the meinung (1-5) range.
 
     Non-numeric values are removed. Numeric values are clamped to valid ranges.
     """
@@ -643,7 +639,7 @@ async def extract_semantics(
     """Call LLM to extract structured metadata from document text.
 
     Returns a dict with keys like schlagworte, zusammenfassung, kurztitel,
-    and optionally trojanergefahr/meinung/vorwort depending on doktyp.
+    and optionally meinung/vorwort depending on doktyp.
 
     The full document text is sent unmodified — there is no token truncation.
     When *dok_titel* and/or *drucksnr* are given, a context header is prepended
@@ -764,9 +760,8 @@ async def enrich_dokument(
     """Enrich a plain Dokument with PDF text extraction and LLM semantics.
 
     Takes an existing Dokument (as built by the scraper with empty volltext/hash)
-    and returns an EnrichmentResult containing the enriched Dokument and an optional
-    trojanergefahr score (Station-level field extracted by LLM). PARLIS metadata
-    (titel, autoren, drucksnr, timestamps) is preserved.
+    and returns an EnrichmentResult containing the enriched Dokument. PARLIS
+    metadata (titel, autoren, drucksnr, timestamps) is preserved.
 
     *vorgang_titel* is the bill title of the surrounding Vorgang. It is passed
     to the LLM as document-identity context so that multi-topic plenary protocols
@@ -920,7 +915,6 @@ async def enrich_dokument(
                     meinung=semantics.get("meinung"),
                     vorwort=_sanitize_llm_text(semantics.get("vorwort")),
                 ),
-                trojanergefahr=semantics.get("trojanergefahr"),
             )
         except Exception:
             logger.warning("LLM extraction failed for %s, using text-only fallback", dok.link, exc_info=True)
