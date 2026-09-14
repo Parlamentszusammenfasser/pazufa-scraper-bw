@@ -73,6 +73,7 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 | 049    | Ein `Dokument`-Row je Fundstelle: `#page=N` gehört auch bei `REDEPROTOKOLL` in `hash_`, nur der Semantik-Cache bleibt auf dem Datei-Hash (Issue #25, Korrektur zu DD-043) — *geteiltes Plenarprotokoll, falsche Lesung im `titel`, `#page`-Anker fremder Debatte, `autoren` des letzten Uploads; Zusammenfassung weiterhin sitzungsbezogen (DD-037/Issue #49)* | `enrich_dokument` (`file_hash`/`doc_hash`/`cache_hash`) |
 | 050    | Seiten-Marker-Regex akzeptiert String-Rand als Ersatz für fehlendes `\n\n` (Issue #27) — *`#page=1` verlor Seite 1 stillschweigend an die Folgeseite, kein Off-by-one; symmetrisches Gegenstück am Dokumentende (Marker-Leakage)* | `_PAGE_MARKER_RE`, `_extract_relevant_pages` |
 | 051    | Upgrade auf corelib v0.2.1 / Spec 0.2.5: `trojanergefahr` entfällt ersatzlos, `X-Scraper-Id` weg beim Kalender-PUT, Gesetzblatt-Dokument wird `gesetz` — *Dependency-Bump, `TypeError: unexpected keyword argument 'trojanergefahr'`, neue Enum-Werte, ungefüllte Felder `ressort`/`sachgebiete`/`subdoc_id`/`DokumentHash`* | `pyproject.toml`, `api.py::put_kalender`, `DOKUMENTENTYP_MAP`, `EnrichmentResult`, Prompts |
+| 052    | `vg2:`-Cache speichert Fingerprint (Fundstellen-Rohtext + `pdf_url`, „Aktueller Stand") statt Vorgang-JSON (GitHub Issue #46) — *Vorgang nie aktualisiert, „skipping cached items", neue Station/Sitzung fehlt, kein TTL, Cache-Invalidierung* | `_vorgang_fingerprint`, `get_cached_result`, `store_extracted_result` |
 
 ---
 
@@ -3084,3 +3085,60 @@ alten `mitteilung`-Typ, bis sie erneut hochgeladen werden.
 - `tests/unit/test_api.py::TestPutKalender::test_path_params_positional_body_kwarg_and_no_scraper_id`
 - `tests/unit/test_enum_mapper.py::TestEnumValuesExistInFramework::test_all_doktyp_values_valid`
   (Kanarienvogel: kennt jetzt `gesetz` und `eckpunktepapier`) und `test_known_patterns`
+
+---
+
+## DD-052: Fingerprint des PARLIS-Records im `vg2:`-Cache — geänderte Vorgänge werden neu hochgeladen (GitHub Issue #46)
+
+**Datum:** 13.09.2026
+
+**Kontext:** Der Cache-Schlüssel war nur die Vorgangs-ID (`vg2:V-247603`), jeder
+vorhandene Eintrag galt als Treffer, und Einträge laufen nie ab. Ein einmal
+hochgeladener Vorgang blieb damit auf dem Stand des ersten Uploads eingefroren: neue
+Plenarsitzungen, Beschlussempfehlungen, Gesetzblatt-Einträge oder ein geänderter
+„Aktueller Stand" erreichten das Backend nie. Der Scraper läuft täglich und soll stets
+den aktuellen Stand zeigen. Der PARLIS-Record liegt bei jedem Lauf ohnehin vollständig
+vor (die Suche liefert alle Fundstellen), der Vergleich kostet also keinen Request.
+
+**Entscheidung:**
+
+1. **`vg2:<vorgangs_id>` speichert den Fingerprint statt des Vorgang-JSON.** Ein Treffer
+   zählt nur, wenn der gespeicherte Wert dem Fingerprint des aktuellen Records gleicht;
+   sonst wird der Vorgang neu gebaut und mit denselben stabilen IDs (DD-028/DD-034)
+   erneut per `PUT` hochgeladen. Das JSON wurde nirgends gelesen. Ein Schlüssel je
+   Vorgang (statt Fingerprint im Schlüssel) verhindert, dass sich ohne TTL veraltete
+   Einträge ansammeln.
+2. **Gehasht wird nur, was Fortschritt anzeigt:** je Fundstelle Rohtext + `pdf_url`
+   (sortiert) und „Aktueller Stand". Neue Sitzung/Drucksache → neue Fundstelle;
+   nachgereichtes Protokoll → neuer Link; Beschluss → neuer Stand.
+3. **Bewusst nicht gehasht:**
+   - *Parser-abgeleitete Felder* (`datum`, `station_typ`, `ausschuss`, `gesetzblatt_*` …):
+     sonst würde jede Parser-Verbesserung den gesamten Cache invalidieren.
+   - *Reihenfolge der Fundstellen*: eine Umsortierung in PARLIS ist keine Änderung.
+   - *Titel, Initiative, Sachgebiet, Vorgangstyp*: ändern sich praktisch nie; eine reine
+     Titelkorrektur in PARLIS wird in Kauf genommen.
+   - *Scraper-Output* (PDF-Text, LLM-Ergebnisse): nicht deterministisch und erst nach
+     einem vollen Rebuild bekannt.
+4. **Keine Versionskonstante.** Soll nach einer Mapping-Änderung doch alles neu gebaut
+   werden, reicht es, die `vg2:`-Einträge zu löschen (oder das Präfix zu erhöhen) — ein
+   eingebauter Versionszähler würde den Cache dagegen routinemäßig obsolet machen.
+
+Die Regel aus Issue #66 (PDF noch nicht veröffentlicht → nicht cachen) bleibt
+unverändert. Ein Rebuild lädt die PDFs erneut, LLM-Calls fallen aber nur für neue
+Dokumente an (Semantik-Cache auf Datei-Hash + Prompt, DD-020/DD-049).
+
+**Migrationshinweis:** Bestehende `vg2:`-Einträge enthalten JSON, keinen Fingerprint,
+und gelten daher als geändert — jeder Vorgang wird nach dem Deploy genau einmal neu
+hochgeladen. Kein manuelles Aufräumen nötig.
+
+**Nicht abgedeckt:** Ein unter derselben URL ausgetauschtes PDF ohne Änderung am
+PARLIS-Record. Beteiligung (Schlüssel nur Slug) und Sitzungen (nur Datum) haben dasselbe
+Muster und werden separat behandelt.
+
+**Code:** `bawue_vorgaenge_scraper._vorgang_fingerprint`, `listing_page_extractor`
+(`_fingerprints`), `get_cached_result`, `store_extracted_result`
+
+**Tests:** `tests/unit/test_bawue_scraper.py::TestVorgangRefreshIssue46` (unveränderter
+Record → übersprungen; neue Fundstelle / neuer PDF-Link / geänderter Stand → erneuter
+Upload; abgeleitete Felder und Reihenfolge → übersprungen; Alt-Eintrag → einmaliger
+Rebuild) und `TestBuildVorgang::test_store_extracted_result_skips_caching_on_pending_pdf_download`
