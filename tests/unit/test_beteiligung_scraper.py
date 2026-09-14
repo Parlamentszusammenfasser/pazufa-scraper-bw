@@ -280,6 +280,39 @@ def _make_enriched_dok(url: str = "https://example.com/test.pdf"):
     )
 
 
+class TestIssue45LinkListMarkup:
+    @pytest.mark.asyncio
+    async def test_effizienzgesetz_builds_vorgang(self):
+        scraper = _make_scraper()
+        scraper._raw_cache["effizienzgesetz"] = _make_process(slug="effizienzgesetz")
+        page = (FIXTURES / "effizienzgesetz_detail.html").read_text()
+
+        with patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", return_value=page):
+            vorgang = await scraper.item_extractor("effizienzgesetz")
+
+        assert vorgang is not None
+        station = vorgang.stationen[0]
+        assert station.typ == Stationstyp.PREPARL_REGENT
+        assert len(station.dokumente) == 1
+        assert station.dokumente[0].typ == Doktyp.PREPARL_ENTWURF
+
+    @pytest.mark.asyncio
+    async def test_esf_skipped_without_error_log(self, caplog):
+        scraper = _make_scraper()
+        scraper._raw_cache["esf-foerderperiode-2028-2034"] = _make_process(slug="esf-foerderperiode-2028-2034")
+        page = (FIXTURES / "esf_foerderperiode_detail.html").read_text()
+
+        with (
+            patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", return_value=page),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_beteiligung_scraper"),
+        ):
+            vorgang = await scraper.item_extractor("esf-foerderperiode-2028-2034")
+
+        assert vorgang is None
+        assert scraper._skipped == 1
+        assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
 class TestListingPageExtractor:
     @pytest.mark.asyncio
     async def test_returns_slugs(self):

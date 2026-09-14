@@ -28,7 +28,7 @@ den PaZuFa-Standardkonventionen abweichen oder einer Erklärung bedürfen.
 | 004 ♻️ | Unterschiedliche Lesungsrunden nie mergen (tw. abgelöst durch DD-024) — *Stationen zusammenführen*                                                                                                                                                        | `_try_merge_station`, `_find_matching_ausschuss`                                            |
 | 005    | Stellungnahmen/Antworten als Kinder der Vorstation — *Stellungnahme anhängen*                                                                                                                                                                             | `_is_stellungnahme`, `_attach_stellungnahme`                                                |
 | 006    | ICS: nur Plenar/FinA/Haushaltsberatungen — *Sitzungen filtern*                                                                                                                                                                                            | `ics_parser._classify_event`                                                                |
-| 007    | Beteiligungsportal: nur Prozesse mit Entwurf-PDF — *Beteiligung filtern*                                                                                                                                                                                  | `bawue_beteiligung_scraper.item_extractor`                                                  |
+| 007    | Beteiligungsportal: nur Prozesse mit portal-gehostetem Entwurf-PDF (`link-download-block`/`link-list__link`) — *Beteiligung filtern, PDF-Links*                                                                                                           | `beteiligung_parser.parse_process_detail`, `bawue_beteiligung_scraper._build_vorgang`       |
 | 008    | Platzhalterdatum `00.00.JJJJ` — *Datum-Parsing, Fallback, UTC*                                                                                                                                                                                            | `_parse_fundstelle_date`, `_fallback_date_from_year`                                        |
 | 009    | Initiative-Fallback aus Fundstellen-Autor — *fehlendes „Initiative"-Feld (Haushalt)*                                                                                                                                                                      | `_build_vorgang`                                                                            |
 | 010    | Synthetische `parl-ablehnung` aus „Aktueller Stand: Abgelehnt" — *fehlende Ablehnungs-Station*                                                                                                                                                            | `_ensure_ablehnung_station`                                                                 |
@@ -274,8 +274,16 @@ einen PDF-Link enthalten. Das Vorhandensein eines PDFs ist ein hinreichendes
 Indiz für einen tatsächlichen Gesetzentwurf. Prozesse ohne PDFs werden mit
 Info-Log übersprungen.
 
-**Implementierung:** `bawue_beteiligung_scraper.py`, Methode `item_extractor()` —
-Prüfung auf `detail.pdf_links`.
+Das Portal rendert PDF-Downloads in zwei Markups: `a.link-download-block` und
+`a.link-list__link` (Link-Liste). Beide werden ausgewertet, Duplikate per URL
+entfernt. Gezählt werden nur PDFs, die auf dem Portal selbst gehostet sind:
+Extern verlinkte PDFs (z. B. EU-Verordnungsvorschläge auf `esf-bw.de` bei
+„Europäischer Sozialfonds") sind Hintergrundinformationen, keine Landesentwürfe
+(GitHub-Issue #45).
+
+**Implementierung:** `beteiligung_parser.py`, Funktion `parse_process_detail()` —
+Link-Extraktion und Host-Filter; `bawue_beteiligung_scraper.py`, Methode
+`_build_vorgang()` — Prüfung auf `detail.pdf_links`.
 
 ---
 

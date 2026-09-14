@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass, field
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from lxml import html
 
@@ -77,14 +77,19 @@ def parse_process_detail(html_content: str, base_url: str) -> RawBeteiligungDeta
     ministry_els = tree.xpath('//div[contains(@class, "contact-box__headline")]//h3')
     ministry = ministry_els[0].text_content().strip() if ministry_els else ""
 
-    # PDF links — links with class "link-download-block" pointing to .pdf
+    # PDF links from both download markups, restricted to portal-hosted files (DD-007)
     pdf_links = []
-    for link in tree.xpath('//a[contains(@class, "link-download-block")]'):
+    seen_urls = set()
+    portal_host = urlparse(base_url).netloc.lower()
+    for link in tree.xpath('//a[contains(@class, "link-download-block") or contains(@class, "link-list__link")]'):
         href = link.get("href", "")
-        if href.endswith(".pdf"):
-            pdf_url = urljoin(base_url, href) if not href.startswith("http") else href
-            pdf_title = link.text_content().strip()
-            pdf_links.append({"title": pdf_title, "url": pdf_url})
+        if not href.endswith(".pdf"):
+            continue
+        pdf_url = urljoin(base_url, href)
+        if urlparse(pdf_url).netloc.lower() != portal_host or pdf_url in seen_urls:
+            continue
+        seen_urls.add(pdf_url)
+        pdf_links.append({"title": " ".join(link.text_content().split()), "url": pdf_url})
 
     # Comment deadline from comment-list__closed announcement
     comment_deadline = None
