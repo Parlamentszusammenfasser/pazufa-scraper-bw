@@ -35,6 +35,16 @@ def klima_register_html():
     return (FIXTURES / "klima_register_detail.html").read_text()
 
 
+@pytest.fixture()
+def effizienzgesetz_html():
+    return (FIXTURES / "effizienzgesetz_detail.html").read_text()
+
+
+@pytest.fixture()
+def esf_foerderperiode_html():
+    return (FIXTURES / "esf_foerderperiode_detail.html").read_text()
+
+
 class TestParseProcessList:
     def test_extracts_all_entries(self, lp17_index_html):
         processes = parse_process_list(lp17_index_html)
@@ -149,3 +159,31 @@ class TestParseProcessDetail:
     def test_title_extracted_from_article_template(self, klima_register_html):
         detail = parse_process_detail(klima_register_html, BASE_URL)
         assert detail.title == "Klima-Maßnahmen-Register 2026"
+
+
+class TestIssue45LinkListMarkup:
+    def test_effizienzgesetz_extracts_link_list_pdf(self, effizienzgesetz_html):
+        detail = parse_process_detail(effizienzgesetz_html, BASE_URL)
+        assert detail.pdf_links == [
+            {
+                "title": "Gesetz zur Abschaffung von Berichts-, Dokumentations- und "
+                "Aufbewahrungspflichten (Effizienzgesetz) (PDF)",
+                "url": f"{BASE_URL}/fileadmin/redaktion/beteiligungsportal/StM/260730_Effizienzgesetz.pdf",
+            }
+        ]
+
+    def test_effizienzgesetz_comment_deadline(self, effizienzgesetz_html):
+        detail = parse_process_detail(effizienzgesetz_html, BASE_URL)
+        assert detail.comment_deadline == "09.09.2026"
+
+    def test_esf_external_pdfs_ignored(self, esf_foerderperiode_html):
+        detail = parse_process_detail(esf_foerderperiode_html, BASE_URL)
+        assert detail.pdf_links == []
+
+    def test_same_pdf_in_both_markups_deduplicated(self):
+        page = """<html><body>
+            <a class="link-download-block" href="/fileadmin/entwurf.pdf">Entwurf (PDF)</a>
+            <a class="link-list__link" href="/fileadmin/entwurf.pdf">Entwurf (PDF)</a>
+        </body></html>"""
+        detail = parse_process_detail(page, BASE_URL)
+        assert detail.pdf_links == [{"title": "Entwurf (PDF)", "url": f"{BASE_URL}/fileadmin/entwurf.pdf"}]
