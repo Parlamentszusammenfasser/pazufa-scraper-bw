@@ -201,16 +201,16 @@ class TestBuildVorgang:
         scraper = object.__new__(BawueVorgaengeScraper)
         scraper.config = MagicMock()
         scraper._pending_pdf_downloads = {"V-246637"}
+        scraper._fingerprints = {"V-246637": "fp-pending", "V-247045": "fp-clean"}
 
         pending = MagicMock(ids=[VgIdent(id="V-246637", typ="vorgnr")])
-        await scraper.store_extracted_result("raw-key-1", pending)
+        await scraper.store_extracted_result("V-246637", pending)
         scraper.config.cache.store_raw.assert_not_called()
         assert "V-246637" not in scraper._pending_pdf_downloads  # consumed
 
         clean = MagicMock(ids=[VgIdent(id="V-247045", typ="vorgnr")])
-        clean.to_dict.return_value = {"api_id": "x"}
-        await scraper.store_extracted_result("raw-key-2", clean)
-        scraper.config.cache.store_raw.assert_called_once()
+        await scraper.store_extracted_result("V-247045", clean)
+        scraper.config.cache.store_raw.assert_called_once_with("vg2:V-247045", "fp-clean", "Vorgang")
 
     @pytest.mark.asyncio
     async def test_documentless_station_gets_stable_api_id(self, scraper_build_vorgang):
@@ -1130,6 +1130,7 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     scraper._wahlperiode = 17
     scraper._wahlperiode_start_date = wahlperiode_start
     scraper._raw_cache = {}
+    scraper._fingerprints = {}
     scraper._parlis = MagicMock()
     scraper._parlis.search.return_value = search_return or []
     scraper._enabled_vorgangstypen = frozenset(DEFAULT_ENABLED_VORGANGSTYPEN)
@@ -1283,6 +1284,121 @@ class TestItemExtractor:
 
         assert result is not None
         assert scraper._skipped == 0
+
+
+class _InMemoryCache:
+    """Stands in for the Redis-backed BawueCache."""
+
+    def __init__(self):
+        self.data: dict[str, str] = {}
+
+    def get_raw(self, key, typehint=""):
+        return self.data.get(key)
+
+    def store_raw(self, key, value, typehint=""):
+        self.data[key] = value
+        return True
+
+
+class TestVorgangRefreshIssue46:
+    """Issue #46: a cached Vorgang is rebuilt and re-uploaded once PARLIS reports
+    progress on it (new Fundstelle, changed "Aktueller Stand"), and skipped otherwise.
+
+    Runs the real listing → cache check → build → store pipeline; only the PARLIS
+    search and the upload are stubbed.
+    """
+
+    @staticmethod
+    def _scraper():
+        scraper = _make_scraper_with_mock_parlis()
+        scraper.listing_urls = ["Gesetzgebung"]
+        scraper.config.linearize = True
+        scraper.config.max_concurrency = 1
+        scraper.config.api_obj_log = None
+        scraper.config.cache = _InMemoryCache()
+        scraper._pending_pdf_downloads = set()
+        scraper.items_done = 0
+        scraper.uploaded = []
+
+        async def _send(item):
+            scraper.uploaded.append(item)
+            return item
+
+        scraper.send_result = _send
+        return scraper
+
+    @staticmethod
+    async def _run_cycle(scraper, raw):
+        with patch("bawue.bawue_vorgaenge_scraper.asyncio.to_thread", return_value=[raw]):
+            ids = await scraper.process_lpurls(scraper.listing_urls)
+        return await scraper.process_results(await scraper.process_items(ids))
+
+    @pytest.mark.asyncio
+    async def test_unchanged_record_is_skipped_on_next_run(self):
+        scraper = self._scraper()
+
+        assert await self._run_cycle(scraper, _make_raw_vorgang("V-247603")) == (1, 0, 0)
+        assert await self._run_cycle(scraper, _make_raw_vorgang("V-247603")) == (0, 0, 0)
+        assert len(scraper.uploaded) == 1
+
+    @pytest.mark.asyncio
+    async def test_new_fundstelle_triggers_reupload(self):
+        """A committee report published after the first upload must reach the backend."""
+        scraper = self._scraper()
+        await self._run_cycle(scraper, _make_raw_vorgang("V-247603"))
+
+        updated = _make_raw_vorgang("V-247603")
+        updated["fundstellen_parsed"].append(
+            parse_fundstelle_text(
+                "Beschlussempfehlung und Bericht    Ausschuss für Finanzen  12.03.2026 Drucksache 17/10400"
+            )
+        )
+        assert await self._run_cycle(scraper, updated) == (1, 0, 0)
+
+        assert len(scraper.uploaded) == 2
+        assert len(scraper.uploaded[1].stationen) > len(scraper.uploaded[0].stationen)
+
+    @pytest.mark.asyncio
+    async def test_new_pdf_link_triggers_reupload(self):
+        """A Plenarprotokoll linked after the session was first listed must be picked up."""
+        scraper = self._scraper()
+        await self._run_cycle(scraper, _make_raw_vorgang("V-247603"))
+
+        updated = _make_raw_vorgang("V-247603")
+        updated["fundstellen_parsed"][1]["pdf_url"] = "https://www.landtag-bw.de/files/plp/17_0141.pdf"
+        assert await self._run_cycle(scraper, updated) == (1, 0, 0)
+
+    @pytest.mark.asyncio
+    async def test_changed_aktueller_stand_triggers_reupload(self):
+        scraper = self._scraper()
+        await self._run_cycle(scraper, _make_raw_vorgang("V-247603"))
+
+        updated = _make_raw_vorgang("V-247603")
+        updated["Aktueller Stand"] = "Abgelehnt"
+        assert await self._run_cycle(scraper, updated) == (1, 0, 0)
+
+    @pytest.mark.asyncio
+    async def test_parser_derived_fields_and_order_do_not_invalidate_cache(self):
+        """The fingerprint covers PARLIS source data only: a parser change that alters
+        derived fields, or PARLIS reordering the Fundstellen, must not rebuild every Vorgang."""
+        scraper = self._scraper()
+        await self._run_cycle(scraper, _make_raw_vorgang("V-247603"))
+
+        reparsed = _make_raw_vorgang("V-247603")
+        reparsed["fundstellen_parsed"].reverse()
+        reparsed["fundstellen_parsed"][0]["station_typ"] = "Plenarprotokoll"
+        reparsed["fundstellen_parsed"][1]["gesetzblatt_jahr"] = 2026
+        assert await self._run_cycle(scraper, reparsed) == (0, 0, 0)
+
+    @pytest.mark.asyncio
+    async def test_legacy_cache_entry_triggers_rebuild(self):
+        """Entries written before issue #46 hold the Vorgang JSON, not a fingerprint:
+        they are treated as changed, so every Vorgang is rebuilt once after the deploy."""
+        scraper = self._scraper()
+        scraper.config.cache.data["vg2:V-247603"] = json.dumps({"api_id": "legacy", "titel": "Test Gesetz"})
+
+        assert await self._run_cycle(scraper, _make_raw_vorgang("V-247603")) == (1, 0, 0)
+        assert await self._run_cycle(scraper, _make_raw_vorgang("V-247603")) == (0, 0, 0)
 
 
 class TestPlaceholderDate:
@@ -2614,6 +2730,7 @@ class TestEnabledVorgangstypen:
         scraper._wahlperiode_start_date = date(2021, 4, 26)
         scraper._enabled_vorgangstypen = frozenset(["Gesetzgebung"])
         scraper._raw_cache = {}
+        scraper._fingerprints = {}
         scraper._by_type = {}
         scraper._skipped = 0
         scraper._parlis_errors = []

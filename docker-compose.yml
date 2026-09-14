@@ -10,13 +10,14 @@ services:
   scraper:
     # References the image build from `make package`
     # to re-create the image with the latest code run `make clean package`
-    image: schneefisch/pazufa-bawue-scraper:1.2.0
-    # Override entrypoint to drop --once so the scraper loops via cycle-time-s
-    entrypoint: ["sh", "-c", "python -m bawue --config-file config.toml 2>&1 | tee /app/locallogs/stdout.log"]
+    image: docker.io/schneefisch/pazufa-bawue-scraper:1.3.0
+    # Override entrypoint to tee output into locallogs; --once runs a single cycle and exits.
+    # bash pipefail keeps python's exit code (e.g. 137 on OOM kill) instead of tee's.
+    entrypoint: ["bash", "-o", "pipefail", "-c", "python -m bawue --config-file config.toml --once 2>&1 | tee /app/locallogs/stdout.log"]
     environment:
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      CYCLE_TIME_S: 300          # re-run every 5 minutes
+      # Set REDIS_URL in .env to use a managed Redis (e.g. Upstash, rediss://...);
+      # unset falls back to the local redis service.
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       MAX_CONCURRENCY: 3         # limit parallel extractions to prevent OOM
       PYTHONUNBUFFERED: "1"
       LTZF_API_URL: ${LTZF_API_URL:?Set LTZF_API_URL in .env}
@@ -25,7 +26,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2g
+          memory: 4g
     volumes:
       # Mount staging config over the baked-in config.toml
       - ./config.staging.toml:/app/config.toml:ro

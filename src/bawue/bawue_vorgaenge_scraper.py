@@ -1,6 +1,7 @@
 """BaWue Vorgänge scraper: VorgangsScraper subclass for Baden-Württemberg PARLIS."""
 
 import asyncio
+import json
 import logging
 import re
 import ssl
@@ -8,6 +9,7 @@ import time
 import uuid
 from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
+from hashlib import sha256
 from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
 
@@ -133,6 +135,20 @@ DEFAULT_GSBLT_DELAY = 1.0
 _AUSSCHBER_MERGE_MAX_GAP = timedelta(days=60)
 
 
+def _vorgang_fingerprint(raw: RawVorgang) -> str:
+    """Fingerprint of the PARLIS data that signals progress on a Vorgang (issue #46, DD-052).
+
+    A new Sitzung, Beschlussempfehlung or Gesetzblatt entry adds a Fundstelle, a
+    published Protokoll adds its link, a decision changes "Aktueller Stand". Only
+    that source data is hashed — never parser-derived fields, so improving the
+    parser does not invalidate every cache entry — and the Fundstellen order is
+    ignored.
+    """
+    fundstellen = sorted([f.get("raw", ""), f.get("pdf_url") or ""] for f in raw.get("fundstellen_parsed", []))
+    payload = json.dumps([raw.get("Aktueller Stand", ""), fundstellen], ensure_ascii=False)
+    return sha256(payload.encode()).hexdigest()
+
+
 class BawueVorgaengeScraper(VorgangsScraper):
     """Scrapes legislative data from the Baden-Württemberg PARLIS system.
 
@@ -181,6 +197,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # consumed by item_extractor. Needed because the framework deduplicates items via a set
         # of hashable keys, but we need the full raw data for conversion.
         self._raw_cache: dict[str, RawVorgang] = {}
+        # vorgang_id → fingerprint of its PARLIS record (issue #46, DD-052). Kept apart from
+        # _raw_cache, which item_extractor consumes before the cache entry is written.
+        self._fingerprints: dict[str, str] = {}
 
         self._upload_limiter = create_upload_limiter()
         self._client = build_client(config.database_url, config.api_key)
@@ -287,6 +306,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 continue
             if vid:
                 self._raw_cache[vid] = raw
+                self._fingerprints[vid] = _vorgang_fingerprint(raw)
                 vorgang_ids.append(vid)
 
         self._by_type[vorgangstyp] = self._by_type.get(vorgangstyp, 0) + len(vorgang_ids)
@@ -332,8 +352,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
         finally:
             reset_vorgangs_id(token)
 
+    async def get_cached_result(self, item_key: str) -> str | None:
+        """A cache hit only while the PARLIS record is unchanged (issue #46, DD-052)."""
+        cached = await super().get_cached_result(item_key)
+        return cached if cached == self._fingerprints.get(item_key) else None
+
     async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
-        """Cache the uploaded Vorgang — unless a PDF download failed (issue #66).
+        """Cache the uploaded Vorgang's fingerprint — unless a PDF download failed (issue #66).
 
         Plenarprotokolle are published weeks after the session; a Vorgang cached
         with a still-missing PDF would keep its TODO volltext until the PARLIS
@@ -348,7 +373,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 vorgnr,
             )
             return
-        await super().store_extracted_result(item_key, result)
+        # The fingerprint replaces the base class's Vorgang JSON: nothing reads it back.
+        self.config.cache.store_raw(f"vg2:{item_key}", self._fingerprints[item_key], "Vorgang")
 
     async def _build_vorgang(self, raw: RawVorgang) -> Vorgang:
         """Convert a raw PARLIS dict into a framework Vorgang model.
