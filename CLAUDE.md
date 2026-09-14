@@ -22,14 +22,12 @@ submits them to the [Parlamentszusammenfasser](https://codeberg.org/PaZuFa/parla
 
   **Issue numbers are ambiguous across the migration** — the old Codeberg repo
   ([PaZuFa/pazufa-scraper-bw](https://codeberg.org/PaZuFa/pazufa-scraper-bw)) still
-  exists and its issues were *not* renumbered into GitHub. GitHub restarted at 1.
-  When code or a DD cites an issue:
-  - **`#20` and above → Codeberg** (all the historical ones: #25, #26, #31, #32,
-    #47, #48, #49, #50, #54, #71, #72 …). GitHub has no such issues — those numbers
-    are PRs there.
-  - **`#9` / `#10` → GitHub** (post-migration work: DD-045, DD-047). Note both
-    numbers *also* exist on Codeberg with unrelated content, so don't resolve a low
-    number by guessing — check the DD or commit that introduced the reference.
+  exists and its issues were *not* renumbered into GitHub. GitHub restarted at 1 and
+  now overlaps the Codeberg range. New issues live on GitHub; a pre-migration
+  reference in a DD or old commit may point to Codeberg. Never resolve a number by
+  guessing — check the DD or commit that introduced the reference.
+- **In production**: staging and prod run on GCP Cloud Run (`deploy/gcp/`,
+  workflows `deploy-staging.yml` / `deploy-prod.yml`).
 
 Three scrapers (all in `src/bawue/`), run from a static registry:
 
@@ -38,6 +36,20 @@ Three scrapers (all in `src/bawue/`), run from a static registry:
 | `BawueVorgaengeScraper` | PARLIS (`parlis.landtag-bw.de`, HTML/JSON-comment scraping) | `Vorgang` |
 | `BawueBeteiligungScraper` | Beteiligungsportal BW | `Vorgang` (`preparl-regent` station) |
 | `BawueSitzungenScraper` | ICS calendar feed | `Sitzung` |
+
+## Maintenance mode
+
+The scraper is **productive**; every merge to `main` ships. Therefore:
+
+- **Review before changing.** Read the affected code, its callers, the relevant DD and
+  existing tests. Name the implications (Station ordering, stable `api_id`s, cache
+  fingerprint, backend merge) before writing code.
+- **Test-driven, always.** Failing test first, then the fix. `make test` and `make lint` green.
+- **Surgical.** Smallest diff that solves the problem; no side features.
+- **Refactor what you touch — only that.** With each change, check whether the touched
+  code gets cleaner by refactoring. Do it only under green tests (before and after), in a
+  separate `refactor:` commit. Broader refactorings: propose, don't do.
+- **Comments:** short, precise, easy to read. Say *why* (cite DD/issue), not *what*.
 
 ## The mental model that matters most
 
@@ -81,13 +93,15 @@ Other docs: `docs/architecture.md` (full component/data-flow reference),
 
 TDD is the norm here, and each fixed issue leaves a **regression test**:
 
+0. Review the code and implications (see *Maintenance mode*).
 1. Reproduce with a failing test — unit tests in `tests/unit/` (fixtures in `tests/fixtures/`),
    integration in `tests/integration/`. Use existing helpers like `_make_raw_vorgang` /
    `scraper_build_vorgang` (see `tests/unit/test_bawue_scraper.py`).
-2. Make a **surgical** fix; update/add the relevant DD if behavior rules change.
+2. Make a **surgical** fix; update/add the relevant DD if behavior rules change. Then check
+   whether a refactoring makes the touched code cleaner (separate commit, tests green).
 3. Keep the regression test named for the issue/Drucksache so it pins the fix.
 
-Git workflow: branch `fix/issue-<N>-<slug>` off `main`, commit `fix: issue #<N> <summary>`,
+Git workflow: branch `fix/issue-<N>-<slug>` off `main`, conventional commit (see below),
 PR into `main` on GitHub (`gh pr create --base main`). Work that doesn't trace to an
 issue uses a descriptive slug instead (`fix/<slug>`). Don't commit or push unless asked.
 
@@ -96,7 +110,9 @@ issue uses a descriptive slug instead (`fix/<slug>`). Don't commit or push unles
 ```bash
 make install         # venv + poetry install (fetches corelib from its pinned git tag)
 make test            # unit tests
+make test-cov        # unit tests with coverage
 make test-all        # unit + integration (integration needs a backend)
+make audit           # dependency vulnerability scan (SCA)
 make lint            # ruff lint (CI gates: trivy audit → ruff-lint + ruff-format → pytest)
 make format          # ruff format (black-compatible)
 make run             # run the scraper (needs config.toml + Redis)
@@ -122,7 +138,8 @@ Syntax:
 ```
 
 Types: `feat`, `fix`, `build`, `chore`, `ci`, `docs`, `style`, `refactor`, `perf`, `test`  
-Breaking changes: a commit that has a footer `BREAKING CHANGE:`
+Scope is optional, e.g. `fix: …` or `fix(issue-46): …`.  
+Breaking changes: `!` after type/scope (`feat!: …`, `feat(api)!: …`) or a footer `BREAKING CHANGE:`
 
 On push to `main`, python-semantic-release derives the next version from these
 commits, pushes a bare semver tag, and publishes **GitHub Releases** with the
