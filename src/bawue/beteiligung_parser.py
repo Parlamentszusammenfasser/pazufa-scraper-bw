@@ -80,13 +80,13 @@ def parse_process_detail(html_content: str, base_url: str) -> RawBeteiligungDeta
     # PDF links from both download markups, restricted to portal-hosted files (DD-007)
     pdf_links = []
     seen_urls = set()
-    portal_host = urlparse(base_url).netloc
+    portal_host = urlparse(base_url).netloc.lower()
     for link in tree.xpath('//a[contains(@class, "link-download-block") or contains(@class, "link-list__link")]'):
         href = link.get("href", "")
         if not href.endswith(".pdf"):
             continue
         pdf_url = urljoin(base_url, href)
-        if urlparse(pdf_url).netloc != portal_host or pdf_url in seen_urls:
+        if urlparse(pdf_url).netloc.lower() != portal_host or pdf_url in seen_urls:
             continue
         seen_urls.add(pdf_url)
         pdf_links.append({"title": " ".join(link.text_content().split()), "url": pdf_url})

@@ -187,3 +187,11 @@ class TestIssue45LinkListMarkup:
         </body></html>"""
         detail = parse_process_detail(page, BASE_URL)
         assert detail.pdf_links == [{"title": "Entwurf (PDF)", "url": f"{BASE_URL}/fileadmin/entwurf.pdf"}]
+
+    def test_portal_host_matched_case_insensitively(self):
+        url = "https://Beteiligungsportal.Baden-Wuerttemberg.de/fileadmin/entwurf.pdf"
+        page = f"""<html><body>
+            <a class="link-list__link" href="{url}">Entwurf (PDF)</a>
+        </body></html>"""
+        detail = parse_process_detail(page, BASE_URL)
+        assert detail.pdf_links == [{"title": "Entwurf (PDF)", "url": url}]
