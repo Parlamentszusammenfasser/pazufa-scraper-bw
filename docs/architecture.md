@@ -371,7 +371,7 @@ Configuration from `[beteiligung]` section.
 |---------------------|-------------------------------------------------|
 | `api_id`            | `uuid5(NAMESPACE_URL, "beteiligung-{slug}")`    |
 | `titel`             | Detail page heading (dossier-header h1)         |
-| `kurztitel`         | URL slug (for backend merging with PARLIS data) |
+| `kurztitel`         | LLM short title, fallback `titel` (DD-053)      |
 | `typ`               | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`          |
 | `initiatoren`       | `[Autor(organisation=ministry)]`                |
 | Station `typ`       | `Stationstyp.PREPARL_MINUS_REGENT`              |

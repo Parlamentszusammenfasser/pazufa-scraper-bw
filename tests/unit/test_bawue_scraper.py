@@ -17,11 +17,11 @@ from bawue.bawue_vorgaenge_scraper import (
     _construct_drucksache_pdf_url,
     _fallback_date_from_year,
     _initiativ_drucksnr_from_fundstellen,
+    _initiativ_zusammenfassung,
     _parse_autoren,
     _parse_fundstelle_date,
     _reading_round,
     _same_round_label,
-    _vorgang_kurztitel,
 )
 from bawue.parlis_parser import parse_fundstelle_text
 from bawue.types import UNSET, Doktyp, Stationstyp, Vorgangstyp, placeholder_hash
@@ -89,9 +89,9 @@ class TestBuildVorgang:
         assert vorgang.ids is not None
         assert vorgang.ids[0].id == "V-001"
         assert vorgang.ids[0].typ == "vorgnr"
-        # Issue #25: kurztitel is a semantic summary, not the vgnr. Without LLM
-        # enrichment no kurztitel is available, so it is None (not "V-001").
-        assert vorgang.kurztitel is None
+        # Issue #25: kurztitel is never the vgnr. GitHub issue #32: without LLM
+        # it falls back to the official titel (DD-053).
+        assert vorgang.kurztitel == "Testgesetz"
 
     @pytest.mark.asyncio
     async def test_build_vorgang_forwards_parlis_backlink(self, scraper_build_vorgang):
@@ -112,24 +112,23 @@ class TestBuildVorgang:
         assert vorgang.links is UNSET
 
     @pytest.mark.asyncio
-    async def test_kurztitel_from_initiative_document(self, scraper_build_vorgang):
-        """Issue #25: the Vorgang Kurztitel reuses the initiating document's LLM kurztitel."""
+    async def test_kurztitel_input_is_initiating_summary(self, scraper_build_vorgang):
+        """GitHub issue #32: the Kurztitel prompt gets the initiating document's summary."""
         raw = _make_raw_vorgang("V-001")
         vorgang = await scraper_build_vorgang(raw)
 
-        # Simulate the enriched initiative document carrying a plain-language title.
-        vorgang.stationen[0].dokumente[0].kurztitel = "Klimaschutzgesetz"
+        vorgang.stationen[0].dokumente[0].zusammenfassung = "Das Land wird klimaneutral."
 
-        assert _vorgang_kurztitel(vorgang.stationen) == "Klimaschutzgesetz"
+        assert _initiativ_zusammenfassung(vorgang.stationen) == "Das Land wird klimaneutral."
 
     @pytest.mark.asyncio
     async def test_build_vorgang_kurztitel_is_semantic_not_vgnr(self, monkeypatch):
-        """Issue #25 regression: the *built* Vorgang exposes the initiating
-        document's plain-language kurztitel, never the vgnr.
+        """Issue #25 / GitHub issue #32 regression: the *built* Vorgang exposes
+        the LLM-generated kurztitel, never the vgnr.
 
-        This pins the exact seam that regressed the issue. With the original
-        buggy assignment (``kurztitel=vorgang_id``) this Vorgang's kurztitel
-        would have been ``"V-246999"``; it must now be the semantic title.
+        With the original buggy assignment (``kurztitel=vorgang_id``) this
+        Vorgang's kurztitel would have been ``"V-246999"``. Staging Vorgang
+        116d8179 (V-238884) showed the other failure: the long titel echoed back.
         """
         from bawue.bawue_dok import EnrichmentResult
 
@@ -139,22 +138,28 @@ class TestBuildVorgang:
         scraper.session = MagicMock()
         scraper._client = MagicMock()
         scraper.config = MagicMock()
+        scraper.config.cache.get_raw.return_value = None
         scraper._llm_enabled = True
         scraper._llm = MagicMock()
         scraper._llm_model = "gpt-5-nano"
         scraper._llm_metrics = LLMMetrics()
 
         async def _fake_enrich(session, llm, dok, **kwargs):
-            # The initiating Gesetzentwurf comes back with an LLM kurztitel.
-            dok.kurztitel = "Ausgleich für Coronasoforthilfen"
+            dok.zusammenfassung = "Soforthilfen werden nicht zurückgefordert."
             return EnrichmentResult(dokument=dok)
 
         monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
+        llm_reply = MagicMock()
+        llm_reply.choices = [MagicMock()]
+        llm_reply.choices[0].message.content = '{"kurztitel": "Ausgleich für Coronasoforthilfen"}'
 
-        vorgang = await scraper._build_vorgang(_make_raw_vorgang("V-246999"))
+        with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, return_value=llm_reply) as acomp:
+            vorgang = await scraper._build_vorgang(_make_raw_vorgang("V-246999", titel="Gesetz über Soforthilfen"))
 
         assert vorgang.kurztitel == "Ausgleich für Coronasoforthilfen"
-        assert vorgang.kurztitel != "V-246999"
+        prompt = acomp.call_args.kwargs["messages"][-1]["content"]
+        assert "Gesetz über Soforthilfen" in prompt
+        assert "Soforthilfen werden nicht zurückgefordert." in prompt
 
     @pytest.mark.asyncio
     async def test_build_vorgang_marks_vorgang_with_failed_pdf_download(self, monkeypatch):

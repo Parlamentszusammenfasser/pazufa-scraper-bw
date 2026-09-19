@@ -749,6 +749,94 @@ def _redis_set(
 
 
 # ---------------------------------------------------------------------------
+# Vorgang Kurztitel (GitHub issue #32, DD-053)
+# ---------------------------------------------------------------------------
+
+KURZTITEL_MAX_LEN = 60
+_KURZTITEL_CACHE_PREFIX = "vorgang-kurztitel:"
+
+KURZTITEL_PROMPT = f"""\
+Formuliere einen Kurztitel für den folgenden parlamentarischen Vorgang. Er ist die
+Überschrift auf einer öffentlichen Website für Bürgerinnen und Bürger ohne juristische
+Vorkenntnisse.
+Regeln:
+- höchstens {KURZTITEL_MAX_LEN} Zeichen
+- einfache, verständliche Sprache; benenne, worum es inhaltlich geht
+- keine juristischen Floskeln wie „Gesetz zur Änderung des …“, keine Artikel- oder Paragrafenverweise
+- eine Zeile, kein Punkt am Ende, keine Anführungszeichen
+Ist der offizielle Titel bereits kurz und verständlich, übernimm ihn unverändert.
+Antworte ausschließlich mit validem JSON: {{"kurztitel": "..."}}"""
+
+# A lowercase, hyphen-joined token string is a URL slug, not a title (GitHub issue #32).
+_SLUG_RE = re.compile(r"[a-z0-9äöüß]+(?:-[a-z0-9äöüß]+)+")
+_KURZTITEL_STRIP = " \t\"'„“”«»."
+
+
+def _clean_kurztitel(raw: object) -> str:
+    """Sanitize (DD-027) and strip wrapping quotes / a trailing period."""
+    text = _sanitize_llm_text(raw) if isinstance(raw, str) else None
+    return (text or "").strip(_KURZTITEL_STRIP)
+
+
+def _kurztitel_problem(kurztitel: str) -> str | None:
+    """Why *kurztitel* breaks the rules, phrased for the re-prompt; None when valid."""
+    if not kurztitel:
+        return "Der Kurztitel ist leer."
+    if "\n" in kurztitel:
+        return "Der Kurztitel muss eine einzige Zeile sein."
+    if len(kurztitel) > KURZTITEL_MAX_LEN:
+        return f"Der Kurztitel hat {len(kurztitel)} Zeichen, erlaubt sind höchstens {KURZTITEL_MAX_LEN}."
+    if _SLUG_RE.fullmatch(kurztitel):
+        return "Der Kurztitel ist ein URL-Kürzel, kein lesbarer Titel."
+    return None
+
+
+async def vorgang_kurztitel(
+    llm: LLMConnector | None,
+    titel: str,
+    zusammenfassung: str | None,
+    model: str = "gpt-5-nano",
+    cache: BawueCache | None = None,
+) -> str:
+    """Short, human-readable Vorgang title of at most KURZTITEL_MAX_LEN characters.
+
+    Generated from the official *titel* plus the initiating document's
+    *zusammenfassung*. A rule violation is re-prompted once. Falls back to *titel*
+    when the LLM is off, fails, or stays invalid, so the field is never empty and
+    never a slug. Only generated titles are cached, so a transient failure does
+    not pin the fallback.
+    """
+    if llm is None or not titel.strip():
+        return titel
+
+    user_message = f"{KURZTITEL_PROMPT}\n\nOffizieller Titel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
+    cache_key = hashlib.sha256(f"{_SYSTEM_PROMPT}\n{user_message}".encode()).hexdigest()
+    cached = _redis_get(cache, cache_key, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
+    if cached is not None:
+        return cached
+
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user", "content": user_message},
+    ]
+    try:
+        for attempt in range(2):
+            kurztitel = _clean_kurztitel((await _llm_json(llm, model, messages)).get("kurztitel"))
+            problem = _kurztitel_problem(kurztitel)
+            if problem is None:
+                _redis_set(cache, cache_key, kurztitel, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
+                return kurztitel
+            logger.info("Kurztitel attempt %d rejected (%s): %r", attempt + 1, problem, kurztitel)
+            messages += [
+                {"role": "assistant", "content": json.dumps({"kurztitel": kurztitel}, ensure_ascii=False)},
+                {"role": "user", "content": f"{problem} Formuliere den Kurztitel neu."},
+            ]
+    except Exception:
+        logger.warning("Kurztitel generation failed for %r, using titel", titel[:60], exc_info=True)
+    return titel
+
+
+# ---------------------------------------------------------------------------
 # Main enrichment entry point
 # ---------------------------------------------------------------------------
 

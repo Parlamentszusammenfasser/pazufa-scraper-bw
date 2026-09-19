@@ -182,11 +182,39 @@ class TestBuildVorgang:
         assert vorgang.typ == Vorgangstyp.GG_LAND_PARL
 
     @pytest.mark.asyncio
-    async def test_kurztitel_is_slug(self):
+    async def test_kurztitel_without_llm_is_titel_not_slug(self):
+        """GitHub issue #32: the portal slug ("dienst-und-versorgungsbezuege") is not a title."""
         scraper = _make_scraper()
-        detail = _make_detail()
-        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
-        assert vorgang.kurztitel == "entbuerokratisierung"
+        detail = _make_detail(title="Dienst- und Versorgungsbezüge")
+        vorgang = await scraper._build_vorgang("dienst-und-versorgungsbezuege", detail)
+        assert vorgang.kurztitel == "Dienst- und Versorgungsbezüge"
+
+    @pytest.mark.asyncio
+    async def test_kurztitel_generated_from_titel_and_document_summary(self, monkeypatch):
+        """GitHub issue #32: with LLM, the kurztitel is generated (DD-053)."""
+        from bawue.bawue_dok import EnrichmentResult
+
+        async def _fake_enrich(session, llm, dok, **kwargs):
+            dok.zusammenfassung = "Besoldung steigt 2026 bis 2028."
+            return EnrichmentResult(dokument=dok)
+
+        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
+        scraper = _make_scraper()
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper.config.cache.get_raw.return_value = None
+        llm_reply = MagicMock()
+        llm_reply.choices = [MagicMock()]
+        llm_reply.choices[0].message.content = '{"kurztitel": "Höhere Beamtenbesoldung 2026 bis 2028"}'
+
+        with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, return_value=llm_reply) as acomp:
+            vorgang = await scraper._build_vorgang(
+                "dienst-und-versorgungsbezuege", _make_detail(title="Dienst- und Versorgungsbezüge")
+            )
+
+        assert vorgang.kurztitel == "Höhere Beamtenbesoldung 2026 bis 2028"
+        assert "Besoldung steigt 2026 bis 2028." in acomp.call_args.kwargs["messages"][-1]["content"]
 
     @pytest.mark.asyncio
     async def test_links_contain_beteiligung_url(self):

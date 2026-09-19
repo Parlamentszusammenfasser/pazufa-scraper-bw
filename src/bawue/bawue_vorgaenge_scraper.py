@@ -17,7 +17,7 @@ import aiohttp
 import certifi
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, clear_hash_cache
+from bawue.bawue_dok import LLMMetrics, clear_hash_cache, vorgang_kurztitel
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
@@ -461,10 +461,21 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # consumers can trace the entry back to its source in PARLIS.
         detail_url = raw.get("detail_url")
 
+        vorgang_titel = todo_if_blank(titel)
+        kurztitel = vorgang_titel
+        if self._llm_enabled and self._llm is not None:
+            kurztitel = await vorgang_kurztitel(
+                self._llm,
+                vorgang_titel,
+                _initiativ_zusammenfassung(stationen),
+                model=self._llm_model,
+                cache=self.config.cache,
+            )
+
         return Vorgang(
             api_id=str(api_id),
-            titel=todo_if_blank(titel),
-            kurztitel=_vorgang_kurztitel(stationen),
+            titel=vorgang_titel,
+            kurztitel=kurztitel,
             typ=typ,
             wahlperiode=self._wahlperiode,
             verfassungsaendernd=is_verfassungsaendernd(titel),
@@ -1248,22 +1259,19 @@ def _initiativ_drucksnr_from_fundstellen(fundstellen: list[RawFundstelle], initi
     return None
 
 
-def _vorgang_kurztitel(stationen: list[Station]) -> str | None:
-    """Return a human-readable Kurztitel for the Vorgang (Issue #25).
+def _initiativ_zusammenfassung(stationen: list[Station]) -> str | None:
+    """Summary of the initiating Gesetzentwurf/Antrag, the Kurztitel's content input.
 
-    Reuses the LLM-generated, plain-language ``kurztitel`` of the initiating
-    Gesetzentwurf/Antrag, which best summarises the whole process. Falls back to
-    the first document that carries a kurztitel, and finally to None when LLM
-    enrichment is disabled (so the official title remains the only title).
+    It describes the whole process best (GitHub issue #32, DD-053). Falls back to
+    the first document with a summary, and to None when LLM enrichment is off.
     """
     for typen in (_INITIATIV_TYPEN, None):
         for station in stationen:
             if typen is not None and station.typ not in typen:
                 continue
             for dok in station.dokumente:
-                kurztitel = dok.kurztitel
-                if kurztitel:
-                    return kurztitel
+                if dok.zusammenfassung:
+                    return dok.zusammenfassung
     return None
 
 

@@ -22,7 +22,7 @@
 Bei aktivem LLM (`[llm]`): `zusammenfassung`, `schlagworte`, `kurztitel` und `meinung` werden auf **Dokument-Ebene**
 gefüllt. Auf **Vorgang-Ebene** bleiben Lücken.
 
-Missing fields: `kurztitel` (Vorgang — nur Beteiligungsportal), `links` (Vorgang), `lobbyregister`,
+Missing fields: `links` (Vorgang), `lobbyregister`,
 `ressort` (Vorgang, #39), `sachgebiete` (Vorgang, #40), `schlagworte` (Station), `stellungnahmen`,
 `subdoc_id` (Dokument, #41), `vorwort`, `zp_modifiziert` (Station), `gremium_federf`
 
@@ -36,6 +36,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 |----------|-----------------------|-------------|--------------------------------------------------------------------------------------|
 | Vorgang  | `api_id`              | ✅ Complete  | `uuid5(NAMESPACE_URL, vorgangs_id)`                                                  |
 | Vorgang  | `titel`               | ✅ Complete  | From PARLIS / Beteiligungsportal                                                     |
+| Vorgang  | `kurztitel`           | ✅ LLM       | ≤ 60 chars, own LLM call; falls back to `titel` without `[llm]` (DD-053)             |
 | Vorgang  | `typ`                 | ✅ Complete  | Enum-mapped                                                                          |
 | Vorgang  | `wahlperiode`         | ✅ Complete  | Fixed WP 17                                                                          |
 | Vorgang  | `verfassungsaendernd` | ✅ Heuristik | Title regex (DD-023); PARLIS has no native attribute                                 |
