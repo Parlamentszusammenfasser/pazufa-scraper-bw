@@ -17,7 +17,7 @@ import aiohttp
 import certifi
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, clear_hash_cache, vorgang_kurztitel
+from bawue.bawue_dok import LLMMetrics, clear_hash_cache, vorgang_kurztitel, zusammenfassung_text
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
@@ -1270,8 +1270,8 @@ def _initiativ_zusammenfassung(stationen: list[Station]) -> str | None:
             if typen is not None and station.typ not in typen:
                 continue
             for dok in station.dokumente:
-                if dok.zusammenfassung:
-                    return dok.zusammenfassung
+                if text := zusammenfassung_text(dok):
+                    return text
     return None
 
 

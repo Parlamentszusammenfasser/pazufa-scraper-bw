@@ -445,6 +445,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 **LLM pipeline:**
 - Document-type-specific German prompts (4 variants: ENTWURF, STELLUNGNAHME, BESCHLUSSEMPF, GENERIC)
 - Extracts: `zusammenfassung`, `schlagworte`, `kurztitel`, and optionally `meinung` (1–5 score) and `vorwort`
+- `zusammenfassung` is sent as the typed tuple `[(full-llm, …)]` (DD-054)
 - JSON response with up to 3 retries on parse failures
 - Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
 - In-memory SHA256 hash cache skips LLM calls for duplicate PDFs within a run (cache key includes document identity, DD-029)

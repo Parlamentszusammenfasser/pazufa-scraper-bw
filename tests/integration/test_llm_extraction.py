@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 import aiohttp
 import pytest
 
-from bawue.bawue_dok import KURZTITEL_MAX_LEN, enrich_dokument, vorgang_kurztitel
+from bawue.bawue_dok import KURZTITEL_MAX_LEN, enrich_dokument, vorgang_kurztitel, zusammenfassung_text
 from bawue.types import Autor, Doktyp, Dokument
 
 pytestmark = pytest.mark.integration
@@ -66,8 +66,8 @@ class TestEntwurfEnrichment:
         assert len(enriched.hash_) == 64, "hash should be SHA256 hex digest"
 
         # LLM extraction worked
-        assert enriched.zusammenfassung is not None
-        assert len(enriched.zusammenfassung) > 50, "zusammenfassung should be meaningful"
+        assert enriched.zusammenfassung[0].typ == "full-llm"  # GitHub issue #42, DD-054
+        assert len(zusammenfassung_text(enriched)) > 50, "zusammenfassung should be meaningful"
         assert enriched.schlagworte is not None
         assert len(enriched.schlagworte) >= 2, "should have at least 2 keywords"
         assert enriched.kurztitel is not None
@@ -84,7 +84,7 @@ class TestEntwurfEnrichment:
         print(f"Schlagworte:     {enriched.schlagworte}")
         print(f"Hash:            {enriched.hash_}")
         print(f"Volltext:        {enriched.volltext[:200]}…")
-        print(f"Zusammenfassung: {enriched.zusammenfassung}")
+        print(f"Zusammenfassung: {zusammenfassung_text(enriched)}")
         print("=" * 72)
 
     @pytest.mark.asyncio
@@ -120,7 +120,7 @@ class TestEntwurfEnrichment:
         async with aiohttp.ClientSession() as session:
             enriched = (await enrich_dokument(session, llm, dok)).dokument
 
-        kurztitel = await vorgang_kurztitel(llm, dok.titel, enriched.zusammenfassung)
+        kurztitel = await vorgang_kurztitel(llm, dok.titel, zusammenfassung_text(enriched))
 
         print(f"\nVorgang Kurztitel (real data): {kurztitel!r}")
 

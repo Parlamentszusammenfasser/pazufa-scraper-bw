@@ -5,7 +5,7 @@
 | Category                     | Estimate  | Notes                                                                                                                                                                               |
 |------------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Pflichtfunktionalität**    | **~85 %** | Core fields complete; `volltext`/`hash` now also filled at scraper level (LLM). `tops=[]` and `nummer=0` for committees outstanding.                                                |
-| **Optionale Funktionalität** | **~50 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. Die neuen 0.2.5-Felder (`ressort`, `sachgebiete`, strukturierter `hash`, typisierte `zusammenfassung`) sind noch leer — Issues #39–#43. Zusätzliche Datenquellen fehlen weiterhin. |
+| **Optionale Funktionalität** | **~50 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. Die neuen 0.2.5-Felder (`ressort`, `sachgebiete`, strukturierter `hash`) sind noch leer; `zusammenfassung` geht als Typ `full-llm` raus (DD-054) — Issues #39–#43. Zusätzliche Datenquellen fehlen weiterhin. |
 | **Community DoD**            | **~90 %** | Core Completion ✅; Coding-Regeln ✅ (bis auf Einzelfälle s.u.); CI/Tests ✅; `verfassungsaendernd`-Konflikt dokumentiert (DD-023); offen: Wiki-Mirror der DDs, Gesetzblatt-Quelle.    |
 
 ### Known Gaps — Required Fields
@@ -54,7 +54,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Dokument | `zp_referenz`         | ✅ Complete  | Fundstelle date                                                                      |
 | Dokument | `link`                | ✅ Complete  | PDF URL from Fundstelle                                                              |
 | Dokument | `autoren`             | ✅ Complete  | Fundstelle author, else committee, else issuing body (Landtag/Landesregierung, DD-042), else Initiative |
-| Dokument | `zusammenfassung`     | ✅ LLM       | LLM-generated summary (150–250 words). Requires `[llm]` config.                      |
+| Dokument | `zusammenfassung`     | ✅ LLM       | LLM-generated summary (150–250 words), sent as `[(full-llm, …)]` (DD-054). Requires `[llm]` config. |
 | Dokument | `schlagworte`         | ✅ LLM       | LLM-generated keyword list. Requires `[llm]` config.                                 |
 | Dokument | `kurztitel`           | ✅ LLM       | LLM-generated short title in plain language. Requires `[llm]` config.                |
 | Dokument | `meinung`             | ✅ LLM       | LLM-generated opinion score (1–5). Only for Stellungnahme/Beschlussempfehlung.       |

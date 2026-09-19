@@ -10,7 +10,7 @@ from uuid import NAMESPACE_URL, uuid5
 import aiohttp
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, clear_hash_cache, vorgang_kurztitel
+from bawue.bawue_dok import LLMMetrics, clear_hash_cache, vorgang_kurztitel, zusammenfassung_text
 from bawue.beteiligung_client import BASE_URL, BeteiligungClient
 from bawue.beteiligung_parser import (
     RawBeteiligungDetail,
@@ -244,7 +244,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         titel = todo_if_blank(detail.title)
         kurztitel = titel
         if self._llm_enabled and self._llm is not None:
-            zusammenfassung = next((d.zusammenfassung for d in dokumente if d.zusammenfassung), None)
+            zusammenfassung = next(filter(None, map(zusammenfassung_text, dokumente)), None)
             kurztitel = await vorgang_kurztitel(
                 self._llm, titel, zusammenfassung, model=self._llm_model, cache=self.config.cache
             )
