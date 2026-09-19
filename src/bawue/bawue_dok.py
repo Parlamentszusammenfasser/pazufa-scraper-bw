@@ -769,13 +769,18 @@ Antworte ausschließlich mit validem JSON: {{"kurztitel": "..."}}"""
 
 # A lowercase, hyphen-joined token string is a URL slug, not a title (GitHub issue #32).
 _SLUG_RE = re.compile(r"[a-z0-9äöüß]+(?:-[a-z0-9äöüß]+)+")
-_KURZTITEL_STRIP = " \t\"'„“”«»."
+# Legal boilerplate the prompt forbids; checked so an echoed title gets the re-prompt.
+_BOILERPLATE_RE = re.compile(r"^(?:Entwurf eines )?Gesetz(?:es)? zur Änderung\b|§|\bArt(?:ikel|\.)\s*\d")
+_KURZTITEL_QUOTES = " \t\"'„“”«»"
+# A trailing period after a word of 2+ letters; keeps abbreviations like "e.V." or "u. a.".
+_TRAILING_PERIOD_RE = re.compile(r"(?<=[^\W\d_]{2})\.$")
 
 
 def _clean_kurztitel(raw: object) -> str:
     """Sanitize (DD-027) and strip wrapping quotes / a trailing period."""
     text = _sanitize_llm_text(raw) if isinstance(raw, str) else None
-    return (text or "").strip(_KURZTITEL_STRIP)
+    text = (text or "").strip(_KURZTITEL_QUOTES)
+    return _TRAILING_PERIOD_RE.sub("", text).strip(_KURZTITEL_QUOTES)
 
 
 def _kurztitel_problem(kurztitel: str) -> str | None:
@@ -788,6 +793,8 @@ def _kurztitel_problem(kurztitel: str) -> str | None:
         return f"Der Kurztitel hat {len(kurztitel)} Zeichen, erlaubt sind höchstens {KURZTITEL_MAX_LEN}."
     if _SLUG_RE.fullmatch(kurztitel):
         return "Der Kurztitel ist ein URL-Kürzel, kein lesbarer Titel."
+    if _BOILERPLATE_RE.search(kurztitel):
+        return "Der Kurztitel enthält juristische Floskeln oder Artikel-/Paragrafenverweise."
     return None
 
 

@@ -1,5 +1,6 @@
 """Tests for the BawueVorgaengeScraper item_extractor logic."""
 
+import copy
 import json
 import logging
 import re
@@ -120,6 +121,20 @@ class TestBuildVorgang:
         vorgang.stationen[0].dokumente[0].zusammenfassung = "Das Land wird klimaneutral."
 
         assert _initiativ_zusammenfassung(vorgang.stationen) == "Das Land wird klimaneutral."
+
+    @pytest.mark.asyncio
+    async def test_kurztitel_input_prefers_initiating_station(self, scraper_build_vorgang):
+        """GitHub issue #32: an earlier non-initiating document must not win."""
+        raw = _make_raw_vorgang("V-001")
+        vorgang = await scraper_build_vorgang(raw)
+        initiativ = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_INITIATIV)
+        other = copy.deepcopy(initiativ)
+        other.typ = Stationstyp.PARL_AUSSCHBER
+        other.dokumente[0].zusammenfassung = "Beschlussempfehlung des Ausschusses."
+        initiativ.dokumente[0].zusammenfassung = "Das Land wird klimaneutral."
+
+        stationen = [other, initiativ]  # non-initiating document first
+        assert _initiativ_zusammenfassung(stationen) == "Das Land wird klimaneutral."
 
     @pytest.mark.asyncio
     async def test_build_vorgang_kurztitel_is_semantic_not_vgnr(self, monkeypatch):

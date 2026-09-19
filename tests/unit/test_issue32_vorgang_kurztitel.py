@@ -113,6 +113,27 @@ class TestVorgangKurztitel:
             assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == LONG_TITEL
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "Gesetz zur Änderung des Abgeordnetengesetzes",  # acceptance example: boilerplate echoed
+            "Entwurf eines Gesetzes zur Änderung des Schulgesetzes",
+            "Änderung von § 5 Landeswahlgesetz",
+            "Neufassung von Artikel 3 der Verfassung",
+        ],
+    )
+    async def test_legal_boilerplate_is_reprompted(self, bad):
+        """Rule 2: legal boilerplate / article references get the agreed re-prompt."""
+        with _patch_llm(bad, GOOD) as acomp:
+            assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == GOOD
+        assert acomp.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_abbreviation_period_is_kept(self):
+        with _patch_llm("Förderung für Sportvereine e.V."):
+            assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == "Förderung für Sportvereine e.V."
+
+    @pytest.mark.asyncio
     async def test_trailing_period_and_quotes_are_stripped(self):
         with _patch_llm(f"„{GOOD}.“"):
             assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == GOOD
