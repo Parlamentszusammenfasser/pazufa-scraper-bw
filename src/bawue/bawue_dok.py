@@ -27,7 +27,7 @@ from pazufa_corelib.llm import LLMConnector
 from pazufa_corelib.normalization import normalize_volltext as _core_normalize_volltext
 
 from bawue.cache import BawueCache
-from bawue.types import Doktyp, Dokument
+from bawue.types import Doktyp, Dokument, Zusammenfassungstupel
 
 logger = logging.getLogger(__name__)
 
@@ -359,6 +359,24 @@ def _sanitize_llm_text(text: str | None) -> str | None:
     text = text.replace("<", "\u2039").replace(">", "\u203a")
     text = text.strip()
     return text or None
+
+
+# Reserved spec-0.2.5 type for an LLM-written summary of the whole document
+# (GitHub issue #42, DD-054); a plain string would be stored as `full`.
+ZUSAMMENFASSUNG_TYP = "full-llm"
+
+
+def _llm_zusammenfassung(text: str | None) -> list[Zusammenfassungstupel] | None:
+    """Sanitised LLM summary as the typed ``[(full-llm, text)]`` list, None if empty."""
+    text = _sanitize_llm_text(text)
+    return [Zusammenfassungstupel(typ=ZUSAMMENFASSUNG_TYP, inhalt=text)] if text else None
+
+
+def zusammenfassung_text(dok: Dokument) -> str | None:
+    """Plain text of *dok*'s ``full-llm`` summary, None when it has none."""
+    if isinstance(dok.zusammenfassung, list):
+        return next((t.inhalt for t in dok.zusammenfassung if t.typ == ZUSAMMENFASSUNG_TYP), None)
+    return None
 
 
 def _sanitize_llm_strings(values: list[str] | None) -> list[str] | None:
@@ -1010,7 +1028,7 @@ async def enrich_dokument(
                     link=dok.link,
                     autoren=dok.autoren,
                     drucksnr=dok.drucksnr,
-                    zusammenfassung=_sanitize_llm_text(semantics.get("zusammenfassung")),
+                    zusammenfassung=_llm_zusammenfassung(semantics.get("zusammenfassung")),
                     schlagworte=_sanitize_llm_strings(semantics.get("schlagworte")),
                     kurztitel=_sanitize_llm_text(semantics.get("kurztitel")),
                     meinung=semantics.get("meinung"),

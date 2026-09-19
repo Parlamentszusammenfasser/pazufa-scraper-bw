@@ -33,8 +33,9 @@ from bawue.bawue_dok import (
     extract_semantics,
     narrow_to_relevant_section,
     normalize_volltext,
+    zusammenfassung_text,
 )
-from bawue.types import UNSET, Autor, Doktyp, Dokument
+from bawue.types import UNSET, Autor, Doktyp, Dokument, Zusammenfassungstupel
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -664,7 +665,7 @@ class TestEnrichDokument:
         assert isinstance(result, EnrichmentResult)
         assert result.dokument.volltext == SAMPLE_FULL_TEXT
         assert result.dokument.hash_ == SAMPLE_HASH
-        assert result.dokument.zusammenfassung == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
+        assert zusammenfassung_text(result.dokument) == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
         assert result.dokument.schlagworte == ["umwelt", "klimaschutz", "energie"]
         assert result.dokument.kurztitel == "Erneuerbare-Energien-Gesetz"
         assert result.dokument.vorwort is not None
@@ -979,7 +980,7 @@ class TestSharedRedeprotokollNeutralSummary:
         assert result_privatschule.dokument.zusammenfassung == result_kita.dokument.zusammenfassung
         assert result_privatschule.dokument.schlagworte == result_kita.dokument.schlagworte
         assert result_privatschule.dokument.kurztitel == result_kita.dokument.kurztitel
-        assert "FALSCHES THEMA" not in result_privatschule.dokument.zusammenfassung
+        assert "FALSCHES THEMA" not in zusammenfassung_text(result_privatschule.dokument)
 
 
 # ---------------------------------------------------------------------------
@@ -1536,11 +1537,11 @@ class TestEnrichDokumentSanitization:
         with _patch_pdf_pipeline(), _patch_llm(polluted_response):
             result = await enrich_dokument(session, llm, dok)
 
-        assert result.dokument.zusammenfassung == "Der Landtag hat das Gesetz beschlossen."
+        assert zusammenfassung_text(result.dokument) == "Der Landtag hat das Gesetz beschlossen."
         assert result.dokument.vorwort == "Ziel: Klimaschutz"
         # No raw brackets reach the API model \u2014 guards against the backend XSS validator.
-        assert "<" not in result.dokument.zusammenfassung
-        assert ">" not in result.dokument.zusammenfassung
+        assert "<" not in zusammenfassung_text(result.dokument)
+        assert ">" not in zusammenfassung_text(result.dokument)
 
 
 # ---------------------------------------------------------------------------
@@ -2197,7 +2198,7 @@ class TestRedisCacheIntegration:
             result = await enrich_dokument(session, llm, dok, cache=cache)
 
         mock_acomp.assert_not_called()
-        assert result.dokument.zusammenfassung == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
+        assert zusammenfassung_text(result.dokument) == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
 
     @pytest.mark.asyncio
     async def test_in_memory_cache_takes_priority_over_redis(self):
@@ -2265,3 +2266,39 @@ class TestRedisCacheIntegration:
 
         assert metrics.cache_hits == 1
         assert metrics.success == 0
+
+
+class TestIssue42TypedZusammenfassung:
+    """GitHub issue #42 step 1 (DD-054): our summary is LLM-written, so it goes out
+    as the typed tuple ``[(full-llm, …)]`` instead of a plain string (= ``full``)."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_summary_is_sent_as_full_llm_tuple(self):
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument(typ=Doktyp.ENTWURF))
+
+        assert result.dokument.to_dict()["zusammenfassung"] == [
+            {"typ": "full-llm", "inhalt": "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."}
+        ]
+
+    @pytest.mark.asyncio
+    async def test_missing_summary_sends_no_tuple(self):
+        response = json.dumps({"schlagworte": ["umwelt"], "kurztitel": "Klima"})
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument(typ=Doktyp.ENTWURF))
+
+        assert result.dokument.zusammenfassung is None
+
+    def test_zusammenfassung_text_reads_the_full_llm_inhalt(self):
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        assert zusammenfassung_text(dok) is None
+        dok.zusammenfassung = None
+        assert zusammenfassung_text(dok) is None
+        dok.zusammenfassung = [Zusammenfassungstupel(typ="full-llm", inhalt="Kurz gesagt.")]
+        assert zusammenfassung_text(dok) == "Kurz gesagt."

@@ -25,7 +25,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _same_round_label,
 )
 from bawue.parlis_parser import parse_fundstelle_text
-from bawue.types import UNSET, Doktyp, Stationstyp, Vorgangstyp, placeholder_hash
+from bawue.types import UNSET, Doktyp, Stationstyp, Vorgangstyp, Zusammenfassungstupel, placeholder_hash
 
 
 def _make_raw_vorgang(
@@ -118,7 +118,9 @@ class TestBuildVorgang:
         raw = _make_raw_vorgang("V-001")
         vorgang = await scraper_build_vorgang(raw)
 
-        vorgang.stationen[0].dokumente[0].zusammenfassung = "Das Land wird klimaneutral."
+        vorgang.stationen[0].dokumente[0].zusammenfassung = [
+            Zusammenfassungstupel(typ="full-llm", inhalt="Das Land wird klimaneutral.")
+        ]
 
         assert _initiativ_zusammenfassung(vorgang.stationen) == "Das Land wird klimaneutral."
 
@@ -130,8 +132,12 @@ class TestBuildVorgang:
         initiativ = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_INITIATIV)
         other = copy.deepcopy(initiativ)
         other.typ = Stationstyp.PARL_AUSSCHBER
-        other.dokumente[0].zusammenfassung = "Beschlussempfehlung des Ausschusses."
-        initiativ.dokumente[0].zusammenfassung = "Das Land wird klimaneutral."
+        other.dokumente[0].zusammenfassung = [
+            Zusammenfassungstupel(typ="full-llm", inhalt="Beschlussempfehlung des Ausschusses.")
+        ]
+        initiativ.dokumente[0].zusammenfassung = [
+            Zusammenfassungstupel(typ="full-llm", inhalt="Das Land wird klimaneutral.")
+        ]
 
         stationen = [other, initiativ]  # non-initiating document first
         assert _initiativ_zusammenfassung(stationen) == "Das Land wird klimaneutral."
@@ -160,7 +166,9 @@ class TestBuildVorgang:
         scraper._llm_metrics = LLMMetrics()
 
         async def _fake_enrich(session, llm, dok, **kwargs):
-            dok.zusammenfassung = "Soforthilfen werden nicht zurückgefordert."
+            dok.zusammenfassung = [
+                Zusammenfassungstupel(typ="full-llm", inhalt="Soforthilfen werden nicht zurückgefordert.")
+            ]
             return EnrichmentResult(dokument=dok)
 
         monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
@@ -174,7 +182,8 @@ class TestBuildVorgang:
         assert vorgang.kurztitel == "Ausgleich für Coronasoforthilfen"
         prompt = acomp.call_args.kwargs["messages"][-1]["content"]
         assert "Gesetz über Soforthilfen" in prompt
-        assert "Soforthilfen werden nicht zurückgefordert." in prompt
+        # Plain text, not the tuple list: keeps the kurztitel cache key unchanged (issue #42).
+        assert prompt.endswith("Zusammenfassung: Soforthilfen werden nicht zurückgefordert.")
 
     @pytest.mark.asyncio
     async def test_build_vorgang_marks_vorgang_with_failed_pdf_download(self, monkeypatch):

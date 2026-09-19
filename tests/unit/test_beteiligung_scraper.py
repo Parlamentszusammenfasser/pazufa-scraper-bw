@@ -11,7 +11,7 @@ import pytest
 from bawue.bawue_beteiligung_scraper import DEFAULT_WAHLPERIODE, BawueBeteiligungScraper
 from bawue.bawue_dok import LLMMetrics
 from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
-from bawue.types import Doktyp, Parlament, Stationstyp, Vorgangstyp, placeholder_hash
+from bawue.types import Doktyp, Parlament, Stationstyp, Vorgangstyp, Zusammenfassungstupel, placeholder_hash
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
 
@@ -195,7 +195,7 @@ class TestBuildVorgang:
         from bawue.bawue_dok import EnrichmentResult
 
         async def _fake_enrich(session, llm, dok, **kwargs):
-            dok.zusammenfassung = "Besoldung steigt 2026 bis 2028."
+            dok.zusammenfassung = [Zusammenfassungstupel(typ="full-llm", inhalt="Besoldung steigt 2026 bis 2028.")]
             return EnrichmentResult(dokument=dok)
 
         monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
@@ -214,7 +214,10 @@ class TestBuildVorgang:
             )
 
         assert vorgang.kurztitel == "Höhere Beamtenbesoldung 2026 bis 2028"
-        assert "Besoldung steigt 2026 bis 2028." in acomp.call_args.kwargs["messages"][-1]["content"]
+        # Plain text, not the tuple list: keeps the kurztitel cache key unchanged (issue #42).
+        assert acomp.call_args.kwargs["messages"][-1]["content"].endswith(
+            "Zusammenfassung: Besoldung steigt 2026 bis 2028."
+        )
 
     @pytest.mark.asyncio
     async def test_links_contain_beteiligung_url(self):

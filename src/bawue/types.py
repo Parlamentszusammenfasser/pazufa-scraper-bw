@@ -33,6 +33,7 @@ from pazufa_corelib.api_client.models.stationstyp import Stationstyp
 from pazufa_corelib.api_client.models.vg_ident import VgIdent
 from pazufa_corelib.api_client.models.vorgang import Vorgang
 from pazufa_corelib.api_client.models.vorgangstyp import Vorgangstyp
+from pazufa_corelib.api_client.models.zusammenfassungstupel import Zusammenfassungstupel
 from pazufa_corelib.api_client.types import UNSET, Unset
 
 __all__ = [
@@ -54,6 +55,7 @@ __all__ = [
     "VgIdent",
     "Vorgang",
     "Vorgangstyp",
+    "Zusammenfassungstupel",
     "canonicalize_organisation",
     "is_verfassungsaendernd",
     "none_if_blank",
