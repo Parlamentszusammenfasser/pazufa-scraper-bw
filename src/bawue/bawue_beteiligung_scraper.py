@@ -10,7 +10,7 @@ from uuid import NAMESPACE_URL, uuid5
 import aiohttp
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, clear_hash_cache
+from bawue.bawue_dok import LLMMetrics, clear_hash_cache, vorgang_kurztitel
 from bawue.beteiligung_client import BASE_URL, BeteiligungClient
 from bawue.beteiligung_parser import (
     RawBeteiligungDetail,
@@ -240,10 +240,19 @@ class BawueBeteiligungScraper(VorgangsScraper):
         # `vorgnr` ident — api_id already provides stable identity for dedup.
         beteiligung_url = f"{BASE_URL}/de/mitmachen/lp-{self._wahlperiode}/{slug}"
 
+        # The slug is not a title (GitHub issue #32, DD-053).
+        titel = todo_if_blank(detail.title)
+        kurztitel = titel
+        if self._llm_enabled and self._llm is not None:
+            zusammenfassung = next((d.zusammenfassung for d in dokumente if d.zusammenfassung), None)
+            kurztitel = await vorgang_kurztitel(
+                self._llm, titel, zusammenfassung, model=self._llm_model, cache=self.config.cache
+            )
+
         return Vorgang(
             api_id=str(api_id),
-            titel=todo_if_blank(detail.title),
-            kurztitel=slug,
+            titel=titel,
+            kurztitel=kurztitel,
             typ=Vorgangstyp.GG_LAND_PARL,
             wahlperiode=self._wahlperiode,
             verfassungsaendernd=is_verfassungsaendernd(detail.title),

@@ -628,6 +628,21 @@ def _parse_llm_response(content: str) -> dict:
         return repaired
 
 
+async def _llm_json(llm: LLMConnector, model: str, messages: list[dict]) -> dict:
+    """Run one JSON-mode chat completion and return the parsed object."""
+    async with _LLM_SEMAPHORE:
+        response = await litellm.acompletion(
+            model=model,
+            api_key=llm.api_key,
+            messages=messages,
+            temperature=llm.temperature,
+            timeout=llm.timeout_seconds,
+            response_format={"type": "json_object"},
+            num_retries=MAX_JSON_RETRIES,
+        )
+    return _parse_llm_response(response.choices[0].message.content)
+
+
 async def extract_semantics(
     llm: LLMConnector,
     full_text: str,
@@ -662,20 +677,7 @@ async def extract_semantics(
         {"role": "user", "content": user_message},
     ]
 
-    async with _LLM_SEMAPHORE:
-        response = await litellm.acompletion(
-            model=model,
-            api_key=llm.api_key,
-            messages=messages,
-            temperature=llm.temperature,
-            timeout=llm.timeout_seconds,
-            response_format={"type": "json_object"},
-            num_retries=MAX_JSON_RETRIES,
-        )
-
-    content = response.choices[0].message.content
-    data = _parse_llm_response(content)
-    return _validate_scores(data)
+    return _validate_scores(await _llm_json(llm, model, messages))
 
 
 async def narrow_to_relevant_section(
@@ -728,18 +730,117 @@ def _cache_key(doc_hash: str, prompt_hash: str) -> str:
     return f"{doc_hash}:{prompt_hash}"
 
 
-def _redis_get(cache: BawueCache | None, key: str) -> str | None:
-    """Look up LLM semantics in Redis. Returns JSON string or None."""
+def _redis_get(
+    cache: BawueCache | None, key: str, prefix: str = _REDIS_CACHE_PREFIX, typehint: str = "LLM Semantics"
+) -> str | None:
+    """Look up an LLM result in Redis under *prefix*. Returns the stored string or None."""
     if cache is None:
         return None
-    return cache.get_raw(f"{_REDIS_CACHE_PREFIX}{key}", typehint="LLM Semantics")
+    return cache.get_raw(f"{prefix}{key}", typehint=typehint)
 
 
-def _redis_set(cache: BawueCache | None, key: str, value: str) -> None:
-    """Store LLM semantics in Redis."""
+def _redis_set(
+    cache: BawueCache | None, key: str, value: str, prefix: str = _REDIS_CACHE_PREFIX, typehint: str = "LLM Semantics"
+) -> None:
+    """Store an LLM result in Redis under *prefix*."""
     if cache is None:
         return
-    cache.store_raw(f"{_REDIS_CACHE_PREFIX}{key}", value, typehint="LLM Semantics")
+    cache.store_raw(f"{prefix}{key}", value, typehint=typehint)
+
+
+# ---------------------------------------------------------------------------
+# Vorgang Kurztitel (GitHub issue #32, DD-053)
+# ---------------------------------------------------------------------------
+
+KURZTITEL_MAX_LEN = 60
+_KURZTITEL_CACHE_PREFIX = "vorgang-kurztitel:"
+
+KURZTITEL_PROMPT = f"""\
+Formuliere einen Kurztitel für den folgenden parlamentarischen Vorgang. Er ist die
+Überschrift auf einer öffentlichen Website für Bürgerinnen und Bürger ohne juristische
+Vorkenntnisse.
+Regeln:
+- höchstens {KURZTITEL_MAX_LEN} Zeichen
+- einfache, verständliche Sprache; benenne, worum es inhaltlich geht
+- keine juristischen Floskeln wie „Gesetz zur Änderung des …“, keine Artikel- oder Paragrafenverweise
+- eine Zeile, kein Punkt am Ende, keine Anführungszeichen
+Ist der offizielle Titel bereits kurz und verständlich, übernimm ihn unverändert.
+Antworte ausschließlich mit validem JSON: {{"kurztitel": "..."}}"""
+
+# A lowercase, hyphen-joined token string is a URL slug, not a title (GitHub issue #32).
+_SLUG_RE = re.compile(r"[a-z0-9äöüß]+(?:-[a-z0-9äöüß]+)+")
+# Legal boilerplate the prompt forbids; checked so an echoed title gets the re-prompt.
+_BOILERPLATE_RE = re.compile(r"^(?:Entwurf eines )?Gesetz(?:es)? zur Änderung\b|§|\bArt(?:ikel|\.)\s*\d")
+_KURZTITEL_QUOTES = " \t\"'„“”«»"
+# A trailing period after a word of 2+ letters; keeps abbreviations like "e.V." or "u. a.".
+_TRAILING_PERIOD_RE = re.compile(r"(?<=[^\W\d_]{2})\.$")
+
+
+def _clean_kurztitel(raw: object) -> str:
+    """Sanitize (DD-027) and strip wrapping quotes / a trailing period."""
+    text = _sanitize_llm_text(raw) if isinstance(raw, str) else None
+    text = (text or "").strip(_KURZTITEL_QUOTES)
+    return _TRAILING_PERIOD_RE.sub("", text).strip(_KURZTITEL_QUOTES)
+
+
+def _kurztitel_problem(kurztitel: str) -> str | None:
+    """Why *kurztitel* breaks the rules, phrased for the re-prompt; None when valid."""
+    if not kurztitel:
+        return "Der Kurztitel ist leer."
+    if "\n" in kurztitel:
+        return "Der Kurztitel muss eine einzige Zeile sein."
+    if len(kurztitel) > KURZTITEL_MAX_LEN:
+        return f"Der Kurztitel hat {len(kurztitel)} Zeichen, erlaubt sind höchstens {KURZTITEL_MAX_LEN}."
+    if _SLUG_RE.fullmatch(kurztitel):
+        return "Der Kurztitel ist ein URL-Kürzel, kein lesbarer Titel."
+    if _BOILERPLATE_RE.search(kurztitel):
+        return "Der Kurztitel enthält juristische Floskeln oder Artikel-/Paragrafenverweise."
+    return None
+
+
+async def vorgang_kurztitel(
+    llm: LLMConnector | None,
+    titel: str,
+    zusammenfassung: str | None,
+    model: str = "gpt-5-nano",
+    cache: BawueCache | None = None,
+) -> str:
+    """Short, human-readable Vorgang title of at most KURZTITEL_MAX_LEN characters.
+
+    Generated from the official *titel* plus the initiating document's
+    *zusammenfassung*. A rule violation is re-prompted once. Falls back to *titel*
+    when the LLM is off, fails, or stays invalid, so the field is never empty and
+    never a slug. Only generated titles are cached, so a transient failure does
+    not pin the fallback.
+    """
+    if llm is None or not titel.strip():
+        return titel
+
+    user_message = f"{KURZTITEL_PROMPT}\n\nOffizieller Titel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
+    cache_key = hashlib.sha256(f"{_SYSTEM_PROMPT}\n{user_message}".encode()).hexdigest()
+    cached = _redis_get(cache, cache_key, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
+    if cached is not None:
+        return cached
+
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user", "content": user_message},
+    ]
+    try:
+        for attempt in range(2):
+            kurztitel = _clean_kurztitel((await _llm_json(llm, model, messages)).get("kurztitel"))
+            problem = _kurztitel_problem(kurztitel)
+            if problem is None:
+                _redis_set(cache, cache_key, kurztitel, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
+                return kurztitel
+            logger.info("Kurztitel attempt %d rejected (%s): %r", attempt + 1, problem, kurztitel)
+            messages += [
+                {"role": "assistant", "content": json.dumps({"kurztitel": kurztitel}, ensure_ascii=False)},
+                {"role": "user", "content": f"{problem} Formuliere den Kurztitel neu."},
+            ]
+    except Exception:
+        logger.warning("Kurztitel generation failed for %r, using titel", titel[:60], exc_info=True)
+    return titel
 
 
 # ---------------------------------------------------------------------------

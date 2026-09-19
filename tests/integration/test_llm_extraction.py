@@ -13,9 +13,8 @@ from datetime import UTC, datetime
 import aiohttp
 import pytest
 
-from bawue.bawue_dok import enrich_dokument
-from bawue.bawue_vorgaenge_scraper import _vorgang_kurztitel
-from bawue.types import Autor, Doktyp, Dokument, Gremium, Parlament, Station, Stationstyp
+from bawue.bawue_dok import KURZTITEL_MAX_LEN, enrich_dokument, vorgang_kurztitel
+from bawue.types import Autor, Doktyp, Dokument
 
 pytestmark = pytest.mark.integration
 
@@ -108,41 +107,29 @@ class TestEntwurfEnrichment:
         assert enriched.zp_modifiziert == datetime(2026, 1, 15, tzinfo=UTC)
 
     @pytest.mark.asyncio
-    async def test_vorgang_kurztitel_is_semantic_not_number(self):
-        """Issue #25 (special case, real data): a real Landtag Gesetzentwurf must
-        yield a Vorgang Kurztitel that is a human-readable summary — never the
-        Vorgangs-/Drucksachennummer.
+    async def test_vorgang_kurztitel_is_short_and_readable(self):
+        """Issue #25 / GitHub issue #32 (real data): a real Gesetzentwurf yields a
+        Vorgang Kurztitel that is a short, human-readable title (DD-053).
 
-        This is the end-to-end guarantee the issue is about, and only real
-        document text + a real LLM can validate the *semantic* quality of the
-        title. Deterministic wiring is covered by the unit tests; this test
-        covers the content the unit tests cannot fake.
+        Only real document text + a real LLM can validate the *semantic* quality;
+        wiring and fallbacks are covered by the unit tests.
         """
         dok = _make_test_dokument(typ=Doktyp.ENTWURF)
         llm = _make_llm()
 
         async with aiohttp.ClientSession() as session:
-            result = await enrich_dokument(session, llm, dok)
-        enriched = result.dokument
+            enriched = (await enrich_dokument(session, llm, dok)).dokument
 
-        # Wrap the enriched initiating document into its Station, exactly as the
-        # scraper does before building the Vorgang.
-        station = Station(
-            zp_start=datetime(2026, 1, 15, tzinfo=UTC),
-            gremium=Gremium(name="Plenum", wahlperiode=17, parlament=Parlament.BW),
-            typ=Stationstyp.PARL_INITIATIV,
-            dokumente=[enriched],
-        )
-
-        kurztitel = _vorgang_kurztitel([station])
+        kurztitel = await vorgang_kurztitel(llm, dok.titel, enriched.zusammenfassung)
 
         print(f"\nVorgang Kurztitel (real data): {kurztitel!r}")
 
-        assert kurztitel == enriched.kurztitel, "Vorgang reuses the initiating document's kurztitel"
-        assert kurztitel, "kurztitel must not be empty"
-        # It must be a title, not an identifier: not the drucksnr, and not a bare number.
+        # dok.titel is 98 chars: anything else than the fallback means generation succeeded.
+        assert kurztitel != dok.titel, "LLM generation fell back to titel"
+        assert len(kurztitel) <= KURZTITEL_MAX_LEN
+        assert "\n" not in kurztitel
+        # It must be a title, not an identifier.
         assert kurztitel != enriched.drucksnr
-        assert not kurztitel.replace("/", "").replace("-", "").isdigit(), "kurztitel must not be a bare number"
         assert " " in kurztitel.strip(), "a human-readable title has more than one word"
 
     @pytest.mark.asyncio
