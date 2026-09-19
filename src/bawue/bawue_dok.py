@@ -628,6 +628,21 @@ def _parse_llm_response(content: str) -> dict:
         return repaired
 
 
+async def _llm_json(llm: LLMConnector, model: str, messages: list[dict]) -> dict:
+    """Run one JSON-mode chat completion and return the parsed object."""
+    async with _LLM_SEMAPHORE:
+        response = await litellm.acompletion(
+            model=model,
+            api_key=llm.api_key,
+            messages=messages,
+            temperature=llm.temperature,
+            timeout=llm.timeout_seconds,
+            response_format={"type": "json_object"},
+            num_retries=MAX_JSON_RETRIES,
+        )
+    return _parse_llm_response(response.choices[0].message.content)
+
+
 async def extract_semantics(
     llm: LLMConnector,
     full_text: str,
@@ -662,20 +677,7 @@ async def extract_semantics(
         {"role": "user", "content": user_message},
     ]
 
-    async with _LLM_SEMAPHORE:
-        response = await litellm.acompletion(
-            model=model,
-            api_key=llm.api_key,
-            messages=messages,
-            temperature=llm.temperature,
-            timeout=llm.timeout_seconds,
-            response_format={"type": "json_object"},
-            num_retries=MAX_JSON_RETRIES,
-        )
-
-    content = response.choices[0].message.content
-    data = _parse_llm_response(content)
-    return _validate_scores(data)
+    return _validate_scores(await _llm_json(llm, model, messages))
 
 
 async def narrow_to_relevant_section(
