@@ -730,18 +730,22 @@ def _cache_key(doc_hash: str, prompt_hash: str) -> str:
     return f"{doc_hash}:{prompt_hash}"
 
 
-def _redis_get(cache: BawueCache | None, key: str) -> str | None:
-    """Look up LLM semantics in Redis. Returns JSON string or None."""
+def _redis_get(
+    cache: BawueCache | None, key: str, prefix: str = _REDIS_CACHE_PREFIX, typehint: str = "LLM Semantics"
+) -> str | None:
+    """Look up an LLM result in Redis under *prefix*. Returns the stored string or None."""
     if cache is None:
         return None
-    return cache.get_raw(f"{_REDIS_CACHE_PREFIX}{key}", typehint="LLM Semantics")
+    return cache.get_raw(f"{prefix}{key}", typehint=typehint)
 
 
-def _redis_set(cache: BawueCache | None, key: str, value: str) -> None:
-    """Store LLM semantics in Redis."""
+def _redis_set(
+    cache: BawueCache | None, key: str, value: str, prefix: str = _REDIS_CACHE_PREFIX, typehint: str = "LLM Semantics"
+) -> None:
+    """Store an LLM result in Redis under *prefix*."""
     if cache is None:
         return
-    cache.store_raw(f"{_REDIS_CACHE_PREFIX}{key}", value, typehint="LLM Semantics")
+    cache.store_raw(f"{prefix}{key}", value, typehint=typehint)
 
 
 # ---------------------------------------------------------------------------
