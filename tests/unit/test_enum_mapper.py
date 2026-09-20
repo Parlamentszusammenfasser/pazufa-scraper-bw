@@ -700,10 +700,11 @@ class TestRessortMapping:
         """Leave `ressort` unset rather than guessing (issue #39)."""
         assert map_ressort("Ministerium für besondere Aufgaben") is None
 
-    def test_all_mapped_values_exist_in_framework(self):
-        """Canary: every mapped value must be a real `Ressort` member."""
-        framework_values = {m.value for m in Ressort}
-        assert {r.value for r in RESSORT_MAP.values()}.issubset(framework_values)
+    def test_mapping_covers_the_framework_enum_exactly(self):
+        """Canary, both directions: every mapped value is a real `Ressort`, and every
+        `Ressort` has a keyword — one added by a later spec would otherwise never be
+        assigned (same rule as `test_all_doktyp_values_valid`)."""
+        assert {r.value for r in RESSORT_MAP.values()} == {m.value for m in Ressort}
 
     def test_keywords_are_lowercase(self):
         """Matching lower-cases the ministry name, so upper-case keys would never hit."""

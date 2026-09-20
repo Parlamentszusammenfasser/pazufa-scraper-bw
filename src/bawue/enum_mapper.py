@@ -219,7 +219,9 @@ RESSORT_MAP: dict[str, Ressort] = {
 # that stay true if a future key ever becomes the prefix of another. The lookbehind
 # requires the keyword to start a word: it stops "Energiewirtschaft" from
 # counting as a Wirtschaft ministry, "Ausbildung" as a Bildung one.
-_RESSORT_RE = re.compile(r"(?<![a-zäöüß])(" + "|".join(sorted(RESSORT_MAP, key=len, reverse=True)) + r")")
+_RESSORT_RE = re.compile(
+    r"(?<![a-zäöüß])(" + "|".join(re.escape(key) for key in sorted(RESSORT_MAP, key=len, reverse=True)) + r")"
+)
 
 
 def map_vorgangstyp(parlis_typ: str) -> Vorgangstyp:
