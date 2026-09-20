@@ -374,7 +374,7 @@ Configuration from `[beteiligung]` section.
 | `kurztitel`         | LLM short title, fallback `titel` (DD-053)      |
 | `typ`               | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`          |
 | `initiatoren`       | `[Autor(organisation=ministry)]`                |
-| `ressort`           | Ressort des Ministeriums laut Tabelle (DD-055)  |
+| `ressort`           | LLM-Klassifikation des Schwerpunkts (DD-055)    |
 | Station `typ`       | `Stationstyp.PREPARL_MINUS_REGENT`              |
 | Station `gremium`   | `Parlament.BW, "regierung"` (reservierter Name) |
 | Station `dokumente` | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF`       |
@@ -447,6 +447,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 - Document-type-specific German prompts (4 variants: ENTWURF, STELLUNGNAHME, BESCHLUSSEMPF, GENERIC)
 - Extracts: `zusammenfassung`, `schlagworte`, `kurztitel`, and optionally `meinung` (1–5 score) and `vorwort`
 - `zusammenfassung` is sent as the typed tuple `[(full-llm, …)]` (DD-054)
+- `Vorgang.ressort` is an own LLM call per Vorgang, classified by subject matter; prompt mirrored from the BB scraper (DD-055)
 - JSON response with up to 3 retries on parse failures
 - Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
 - In-memory SHA256 hash cache skips LLM calls for duplicate PDFs within a run (cache key includes document identity, DD-029)
@@ -555,29 +556,6 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | Regierungserklärung/Regierungsinformation | `sonstig`      |
 | Untersuchungsausschuss                    | `sonstig`      |
 | *(all others — PARLIS has 29+ types)*     | `sonstig`      |
-
-### Ministerium → PaZuFa `Ressort`
-
-Kuratierte Tabelle `RESSORT_BY_MINISTERIUM` (DD-055): je Ministerium eine bewusst gewählte Zeile,
-nichts wird aus dem Wortlaut des Namens abgeleitet. Die Spec beschreibt das Feld als „usually the
-name of a ministry" — es benennt das zuständige Haus, nicht das Thema (Thema: `sachgebiete`, #40).
-Quelle ist das federführende Ministerium (Beteiligungsportal) bzw. `Initiative` oder
-Fundstellen-Autor (PARLIS). In PARLIS bleibt `ressort` oft `UNSET`: Regierungsentwürfe stehen dort
-unter „Landesregierung", ein Ministerium nennen vor allem Anfragen (antwortendes Ministerium) und
-die „…/eines Ministeriums"-Vorgangstypen. Ein unbekanntes (umbenanntes) Ministerium liefert kein
-Ressort und wird einmal je Name geloggt.
-
-| Ministerium (Auswahl)                                         | PaZuFa `ressort`           |
-|---------------------------------------------------------------|----------------------------|
-| Ministerium für Umwelt, Klima und Energiewirtschaft             | `Umwelt`                   |
-| Ministerium für Soziales, Arbeit und Gesundheit (WP18)          | `Soziales`                 |
-| Ministerium des Inneren, für Digitalisierung und Europa (WP18)  | `Inneres`                  |
-| Ministerium der Justiz und für Migration                        | `Justiz`                   |
-| Ministerium für Kultus (WP18) / Kultus, Jugend und Sport (WP17) | `Bildung`                  |
-| Ministerium für Ländlichen Raum, Landwirtschaft und Heimat      | `Landwirtschaft`           |
-| Ministerium für Landesentwicklung und Wohnen                    | `Landes-/Stadtentwicklung` |
-| Staatsministerium                                               | *(kein Fachressort)*       |
-| Fraktion / Landesregierung / Abgeordnete                        | *(kein Ressort)*           |
 
 ### Fundstelle → PaZuFa `Stationstyp`
 

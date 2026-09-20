@@ -5133,75 +5133,37 @@ class TestPlaceholderHash:
 
 
 class TestIssue39Ressort:
-    """GitHub issue #39 (DD-055): PARLIS names the responsible ministry either as
-    the Initiative or as the author of a Fundstelle; a Fraktion has no Ressort."""
+    """GitHub issue #39 (DD-055): `ressort` comes from the LLM classification of the
+    subject matter, so it is omitted entirely when the LLM is off."""
 
     @pytest.mark.asyncio
-    async def test_ressort_from_initiative(self, scraper_build_vorgang):
-        raw = _make_raw_vorgang("V-001", initiative="Ministerium für Umwelt, Klima und Energiewirtschaft")
-
-        vorgang = await scraper_build_vorgang(raw)
-
-        assert vorgang.ressort == Ressort.UMWELT
-
-    @pytest.mark.asyncio
-    async def test_fraktion_initiative_leaves_ressort_unset(self, scraper_build_vorgang):
-        raw = _make_raw_vorgang("V-002", initiative="Fraktion GRÜNE")
-
-        vorgang = await scraper_build_vorgang(raw)
+    async def test_no_llm_leaves_ressort_unset(self, scraper_build_vorgang):
+        vorgang = await scraper_build_vorgang(_make_raw_vorgang("V-001"))
 
         assert vorgang.ressort is UNSET
         assert "ressort" not in vorgang.to_dict()
 
     @pytest.mark.asyncio
-    async def test_ressort_from_answering_ministry_in_fundstelle(self, scraper_build_vorgang):
-        """A Kleine Anfrage is initiated by an Abgeordneter; the answering ministry
-        is the one that owns the subject."""
-        raw = _make_raw_vorgang(
-            "V-003",
-            vorgangstyp="Kleine Anfrage",
-            initiative="Abg. Max Mustermann",
-            fundstellen=[
-                {
-                    "raw": "Kleine Anfrage    Abg. Max Mustermann  22.01.2026 Drucksache 17/12250   (5 S.)",
-                    "datum": "22.01.2026",
-                    "drucksache": "17/12250",
-                    "station_typ": "Kleine Anfrage",
-                    "autor_text": "Abg. Max Mustermann",
-                    "pdf_url": "",
-                },
-                {
-                    "raw": "Antwort    Ministerium für Verkehr  19.02.2026 Drucksache 17/12250   (5 S.)",
-                    "datum": "19.02.2026",
-                    "drucksache": "17/12250",
-                    "station_typ": "Antwort",
-                    "autor_text": "Ministerium für Verkehr",
-                    "pdf_url": "",
-                },
-            ],
+    async def test_classified_ressort_reaches_the_vorgang(self, scraper_build_vorgang, monkeypatch):
+        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
+        monkeypatch.setattr(
+            "bawue.bawue_vorgaenge_scraper.vorgang_ressort",
+            AsyncMock(return_value=Ressort.UMWELT),
         )
-
-        vorgang = await scraper_build_vorgang(raw)
-
-        assert vorgang.ressort == Ressort.VERKEHRINFRASTRUKTUR
-
-    @pytest.mark.asyncio
-    async def test_initiative_ministry_beats_fundstelle_ministry(self, scraper_build_vorgang):
-        raw = _make_raw_vorgang(
-            "V-004",
-            initiative="Ministerium der Justiz und für Migration",
-            fundstellen=[
-                {
-                    "raw": "Mitteilung    Ministerium für Verkehr  19.02.2026 Drucksache 17/12250   (5 S.)",
-                    "datum": "19.02.2026",
-                    "drucksache": "17/12250",
-                    "station_typ": "Mitteilung",
-                    "autor_text": "Ministerium für Verkehr",
-                    "pdf_url": "",
-                },
-            ],
+        monkeypatch.setattr(
+            "bawue.bawue_vorgaenge_scraper.vorgang_kurztitel",
+            AsyncMock(return_value="Kurz"),
         )
+        scraper._wahlperiode = 17
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper.config = MagicMock()
 
-        vorgang = await scraper_build_vorgang(raw)
+        vorgang = await scraper._build_vorgang(_make_raw_vorgang("V-002"))
 
-        assert vorgang.ressort == Ressort.JUSTIZ
+        assert vorgang.ressort == Ressort.UMWELT
+        assert vorgang.to_dict()["ressort"] == "Umwelt"

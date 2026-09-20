@@ -61,7 +61,6 @@ __all__ = [
     "canonicalize_organisation",
     "is_verfassungsaendernd",
     "none_if_blank",
-    "org_lookup_key",
     "placeholder_hash",
     "todo_if_blank",
 ]
@@ -138,7 +137,7 @@ _ORGANISATION_ALIASES: dict[str, CanonicalOrganisation] = {
 _NON_ALNUM_RE = re.compile(r"[^\w]+", re.UNICODE)
 
 
-def org_lookup_key(raw: str) -> str:
+def _org_lookup_key(raw: str) -> str:
     """Lowercase + strip non-alphanumeric for variant-tolerant lookup."""
     return _NON_ALNUM_RE.sub("", raw).lower()
 
@@ -203,7 +202,7 @@ def canonicalize_organisation(raw: str) -> str:
     stripped = raw.strip()
     if not stripped:
         return stripped
-    return _ORGANISATION_ALIASES.get(org_lookup_key(stripped), stripped)
+    return _ORGANISATION_ALIASES.get(_org_lookup_key(stripped), stripped)
 
 
 # Matches the two canonical German title phrasings for acts that amend the

@@ -1,16 +1,12 @@
 """Mapping from PARLIS terminology to PaZuFa enum values.
 
 The dictionaries below are fully populated from the architecture document.
-The Vorgangs-/Stations-/Dokumententyp matchers use case-insensitive substring matching
-against dictionary keys; `map_ressort` looks the ministry up by its full name (DD-055).
+The matching functions use case-insensitive substring matching against dictionary keys.
 """
 
-import logging
 import re
 
-from bawue.types import Doktyp, Ressort, Stationstyp, Vorgangstyp, org_lookup_key
-
-logger = logging.getLogger(__name__)
+from bawue.types import Doktyp, Stationstyp, Vorgangstyp
 
 # ---------------------------------------------------------------------------
 # Vorgangstyp mapping: PARLIS Vorgangstyp string → PaZuFa Vorgangstyp
@@ -158,71 +154,6 @@ DOKUMENTENTYP_MAP: dict[str, Doktyp] = {
 _DOKUMENTENTYP_KEYS_SORTED = sorted(DOKUMENTENTYP_MAP.keys(), key=len, reverse=True)
 
 
-# ---------------------------------------------------------------------------
-# Ressort mapping: BW-Ministerium → PaZuFa Ressort (issue #39, DD-055)
-#
-# The spec defines `Ressort` as "the Ressort, which the Vorgang is associated
-# with. Usually the name of a ministry" — the field names the responsible house,
-# not the subject matter (that is `sachgebiete`, issue #40). Every BW ministry
-# covers several Ressorts while the enum holds exactly one value, so which value
-# a ministry gets is decided here per ministry and justified in DD-055; nothing
-# is derived from the wording of the name.
-#
-# Covers the cabinets whose Vorgänge are in PARLIS (WP16-WP18). `None` means the
-# house deliberately has no Fachressort. A ministry that is missing — a renamed
-# one after a Regierungsbildung — yields no Ressort and is logged once, so the
-# gap shows up instead of being papered over by a guess.
-# ---------------------------------------------------------------------------
-RESSORT_BY_MINISTERIUM: dict[str, Ressort | None] = {
-    # Regierungszentrale, kein Fachressort
-    "Staatsministerium": None,
-    # WP18 (seit 05/2026)
-    "Ministerium des Inneren, für Digitalisierung und Europa": Ressort.INNERES,
-    "Ministerium für Kultus": Ressort.BILDUNG,
-    "Ministerium für Wirtschaft, Handwerk und Tourismus": Ressort.WIRTSCHAFT,
-    "Ministerium für Soziales, Arbeit und Gesundheit": Ressort.SOZIALES,
-    "Ministerium für Ländlichen Raum, Landwirtschaft und Heimat": Ressort.LANDWIRTSCHAFT,
-    # WP17 (2021-2026)
-    "Ministerium des Inneren, für Digitalisierung und Kommunen": Ressort.INNERES,
-    "Ministerium für Kultus, Jugend und Sport": Ressort.BILDUNG,
-    "Ministerium für Wirtschaft, Arbeit und Tourismus": Ressort.WIRTSCHAFT,
-    "Ministerium für Soziales, Gesundheit und Integration": Ressort.SOZIALES,
-    "Ministerium für Ernährung, Ländlichen Raum und Verbraucherschutz": Ressort.LANDWIRTSCHAFT,
-    # WP16 (2016-2021)
-    "Ministerium für Inneres, Digitalisierung und Migration": Ressort.INNERES,
-    "Ministerium für Soziales und Integration": Ressort.SOZIALES,
-    "Ministerium für Wirtschaft, Arbeit und Wohnungsbau": Ressort.WIRTSCHAFT,
-    "Ministerium für Ländlichen Raum und Verbraucherschutz": Ressort.LANDWIRTSCHAFT,
-    "Ministerium der Justiz und für Europa": Ressort.JUSTIZ,
-    # Unverändert über die Wahlperioden
-    "Ministerium für Finanzen": Ressort.FINANZEN,
-    "Ministerium für Wissenschaft, Forschung und Kunst": Ressort.WISSENSCHAFT,
-    "Ministerium für Umwelt, Klima und Energiewirtschaft": Ressort.UMWELT,
-    "Ministerium für Verkehr": Ressort.VERKEHRINFRASTRUKTUR,
-    "Ministerium der Justiz und für Migration": Ressort.JUSTIZ,
-    "Ministerium für Landesentwicklung und Wohnen": Ressort.LANDES_STADTENTWICKLUNG,
-    # Kurzformen, wie sie in PARLIS-Autorenfeldern vorkommen
-    "Innenministerium": Ressort.INNERES,
-    "Kultusministerium": Ressort.BILDUNG,
-    "Finanzministerium": Ressort.FINANZEN,
-    "Justizministerium": Ressort.JUSTIZ,
-    "Sozialministerium": Ressort.SOZIALES,
-    "Umweltministerium": Ressort.UMWELT,
-    "Verkehrsministerium": Ressort.VERKEHRINFRASTRUKTUR,
-    "Wirtschaftsministerium": Ressort.WIRTSCHAFT,
-    "Wissenschaftsministerium": Ressort.WISSENSCHAFT,
-    "Landwirtschaftsministerium": Ressort.LANDWIRTSCHAFT,
-}
-
-# Punctuation- and case-tolerant lookup ("Ministerium für Verkehr" vs "Ministerium
-# fuer Verkehr," vs double spaces), same normalisation as `canonicalize_organisation`.
-_RESSORT_LOOKUP: dict[str, Ressort | None] = {
-    org_lookup_key(name): ressort for name, ressort in RESSORT_BY_MINISTERIUM.items()
-}
-
-_UNKNOWN_MINISTERIEN: set[str] = set()
-
-
 def map_vorgangstyp(parlis_typ: str) -> Vorgangstyp:
     """Map a PARLIS Vorgangstyp string to the PaZuFa Vorgangstyp enum."""
     return VORGANGSTYP_MAP.get(parlis_typ, Vorgangstyp.SONSTIG)
@@ -261,27 +192,3 @@ def map_dokumententyp(context: str, is_vorparlamentarisch: bool = False) -> Dokt
                 return Doktyp.PREPARL_ENTWURF
             return DOKUMENTENTYP_MAP[key]
     return Doktyp.SONSTIG
-
-
-def map_ressort(organisation: str) -> Ressort | None:
-    """The Ressort of a named BW ministry, None for anything else (DD-055).
-
-    Only ministries carry a Ressort: a Fraktion, an Ausschuss, "Landesregierung"
-    or an Abgeordneter returns None. A ministry that is not in
-    `RESSORT_BY_MINISTERIUM` — typically one renamed by a new cabinet — also
-    returns None and is logged once, so `Vorgang.ressort` stays unset instead of
-    carrying a guess derived from the name.
-    """
-    name = _normalize_whitespace(organisation)
-    if "ministerium" not in name.lower():
-        return None
-    key = org_lookup_key(name)
-    if key in _RESSORT_LOOKUP:
-        return _RESSORT_LOOKUP[key]
-    if name not in _UNKNOWN_MINISTERIEN:
-        _UNKNOWN_MINISTERIEN.add(name)
-        logger.warning(
-            "Unknown ministry '%s' — no Ressort assigned. Add a row to RESSORT_BY_MINISTERIUM (DD-055).",
-            name,
-        )
-    return None

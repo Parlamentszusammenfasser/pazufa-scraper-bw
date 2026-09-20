@@ -10,7 +10,7 @@ from uuid import NAMESPACE_URL, uuid5
 import aiohttp
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, clear_hash_cache, vorgang_kurztitel, zusammenfassung_text
+from bawue.bawue_dok import LLMMetrics, clear_hash_cache, vorgang_kurztitel, vorgang_ressort, zusammenfassung_text
 from bawue.beteiligung_client import BASE_URL, BeteiligungClient
 from bawue.beteiligung_parser import (
     RawBeteiligungDetail,
@@ -19,7 +19,6 @@ from bawue.beteiligung_parser import (
 )
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
-from bawue.enum_mapper import map_ressort
 from bawue.notifications import send_mattermost_summary
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
@@ -243,10 +242,16 @@ class BawueBeteiligungScraper(VorgangsScraper):
         # The slug is not a title (GitHub issue #32, DD-053).
         titel = todo_if_blank(detail.title)
         kurztitel = titel
+        ressort = UNSET
         if self._llm_enabled and self._llm is not None:
             zusammenfassung = next(filter(None, map(zusammenfassung_text, dokumente)), None)
             kurztitel = await vorgang_kurztitel(
                 self._llm, titel, zusammenfassung, model=self._llm_model, cache=self.config.cache
+            )
+            # Classified from the subject matter, not from the ministry (issue #39, DD-055).
+            ressort = (
+                await vorgang_ressort(self._llm, titel, zusammenfassung, model=self._llm_model, cache=self.config.cache)
+                or UNSET
             )
 
         return Vorgang(
@@ -259,9 +264,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             initiatoren=ministry_autoren,
             stationen=[station],
             links=[beteiligung_url],
-            # The Beteiligungsportal names the federführende ministry outright
-            # (issue #39, DD-055).
-            ressort=map_ressort(ministry) or UNSET,
+            ressort=ressort,
         )
 
 

@@ -27,7 +27,7 @@ from pazufa_corelib.llm import LLMConnector
 from pazufa_corelib.normalization import normalize_volltext as _core_normalize_volltext
 
 from bawue.cache import BawueCache
-from bawue.types import Doktyp, Dokument, Zusammenfassungstupel
+from bawue.types import Doktyp, Dokument, Ressort, Zusammenfassungstupel
 
 logger = logging.getLogger(__name__)
 
@@ -859,6 +859,82 @@ async def vorgang_kurztitel(
     except Exception:
         logger.warning("Kurztitel generation failed for %r, using titel", titel[:60], exc_info=True)
     return titel
+
+
+# ---------------------------------------------------------------------------
+# Vorgang Ressort (GitHub issue #39, DD-055)
+# ---------------------------------------------------------------------------
+
+_RESSORT_CACHE_PREFIX = "vorgang-ressort:"
+_RESSORT_LISTE = "\n".join(f"- {r.value}" for r in Ressort)
+
+# The rules mirror pazufa-scraper-bb's RESSORT_PROMPT (its issue #53) so a Ressort
+# means the same thing in every Land's data: the subject matter of the regulation
+# decides, not the body that submitted it. Keep the two in sync.
+RESSORT_PROMPT = f"""\
+Du bist ein parlamentarischer Analyst. Ordne den folgenden parlamentarischen Vorgang
+genau einem Ressort (Ministerium/Geschäftsbereich) zu.
+
+Wähle EXAKT einen Wert aus dieser Liste:
+{_RESSORT_LISTE}
+
+REGELN:
+- Maßgeblich ist der fachliche Schwerpunkt der Regelung, nicht der einbringende Akteur.
+- Haushaltsgesetze und Gesetze zu Abgaben/Steuern gehören zu "Finanzen".
+- Kommunalrecht und Gesetze zur Gemeinde-/Kreisebene gehören zu "Kommunales".
+- Wenn kein Wert der Liste fachlich passt: null zurückgeben.
+
+Antworte ausschließlich mit validem JSON: {{"ressort": "..."}} oder {{"ressort": null}}"""
+
+
+async def vorgang_ressort(
+    llm: LLMConnector | None,
+    titel: str,
+    zusammenfassung: str | None,
+    model: str = "gpt-5-nano",
+    cache: BawueCache | None = None,
+) -> Ressort | None:
+    """The Ressort a Vorgang belongs to, classified from *titel* + *zusammenfassung*.
+
+    Returns None when the LLM is off, the call fails, no listed Ressort fits, or
+    the model answers with something outside the enum — the caller then omits the
+    field instead of sending a guess. Cached under its own prefix, so the
+    `llm-semantics:` cache stays untouched (DD-052/DD-053).
+    """
+    if llm is None or not titel.strip():
+        return None
+
+    user_message = f"{RESSORT_PROMPT}\n\nTitel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
+    cache_key = hashlib.sha256(f"{_SYSTEM_PROMPT}\n{user_message}".encode()).hexdigest()
+    cached = _redis_get(cache, cache_key, prefix=_RESSORT_CACHE_PREFIX, typehint="Vorgang Ressort")
+    if cached is not None:
+        return _parse_ressort(cached, titel)
+
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user", "content": user_message},
+    ]
+    try:
+        raw = (await _llm_json(llm, model, messages)).get("ressort")
+    except Exception:
+        logger.warning("Ressort classification failed for %r", titel[:60], exc_info=True)
+        return None
+
+    ressort = _parse_ressort(raw, titel)
+    if ressort is not None:
+        _redis_set(cache, cache_key, ressort.value, prefix=_RESSORT_CACHE_PREFIX, typehint="Vorgang Ressort")
+    return ressort
+
+
+def _parse_ressort(raw: object, titel: str) -> Ressort | None:
+    """The `Ressort` member *raw* names, None for null or anything off the enum."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        return Ressort(raw.strip())
+    except ValueError:
+        logger.info("LLM returned unknown Ressort %r for %r", raw, titel[:60])
+        return None
 
 
 # ---------------------------------------------------------------------------

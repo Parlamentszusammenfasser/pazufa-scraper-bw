@@ -615,24 +615,34 @@ class TestInit:
 
 
 class TestIssue39Ressort:
-    """GitHub issue #39 (DD-055): the federführende ministry fills `Vorgang.ressort`."""
+    """GitHub issue #39 (DD-055): `ressort` is the LLM's classification of the subject
+    matter, not a lookup of the federführende ministry."""
 
     @pytest.mark.asyncio
-    async def test_ressort_from_ministry(self):
+    async def test_no_llm_leaves_ressort_unset(self):
         scraper = _make_scraper()
-        detail = _make_detail(ministry="Ministerium der Justiz und für Migration")
 
-        vorgang = await scraper._build_vorgang("justizgesetz", detail)
-
-        assert vorgang.ressort == Ressort.JUSTIZ
-        assert vorgang.to_dict()["ressort"] == "Justiz"
-
-    @pytest.mark.asyncio
-    async def test_no_ministry_leaves_ressort_unset(self):
-        scraper = _make_scraper()
-        detail = _make_detail(ministry="")
-
-        vorgang = await scraper._build_vorgang("ohne-ministerium", detail)
+        vorgang = await scraper._build_vorgang("ohne-llm", _make_detail())
 
         assert vorgang.ressort is UNSET
         assert "ressort" not in vorgang.to_dict()
+
+    @pytest.mark.asyncio
+    async def test_classified_ressort_reaches_the_vorgang(self, monkeypatch):
+        scraper = _make_scraper()
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        monkeypatch.setattr(
+            "bawue.bawue_beteiligung_scraper.vorgang_ressort",
+            AsyncMock(return_value=Ressort.JUSTIZ),
+        )
+        monkeypatch.setattr(
+            "bawue.bawue_beteiligung_scraper.vorgang_kurztitel",
+            AsyncMock(return_value="Kurz"),
+        )
+
+        vorgang = await scraper._build_vorgang("justizgesetz", _make_detail())
+
+        assert vorgang.ressort == Ressort.JUSTIZ
+        assert vorgang.to_dict()["ressort"] == "Justiz"
