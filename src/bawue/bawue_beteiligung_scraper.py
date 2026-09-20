@@ -184,10 +184,12 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
         # An empty ministry yields no Autor — the new backend rejects
         # empty organisation strings, so the list stays empty rather than
-        # carrying a placeholder author. `canonicalize_organisation` strips, so
-        # a blank name canonicalises to "" and drops out here.
-        ministry = canonicalize_organisation(detail.ministry) if detail.ministry else ""
-        ministry_autoren = [Autor(organisation=ministry)] if ministry else []
+        # carrying a placeholder author.
+        ministry_autoren = (
+            [Autor(organisation=canonicalize_organisation(detail.ministry))]
+            if detail.ministry and detail.ministry.strip()
+            else []
+        )
 
         # Build documents
         dokumente: list[Dokument] = []

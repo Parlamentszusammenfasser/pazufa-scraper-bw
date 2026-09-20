@@ -5167,3 +5167,30 @@ class TestIssue39Ressort:
 
         assert vorgang.ressort == Ressort.UMWELT
         assert vorgang.to_dict()["ressort"] == "Umwelt"
+
+    @pytest.mark.asyncio
+    async def test_unclassified_vorgang_omits_the_field(self, monkeypatch):
+        """LLM on, but nothing fits: the key must be absent, not `null` — the backend
+        distinguishes the two, and every other test passes with a plain `None` too."""
+        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
+        monkeypatch.setattr(
+            "bawue.bawue_vorgaenge_scraper.vorgang_ressort",
+            AsyncMock(return_value=None),
+        )
+        monkeypatch.setattr(
+            "bawue.bawue_vorgaenge_scraper.vorgang_kurztitel",
+            AsyncMock(return_value="Kurz"),
+        )
+        scraper._wahlperiode = 17
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper.config = MagicMock()
+
+        vorgang = await scraper._build_vorgang(_make_raw_vorgang("V-003"))
+
+        assert vorgang.ressort is UNSET
+        assert "ressort" not in vorgang.to_dict()

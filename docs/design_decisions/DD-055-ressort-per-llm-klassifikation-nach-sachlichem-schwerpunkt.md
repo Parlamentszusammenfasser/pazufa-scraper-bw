@@ -29,17 +29,41 @@ gemeinsame Quelle ist die Enum-Liste selbst.
 
 1. `bawue_dok.vorgang_ressort` klassifiziert je Vorgang per eigenem LLM-Call aus `titel` +
    Initiativ-Zusammenfassung gegen `Ressort`. Kein Wert wird aus Namen abgeleitet.
-2. Der Prompt (`RESSORT_PROMPT`) **spiegelt den Prompt von `pazufa-scraper-bb`** — gleiche Regeln
-   (Schwerpunkt statt Akteur, Haushalt/Steuern → `Finanzen`, Kommunalrecht → `Kommunales`,
-   `null` wenn nichts passt), damit ein Ressort in BW dasselbe bedeutet wie in BB. Änderungen an
-   den Regeln gehören mit BB abgestimmt.
-3. Alle 33 Enum-Werte stehen im Prompt; ein Testkanarienvogel sichert das ab (analog BB). Eine
-   Antwort außerhalb des Enums wird verworfen (`None`), nicht als Rohstring gesendet.
-4. Kein Ressort → Feld bleibt `UNSET` und wird gar nicht gesendet: LLM aus (Default), Call
-   fehlgeschlagen, `null` oder unbekannter Wert.
+2. Der Prompt (`RESSORT_PROMPT`) **spiegelt die Regeln von `pazufa-scraper-bb`** — Schwerpunkt
+   statt Akteur, Haushalt/Steuern → `Finanzen`, Kommunalrecht → `Kommunales`, `null` wenn nichts
+   passt; die vier REGELN und die Enum-Liste sind zeichengleich. Änderungen an den Regeln gehören
+   mit BB abgestimmt.
+
+   **Bewusst nicht gespiegelt** (Review zu PR #55): BB klassifiziert aus `volltext[:5000]` des
+   Gesetzentwurfs, BW aus `titel` + LLM-Zusammenfassung des Initiativdokuments (ohne
+   Zusammenfassung: Titel allein); BB spricht vom „Gesetzentwurf", BW vom „parlamentarischen
+   Vorgang"; die Default-Modelle unterscheiden sich (BB `gpt-4o-mini`, BW `gpt-5-nano`). Die
+   Zusammenfassung als Eingabe ist billiger und bereits gecacht, kann aber den Schwerpunkt
+   verschieben — insbesondere bei Haushaltsbegleitgesetzen, wo die Zusammenfassung die
+   finanzierten Bereiche plastischer beschreibt als die Haushaltssystematik. Vor dem ersten
+   vollständigen Backfill an einer gemeinsamen Stichprobe mit BB gegenprüfen.
+3. Alle 33 Enum-Werte stehen im Prompt; ein Testkanarienvogel sichert das ab (analog BB).
+   Die Antwort wird schreibweisentolerant aufgelöst (Groß-/Kleinschreibung, Leerzeichen und
+   Trennzeichen der zusammengesetzten Werte wie `Verkehr/Infrastruktur` oder
+   `Landes-/Stadtentwicklung`, auch der Enum-Membername). Bleibt sie unauflösbar, wird sie
+   verworfen (`None`, nie als Rohstring gesendet) und mit `logger.warning` protokolliert, damit
+   ein Auseinanderdriften von Modell und Enum im Lauf sichtbar wird.
+   Das Modell begründet zuerst kurz und nennt dann das Ressort (`begruendung` vor `ressort`, wie
+   in BB): das verbessert die Zuordnung und macht eine falsche Klassifikation nachvollziehbar.
+4. Kein Ressort → Feld bleibt `UNSET` und wird gar nicht gesendet: LLM aus (Default),
+   Platzhaltertitel (`TODO`, sonst würde aus dem Nichts ein Ressort erfunden), Call
+   fehlgeschlagen, `null` oder unauflösbarer Wert.
+   Klassifiziert wird nur aus dem **Initiativdokument** (`_initiativ_zusammenfassung(...,
+   any_document=False)`); die Zusammenfassung eines Plenarprotokolls beschreibt die Debatte, nicht
+   den Regelungsgegenstand. Der Kurztitel behält seinen Fallback auf ein beliebiges Dokument.
 5. **Eigener Redis-Namespace** `vorgang-ressort:<sha256(System-Prompt + Prompt + Titel +
    Zusammenfassung)>` wie beim Kurztitel (DD-053). `llm-semantics:` und `vorgang-kurztitel:`
-   bleiben unberührt; eine Prompt-Änderung invalidiert nur den Ressort-Cache.
+   bleiben unberührt; eine Prompt- oder Enum-Änderung invalidiert nur den Ressort-Cache (die
+   Enum-Liste steht im Prompt). Gespeichert wird `{"ressort": …, "begruendung": …}` — **auch ein
+   klassifiziertes `null`**: „nichts passt" ist eine dauerhafte Antwort, kein Fehler, und würde
+   sonst bei jeder Neuableitung erneut bezahlt und neu gewürfelt. Nur ein fehlgeschlagener Call
+   bleibt ungecacht, damit ein transienter Fehler kein leeres Ergebnis festschreibt. Ein
+   unlesbarer Eintrag wird als Rohwert gelesen statt zu werfen.
 6. Kosten: ein zusätzlicher LLM-Call je Vorgang (wie der Kurztitel-Call), gecacht.
 
 **Konsequenz:** Das Ressort beschreibt den fachlichen Schwerpunkt, nicht das einreichende Haus.
@@ -48,9 +72,11 @@ konsistent mit BB. Zur Spec-Formulierung „usually the name of a ministry": der
 Regelung *ist* in aller Regel der Geschäftsbereich eines Ministeriums; die Spec legt sich nicht
 auf das einbringende Haus fest.
 
-**Reichweite:** Nur mit aktivem `[llm]`; ohne LLM bleibt das Feld leer. Bereits gesendete Vorgänge
-bekommen ihr Ressort erst, wenn sich ihr PARLIS-Record ändert bzw. die `vg2:`-Einträge gelöscht
-werden (DD-052).
+**Reichweite:** Nur mit aktivem `[llm]`; ohne LLM bleibt das Feld leer. Bereits gesendete
+PARLIS-Vorgänge bekommen ihr Ressort erst, wenn sich ihr Record ändert (Fingerprint, DD-052) oder
+die `vg2:`-Einträge gelöscht werden. Im Beteiligungsportal-Scraper gibt es **keine**
+Änderungserkennung: dort wird ein gecachter Eintrag allein wegen seiner Existenz übersprungen, ein
+erneuter Lauf braucht also zwingend das Löschen der Cache-Keys.
 
 **Offen:** Das Backend schrieb `ressort` zeitweise nur beim Insert, nicht beim Merge
 (BB-CHANGELOG, backendseitig behoben 2026-08-26) — beim ersten Live-Lauf prüfen, ob das Feld an

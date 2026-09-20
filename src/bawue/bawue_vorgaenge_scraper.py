@@ -473,12 +473,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 model=self._llm_model,
                 cache=self.config.cache,
             )
-            # Classified from the subject matter, not from the initiator (issue #39, DD-055).
+            # Classified from the subject matter, not from the initiator (issue #39,
+            # DD-055) — and only from the initiating document, never from a protocol.
             ressort = (
                 await vorgang_ressort(
                     self._llm,
                     vorgang_titel,
-                    initiativ_zusammenfassung,
+                    _initiativ_zusammenfassung(stationen, any_document=False),
                     model=self._llm_model,
                     cache=self.config.cache,
                 )
@@ -1273,13 +1274,16 @@ def _initiativ_drucksnr_from_fundstellen(fundstellen: list[RawFundstelle], initi
     return None
 
 
-def _initiativ_zusammenfassung(stationen: list[Station]) -> str | None:
+def _initiativ_zusammenfassung(stationen: list[Station], *, any_document: bool = True) -> str | None:
     """Summary of the initiating Gesetzentwurf/Antrag, the Kurztitel's content input.
 
     It describes the whole process best (GitHub issue #32, DD-053). Falls back to
     the first document with a summary, and to None when LLM enrichment is off.
+    With ``any_document=False`` that fallback is dropped: the Ressort classification
+    (DD-055) must not be decided by a Plenarprotokoll's or Beschlussempfehlung's
+    summary, which describes the debate rather than the substance.
     """
-    for typen in (_INITIATIV_TYPEN, None):
+    for typen in (_INITIATIV_TYPEN, None) if any_document else (_INITIATIV_TYPEN,):
         for station in stationen:
             if typen is not None and station.typ not in typen:
                 continue

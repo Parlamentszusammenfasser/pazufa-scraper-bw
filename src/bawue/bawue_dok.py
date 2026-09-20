@@ -27,7 +27,7 @@ from pazufa_corelib.llm import LLMConnector
 from pazufa_corelib.normalization import normalize_volltext as _core_normalize_volltext
 
 from bawue.cache import BawueCache
-from bawue.types import Doktyp, Dokument, Ressort, Zusammenfassungstupel
+from bawue.types import TODO_MARKER, Doktyp, Dokument, Ressort, Zusammenfassungstupel
 
 logger = logging.getLogger(__name__)
 
@@ -875,7 +875,7 @@ RESSORT_PROMPT = f"""\
 Du bist ein parlamentarischer Analyst. Ordne den folgenden parlamentarischen Vorgang
 genau einem Ressort (Ministerium/Geschäftsbereich) zu.
 
-Wähle EXAKT einen Wert aus dieser Liste:
+Wähle EXAKT einen Wert aus dieser Liste, Schreibweise unverändert übernehmen:
 {_RESSORT_LISTE}
 
 REGELN:
@@ -884,7 +884,9 @@ REGELN:
 - Kommunalrecht und Gesetze zur Gemeinde-/Kreisebene gehören zu "Kommunales".
 - Wenn kein Wert der Liste fachlich passt: null zurückgeben.
 
-Antworte ausschließlich mit validem JSON: {{"ressort": "..."}} oder {{"ressort": null}}"""
+Begründe zuerst kurz (ein Satz), dann nenne das Ressort.
+Antworte ausschließlich mit validem JSON:
+{{"begruendung": "...", "ressort": "..."}} oder {{"begruendung": "...", "ressort": null}}"""
 
 
 async def vorgang_ressort(
@@ -896,45 +898,88 @@ async def vorgang_ressort(
 ) -> Ressort | None:
     """The Ressort a Vorgang belongs to, classified from *titel* + *zusammenfassung*.
 
-    Returns None when the LLM is off, the call fails, no listed Ressort fits, or
-    the model answers with something outside the enum — the caller then omits the
-    field instead of sending a guess. Cached under its own prefix, so the
-    `llm-semantics:` cache stays untouched (DD-052/DD-053).
+    Returns None when the LLM is off, the title is the `TODO` placeholder (there is
+    nothing to classify, and an invented Ressort is indistinguishable from a real
+    one downstream), the call fails, or no listed Ressort fits — the caller then
+    omits the field instead of sending a guess.
+
+    The classification *including* a "nothing fits" answer is cached under its own
+    prefix, so the `llm-semantics:` cache stays untouched (DD-052/DD-053) and a
+    permanent null is not re-asked on every re-derivation. Only a failed call stays
+    uncached, so a transient error does not pin an empty result.
     """
-    if llm is None or not titel.strip():
+    if llm is None or not titel.strip() or titel.strip() == TODO_MARKER:
         return None
 
     user_message = f"{RESSORT_PROMPT}\n\nTitel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
     cache_key = hashlib.sha256(f"{_SYSTEM_PROMPT}\n{user_message}".encode()).hexdigest()
     cached = _redis_get(cache, cache_key, prefix=_RESSORT_CACHE_PREFIX, typehint="Vorgang Ressort")
     if cached is not None:
-        return _parse_ressort(cached, titel)
+        return _parse_ressort(_cached_ressort(cached), titel)
 
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user", "content": user_message},
     ]
     try:
-        raw = (await _llm_json(llm, model, messages)).get("ressort")
+        answer = await _llm_json(llm, model, messages)
     except Exception:
         logger.warning("Ressort classification failed for %r", titel[:60], exc_info=True)
         return None
 
-    ressort = _parse_ressort(raw, titel)
-    if ressort is not None:
-        _redis_set(cache, cache_key, ressort.value, prefix=_RESSORT_CACHE_PREFIX, typehint="Vorgang Ressort")
+    ressort = _parse_ressort(answer.get("ressort"), titel)
+    logger.info("Ressort: %s → %s (%s)", titel[:40], ressort, str(answer.get("begruendung"))[:60])
+    # The begründung travels with the value so a wrong classification can be
+    # examined later without re-calling the model.
+    _redis_set(
+        cache,
+        cache_key,
+        json.dumps({"ressort": ressort.value if ressort else None, "begruendung": answer.get("begruendung")}),
+        prefix=_RESSORT_CACHE_PREFIX,
+        typehint="Vorgang Ressort",
+    )
     return ressort
 
 
+def _cached_ressort(cached: object) -> object:
+    """The Ressort value out of a cached answer.
+
+    Entries are JSON objects (value + begründung). Anything else is read as a bare
+    value: a malformed entry must not crash a run, and the first iteration of this
+    cache stored the plain string.
+    """
+    try:
+        return json.loads(cached).get("ressort")
+    except (TypeError, ValueError, AttributeError):
+        return cached
+
+
+def _ressort_lookup_key(value: str) -> str:
+    """Spelling-tolerant key: case, spacing and the separators of the compound values.
+
+    8 of the 33 Ressort values are slash- or hyphen-joined ("Verkehr/Infrastruktur",
+    "Landes-/Stadtentwicklung"), which is exactly where a small model drifts —
+    "Verkehr / Infrastruktur", lower case, or the enum member name.
+    """
+    return re.sub(r"[^\w]+", "", value).casefold()
+
+
+_RESSORT_BY_KEY: dict[str, Ressort] = {_ressort_lookup_key(r.value): r for r in Ressort}
+
+
 def _parse_ressort(raw: object, titel: str) -> Ressort | None:
-    """The `Ressort` member *raw* names, None for null or anything off the enum."""
+    """The `Ressort` member *raw* names, None for null or anything off the enum.
+
+    A near-miss spelling of a compound value is normalised rather than dropped; a
+    value that is no Ressort at all is logged at warning level, so a drift between
+    the model and the enum shows up in the run log instead of as a quiet gap.
+    """
     if not isinstance(raw, str) or not raw.strip():
         return None
-    try:
-        return Ressort(raw.strip())
-    except ValueError:
-        logger.info("LLM returned unknown Ressort %r for %r", raw, titel[:60])
-        return None
+    ressort = _RESSORT_BY_KEY.get(_ressort_lookup_key(raw))
+    if ressort is None:
+        logger.warning("LLM returned unknown Ressort %r for %r", raw, titel[:60])
+    return ressort
 
 
 # ---------------------------------------------------------------------------
