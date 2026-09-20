@@ -192,7 +192,9 @@ RESSORT_MAP: dict[str, Ressort] = {
     "justiz": Ressort.JUSTIZ,
     "kinder": Ressort.KINDER,
     "klima": Ressort.KLIMASCHUTZ,
-    "kommun": Ressort.KOMMUNALES,
+    # Not the shorter "kommun": that also matches "Kommunikation".
+    "kommunal": Ressort.KOMMUNALES,
+    "kommunen": Ressort.KOMMUNALES,
     "kunst": Ressort.KUNSTKULTUR,
     "kultur": Ressort.KUNSTKULTUR,
     "landesentwicklung": Ressort.LANDES_STADTENTWICKLUNG,
@@ -213,8 +215,8 @@ RESSORT_MAP: dict[str, Ressort] = {
     "bauen": Ressort.WOHNENBAU,
 }
 
-# Leftmost match wins (= the leading Ressort); longest-first alternation keeps
-# "inneres" from being swallowed by "innen" at the same position. The lookbehind
+# Leftmost match wins (= the leading Ressort); the longest-first alternation makes
+# that stay true if a future key ever becomes the prefix of another. The lookbehind
 # requires the keyword to start a word: it stops "Energiewirtschaft" from
 # counting as a Wirtschaft ministry, "Ausbildung" as a Bildung one.
 _RESSORT_RE = re.compile(r"(?<![a-zäöüß])(" + "|".join(sorted(RESSORT_MAP, key=len, reverse=True)) + r")")

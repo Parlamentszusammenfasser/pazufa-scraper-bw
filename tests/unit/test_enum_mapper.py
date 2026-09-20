@@ -673,6 +673,12 @@ class TestRessortMapping:
         """`Energiewirtschaft` is an Energie ministry, not a Wirtschaft one."""
         assert map_ressort("Ministerium für Energiewirtschaft") == Ressort.ENERGIE
 
+    def test_kommunikation_is_not_kommunales(self):
+        """A word that merely starts like a Ressort keyword must not count."""
+        assert map_ressort("Staatsministerium, Abteilung Kommunikation") is None
+        assert map_ressort("Ministerium für Kommunales") == Ressort.KOMMUNALES
+        assert map_ressort("Ministerium des Inneren, für Digitalisierung und Kommunen") == Ressort.INNERES
+
     @pytest.mark.parametrize(
         "organisation",
         [

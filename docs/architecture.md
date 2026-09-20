@@ -560,7 +560,9 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 
 Stichwort-Matching auf dem Ministeriumsnamen (`RESSORT_MAP`), das zuerst genannte Ressort gewinnt
 (DD-055). Quelle ist das federführende Ministerium (Beteiligungsportal) bzw. `Initiative` oder
-Fundstellen-Autor (PARLIS); ohne Ministerium bleibt `ressort` `UNSET`.
+Fundstellen-Autor (PARLIS); ohne Ministerium bleibt `ressort` `UNSET`. In PARLIS trifft das oft zu:
+Regierungsentwürfe stehen dort unter „Landesregierung", ein Ministerium nennen vor allem Anfragen
+(antwortendes Ministerium) und die „…/eines Ministeriums"-Vorgangstypen.
 
 | Ministerium (Beispiel)                                     | PaZuFa `ressort`           |
 |------------------------------------------------------------|----------------------------|

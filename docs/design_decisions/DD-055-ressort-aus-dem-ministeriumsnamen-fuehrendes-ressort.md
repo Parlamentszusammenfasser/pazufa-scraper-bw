@@ -28,6 +28,12 @@ schneidet sie neu zu (WP18 seit 05/2026, z. B. „Ministerium für Soziales, Arb
    bleibt `ressort` `UNSET` statt `null` — das Feld wird dann gar nicht gesendet.
 6. Unbekannte Ministeriumsnamen ohne bekanntes Stichwort bleiben bewusst ohne Ressort.
 
+**Reichweite in PARLIS:** Gesetzentwürfe der Landesregierung laufen in PARLIS unter der
+`Initiative` „Landesregierung", und auch die Fundstellen nennen dort kein Ministerium — solche
+Vorgänge bleiben ohne Ressort. Gefüllt wird es in der Praxis vor allem bei Anfragen (antwortendes
+Ministerium in der Antwort-Fundstelle) und bei den Vorgangstypen „… der Landesregierung/eines
+Ministeriums". Das Beteiligungsportal nennt das federführende Ministerium dagegen immer.
+
 **Konsequenz:** Bei Kleinen/Großen Anfragen stammt das Ressort vom **antwortenden** Ministerium —
 das ist die fachlich zuständige Stelle und damit die gewünschte Aussage, auch wenn der Initiator
 ein Abgeordneter ist. Bereits gesendete Vorgänge bekommen ihr Ressort erst, wenn sich ihr
