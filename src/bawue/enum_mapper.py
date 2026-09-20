@@ -6,7 +6,7 @@ The matching functions use case-insensitive substring matching against dictionar
 
 import re
 
-from bawue.types import Doktyp, Stationstyp, Vorgangstyp
+from bawue.types import Doktyp, Ressort, Stationstyp, Vorgangstyp
 
 # ---------------------------------------------------------------------------
 # Vorgangstyp mapping: PARLIS Vorgangstyp string → PaZuFa Vorgangstyp
@@ -154,6 +154,72 @@ DOKUMENTENTYP_MAP: dict[str, Doktyp] = {
 _DOKUMENTENTYP_KEYS_SORTED = sorted(DOKUMENTENTYP_MAP.keys(), key=len, reverse=True)
 
 
+# ---------------------------------------------------------------------------
+# Ressort mapping: keyword in a ministry name → PaZuFa Ressort (issue #39, DD-055)
+#
+# BW ministries cover several Ressorts at once ("Ministerium für Umwelt, Klima
+# und Energiewirtschaft") and every cabinet cuts them differently, so the table
+# keys on the Ressort keywords appearing in the name rather than on the full
+# name: `map_ressort` returns the Ressort named first, which is the leading one.
+# Keys are lower-case; keep them as short as the shortest inflected form that
+# still identifies the Ressort ("sozial" covers Soziales/Sozialministerium).
+# ---------------------------------------------------------------------------
+RESSORT_MAP: dict[str, Ressort] = {
+    "arbeit": Ressort.ARBEIT,
+    "bildung": Ressort.BILDUNG,
+    "kultus": Ressort.BILDUNG,
+    "digital": Ressort.DIGITALISIERUNG,
+    "energie": Ressort.ENERGIE,
+    "ernährung": Ressort.ERNÄHRUNG,
+    "europa": Ressort.EUROPA,
+    "familie": Ressort.FAMILIESENIOREN,
+    "senioren": Ressort.FAMILIESENIOREN,
+    "finanz": Ressort.FINANZEN,
+    "forschung": Ressort.FORSCHUNG,
+    "forst": Ressort.FORSTEN,
+    "frauen": Ressort.FRAUENGLEICHSTELLUNG,
+    "gleichstellung": Ressort.FRAUENGLEICHSTELLUNG,
+    "gesundheit": Ressort.GESUNDHEITPFLEGEPRÄVENTION,
+    "pflege": Ressort.GESUNDHEITPFLEGEPRÄVENTION,
+    "prävention": Ressort.GESUNDHEITPFLEGEPRÄVENTION,
+    "heimat": Ressort.HEIMAT,
+    "inneres": Ressort.INNERES,
+    "inneren": Ressort.INNERES,
+    "innen": Ressort.INNERES,
+    "integration": Ressort.INTEGRATIONMIGRATION,
+    "migration": Ressort.INTEGRATIONMIGRATION,
+    "jugend": Ressort.JUGEND,
+    "justiz": Ressort.JUSTIZ,
+    "kinder": Ressort.KINDER,
+    "klima": Ressort.KLIMASCHUTZ,
+    "kommun": Ressort.KOMMUNALES,
+    "kunst": Ressort.KUNSTKULTUR,
+    "kultur": Ressort.KUNSTKULTUR,
+    "landesentwicklung": Ressort.LANDES_STADTENTWICKLUNG,
+    "stadtentwicklung": Ressort.LANDES_STADTENTWICKLUNG,
+    "landwirtschaft": Ressort.LANDWIRTSCHAFT,
+    "ländlich": Ressort.LÄNDLICHER_RAUM,
+    "sozial": Ressort.SOZIALES,
+    "sport": Ressort.SPORT,
+    "tourismus": Ressort.TOURISMUS,
+    "umwelt": Ressort.UMWELT,
+    "verbraucherschutz": Ressort.VERBRAUCHERSCHUTZ,
+    "verkehr": Ressort.VERKEHRINFRASTRUKTUR,
+    "infrastruktur": Ressort.VERKEHRINFRASTRUKTUR,
+    "wirtschaft": Ressort.WIRTSCHAFT,
+    "wissenschaft": Ressort.WISSENSCHAFT,
+    "wohnen": Ressort.WOHNENBAU,
+    "wohnungsbau": Ressort.WOHNENBAU,
+    "bauen": Ressort.WOHNENBAU,
+}
+
+# Leftmost match wins (= the leading Ressort); longest-first alternation keeps
+# "inneres" from being swallowed by "innen" at the same position. The lookbehind
+# requires the keyword to start a word: it stops "Energiewirtschaft" from
+# counting as a Wirtschaft ministry, "Ausbildung" as a Bildung one.
+_RESSORT_RE = re.compile(r"(?<![a-zäöüß])(" + "|".join(sorted(RESSORT_MAP, key=len, reverse=True)) + r")")
+
+
 def map_vorgangstyp(parlis_typ: str) -> Vorgangstyp:
     """Map a PARLIS Vorgangstyp string to the PaZuFa Vorgangstyp enum."""
     return VORGANGSTYP_MAP.get(parlis_typ, Vorgangstyp.SONSTIG)
@@ -192,3 +258,17 @@ def map_dokumententyp(context: str, is_vorparlamentarisch: bool = False) -> Dokt
                 return Doktyp.PREPARL_ENTWURF
             return DOKUMENTENTYP_MAP[key]
     return Doktyp.SONSTIG
+
+
+def map_ressort(organisation: str) -> Ressort | None:
+    """The leading Ressort of a ministry name, None for anything else (DD-055).
+
+    Only ministries carry a Ressort: a Fraktion, an Ausschuss, "Landesregierung"
+    or an Abgeordneter returns None, and so does a ministry whose name names no
+    known Ressort — `Vorgang.ressort` stays unset rather than being guessed.
+    """
+    text = _normalize_whitespace(organisation).lower()
+    if "ministerium" not in text:
+        return None
+    match = _RESSORT_RE.search(text)
+    return RESSORT_MAP[match.group(1)] if match else None

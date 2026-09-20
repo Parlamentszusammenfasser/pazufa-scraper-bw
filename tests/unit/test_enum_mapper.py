@@ -3,8 +3,10 @@
 import pytest
 
 from bawue.enum_mapper import (
+    RESSORT_MAP,
     VORGANGSTYP_MAP,
     map_dokumententyp,
+    map_ressort,
     map_stationstyp,
     map_vorgangstyp,
 )
@@ -12,6 +14,7 @@ from bawue.types import (
     CanonicalOrganisation,
     Doktyp,
     ReservedGremium,
+    Ressort,
     Stationstyp,
     Vorgangstyp,
     canonicalize_organisation,
@@ -624,3 +627,78 @@ class TestIsVerfassungsaendernd:
         result = is_verfassungsaendernd("Gesetz zur Änderung der Verfassung")
         assert result is True
         assert isinstance(result, bool)
+
+
+class TestRessortMapping:
+    """GitHub issue #39 (DD-055): ministry name → leading `Ressort`."""
+
+    @pytest.mark.parametrize(
+        "ministerium,expected",
+        [
+            # Kabinett WP17 (Grün-Schwarz, 2021-2026)
+            ("Staatsministerium", None),
+            ("Ministerium für Finanzen", Ressort.FINANZEN),
+            ("Ministerium des Inneren, für Digitalisierung und Kommunen", Ressort.INNERES),
+            ("Ministerium für Kultus, Jugend und Sport", Ressort.BILDUNG),
+            ("Ministerium für Wissenschaft, Forschung und Kunst", Ressort.WISSENSCHAFT),
+            ("Ministerium für Wirtschaft, Arbeit und Tourismus", Ressort.WIRTSCHAFT),
+            ("Ministerium für Soziales, Gesundheit und Integration", Ressort.SOZIALES),
+            ("Ministerium für Ernährung, Ländlichen Raum und Verbraucherschutz", Ressort.ERNÄHRUNG),
+            ("Ministerium für Umwelt, Klima und Energiewirtschaft", Ressort.UMWELT),
+            ("Ministerium für Verkehr", Ressort.VERKEHRINFRASTRUKTUR),
+            ("Ministerium der Justiz und für Migration", Ressort.JUSTIZ),
+            ("Ministerium für Landesentwicklung und Wohnen", Ressort.LANDES_STADTENTWICKLUNG),
+            # Earlier / newer cabinets rename their ministries — the keyword rule
+            # keeps working without a table update.
+            ("Ministerium für Inneres, Digitalisierung und Migration", Ressort.INNERES),
+            ("Ministerium für Soziales und Integration", Ressort.SOZIALES),
+            ("Ministerium für Soziales, Arbeit und Gesundheit", Ressort.SOZIALES),
+            ("Ministerium für Wirtschaft, Arbeit und Wohnungsbau", Ressort.WIRTSCHAFT),
+            # Short compound forms used in PARLIS prose
+            ("Innenministerium", Ressort.INNERES),
+            ("Kultusministerium", Ressort.BILDUNG),
+            ("Justizministerium", Ressort.JUSTIZ),
+            ("Finanzministerium", Ressort.FINANZEN),
+        ],
+    )
+    def test_known_ministries(self, ministerium, expected):
+        assert map_ressort(ministerium) == expected
+
+    def test_leading_ressort_wins(self):
+        """BW ministries cover several Ressorts; the first one named leads."""
+        assert map_ressort("Ministerium für Umwelt, Klima und Energiewirtschaft") == Ressort.UMWELT
+        assert map_ressort("Ministerium für Klima, Umwelt und Energiewirtschaft") == Ressort.KLIMASCHUTZ
+
+    def test_keyword_inside_a_compound_does_not_match(self):
+        """`Energiewirtschaft` is an Energie ministry, not a Wirtschaft one."""
+        assert map_ressort("Ministerium für Energiewirtschaft") == Ressort.ENERGIE
+
+    @pytest.mark.parametrize(
+        "organisation",
+        [
+            # Not a ministry: never guess a Ressort from these (issue #39).
+            "Landesregierung",
+            "Fraktion GRÜNE",
+            "Fraktion der CDU",
+            "Landtag",
+            "Ausschuss für Verkehr",
+            "Rechnungshof",
+            "",
+            "   ",
+        ],
+    )
+    def test_non_ministries_have_no_ressort(self, organisation):
+        assert map_ressort(organisation) is None
+
+    def test_unknown_ministry_has_no_ressort(self):
+        """Leave `ressort` unset rather than guessing (issue #39)."""
+        assert map_ressort("Ministerium für besondere Aufgaben") is None
+
+    def test_all_mapped_values_exist_in_framework(self):
+        """Canary: every mapped value must be a real `Ressort` member."""
+        framework_values = {m.value for m in Ressort}
+        assert {r.value for r in RESSORT_MAP.values()}.issubset(framework_values)
+
+    def test_keywords_are_lowercase(self):
+        """Matching lower-cases the ministry name, so upper-case keys would never hit."""
+        assert all(key == key.lower() for key in RESSORT_MAP)

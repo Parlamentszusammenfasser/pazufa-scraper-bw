@@ -374,6 +374,7 @@ Configuration from `[beteiligung]` section.
 | `kurztitel`         | LLM short title, fallback `titel` (DD-053)      |
 | `typ`               | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`          |
 | `initiatoren`       | `[Autor(organisation=ministry)]`                |
+| `ressort`           | Führendes Ressort des Ministeriums (DD-055)     |
 | Station `typ`       | `Stationstyp.PREPARL_MINUS_REGENT`              |
 | Station `gremium`   | `Parlament.BW, "regierung"` (reservierter Name) |
 | Station `dokumente` | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF`       |
@@ -554,6 +555,22 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | Regierungserklärung/Regierungsinformation | `sonstig`      |
 | Untersuchungsausschuss                    | `sonstig`      |
 | *(all others — PARLIS has 29+ types)*     | `sonstig`      |
+
+### Ministerium → PaZuFa `Ressort`
+
+Stichwort-Matching auf dem Ministeriumsnamen (`RESSORT_MAP`), das zuerst genannte Ressort gewinnt
+(DD-055). Quelle ist das federführende Ministerium (Beteiligungsportal) bzw. `Initiative` oder
+Fundstellen-Autor (PARLIS); ohne Ministerium bleibt `ressort` `UNSET`.
+
+| Ministerium (Beispiel)                                     | PaZuFa `ressort`           |
+|------------------------------------------------------------|----------------------------|
+| Ministerium für Umwelt, Klima und Energiewirtschaft          | `Umwelt`                   |
+| Ministerium für Soziales, Gesundheit und Integration         | `Soziales`                 |
+| Ministerium des Inneren, für Digitalisierung und Kommunen    | `Inneres`                  |
+| Ministerium der Justiz und für Migration                     | `Justiz`                   |
+| Ministerium für Kultus, Jugend und Sport                     | `Bildung`                  |
+| Ministerium für Landesentwicklung und Wohnen                 | `Landes-/Stadtentwicklung` |
+| Fraktion / Landesregierung / Abgeordnete / Staatsministerium | *(kein Ressort)*           |
 
 ### Fundstelle → PaZuFa `Stationstyp`
 

@@ -11,7 +11,16 @@ import pytest
 from bawue.bawue_beteiligung_scraper import DEFAULT_WAHLPERIODE, BawueBeteiligungScraper
 from bawue.bawue_dok import LLMMetrics
 from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
-from bawue.types import Doktyp, Parlament, Stationstyp, Vorgangstyp, Zusammenfassungstupel, placeholder_hash
+from bawue.types import (
+    UNSET,
+    Doktyp,
+    Parlament,
+    Ressort,
+    Stationstyp,
+    Vorgangstyp,
+    Zusammenfassungstupel,
+    placeholder_hash,
+)
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
 
@@ -603,3 +612,27 @@ class TestInit:
 
         assert result == {}
         assert any("Could not load" in msg for msg in caplog.messages)
+
+
+class TestIssue39Ressort:
+    """GitHub issue #39 (DD-055): the federführende ministry fills `Vorgang.ressort`."""
+
+    @pytest.mark.asyncio
+    async def test_ressort_from_ministry(self):
+        scraper = _make_scraper()
+        detail = _make_detail(ministry="Ministerium der Justiz und für Migration")
+
+        vorgang = await scraper._build_vorgang("justizgesetz", detail)
+
+        assert vorgang.ressort == Ressort.JUSTIZ
+        assert vorgang.to_dict()["ressort"] == "Justiz"
+
+    @pytest.mark.asyncio
+    async def test_no_ministry_leaves_ressort_unset(self):
+        scraper = _make_scraper()
+        detail = _make_detail(ministry="")
+
+        vorgang = await scraper._build_vorgang("ohne-ministerium", detail)
+
+        assert vorgang.ressort is UNSET
+        assert "ressort" not in vorgang.to_dict()

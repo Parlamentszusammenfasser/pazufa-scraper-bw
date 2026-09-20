@@ -25,7 +25,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _same_round_label,
 )
 from bawue.parlis_parser import parse_fundstelle_text
-from bawue.types import UNSET, Doktyp, Stationstyp, Vorgangstyp, Zusammenfassungstupel, placeholder_hash
+from bawue.types import UNSET, Doktyp, Ressort, Stationstyp, Vorgangstyp, Zusammenfassungstupel, placeholder_hash
 
 
 def _make_raw_vorgang(
@@ -5130,3 +5130,78 @@ class TestPlaceholderHash:
         hashes_second = {d.hash_ for st in second.stationen for d in st.dokumente}
         assert hashes_first and hashes_second
         assert hashes_first.isdisjoint(hashes_second)
+
+
+class TestIssue39Ressort:
+    """GitHub issue #39 (DD-055): PARLIS names the responsible ministry either as
+    the Initiative or as the author of a Fundstelle; a Fraktion has no Ressort."""
+
+    @pytest.mark.asyncio
+    async def test_ressort_from_initiative(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang("V-001", initiative="Ministerium für Umwelt, Klima und Energiewirtschaft")
+
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert vorgang.ressort == Ressort.UMWELT
+
+    @pytest.mark.asyncio
+    async def test_fraktion_initiative_leaves_ressort_unset(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang("V-002", initiative="Fraktion GRÜNE")
+
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert vorgang.ressort is UNSET
+        assert "ressort" not in vorgang.to_dict()
+
+    @pytest.mark.asyncio
+    async def test_ressort_from_answering_ministry_in_fundstelle(self, scraper_build_vorgang):
+        """A Kleine Anfrage is initiated by an Abgeordneter; the answering ministry
+        is the one that owns the subject."""
+        raw = _make_raw_vorgang(
+            "V-003",
+            vorgangstyp="Kleine Anfrage",
+            initiative="Abg. Max Mustermann",
+            fundstellen=[
+                {
+                    "raw": "Kleine Anfrage    Abg. Max Mustermann  22.01.2026 Drucksache 17/12250   (5 S.)",
+                    "datum": "22.01.2026",
+                    "drucksache": "17/12250",
+                    "station_typ": "Kleine Anfrage",
+                    "autor_text": "Abg. Max Mustermann",
+                    "pdf_url": "",
+                },
+                {
+                    "raw": "Antwort    Ministerium für Verkehr  19.02.2026 Drucksache 17/12250   (5 S.)",
+                    "datum": "19.02.2026",
+                    "drucksache": "17/12250",
+                    "station_typ": "Antwort",
+                    "autor_text": "Ministerium für Verkehr",
+                    "pdf_url": "",
+                },
+            ],
+        )
+
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert vorgang.ressort == Ressort.VERKEHRINFRASTRUKTUR
+
+    @pytest.mark.asyncio
+    async def test_initiative_ministry_beats_fundstelle_ministry(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang(
+            "V-004",
+            initiative="Ministerium der Justiz und für Migration",
+            fundstellen=[
+                {
+                    "raw": "Mitteilung    Ministerium für Verkehr  19.02.2026 Drucksache 17/12250   (5 S.)",
+                    "datum": "19.02.2026",
+                    "drucksache": "17/12250",
+                    "station_typ": "Mitteilung",
+                    "autor_text": "Ministerium für Verkehr",
+                    "pdf_url": "",
+                },
+            ],
+        )
+
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert vorgang.ressort == Ressort.JUSTIZ

@@ -19,12 +19,14 @@ from bawue.beteiligung_parser import (
 )
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
+from bawue.enum_mapper import map_ressort
 from bawue.notifications import send_mattermost_summary
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, format_duration, format_failed_section
 from bawue.types import (
     TODO_MARKER,
+    UNSET,
     Autor,
     Doktyp,
     Dokument,
@@ -259,6 +261,9 @@ class BawueBeteiligungScraper(VorgangsScraper):
             initiatoren=ministry_autoren,
             stationen=[station],
             links=[beteiligung_url],
+            # The Beteiligungsportal names the federführende ministry outright
+            # (issue #39, DD-055).
+            ressort=map_ressort(detail.ministry) or UNSET,
         )
 
 
