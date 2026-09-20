@@ -27,6 +27,7 @@ from pazufa_corelib.api_client.models.doktyp import Doktyp
 from pazufa_corelib.api_client.models.dokument import Dokument
 from pazufa_corelib.api_client.models.gremium import Gremium
 from pazufa_corelib.api_client.models.parlament import Parlament
+from pazufa_corelib.api_client.models.ressort import Ressort
 from pazufa_corelib.api_client.models.sitzung import Sitzung
 from pazufa_corelib.api_client.models.station import Station
 from pazufa_corelib.api_client.models.stationstyp import Stationstyp
@@ -48,6 +49,7 @@ __all__ = [
     "RawFundstelle",
     "RawVorgang",
     "ReservedGremium",
+    "Ressort",
     "Sitzung",
     "Station",
     "Stationstyp",

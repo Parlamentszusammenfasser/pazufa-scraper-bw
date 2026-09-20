@@ -5,7 +5,7 @@
 | Category                     | Estimate  | Notes                                                                                                                                                                               |
 |------------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Pflichtfunktionalität**    | **~85 %** | Core fields complete; `volltext`/`hash` now also filled at scraper level (LLM). `tops=[]` and `nummer=0` for committees outstanding.                                                |
-| **Optionale Funktionalität** | **~50 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. Die neuen 0.2.5-Felder (`ressort`, `sachgebiete`, strukturierter `hash`) sind noch leer; `zusammenfassung` geht als Typ `full-llm` raus (DD-054) — Issues #39–#43. Zusätzliche Datenquellen fehlen weiterhin. |
+| **Optionale Funktionalität** | **~50 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. `ressort` wird per LLM klassifiziert (DD-055); die übrigen 0.2.5-Felder (`sachgebiete`, strukturierter `hash`) sind noch leer; `zusammenfassung` geht als Typ `full-llm` raus (DD-054) — Issues #40–#43. Zusätzliche Datenquellen fehlen weiterhin. |
 | **Community DoD**            | **~90 %** | Core Completion ✅; Coding-Regeln ✅ (bis auf Einzelfälle s.u.); CI/Tests ✅; `verfassungsaendernd`-Konflikt dokumentiert (DD-023); offen: Wiki-Mirror der DDs, Gesetzblatt-Quelle.    |
 
 ### Known Gaps — Required Fields
@@ -23,7 +23,7 @@ Bei aktivem LLM (`[llm]`): `zusammenfassung`, `schlagworte`, `kurztitel` und `me
 gefüllt. Auf **Vorgang-Ebene** bleiben Lücken.
 
 Missing fields: `links` (Vorgang), `lobbyregister`,
-`ressort` (Vorgang, #39), `sachgebiete` (Vorgang, #40), `schlagworte` (Station), `stellungnahmen`,
+`sachgebiete` (Vorgang, #40), `schlagworte` (Station), `stellungnahmen`,
 `subdoc_id` (Dokument, #41), `vorwort`, `zp_modifiziert` (Station), `gremium_federf`
 
 Missing data sources: Kabinettsbeschlüsse STM. Gesetzblatt BaWue (`postparl-gsblt`) is now covered by
@@ -42,6 +42,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Vorgang  | `verfassungsaendernd` | ✅ Heuristik | Title regex (DD-023); PARLIS has no native attribute                                 |
 | Vorgang  | `initiatoren`         | ✅ Complete  | From Initiative field                                                                |
 | Vorgang  | `stationen`           | ✅ Complete  | From Fundstellen parsing                                                             |
+| Vorgang  | `ressort`             | ✅ LLM       | Eigener LLM-Call je Vorgang, Schwerpunkt statt Akteur (DD-055); ohne LLM `UNSET`      |
 | Station  | `typ`                 | ✅ Complete  | Context-aware enum mapping                                                           |
 | Station  | `dokumente`           | ✅ Complete  | PDF links from Fundstelle                                                            |
 | Station  | `zp_start`            | ✅ Complete  | From Fundstelle date (with fallbacks)                                                |

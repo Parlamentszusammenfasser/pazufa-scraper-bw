@@ -13,8 +13,14 @@ from datetime import UTC, datetime
 import aiohttp
 import pytest
 
-from bawue.bawue_dok import KURZTITEL_MAX_LEN, enrich_dokument, vorgang_kurztitel, zusammenfassung_text
-from bawue.types import Autor, Doktyp, Dokument
+from bawue.bawue_dok import (
+    KURZTITEL_MAX_LEN,
+    enrich_dokument,
+    vorgang_kurztitel,
+    vorgang_ressort,
+    zusammenfassung_text,
+)
+from bawue.types import Autor, Doktyp, Dokument, Ressort
 
 pytestmark = pytest.mark.integration
 
@@ -143,3 +149,43 @@ class TestEntwurfEnrichment:
             e2 = await enrich_dokument(session, llm, dok)
 
         assert e1.dokument.hash_ == e2.dokument.hash_
+
+
+class TestVorgangRessort:
+    """GitHub issue #39 (DD-055): the classifier picks a Ressort by subject matter."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "titel,zusammenfassung,expected",
+        [
+            (
+                "Staatshaushaltsgesetz 2027/2028",
+                "Feststellung des Staatshaushaltsplans für die Jahre 2027 und 2028.",
+                Ressort.FINANZEN,
+            ),
+            (
+                "Gesetz zur Änderung der Gemeindeordnung",
+                "Änderungen am Kommunalrecht der Gemeinden und Landkreise.",
+                Ressort.KOMMUNALES,
+            ),
+        ],
+    )
+    async def test_shared_rules_hold_on_real_calls(self, titel, zusammenfassung, expected):
+        """The two rules BW inherits from the BB prompt: Haushalt/Steuern → Finanzen,
+        Kommunalrecht → Kommunales."""
+        ressort = await vorgang_ressort(_make_llm(), titel, zusammenfassung)
+
+        print(f"\nVorgang Ressort (real LLM): {titel[:50]!r} → {ressort}")
+        assert ressort == expected
+
+    @pytest.mark.asyncio
+    async def test_subject_matter_beats_the_submitting_body(self):
+        """A wind-power bill is Energie even though an Umweltministerium submits it —
+        the difference to deriving the Ressort from the ministry name."""
+        ressort = await vorgang_ressort(
+            _make_llm(),
+            "Gesetz zur Förderung des Ausbaus der Windenergie in Baden-Württemberg",
+            "Der Entwurf beschleunigt Genehmigungsverfahren für Windkraftanlagen und weist Vorranggebiete aus.",
+        )
+
+        assert ressort in {Ressort.ENERGIE, Ressort.KLIMASCHUTZ, Ressort.UMWELT}

@@ -11,7 +11,16 @@ import pytest
 from bawue.bawue_beteiligung_scraper import DEFAULT_WAHLPERIODE, BawueBeteiligungScraper
 from bawue.bawue_dok import LLMMetrics
 from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
-from bawue.types import Doktyp, Parlament, Stationstyp, Vorgangstyp, Zusammenfassungstupel, placeholder_hash
+from bawue.types import (
+    UNSET,
+    Doktyp,
+    Parlament,
+    Ressort,
+    Stationstyp,
+    Vorgangstyp,
+    Zusammenfassungstupel,
+    placeholder_hash,
+)
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
 
@@ -603,3 +612,58 @@ class TestInit:
 
         assert result == {}
         assert any("Could not load" in msg for msg in caplog.messages)
+
+
+class TestIssue39Ressort:
+    """GitHub issue #39 (DD-055): `ressort` is the LLM's classification of the subject
+    matter, not a lookup of the federführende ministry."""
+
+    @pytest.mark.asyncio
+    async def test_no_llm_leaves_ressort_unset(self):
+        scraper = _make_scraper()
+
+        vorgang = await scraper._build_vorgang("ohne-llm", _make_detail())
+
+        assert vorgang.ressort is UNSET
+        assert "ressort" not in vorgang.to_dict()
+
+    @pytest.mark.asyncio
+    async def test_classified_ressort_reaches_the_vorgang(self, monkeypatch):
+        scraper = _make_scraper()
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        monkeypatch.setattr(
+            "bawue.bawue_beteiligung_scraper.vorgang_ressort",
+            AsyncMock(return_value=Ressort.JUSTIZ),
+        )
+        monkeypatch.setattr(
+            "bawue.bawue_beteiligung_scraper.vorgang_kurztitel",
+            AsyncMock(return_value="Kurz"),
+        )
+
+        vorgang = await scraper._build_vorgang("justizgesetz", _make_detail())
+
+        assert vorgang.ressort == Ressort.JUSTIZ
+        assert vorgang.to_dict()["ressort"] == "Justiz"
+
+    @pytest.mark.asyncio
+    async def test_unclassified_vorgang_omits_the_field(self, monkeypatch):
+        """LLM on, but nothing fits: the key must be absent, not `null`."""
+        scraper = _make_scraper()
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        monkeypatch.setattr(
+            "bawue.bawue_beteiligung_scraper.vorgang_ressort",
+            AsyncMock(return_value=None),
+        )
+        monkeypatch.setattr(
+            "bawue.bawue_beteiligung_scraper.vorgang_kurztitel",
+            AsyncMock(return_value="Kurz"),
+        )
+
+        vorgang = await scraper._build_vorgang("ohne-ressort", _make_detail())
+
+        assert vorgang.ressort is UNSET
+        assert "ressort" not in vorgang.to_dict()

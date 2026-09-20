@@ -25,7 +25,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _same_round_label,
 )
 from bawue.parlis_parser import parse_fundstelle_text
-from bawue.types import UNSET, Doktyp, Stationstyp, Vorgangstyp, Zusammenfassungstupel, placeholder_hash
+from bawue.types import UNSET, Doktyp, Ressort, Stationstyp, Vorgangstyp, Zusammenfassungstupel, placeholder_hash
 
 
 def _make_raw_vorgang(
@@ -5130,3 +5130,67 @@ class TestPlaceholderHash:
         hashes_second = {d.hash_ for st in second.stationen for d in st.dokumente}
         assert hashes_first and hashes_second
         assert hashes_first.isdisjoint(hashes_second)
+
+
+class TestIssue39Ressort:
+    """GitHub issue #39 (DD-055): `ressort` comes from the LLM classification of the
+    subject matter, so it is omitted entirely when the LLM is off."""
+
+    @pytest.mark.asyncio
+    async def test_no_llm_leaves_ressort_unset(self, scraper_build_vorgang):
+        vorgang = await scraper_build_vorgang(_make_raw_vorgang("V-001"))
+
+        assert vorgang.ressort is UNSET
+        assert "ressort" not in vorgang.to_dict()
+
+    @pytest.mark.asyncio
+    async def test_classified_ressort_reaches_the_vorgang(self, scraper_build_vorgang, monkeypatch):
+        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
+        monkeypatch.setattr(
+            "bawue.bawue_vorgaenge_scraper.vorgang_ressort",
+            AsyncMock(return_value=Ressort.UMWELT),
+        )
+        monkeypatch.setattr(
+            "bawue.bawue_vorgaenge_scraper.vorgang_kurztitel",
+            AsyncMock(return_value="Kurz"),
+        )
+        scraper._wahlperiode = 17
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper.config = MagicMock()
+
+        vorgang = await scraper._build_vorgang(_make_raw_vorgang("V-002"))
+
+        assert vorgang.ressort == Ressort.UMWELT
+        assert vorgang.to_dict()["ressort"] == "Umwelt"
+
+    @pytest.mark.asyncio
+    async def test_unclassified_vorgang_omits_the_field(self, monkeypatch):
+        """LLM on, but nothing fits: the key must be absent, not `null` — the backend
+        distinguishes the two, and every other test passes with a plain `None` too."""
+        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
+        monkeypatch.setattr(
+            "bawue.bawue_vorgaenge_scraper.vorgang_ressort",
+            AsyncMock(return_value=None),
+        )
+        monkeypatch.setattr(
+            "bawue.bawue_vorgaenge_scraper.vorgang_kurztitel",
+            AsyncMock(return_value="Kurz"),
+        )
+        scraper._wahlperiode = 17
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper.config = MagicMock()
+
+        vorgang = await scraper._build_vorgang(_make_raw_vorgang("V-003"))
+
+        assert vorgang.ressort is UNSET
+        assert "ressort" not in vorgang.to_dict()
