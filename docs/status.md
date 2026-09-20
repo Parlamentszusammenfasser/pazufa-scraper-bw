@@ -42,7 +42,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Vorgang  | `verfassungsaendernd` | ✅ Heuristik | Title regex (DD-023); PARLIS has no native attribute                                 |
 | Vorgang  | `initiatoren`         | ✅ Complete  | From Initiative field                                                                |
 | Vorgang  | `stationen`           | ✅ Complete  | From Fundstellen parsing                                                             |
-| Vorgang  | `ressort`             | ✅ LLM       | Eigener LLM-Call je Vorgang, Schwerpunkt statt Akteur (DD-055); ohne LLM `UNSET`      |
+| Vorgang  | `ressort`             | ✅ LLM       | Eigener LLM-Call je Vorgang, Schwerpunkt statt Akteur (DD-055); `UNSET` ohne LLM, bei `null`, unauflösbarer Antwort oder Fehler |
 | Station  | `typ`                 | ✅ Complete  | Context-aware enum mapping                                                           |
 | Station  | `dokumente`           | ✅ Complete  | PDF links from Fundstelle                                                            |
 | Station  | `zp_start`            | ✅ Complete  | From Fundstelle date (with fallbacks)                                                |
