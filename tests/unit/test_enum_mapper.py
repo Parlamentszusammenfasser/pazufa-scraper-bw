@@ -1,9 +1,12 @@
 """Tests for the PARLIS→PaZuFa enum mapper."""
 
+import logging
+
 import pytest
 
+from bawue import enum_mapper
 from bawue.enum_mapper import (
-    RESSORT_MAP,
+    RESSORT_BY_MINISTERIUM,
     VORGANGSTYP_MAP,
     map_dokumententyp,
     map_ressort,
@@ -630,31 +633,39 @@ class TestIsVerfassungsaendernd:
 
 
 class TestRessortMapping:
-    """GitHub issue #39 (DD-055): ministry name → leading `Ressort`."""
+    """GitHub issue #39 (DD-055): a named BW ministry maps to the Ressort chosen for it."""
 
     @pytest.mark.parametrize(
         "ministerium,expected",
         [
-            # Kabinett WP17 (Grün-Schwarz, 2021-2026)
+            # Regierungszentrale — deliberately without Fachressort
             ("Staatsministerium", None),
-            ("Ministerium für Finanzen", Ressort.FINANZEN),
+            # WP18 (seit 05/2026)
+            ("Ministerium des Inneren, für Digitalisierung und Europa", Ressort.INNERES),
+            ("Ministerium für Kultus", Ressort.BILDUNG),
+            ("Ministerium für Wirtschaft, Handwerk und Tourismus", Ressort.WIRTSCHAFT),
+            ("Ministerium für Soziales, Arbeit und Gesundheit", Ressort.SOZIALES),
+            ("Ministerium für Ländlichen Raum, Landwirtschaft und Heimat", Ressort.LANDWIRTSCHAFT),
+            # WP17 (2021-2026)
             ("Ministerium des Inneren, für Digitalisierung und Kommunen", Ressort.INNERES),
             ("Ministerium für Kultus, Jugend und Sport", Ressort.BILDUNG),
-            ("Ministerium für Wissenschaft, Forschung und Kunst", Ressort.WISSENSCHAFT),
             ("Ministerium für Wirtschaft, Arbeit und Tourismus", Ressort.WIRTSCHAFT),
             ("Ministerium für Soziales, Gesundheit und Integration", Ressort.SOZIALES),
-            ("Ministerium für Ernährung, Ländlichen Raum und Verbraucherschutz", Ressort.ERNÄHRUNG),
+            ("Ministerium für Ernährung, Ländlichen Raum und Verbraucherschutz", Ressort.LANDWIRTSCHAFT),
+            # WP16 (2016-2021)
+            ("Ministerium für Inneres, Digitalisierung und Migration", Ressort.INNERES),
+            ("Ministerium für Soziales und Integration", Ressort.SOZIALES),
+            ("Ministerium für Wirtschaft, Arbeit und Wohnungsbau", Ressort.WIRTSCHAFT),
+            ("Ministerium für Ländlichen Raum und Verbraucherschutz", Ressort.LANDWIRTSCHAFT),
+            ("Ministerium der Justiz und für Europa", Ressort.JUSTIZ),
+            # Unchanged across the Wahlperioden
+            ("Ministerium für Finanzen", Ressort.FINANZEN),
+            ("Ministerium für Wissenschaft, Forschung und Kunst", Ressort.WISSENSCHAFT),
             ("Ministerium für Umwelt, Klima und Energiewirtschaft", Ressort.UMWELT),
             ("Ministerium für Verkehr", Ressort.VERKEHRINFRASTRUKTUR),
             ("Ministerium der Justiz und für Migration", Ressort.JUSTIZ),
             ("Ministerium für Landesentwicklung und Wohnen", Ressort.LANDES_STADTENTWICKLUNG),
-            # Earlier / newer cabinets rename their ministries — the keyword rule
-            # keeps working without a table update.
-            ("Ministerium für Inneres, Digitalisierung und Migration", Ressort.INNERES),
-            ("Ministerium für Soziales und Integration", Ressort.SOZIALES),
-            ("Ministerium für Soziales, Arbeit und Gesundheit", Ressort.SOZIALES),
-            ("Ministerium für Wirtschaft, Arbeit und Wohnungsbau", Ressort.WIRTSCHAFT),
-            # Short compound forms used in PARLIS prose
+            # Short forms as they appear in PARLIS author fields
             ("Innenministerium", Ressort.INNERES),
             ("Kultusministerium", Ressort.BILDUNG),
             ("Justizministerium", Ressort.JUSTIZ),
@@ -664,48 +675,53 @@ class TestRessortMapping:
     def test_known_ministries(self, ministerium, expected):
         assert map_ressort(ministerium) == expected
 
-    def test_leading_ressort_wins(self):
-        """BW ministries cover several Ressorts; the first one named leads."""
-        assert map_ressort("Ministerium für Umwelt, Klima und Energiewirtschaft") == Ressort.UMWELT
-        assert map_ressort("Ministerium für Klima, Umwelt und Energiewirtschaft") == Ressort.KLIMASCHUTZ
-
-    def test_keyword_inside_a_compound_does_not_match(self):
-        """`Energiewirtschaft` is an Energie ministry, not a Wirtschaft one."""
-        assert map_ressort("Ministerium für Energiewirtschaft") == Ressort.ENERGIE
-
-    def test_kommunikation_is_not_kommunales(self):
-        """A word that merely starts like a Ressort keyword must not count."""
-        assert map_ressort("Staatsministerium, Abteilung Kommunikation") is None
-        assert map_ressort("Ministerium für Kommunales") == Ressort.KOMMUNALES
-        assert map_ressort("Ministerium des Inneren, für Digitalisierung und Kommunen") == Ressort.INNERES
+    @pytest.mark.parametrize(
+        "variant",
+        [
+            "Ministerium für Verkehr",
+            "  Ministerium   für  Verkehr ",
+            "ministerium für verkehr",
+            "Ministerium für Verkehr,",
+        ],
+    )
+    def test_lookup_tolerates_spacing_case_and_punctuation(self, variant):
+        assert map_ressort(variant) == Ressort.VERKEHRINFRASTRUKTUR
 
     @pytest.mark.parametrize(
         "organisation",
         [
-            # Not a ministry: never guess a Ressort from these (issue #39).
+            # Not a ministry: never assign a Ressort to these (issue #39).
             "Landesregierung",
             "Fraktion GRÜNE",
             "Fraktion der CDU",
             "Landtag",
             "Ausschuss für Verkehr",
             "Rechnungshof",
+            "Abg. Max Mustermann",
             "",
             "   ",
         ],
     )
-    def test_non_ministries_have_no_ressort(self, organisation):
-        assert map_ressort(organisation) is None
+    def test_non_ministries_have_no_ressort(self, organisation, caplog):
+        with caplog.at_level(logging.WARNING, logger="bawue.enum_mapper"):
+            assert map_ressort(organisation) is None
+        assert caplog.records == []
 
-    def test_unknown_ministry_has_no_ressort(self):
-        """Leave `ressort` unset rather than guessing (issue #39)."""
-        assert map_ressort("Ministerium für besondere Aufgaben") is None
+    def test_unknown_ministry_is_logged_once(self, caplog):
+        """A renamed ministry must surface as a gap, not as a guess from its name."""
+        enum_mapper._UNKNOWN_MINISTERIEN.discard("Ministerium für Klima und Energie")
+        with caplog.at_level(logging.WARNING, logger="bawue.enum_mapper"):
+            assert map_ressort("Ministerium für Klima und Energie") is None
+            assert map_ressort("Ministerium für Klima und Energie") is None
+        warnings = [r for r in caplog.records if "Ministerium für Klima und Energie" in r.getMessage()]
+        assert len(warnings) == 1
 
-    def test_mapping_covers_the_framework_enum_exactly(self):
-        """Canary, both directions: every mapped value is a real `Ressort`, and every
-        `Ressort` has a keyword — one added by a later spec would otherwise never be
-        assigned (same rule as `test_all_doktyp_values_valid`)."""
-        assert {r.value for r in RESSORT_MAP.values()} == {m.value for m in Ressort}
+    def test_mapped_values_exist_in_framework(self):
+        """Canary: every chosen value must be a real `Ressort` member."""
+        framework_values = {m.value for m in Ressort}
+        chosen = {r.value for r in RESSORT_BY_MINISTERIUM.values() if r is not None}
+        assert chosen.issubset(framework_values)
 
-    def test_keywords_are_lowercase(self):
-        """Matching lower-cases the ministry name, so upper-case keys would never hit."""
-        assert all(key == key.lower() for key in RESSORT_MAP)
+    def test_no_two_ministry_spellings_collide(self):
+        """The normalised lookup silently drops duplicates, so guard the row count."""
+        assert len(enum_mapper._RESSORT_LOOKUP) == len(RESSORT_BY_MINISTERIUM)

@@ -1,12 +1,16 @@
 """Mapping from PARLIS terminology to PaZuFa enum values.
 
 The dictionaries below are fully populated from the architecture document.
-The matching functions use case-insensitive substring matching against dictionary keys.
+The Vorgangs-/Stations-/Dokumententyp matchers use case-insensitive substring matching
+against dictionary keys; `map_ressort` looks the ministry up by its full name (DD-055).
 """
 
+import logging
 import re
 
-from bawue.types import Doktyp, Ressort, Stationstyp, Vorgangstyp
+from bawue.types import Doktyp, Ressort, Stationstyp, Vorgangstyp, org_lookup_key
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Vorgangstyp mapping: PARLIS Vorgangstyp string → PaZuFa Vorgangstyp
@@ -155,73 +159,68 @@ _DOKUMENTENTYP_KEYS_SORTED = sorted(DOKUMENTENTYP_MAP.keys(), key=len, reverse=T
 
 
 # ---------------------------------------------------------------------------
-# Ressort mapping: keyword in a ministry name → PaZuFa Ressort (issue #39, DD-055)
+# Ressort mapping: BW-Ministerium → PaZuFa Ressort (issue #39, DD-055)
 #
-# BW ministries cover several Ressorts at once ("Ministerium für Umwelt, Klima
-# und Energiewirtschaft") and every cabinet cuts them differently, so the table
-# keys on the Ressort keywords appearing in the name rather than on the full
-# name: `map_ressort` returns the Ressort named first, which is the leading one.
-# Keys are lower-case; keep them as short as the shortest inflected form that
-# still identifies the Ressort ("sozial" covers Soziales/Sozialministerium).
+# The spec defines `Ressort` as "the Ressort, which the Vorgang is associated
+# with. Usually the name of a ministry" — the field names the responsible house,
+# not the subject matter (that is `sachgebiete`, issue #40). Every BW ministry
+# covers several Ressorts while the enum holds exactly one value, so which value
+# a ministry gets is decided here per ministry and justified in DD-055; nothing
+# is derived from the wording of the name.
+#
+# Covers the cabinets whose Vorgänge are in PARLIS (WP16-WP18). `None` means the
+# house deliberately has no Fachressort. A ministry that is missing — a renamed
+# one after a Regierungsbildung — yields no Ressort and is logged once, so the
+# gap shows up instead of being papered over by a guess.
 # ---------------------------------------------------------------------------
-RESSORT_MAP: dict[str, Ressort] = {
-    "arbeit": Ressort.ARBEIT,
-    "bildung": Ressort.BILDUNG,
-    "kultus": Ressort.BILDUNG,
-    "digital": Ressort.DIGITALISIERUNG,
-    "energie": Ressort.ENERGIE,
-    "ernährung": Ressort.ERNÄHRUNG,
-    "europa": Ressort.EUROPA,
-    "familie": Ressort.FAMILIESENIOREN,
-    "senioren": Ressort.FAMILIESENIOREN,
-    "finanz": Ressort.FINANZEN,
-    "forschung": Ressort.FORSCHUNG,
-    "forst": Ressort.FORSTEN,
-    "frauen": Ressort.FRAUENGLEICHSTELLUNG,
-    "gleichstellung": Ressort.FRAUENGLEICHSTELLUNG,
-    "gesundheit": Ressort.GESUNDHEITPFLEGEPRÄVENTION,
-    "pflege": Ressort.GESUNDHEITPFLEGEPRÄVENTION,
-    "prävention": Ressort.GESUNDHEITPFLEGEPRÄVENTION,
-    "heimat": Ressort.HEIMAT,
-    "inneres": Ressort.INNERES,
-    "inneren": Ressort.INNERES,
-    "innen": Ressort.INNERES,
-    "integration": Ressort.INTEGRATIONMIGRATION,
-    "migration": Ressort.INTEGRATIONMIGRATION,
-    "jugend": Ressort.JUGEND,
-    "justiz": Ressort.JUSTIZ,
-    "kinder": Ressort.KINDER,
-    "klima": Ressort.KLIMASCHUTZ,
-    # Not the shorter "kommun": that also matches "Kommunikation".
-    "kommunal": Ressort.KOMMUNALES,
-    "kommunen": Ressort.KOMMUNALES,
-    "kunst": Ressort.KUNSTKULTUR,
-    "kultur": Ressort.KUNSTKULTUR,
-    "landesentwicklung": Ressort.LANDES_STADTENTWICKLUNG,
-    "stadtentwicklung": Ressort.LANDES_STADTENTWICKLUNG,
-    "landwirtschaft": Ressort.LANDWIRTSCHAFT,
-    "ländlich": Ressort.LÄNDLICHER_RAUM,
-    "sozial": Ressort.SOZIALES,
-    "sport": Ressort.SPORT,
-    "tourismus": Ressort.TOURISMUS,
-    "umwelt": Ressort.UMWELT,
-    "verbraucherschutz": Ressort.VERBRAUCHERSCHUTZ,
-    "verkehr": Ressort.VERKEHRINFRASTRUKTUR,
-    "infrastruktur": Ressort.VERKEHRINFRASTRUKTUR,
-    "wirtschaft": Ressort.WIRTSCHAFT,
-    "wissenschaft": Ressort.WISSENSCHAFT,
-    "wohnen": Ressort.WOHNENBAU,
-    "wohnungsbau": Ressort.WOHNENBAU,
-    "bauen": Ressort.WOHNENBAU,
+RESSORT_BY_MINISTERIUM: dict[str, Ressort | None] = {
+    # Regierungszentrale, kein Fachressort
+    "Staatsministerium": None,
+    # WP18 (seit 05/2026)
+    "Ministerium des Inneren, für Digitalisierung und Europa": Ressort.INNERES,
+    "Ministerium für Kultus": Ressort.BILDUNG,
+    "Ministerium für Wirtschaft, Handwerk und Tourismus": Ressort.WIRTSCHAFT,
+    "Ministerium für Soziales, Arbeit und Gesundheit": Ressort.SOZIALES,
+    "Ministerium für Ländlichen Raum, Landwirtschaft und Heimat": Ressort.LANDWIRTSCHAFT,
+    # WP17 (2021-2026)
+    "Ministerium des Inneren, für Digitalisierung und Kommunen": Ressort.INNERES,
+    "Ministerium für Kultus, Jugend und Sport": Ressort.BILDUNG,
+    "Ministerium für Wirtschaft, Arbeit und Tourismus": Ressort.WIRTSCHAFT,
+    "Ministerium für Soziales, Gesundheit und Integration": Ressort.SOZIALES,
+    "Ministerium für Ernährung, Ländlichen Raum und Verbraucherschutz": Ressort.LANDWIRTSCHAFT,
+    # WP16 (2016-2021)
+    "Ministerium für Inneres, Digitalisierung und Migration": Ressort.INNERES,
+    "Ministerium für Soziales und Integration": Ressort.SOZIALES,
+    "Ministerium für Wirtschaft, Arbeit und Wohnungsbau": Ressort.WIRTSCHAFT,
+    "Ministerium für Ländlichen Raum und Verbraucherschutz": Ressort.LANDWIRTSCHAFT,
+    "Ministerium der Justiz und für Europa": Ressort.JUSTIZ,
+    # Unverändert über die Wahlperioden
+    "Ministerium für Finanzen": Ressort.FINANZEN,
+    "Ministerium für Wissenschaft, Forschung und Kunst": Ressort.WISSENSCHAFT,
+    "Ministerium für Umwelt, Klima und Energiewirtschaft": Ressort.UMWELT,
+    "Ministerium für Verkehr": Ressort.VERKEHRINFRASTRUKTUR,
+    "Ministerium der Justiz und für Migration": Ressort.JUSTIZ,
+    "Ministerium für Landesentwicklung und Wohnen": Ressort.LANDES_STADTENTWICKLUNG,
+    # Kurzformen, wie sie in PARLIS-Autorenfeldern vorkommen
+    "Innenministerium": Ressort.INNERES,
+    "Kultusministerium": Ressort.BILDUNG,
+    "Finanzministerium": Ressort.FINANZEN,
+    "Justizministerium": Ressort.JUSTIZ,
+    "Sozialministerium": Ressort.SOZIALES,
+    "Umweltministerium": Ressort.UMWELT,
+    "Verkehrsministerium": Ressort.VERKEHRINFRASTRUKTUR,
+    "Wirtschaftsministerium": Ressort.WIRTSCHAFT,
+    "Wissenschaftsministerium": Ressort.WISSENSCHAFT,
+    "Landwirtschaftsministerium": Ressort.LANDWIRTSCHAFT,
 }
 
-# Leftmost match wins (= the leading Ressort); the longest-first alternation makes
-# that stay true if a future key ever becomes the prefix of another. The lookbehind
-# requires the keyword to start a word: it stops "Energiewirtschaft" from
-# counting as a Wirtschaft ministry, "Ausbildung" as a Bildung one.
-_RESSORT_RE = re.compile(
-    r"(?<![a-zäöüß])(" + "|".join(re.escape(key) for key in sorted(RESSORT_MAP, key=len, reverse=True)) + r")"
-)
+# Punctuation- and case-tolerant lookup ("Ministerium für Verkehr" vs "Ministerium
+# fuer Verkehr," vs double spaces), same normalisation as `canonicalize_organisation`.
+_RESSORT_LOOKUP: dict[str, Ressort | None] = {
+    org_lookup_key(name): ressort for name, ressort in RESSORT_BY_MINISTERIUM.items()
+}
+
+_UNKNOWN_MINISTERIEN: set[str] = set()
 
 
 def map_vorgangstyp(parlis_typ: str) -> Vorgangstyp:
@@ -265,14 +264,24 @@ def map_dokumententyp(context: str, is_vorparlamentarisch: bool = False) -> Dokt
 
 
 def map_ressort(organisation: str) -> Ressort | None:
-    """The leading Ressort of a ministry name, None for anything else (DD-055).
+    """The Ressort of a named BW ministry, None for anything else (DD-055).
 
     Only ministries carry a Ressort: a Fraktion, an Ausschuss, "Landesregierung"
-    or an Abgeordneter returns None, and so does a ministry whose name names no
-    known Ressort — `Vorgang.ressort` stays unset rather than being guessed.
+    or an Abgeordneter returns None. A ministry that is not in
+    `RESSORT_BY_MINISTERIUM` — typically one renamed by a new cabinet — also
+    returns None and is logged once, so `Vorgang.ressort` stays unset instead of
+    carrying a guess derived from the name.
     """
-    text = _normalize_whitespace(organisation).lower()
-    if "ministerium" not in text:
+    name = _normalize_whitespace(organisation)
+    if "ministerium" not in name.lower():
         return None
-    match = _RESSORT_RE.search(text)
-    return RESSORT_MAP[match.group(1)] if match else None
+    key = org_lookup_key(name)
+    if key in _RESSORT_LOOKUP:
+        return _RESSORT_LOOKUP[key]
+    if name not in _UNKNOWN_MINISTERIEN:
+        _UNKNOWN_MINISTERIEN.add(name)
+        logger.warning(
+            "Unknown ministry '%s' — no Ressort assigned. Add a row to RESSORT_BY_MINISTERIUM (DD-055).",
+            name,
+        )
+    return None

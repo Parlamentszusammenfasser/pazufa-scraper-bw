@@ -374,7 +374,7 @@ Configuration from `[beteiligung]` section.
 | `kurztitel`         | LLM short title, fallback `titel` (DD-053)      |
 | `typ`               | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`          |
 | `initiatoren`       | `[Autor(organisation=ministry)]`                |
-| `ressort`           | Führendes Ressort des Ministeriums (DD-055)     |
+| `ressort`           | Ressort des Ministeriums laut Tabelle (DD-055)  |
 | Station `typ`       | `Stationstyp.PREPARL_MINUS_REGENT`              |
 | Station `gremium`   | `Parlament.BW, "regierung"` (reservierter Name) |
 | Station `dokumente` | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF`       |
@@ -558,21 +558,26 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 
 ### Ministerium → PaZuFa `Ressort`
 
-Stichwort-Matching auf dem Ministeriumsnamen (`RESSORT_MAP`), das zuerst genannte Ressort gewinnt
-(DD-055). Quelle ist das federführende Ministerium (Beteiligungsportal) bzw. `Initiative` oder
-Fundstellen-Autor (PARLIS); ohne Ministerium bleibt `ressort` `UNSET`. In PARLIS trifft das oft zu:
-Regierungsentwürfe stehen dort unter „Landesregierung", ein Ministerium nennen vor allem Anfragen
-(antwortendes Ministerium) und die „…/eines Ministeriums"-Vorgangstypen.
+Kuratierte Tabelle `RESSORT_BY_MINISTERIUM` (DD-055): je Ministerium eine bewusst gewählte Zeile,
+nichts wird aus dem Wortlaut des Namens abgeleitet. Die Spec beschreibt das Feld als „usually the
+name of a ministry" — es benennt das zuständige Haus, nicht das Thema (Thema: `sachgebiete`, #40).
+Quelle ist das federführende Ministerium (Beteiligungsportal) bzw. `Initiative` oder
+Fundstellen-Autor (PARLIS). In PARLIS bleibt `ressort` oft `UNSET`: Regierungsentwürfe stehen dort
+unter „Landesregierung", ein Ministerium nennen vor allem Anfragen (antwortendes Ministerium) und
+die „…/eines Ministeriums"-Vorgangstypen. Ein unbekanntes (umbenanntes) Ministerium liefert kein
+Ressort und wird einmal je Name geloggt.
 
-| Ministerium (Beispiel)                                     | PaZuFa `ressort`           |
-|------------------------------------------------------------|----------------------------|
-| Ministerium für Umwelt, Klima und Energiewirtschaft          | `Umwelt`                   |
-| Ministerium für Soziales, Gesundheit und Integration         | `Soziales`                 |
-| Ministerium des Inneren, für Digitalisierung und Kommunen    | `Inneres`                  |
-| Ministerium der Justiz und für Migration                     | `Justiz`                   |
-| Ministerium für Kultus, Jugend und Sport                     | `Bildung`                  |
-| Ministerium für Landesentwicklung und Wohnen                 | `Landes-/Stadtentwicklung` |
-| Fraktion / Landesregierung / Abgeordnete / Staatsministerium | *(kein Ressort)*           |
+| Ministerium (Auswahl)                                         | PaZuFa `ressort`           |
+|---------------------------------------------------------------|----------------------------|
+| Ministerium für Umwelt, Klima und Energiewirtschaft             | `Umwelt`                   |
+| Ministerium für Soziales, Arbeit und Gesundheit (WP18)          | `Soziales`                 |
+| Ministerium des Inneren, für Digitalisierung und Europa (WP18)  | `Inneres`                  |
+| Ministerium der Justiz und für Migration                        | `Justiz`                   |
+| Ministerium für Kultus (WP18) / Kultus, Jugend und Sport (WP17) | `Bildung`                  |
+| Ministerium für Ländlichen Raum, Landwirtschaft und Heimat      | `Landwirtschaft`           |
+| Ministerium für Landesentwicklung und Wohnen                    | `Landes-/Stadtentwicklung` |
+| Staatsministerium                                               | *(kein Fachressort)*       |
+| Fraktion / Landesregierung / Abgeordnete                        | *(kein Ressort)*           |
 
 ### Fundstelle → PaZuFa `Stationstyp`
 

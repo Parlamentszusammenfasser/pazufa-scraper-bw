@@ -92,7 +92,7 @@ def _parse_autoren(text: str) -> list[Autor]:
 
 
 def _ressort(initiatoren: list[Autor], fundstellen: list[RawFundstelle]) -> Ressort | None:
-    """The responsible ministry's leading Ressort, None when no ministry is named (DD-055).
+    """The Ressort of the responsible ministry, None when none is named (DD-055).
 
     PARLIS names the ministry either as the Initiative (Regierungsentwurf,
     Mitteilung eines Ministeriums) or as the author of a Fundstelle (the ministry

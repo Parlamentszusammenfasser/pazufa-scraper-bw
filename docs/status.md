@@ -5,7 +5,7 @@
 | Category                     | Estimate  | Notes                                                                                                                                                                               |
 |------------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Pflichtfunktionalität**    | **~85 %** | Core fields complete; `volltext`/`hash` now also filled at scraper level (LLM). `tops=[]` and `nummer=0` for committees outstanding.                                                |
-| **Optionale Funktionalität** | **~50 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. `ressort` kommt aus dem Ministeriumsnamen (DD-055); die übrigen 0.2.5-Felder (`sachgebiete`, strukturierter `hash`) sind noch leer; `zusammenfassung` geht als Typ `full-llm` raus (DD-054) — Issues #40–#43. Zusätzliche Datenquellen fehlen weiterhin. |
+| **Optionale Funktionalität** | **~50 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. `ressort` kommt aus einer kuratierten Ministeriumstabelle (DD-055); die übrigen 0.2.5-Felder (`sachgebiete`, strukturierter `hash`) sind noch leer; `zusammenfassung` geht als Typ `full-llm` raus (DD-054) — Issues #40–#43. Zusätzliche Datenquellen fehlen weiterhin. |
 | **Community DoD**            | **~90 %** | Core Completion ✅; Coding-Regeln ✅ (bis auf Einzelfälle s.u.); CI/Tests ✅; `verfassungsaendernd`-Konflikt dokumentiert (DD-023); offen: Wiki-Mirror der DDs, Gesetzblatt-Quelle.    |
 
 ### Known Gaps — Required Fields
@@ -42,7 +42,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Vorgang  | `verfassungsaendernd` | ✅ Heuristik | Title regex (DD-023); PARLIS has no native attribute                                 |
 | Vorgang  | `initiatoren`         | ✅ Complete  | From Initiative field                                                                |
 | Vorgang  | `stationen`           | ✅ Complete  | From Fundstellen parsing                                                             |
-| Vorgang  | `ressort`             | ✅ Heuristik | Führendes Ressort des genannten Ministeriums (DD-055); ohne Ministerium `UNSET`      |
+| Vorgang  | `ressort`             | ✅ Tabelle   | Kuratierte Ministeriumstabelle (DD-055); ohne (bekanntes) Ministerium `UNSET`        |
 | Station  | `typ`                 | ✅ Complete  | Context-aware enum mapping                                                           |
 | Station  | `dokumente`           | ✅ Complete  | PDF links from Fundstelle                                                            |
 | Station  | `zp_start`            | ✅ Complete  | From Fundstelle date (with fallbacks)                                                |
