@@ -28,8 +28,11 @@ welche Teil-Zusammenfassungen sich bewähren. `pazufa-scraper-bb` hat das bereit
 
 **Kosten / Cache:** Die zwei geänderten Prompts ändern `_prompt_fingerprint` für `ENTWURF`,
 `PREPARL_ENTWURF` und `BESCHLUSSEMPF`: deren `llm-semantics:`-Einträge werden einmalig neu
-berechnet (wie DD-050). Die Einträge der übrigen Doktypen sowie `vorgang-kurztitel:` und
-`vorgang-ressort:` bleiben gültig. Gesendet werden die Abschnitte trotzdem erst, wenn ein
+berechnet (wie DD-051); die übrigen Doktypen behalten ihre Einträge. Weil dabei auch der
+`full-llm`-Text der Gesetzentwürfe neu geschrieben wird und dieser in die Cache-Keys von
+`vorgang-kurztitel:` und `vorgang-ressort:` eingeht (DD-053/DD-055), laufen beim nächsten Neubau
+eines Vorgangs mit Entwurf auch diese beiden Calls einmal neu — `Vorgang.kurztitel` und `ressort` können sich dabei
+ändern. Gesendet werden die Abschnitte trotzdem erst, wenn ein
 Vorgang neu gesendet wird — nach Änderung am Record oder Löschen der `vg2:`-Einträge (DD-052).
 
 **Backend-Verhalten:** Zusammenfassungen werden je Typ gemerged (`ON CONFLICT (dok_id, zf_typ)
