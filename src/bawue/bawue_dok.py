@@ -392,14 +392,17 @@ ZUSAMMENFASSUNG_TEILE: dict[str, str] = {
 
 def _llm_zusammenfassung(semantics: dict) -> list[Zusammenfassungstupel] | None:
     """Sanitised LLM summary as typed tuples — ``full-llm`` first, then any non-empty
-    partial summary from :data:`ZUSAMMENFASSUNG_TEILE`; None if there is none."""
+    partial summary from :data:`ZUSAMMENFASSUNG_TEILE`. None without a ``full-llm``
+    text: as in BB, the sections never go out on their own (DD-056)."""
     typen = {"zusammenfassung": ZUSAMMENFASSUNG_TYP, **ZUSAMMENFASSUNG_TEILE}
     tupel = []
     for key, typ in typen.items():
         value = semantics.get(key)
         if isinstance(value, str) and (text := _sanitize_llm_text(value)):
             tupel.append(Zusammenfassungstupel(typ=typ, inhalt=text))
-    return tupel or None
+        elif typ == ZUSAMMENFASSUNG_TYP:
+            return None
+    return tupel
 
 
 def zusammenfassung_text(dok: Dokument) -> str | None:

@@ -2394,13 +2394,15 @@ class TestIssue42PartialSummaries:
         assert result.dokument.zusammenfassung[1].inhalt == "Problem X lösen."
 
     @pytest.mark.asyncio
-    async def test_sections_without_full_summary_are_still_sent(self):
-        response = json.dumps({"schlagworte": ["x"], "intention": "Problem X lösen."})
+    @pytest.mark.parametrize("full", ["", "   ", "</narrow>", None, ["kein", "string"]])
+    async def test_no_sections_without_a_full_summary(self, full):
+        # As in BB, the sections only accompany the full summary; on their own they
+        # would show up without the text they detail (DD-056).
+        response = json.dumps({"schlagworte": ["x"], "zusammenfassung": full, "intention": "Problem X lösen."})
         with _patch_pdf_pipeline(), _patch_llm(response):
             result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument())
 
-        assert result.dokument.to_dict()["zusammenfassung"] == [{"typ": "intention-llm", "inhalt": "Problem X lösen."}]
-        assert zusammenfassung_text(result.dokument) is None
+        assert result.dokument.zusammenfassung is None
 
     @pytest.mark.asyncio
     async def test_zusammenfassung_text_still_reads_only_full_llm(self):
@@ -2427,10 +2429,11 @@ class TestIssue42PartialSummaries:
     @pytest.mark.asyncio
     async def test_malformed_full_summary_keeps_the_other_llm_fields(self):
         # A non-string zusammenfassung used to raise in _sanitize_llm_text and drop
-        # every LLM field via the text-only fallback; now only that tuple is skipped.
+        # every LLM field via the text-only fallback; now only the summary is dropped
+        # (with its sections, which never go out on their own).
         response = self._response(zusammenfassung=["kein", "string"], kurztitel="Kurz", intention="Problem X.")
         with _patch_pdf_pipeline(), _patch_llm(response):
             result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument())
 
-        assert [t.typ for t in result.dokument.zusammenfassung] == ["intention-llm"]
+        assert result.dokument.zusammenfassung is None
         assert result.dokument.kurztitel == "Kurz"

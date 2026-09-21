@@ -26,6 +26,9 @@ welche Teil-Zusammenfassungen sich bewähren. `pazufa-scraper-bb` hat das bereit
    Schlagworte und Kurztitel. Reihenfolge im Payload: `full-llm` zuerst, dann die Abschnitte.
 5. Leere oder nicht-textuelle Abschnitte werden weggelassen (das Backend lehnt leere Strings
    ab; `kosten` fehlt oft). Jeder Abschnitt läuft durch `_sanitize_llm_text` (DD-027).
+   Fehlt die `full-llm`-Zusammenfassung (leer, nur Artefakte, kein String), entfallen auch
+   alle Abschnitte — wie bei BB, wo die Zusammenfassung Pflicht ist; ein Abschnitt allein
+   stünde ohne den Text, den er gliedert.
    `zusammenfassung_text()` liest weiterhin nur `full-llm` — der Kurztitel- und der
    Ressort-Input (DD-053/DD-055) bleiben unverändert.
 
