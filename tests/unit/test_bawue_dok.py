@@ -12,6 +12,9 @@ import aiohttp
 import pytest
 
 from bawue.bawue_dok import (
+    BODY_PROMPT_BESCHLUSSEMPF,
+    BODY_PROMPT_ENTWURF,
+    ZUSAMMENFASSUNG_TEILE,
     EnrichmentResult,
     LLMMetrics,
     _cache_key,
@@ -1459,6 +1462,14 @@ class TestSanitizeLlmText:
     response despite the system prompt forbidding formatting.
     """
 
+    @pytest.mark.parametrize("value", [["Kurz", "Titel"], 42, {"a": 1}, True])
+    def test_non_string_yields_none(self, value):
+        # The LLM's JSON is untyped; a non-string must not raise (DD-027).
+        assert _sanitize_llm_text(value) is None
+
+    def test_non_string_list_items_are_dropped(self):
+        assert _sanitize_llm_strings(["umwelt", 42, ["x"], "energie"]) == ["umwelt", "energie"]
+
     def test_strips_trailing_narrow_artefact(self):
         text = "Der Landtag hat das Gesetz beschlossen.</narrow>"
         assert _sanitize_llm_text(text) == "Der Landtag hat das Gesetz beschlossen."
@@ -2302,3 +2313,164 @@ class TestIssue42TypedZusammenfassung:
         assert zusammenfassung_text(dok) is None
         dok.zusammenfassung = [Zusammenfassungstupel(typ="full-llm", inhalt="Kurz gesagt.")]
         assert zusammenfassung_text(dok) == "Kurz gesagt."
+
+
+class TestIssue42PartialSummaries:
+    """GitHub issue #42 step 2 (DD-056): Entwurf and Beschlussempfehlung additionally
+    carry the three sections Brandenburg sends (``intention-llm``,
+    ``regelungsinhalt-llm``, ``kosten-llm``), after the ``full-llm`` summary."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    @staticmethod
+    def _response(**teile) -> str:
+        return json.dumps({"zusammenfassung": "Ganzes Dokument.", "schlagworte": ["x"], **teile})
+
+    def test_labels_mirror_brandenburg(self):
+        # Cross-Land vocabulary (pazufa-scraper-bb #67); the website attaches the
+        # "AI generated" label by looking for "llm" in the typ.
+        assert ZUSAMMENFASSUNG_TEILE == {
+            "intention": "intention-llm",
+            "regelungsinhalt": "regelungsinhalt-llm",
+            "kosten": "kosten-llm",
+        }
+
+    @pytest.mark.parametrize("prompt", [BODY_PROMPT_ENTWURF, BODY_PROMPT_BESCHLUSSEMPF])
+    def test_single_topic_prompts_ask_for_the_sections(self, prompt):
+        for key in ZUSAMMENFASSUNG_TEILE:
+            assert f'"{key}"' in prompt
+
+    @pytest.mark.parametrize("prompt", [BODY_PROMPT_ENTWURF, BODY_PROMPT_BESCHLUSSEMPF])
+    def test_single_topic_prompts_carry_brandenburgs_rules(self, prompt):
+        # The three section rules of pazufa-scraper-bb's ZUSAMMENFASSUNG_STRUKTUR_PROMPT.
+        assert "sachlich, ohne Wertung" in prompt
+        assert "Keine Aufzählung der Artikelstruktur" in prompt
+        assert "Die Zusammenfassung ist immer zu füllen." in prompt
+
+    @pytest.mark.parametrize(
+        ("doktyp", "fingerprint"),
+        [
+            (Doktyp.ENTWURF, "46d34e16fc98edffbffcbe28aa0223a397b04544f8e0bc9861cce955b207e5a1"),
+            (Doktyp.PREPARL_ENTWURF, "46d34e16fc98edffbffcbe28aa0223a397b04544f8e0bc9861cce955b207e5a1"),
+            (Doktyp.BESCHLUSSEMPF, "27d1504f83e7e9cc2e801b93afa8ebcbd239f6fafa0b4d4da5fe7b7947a5680c"),
+        ],
+    )
+    def test_section_prompts_fingerprint_is_pinned(self, doktyp, fingerprint):
+        # Re-pin only on a deliberate prompt change: it re-summarises every
+        # document of these doktypes once (DD-056).
+        assert _prompt_fingerprint(doktyp, drucksnr="17/1", titel="T") == fingerprint
+
+    @pytest.mark.parametrize(
+        ("doktyp", "fingerprint"),
+        [
+            (Doktyp.STELLUNGNAHME, "a8e05f21f5348e8db35ff22b09bcc4aaefca779a48d35afc96e42c500fd8bb2a"),
+            (Doktyp.REDEPROTOKOLL, "ebd3db4b183641dc7c57985b6c9d039204fd42d93c1fa44a70e5d1fde092ada4"),
+            (Doktyp.SONSTIG, "73a906dc649ce1c1a7e1a0acb8fabc94030ac2319f0b236bbb19c712d529d4d1"),  # GENERIC
+        ],
+    )
+    def test_other_doktypes_keep_their_cache_fingerprint(self, doktyp, fingerprint):
+        # Values from main before DD-056: their llm-semantics: entries must stay valid.
+        assert _prompt_fingerprint(doktyp, drucksnr="17/1", titel="T") == fingerprint
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("doktyp", [Doktyp.ENTWURF, Doktyp.PREPARL_ENTWURF, Doktyp.BESCHLUSSEMPF])
+    async def test_sections_follow_the_full_llm_summary(self, doktyp):
+        response = self._response(
+            intention="Problem X lösen.", regelungsinhalt="§ 5 wird geändert.", kosten="2 Mio. Euro."
+        )
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument(typ=doktyp))
+
+        assert result.dokument.to_dict()["zusammenfassung"] == [
+            {"typ": "full-llm", "inhalt": "Ganzes Dokument."},
+            {"typ": "intention-llm", "inhalt": "Problem X lösen."},
+            {"typ": "regelungsinhalt-llm", "inhalt": "§ 5 wird geändert."},
+            {"typ": "kosten-llm", "inhalt": "2 Mio. Euro."},
+        ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("empty", ["", "   ", None, ["kein", "string"], 42])
+    async def test_empty_or_malformed_section_is_omitted(self, empty):
+        # Kosten is often absent; the backend rejects empty strings.
+        response = self._response(intention="Problem X lösen.", regelungsinhalt="Neu.", kosten=empty)
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument())
+
+        assert [t.typ for t in result.dokument.zusammenfassung] == [
+            "full-llm",
+            "intention-llm",
+            "regelungsinhalt-llm",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_sections_are_sanitised(self):
+        response = self._response(intention="Problem <b>X</b> lösen.</narrow>")
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument())
+
+        assert result.dokument.zusammenfassung[1].inhalt == "Problem X lösen."
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("full", ["", "   ", "</narrow>", None, ["kein", "string"]])
+    async def test_no_sections_without_a_full_summary(self, full):
+        # As in BB, the sections only accompany the full summary; on their own they
+        # would show up without the text they detail (DD-056).
+        response = json.dumps({"schlagworte": ["x"], "zusammenfassung": full, "intention": "Problem X lösen."})
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument())
+
+        assert result.dokument.zusammenfassung is None
+
+    @pytest.mark.asyncio
+    async def test_zusammenfassung_text_still_reads_only_full_llm(self):
+        response = self._response(intention="Problem X lösen.")
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument())
+
+        assert zusammenfassung_text(result.dokument) == "Ganzes Dokument."
+
+    @pytest.mark.asyncio
+    async def test_cached_semantics_without_sections_send_only_full_llm(self):
+        # A Redis entry written before DD-056 (Stellungnahme: unchanged prompt, so the
+        # entry is still hit) has no section keys.
+        cache = MagicMock()
+        cache.get_raw.return_value = SAMPLE_LLM_RESPONSE_STELLUNGNAHME
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_STELLUNGNAHME) as mock_acomp:
+            result = await enrich_dokument(
+                MagicMock(), _make_llm_mock(), _make_plain_dokument(typ=Doktyp.STELLUNGNAHME), cache=cache
+            )
+
+        mock_acomp.assert_not_called()
+        assert [t.typ for t in result.dokument.zusammenfassung] == ["full-llm"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("field", "value"), [("kurztitel", ["Kurz", "Titel"]), ("vorwort", 42), ("schlagworte", ["x", 7])]
+    )
+    async def test_malformed_field_keeps_the_other_llm_fields(self, field, value):
+        # A non-string used to raise in _sanitize_llm_text, and the text-only
+        # fallback then dropped every LLM field; now only the bad value is dropped.
+        response = self._response(**{"kurztitel": "Kurz", "vorwort": "Vorwort.", field: value})
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument())
+
+        assert zusammenfassung_text(result.dokument) == "Ganzes Dokument."
+        assert result.dokument.schlagworte == ["x"]
+        assert result.dokument.kurztitel == (None if field == "kurztitel" else "Kurz")
+        assert result.dokument.vorwort == (None if field == "vorwort" else "Vorwort.")
+
+    @pytest.mark.asyncio
+    async def test_malformed_full_summary_keeps_the_other_llm_fields(self):
+        # A non-string zusammenfassung used to raise in _sanitize_llm_text and drop
+        # every LLM field via the text-only fallback; now only the summary is dropped
+        # (with its sections, which never go out on their own).
+        response = self._response(zusammenfassung=["kein", "string"], kurztitel="Kurz", intention="Problem X.")
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument())
+
+        assert result.dokument.zusammenfassung is None
+        assert result.dokument.kurztitel == "Kurz"
