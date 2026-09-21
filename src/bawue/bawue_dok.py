@@ -111,7 +111,10 @@ Extrahiere aus dem folgenden Gesetzestext die folgenden Informationen als JSON:
  "intention": "Welches Problem soll gelöst werden und mit welchem Ziel? (1-3 Sätze)",
  "regelungsinhalt": "Was wird konkret geregelt oder geändert? (1-3 Sätze)",
  "kosten": "Welche Kosten, Einnahmen oder finanziellen Auswirkungen nennt das Dokument? (1-3 Sätze)"}
+intention, regelungsinhalt und kosten: sachlich, ohne Wertung, nur Informationen aus dem Text.
 Gibt das Dokument zu intention, regelungsinhalt oder kosten nichts her: leeren String zurückgeben.
+Die Zusammenfassung ist immer zu füllen.
+Keine Aufzählung der Artikelstruktur ("Artikel 1 ändert ..."), sondern Inhalt in eigenen Worten.
 Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
 
 BODY_PROMPT_STELLUNGNAHME = """\
@@ -131,7 +134,10 @@ Extrahiere aus der folgenden Beschlussempfehlung die folgenden Informationen als
  "intention": "Welches Problem soll gelöst werden und mit welchem Ziel? (1-3 Sätze)",
  "regelungsinhalt": "Was wird konkret geregelt oder geändert? (1-3 Sätze)",
  "kosten": "Welche Kosten, Einnahmen oder finanziellen Auswirkungen nennt das Dokument? (1-3 Sätze)"}
+intention, regelungsinhalt und kosten: sachlich, ohne Wertung, nur Informationen aus dem Text.
 Gibt das Dokument zu intention, regelungsinhalt oder kosten nichts her: leeren String zurückgeben.
+Die Zusammenfassung ist immer zu füllen.
+Keine Aufzählung der Artikelstruktur ("Artikel 1 ändert ..."), sondern Inhalt in eigenen Worten.
 Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
 
 BODY_PROMPT_GENERIC = """\

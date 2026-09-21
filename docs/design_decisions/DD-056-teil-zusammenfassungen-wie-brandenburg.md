@@ -19,9 +19,12 @@ welche Teil-Zusammenfassungen sich bewähren. `pazufa-scraper-bb` hat das bereit
 2. Nur für die Einzelthemen-Drucksachen `ENTWURF`, `PREPARL_ENTWURF` und `BESCHLUSSEMPF`
    (Prompts `BODY_PROMPT_ENTWURF`/`_BESCHLUSSEMPF`). Protokolle behandeln viele Punkte, feste
    Abschnitte ergeben dort keinen Sinn; Stellungnahme und Generic bleiben wie bei BB ohne.
-3. Kein zusätzlicher LLM-Call: die Abschnitte kommen im selben JSON wie Zusammenfassung,
+3. BBs Abschnittsregeln stehen mit im Prompt: sachlich, ohne Wertung; leerer String, wenn
+   das Dokument nichts hergibt; die Zusammenfassung ist immer zu füllen; keine Aufzählung
+   der Artikelstruktur.
+4. Kein zusätzlicher LLM-Call: die Abschnitte kommen im selben JSON wie Zusammenfassung,
    Schlagworte und Kurztitel. Reihenfolge im Payload: `full-llm` zuerst, dann die Abschnitte.
-4. Leere oder nicht-textuelle Abschnitte werden weggelassen (das Backend lehnt leere Strings
+5. Leere oder nicht-textuelle Abschnitte werden weggelassen (das Backend lehnt leere Strings
    ab; `kosten` fehlt oft). Jeder Abschnitt läuft durch `_sanitize_llm_text` (DD-027).
    `zusammenfassung_text()` liest weiterhin nur `full-llm` — der Kurztitel- und der
    Ressort-Input (DD-053/DD-055) bleiben unverändert.

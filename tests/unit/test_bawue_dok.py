@@ -2336,6 +2336,13 @@ class TestIssue42PartialSummaries:
         for key in ZUSAMMENFASSUNG_TEILE:
             assert f'"{key}"' in prompt
 
+    @pytest.mark.parametrize("prompt", [BODY_PROMPT_ENTWURF, BODY_PROMPT_BESCHLUSSEMPF])
+    def test_single_topic_prompts_carry_brandenburgs_rules(self, prompt):
+        # The three section rules of pazufa-scraper-bb's ZUSAMMENFASSUNG_STRUKTUR_PROMPT.
+        assert "sachlich, ohne Wertung" in prompt
+        assert "Keine Aufzählung der Artikelstruktur" in prompt
+        assert "Die Zusammenfassung ist immer zu füllen." in prompt
+
     @pytest.mark.parametrize(
         ("doktyp", "fingerprint"),
         [
