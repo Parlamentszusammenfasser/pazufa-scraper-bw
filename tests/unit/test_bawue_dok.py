@@ -1462,6 +1462,14 @@ class TestSanitizeLlmText:
     response despite the system prompt forbidding formatting.
     """
 
+    @pytest.mark.parametrize("value", [["Kurz", "Titel"], 42, {"a": 1}, True])
+    def test_non_string_yields_none(self, value):
+        # The LLM's JSON is untyped; a non-string must not raise (DD-027).
+        assert _sanitize_llm_text(value) is None
+
+    def test_non_string_list_items_are_dropped(self):
+        assert _sanitize_llm_strings(["umwelt", 42, ["x"], "energie"]) == ["umwelt", "energie"]
+
     def test_strips_trailing_narrow_artefact(self):
         text = "Der Landtag hat das Gesetz beschlossen.</narrow>"
         assert _sanitize_llm_text(text) == "Der Landtag hat das Gesetz beschlossen."
@@ -2425,6 +2433,22 @@ class TestIssue42PartialSummaries:
 
         mock_acomp.assert_not_called()
         assert [t.typ for t in result.dokument.zusammenfassung] == ["full-llm"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("field", "value"), [("kurztitel", ["Kurz", "Titel"]), ("vorwort", 42), ("schlagworte", ["x", 7])]
+    )
+    async def test_malformed_field_keeps_the_other_llm_fields(self, field, value):
+        # A non-string used to raise in _sanitize_llm_text, and the text-only
+        # fallback then dropped every LLM field; now only the bad value is dropped.
+        response = self._response(**{"kurztitel": "Kurz", "vorwort": "Vorwort.", field: value})
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument())
+
+        assert zusammenfassung_text(result.dokument) == "Ganzes Dokument."
+        assert result.dokument.schlagworte == ["x"]
+        assert result.dokument.kurztitel == (None if field == "kurztitel" else "Kurz")
+        assert result.dokument.vorwort == (None if field == "vorwort" else "Vorwort.")
 
     @pytest.mark.asyncio
     async def test_malformed_full_summary_keeps_the_other_llm_fields(self):

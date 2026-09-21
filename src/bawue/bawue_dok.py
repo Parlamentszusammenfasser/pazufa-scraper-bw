@@ -355,7 +355,7 @@ def normalize_volltext(text: str) -> str:
 _HTML_LIKE_TAG_RE = re.compile(r"</?[a-zA-Z][^<>]{0,80}>")
 
 
-def _sanitize_llm_text(text: str | None) -> str | None:
+def _sanitize_llm_text(text: object) -> str | None:
     """Strip HTML-like tag artefacts and neutralise stray angle brackets in LLM output (DD-027).
 
     The backend's XSS validator rejects payloads containing ``<``/``>``. The
@@ -365,9 +365,10 @@ def _sanitize_llm_text(text: str | None) -> str | None:
     :func:`normalize_volltext`'s defensive guillemet substitution for any
     brackets that survive the tag pass. Returns ``None`` for empty / None
     inputs so the API client omits the field rather than sending an empty
-    string (the backend rejects those).
+    string (the backend rejects those) — and for non-strings: the LLM's JSON is
+    untyped, and one malformed field must not drop all the others.
     """
-    if not text:
+    if not isinstance(text, str) or not text:
         return None
     text = _HTML_LIKE_TAG_RE.sub("", text)
     text = text.replace("<", "\u2039").replace(">", "\u203a")
@@ -398,7 +399,7 @@ def _llm_zusammenfassung(semantics: dict) -> list[Zusammenfassungstupel] | None:
     tupel = []
     for key, typ in typen.items():
         value = semantics.get(key)
-        if isinstance(value, str) and (text := _sanitize_llm_text(value)):
+        if text := _sanitize_llm_text(value):
             tupel.append(Zusammenfassungstupel(typ=typ, inhalt=text))
         elif typ == ZUSAMMENFASSUNG_TYP:
             return None
@@ -829,7 +830,7 @@ _TRAILING_PERIOD_RE = re.compile(r"(?<=[^\W\d_]{2})\.$")
 
 def _clean_kurztitel(raw: object) -> str:
     """Sanitize (DD-027) and strip wrapping quotes / a trailing period."""
-    text = _sanitize_llm_text(raw) if isinstance(raw, str) else None
+    text = _sanitize_llm_text(raw)
     text = (text or "").strip(_KURZTITEL_QUOTES)
     return _TRAILING_PERIOD_RE.sub("", text).strip(_KURZTITEL_QUOTES)
 
