@@ -14,9 +14,6 @@ import pytest
 from bawue.bawue_dok import (
     BODY_PROMPT_BESCHLUSSEMPF,
     BODY_PROMPT_ENTWURF,
-    BODY_PROMPT_GENERIC,
-    BODY_PROMPT_REDEPROTOKOLL,
-    BODY_PROMPT_STELLUNGNAHME,
     ZUSAMMENFASSUNG_TEILE,
     EnrichmentResult,
     LLMMetrics,
@@ -2339,11 +2336,17 @@ class TestIssue42PartialSummaries:
         for key in ZUSAMMENFASSUNG_TEILE:
             assert f'"{key}"' in prompt
 
-    @pytest.mark.parametrize("prompt", [BODY_PROMPT_STELLUNGNAHME, BODY_PROMPT_GENERIC, BODY_PROMPT_REDEPROTOKOLL])
-    def test_other_prompts_are_unchanged(self, prompt):
-        # Their llm-semantics: cache entries must stay valid.
-        for key in ZUSAMMENFASSUNG_TEILE:
-            assert f'"{key}"' not in prompt
+    @pytest.mark.parametrize(
+        ("doktyp", "fingerprint"),
+        [
+            (Doktyp.STELLUNGNAHME, "a8e05f21f5348e8db35ff22b09bcc4aaefca779a48d35afc96e42c500fd8bb2a"),
+            (Doktyp.REDEPROTOKOLL, "ebd3db4b183641dc7c57985b6c9d039204fd42d93c1fa44a70e5d1fde092ada4"),
+            (Doktyp.SONSTIG, "73a906dc649ce1c1a7e1a0acb8fabc94030ac2319f0b236bbb19c712d529d4d1"),  # GENERIC
+        ],
+    )
+    def test_other_doktypes_keep_their_cache_fingerprint(self, doktyp, fingerprint):
+        # Values from main before DD-056: their llm-semantics: entries must stay valid.
+        assert _prompt_fingerprint(doktyp, drucksnr="17/1", titel="T") == fingerprint
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("doktyp", [Doktyp.ENTWURF, Doktyp.PREPARL_ENTWURF, Doktyp.BESCHLUSSEMPF])
@@ -2402,10 +2405,25 @@ class TestIssue42PartialSummaries:
 
     @pytest.mark.asyncio
     async def test_cached_semantics_without_sections_send_only_full_llm(self):
-        # A Stellungnahme (unchanged prompt, still-valid cache entry) has no sections.
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_STELLUNGNAHME):
+        # A Redis entry written before DD-056 (Stellungnahme: unchanged prompt, so the
+        # entry is still hit) has no section keys.
+        cache = MagicMock()
+        cache.get_raw.return_value = SAMPLE_LLM_RESPONSE_STELLUNGNAHME
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_STELLUNGNAHME) as mock_acomp:
             result = await enrich_dokument(
-                MagicMock(), _make_llm_mock(), _make_plain_dokument(typ=Doktyp.STELLUNGNAHME)
+                MagicMock(), _make_llm_mock(), _make_plain_dokument(typ=Doktyp.STELLUNGNAHME), cache=cache
             )
 
+        mock_acomp.assert_not_called()
         assert [t.typ for t in result.dokument.zusammenfassung] == ["full-llm"]
+
+    @pytest.mark.asyncio
+    async def test_malformed_full_summary_keeps_the_other_llm_fields(self):
+        # A non-string zusammenfassung used to raise in _sanitize_llm_text and drop
+        # every LLM field via the text-only fallback; now only that tuple is skipped.
+        response = self._response(zusammenfassung=["kein", "string"], kurztitel="Kurz", intention="Problem X.")
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument())
+
+        assert [t.typ for t in result.dokument.zusammenfassung] == ["intention-llm"]
+        assert result.dokument.kurztitel == "Kurz"
