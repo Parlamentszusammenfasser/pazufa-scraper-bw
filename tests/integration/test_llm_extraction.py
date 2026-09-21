@@ -94,6 +94,19 @@ class TestEntwurfEnrichment:
         print("=" * 72)
 
     @pytest.mark.asyncio
+    async def test_entwurf_carries_the_partial_summaries(self):
+        """Issue #42 step 2 (DD-056): real call returns the BB sections after full-llm."""
+        async with aiohttp.ClientSession() as session:
+            result = await enrich_dokument(session, _make_llm(), _make_test_dokument(typ=Doktyp.ENTWURF))
+        typen = [t.typ for t in result.dokument.zusammenfassung]
+
+        print("\n" + "\n".join(f"{t.typ}: {t.inhalt}" for t in result.dokument.zusammenfassung))
+        assert typen[0] == "full-llm"
+        # Kosten may legitimately be absent; a Gesetzentwurf always states aim and content.
+        assert {"intention-llm", "regelungsinhalt-llm"} <= set(typen)
+        assert set(typen) <= {"full-llm", "intention-llm", "regelungsinhalt-llm", "kosten-llm"}
+
+    @pytest.mark.asyncio
     async def test_parlis_metadata_preserved(self):
         """Enrichment must not overwrite PARLIS-provided fields."""
         dok = _make_test_dokument(typ=Doktyp.ENTWURF)

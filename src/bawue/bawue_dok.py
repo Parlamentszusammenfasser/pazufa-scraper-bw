@@ -107,7 +107,11 @@ Extrahiere aus dem folgenden Gesetzestext die folgenden Informationen als JSON:
 {"schlagworte": ["Liste inhaltlich bedeutsamer Schlagworte"],
  "zusammenfassung": "Zusammenfassung in 150-250 Worten",
  "kurztitel": "Kurzer verständlicher Titel in einfacher Sprache",
- "vorwort": "Präambel oder Intentionsbeschreibung des Entwurfs, falls vorhanden"}
+ "vorwort": "Präambel oder Intentionsbeschreibung des Entwurfs, falls vorhanden",
+ "intention": "Welches Problem soll gelöst werden und mit welchem Ziel? (1-3 Sätze)",
+ "regelungsinhalt": "Was wird konkret geregelt oder geändert? (1-3 Sätze)",
+ "kosten": "Welche Kosten, Einnahmen oder finanziellen Auswirkungen nennt das Dokument? (1-3 Sätze)"}
+Gibt das Dokument zu intention, regelungsinhalt oder kosten nichts her: leeren String zurückgeben.
 Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
 
 BODY_PROMPT_STELLUNGNAHME = """\
@@ -123,7 +127,11 @@ Extrahiere aus der folgenden Beschlussempfehlung die folgenden Informationen als
 {"schlagworte": ["Liste inhaltlich bedeutsamer Schlagworte"],
  "zusammenfassung": "Zusammenfassung in 150-250 Worten",
  "kurztitel": "Kurzer verständlicher Titel in einfacher Sprache",
- "meinung": <1-5, Meinungsbild: 1=Ablehnung empfohlen, 5=Zustimmung empfohlen>}
+ "meinung": <1-5, Meinungsbild: 1=Ablehnung empfohlen, 5=Zustimmung empfohlen>,
+ "intention": "Welches Problem soll gelöst werden und mit welchem Ziel? (1-3 Sätze)",
+ "regelungsinhalt": "Was wird konkret geregelt oder geändert? (1-3 Sätze)",
+ "kosten": "Welche Kosten, Einnahmen oder finanziellen Auswirkungen nennt das Dokument? (1-3 Sätze)"}
+Gibt das Dokument zu intention, regelungsinhalt oder kosten nichts her: leeren String zurückgeben.
 Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
 
 BODY_PROMPT_GENERIC = """\
@@ -366,10 +374,26 @@ def _sanitize_llm_text(text: str | None) -> str | None:
 ZUSAMMENFASSUNG_TYP = "full-llm"
 
 
-def _llm_zusammenfassung(text: str | None) -> list[Zusammenfassungstupel] | None:
-    """Sanitised LLM summary as the typed ``[(full-llm, text)]`` list, None if empty."""
-    text = _sanitize_llm_text(text)
-    return [Zusammenfassungstupel(typ=ZUSAMMENFASSUNG_TYP, inhalt=text)] if text else None
+# Partial summaries (issue #42 step 2, DD-056): semantics key → typ, in send order.
+# Labels mirror pazufa-scraper-bb (#67); the "llm" marker is what the website keys
+# its "AI generated" label on. Only BODY_PROMPT_ENTWURF/_BESCHLUSSEMPF ask for them.
+ZUSAMMENFASSUNG_TEILE: dict[str, str] = {
+    "intention": "intention-llm",
+    "regelungsinhalt": "regelungsinhalt-llm",
+    "kosten": "kosten-llm",
+}
+
+
+def _llm_zusammenfassung(semantics: dict) -> list[Zusammenfassungstupel] | None:
+    """Sanitised LLM summary as typed tuples — ``full-llm`` first, then any non-empty
+    partial summary from :data:`ZUSAMMENFASSUNG_TEILE`; None if there is none."""
+    typen = {"zusammenfassung": ZUSAMMENFASSUNG_TYP, **ZUSAMMENFASSUNG_TEILE}
+    tupel = []
+    for key, typ in typen.items():
+        value = semantics.get(key)
+        if isinstance(value, str) and (text := _sanitize_llm_text(value)):
+            tupel.append(Zusammenfassungstupel(typ=typ, inhalt=text))
+    return tupel or None
 
 
 def zusammenfassung_text(dok: Dokument) -> str | None:
@@ -1149,7 +1173,7 @@ async def enrich_dokument(
                     link=dok.link,
                     autoren=dok.autoren,
                     drucksnr=dok.drucksnr,
-                    zusammenfassung=_llm_zusammenfassung(semantics.get("zusammenfassung")),
+                    zusammenfassung=_llm_zusammenfassung(semantics),
                     schlagworte=_sanitize_llm_strings(semantics.get("schlagworte")),
                     kurztitel=_sanitize_llm_text(semantics.get("kurztitel")),
                     meinung=semantics.get("meinung"),
