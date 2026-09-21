@@ -48,7 +48,7 @@ Dokumente) stillschweigend verworfen; laut BB ist das seit Backend-`main` 0642f9
 zurücklesen und prüfen, dass die Abschnitte angekommen sind.
 
 **Code:** `bawue_dok.ZUSAMMENFASSUNG_TEILE`, `_llm_zusammenfassung`, `BODY_PROMPT_ENTWURF`,
-`BODY_PROMPT_BESCHLUSSEMPF`
+`BODY_PROMPT_BESCHLUSSEMPF`, `_TEILE_PROMPT`
 
 **Tests:** `test_bawue_dok.py::TestIssue42PartialSummaries`,
 `tests/integration/test_llm_extraction.py::TestEntwurfEnrichment::test_entwurf_carries_the_partial_summaries`

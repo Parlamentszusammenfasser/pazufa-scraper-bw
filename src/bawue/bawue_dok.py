@@ -102,12 +102,9 @@ _SYSTEM_PROMPT = (
     "Spekulationen oder Annahmen sind zu vermeiden."
 )
 
-BODY_PROMPT_ENTWURF = """\
-Extrahiere aus dem folgenden Gesetzestext die folgenden Informationen als JSON:
-{"schlagworte": ["Liste inhaltlich bedeutsamer Schlagworte"],
- "zusammenfassung": "Zusammenfassung in 150-250 Worten",
- "kurztitel": "Kurzer verständlicher Titel in einfacher Sprache",
- "vorwort": "Präambel oder Intentionsbeschreibung des Entwurfs, falls vorhanden",
+# Closes the JSON template of the single-topic prompts below: Brandenburg's three
+# partial summaries and their rules (DD-056). Shared so the two cannot drift apart.
+_TEILE_PROMPT = """\
  "intention": "Welches Problem soll gelöst werden und mit welchem Ziel? (1-3 Sätze)",
  "regelungsinhalt": "Was wird konkret geregelt oder geändert? (1-3 Sätze)",
  "kosten": "Welche Kosten, Einnahmen oder finanziellen Auswirkungen nennt das Dokument? (1-3 Sätze)"}
@@ -116,6 +113,17 @@ Gibt das Dokument zu intention, regelungsinhalt oder kosten nichts her: leeren S
 Die Zusammenfassung ist immer zu füllen.
 Keine Aufzählung der Artikelstruktur ("Artikel 1 ändert ..."), sondern Inhalt in eigenen Worten.
 Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
+
+BODY_PROMPT_ENTWURF = (
+    """\
+Extrahiere aus dem folgenden Gesetzestext die folgenden Informationen als JSON:
+{"schlagworte": ["Liste inhaltlich bedeutsamer Schlagworte"],
+ "zusammenfassung": "Zusammenfassung in 150-250 Worten",
+ "kurztitel": "Kurzer verständlicher Titel in einfacher Sprache",
+ "vorwort": "Präambel oder Intentionsbeschreibung des Entwurfs, falls vorhanden",
+"""
+    + _TEILE_PROMPT
+)
 
 BODY_PROMPT_STELLUNGNAHME = """\
 Extrahiere aus der folgenden Stellungnahme die folgenden Informationen als JSON:
@@ -125,20 +133,16 @@ Extrahiere aus der folgenden Stellungnahme die folgenden Informationen als JSON:
  "meinung": <1-5, Meinungsbild: 1=ablehnend, 5=zustimmend>}
 Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
 
-BODY_PROMPT_BESCHLUSSEMPF = """\
+BODY_PROMPT_BESCHLUSSEMPF = (
+    """\
 Extrahiere aus der folgenden Beschlussempfehlung die folgenden Informationen als JSON:
 {"schlagworte": ["Liste inhaltlich bedeutsamer Schlagworte"],
  "zusammenfassung": "Zusammenfassung in 150-250 Worten",
  "kurztitel": "Kurzer verständlicher Titel in einfacher Sprache",
  "meinung": <1-5, Meinungsbild: 1=Ablehnung empfohlen, 5=Zustimmung empfohlen>,
- "intention": "Welches Problem soll gelöst werden und mit welchem Ziel? (1-3 Sätze)",
- "regelungsinhalt": "Was wird konkret geregelt oder geändert? (1-3 Sätze)",
- "kosten": "Welche Kosten, Einnahmen oder finanziellen Auswirkungen nennt das Dokument? (1-3 Sätze)"}
-intention, regelungsinhalt und kosten: sachlich, ohne Wertung, nur Informationen aus dem Text.
-Gibt das Dokument zu intention, regelungsinhalt oder kosten nichts her: leeren String zurückgeben.
-Die Zusammenfassung ist immer zu füllen.
-Keine Aufzählung der Artikelstruktur ("Artikel 1 ändert ..."), sondern Inhalt in eigenen Worten.
-Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
+"""
+    + _TEILE_PROMPT
+)
 
 BODY_PROMPT_GENERIC = """\
 Extrahiere aus dem folgenden parlamentarischen Dokument die folgenden Informationen als JSON:
