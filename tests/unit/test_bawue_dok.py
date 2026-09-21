@@ -2354,6 +2354,19 @@ class TestIssue42PartialSummaries:
     @pytest.mark.parametrize(
         ("doktyp", "fingerprint"),
         [
+            (Doktyp.ENTWURF, "46d34e16fc98edffbffcbe28aa0223a397b04544f8e0bc9861cce955b207e5a1"),
+            (Doktyp.PREPARL_ENTWURF, "46d34e16fc98edffbffcbe28aa0223a397b04544f8e0bc9861cce955b207e5a1"),
+            (Doktyp.BESCHLUSSEMPF, "27d1504f83e7e9cc2e801b93afa8ebcbd239f6fafa0b4d4da5fe7b7947a5680c"),
+        ],
+    )
+    def test_section_prompts_fingerprint_is_pinned(self, doktyp, fingerprint):
+        # Re-pin only on a deliberate prompt change: it re-summarises every
+        # document of these doktypes once (DD-056).
+        assert _prompt_fingerprint(doktyp, drucksnr="17/1", titel="T") == fingerprint
+
+    @pytest.mark.parametrize(
+        ("doktyp", "fingerprint"),
+        [
             (Doktyp.STELLUNGNAHME, "a8e05f21f5348e8db35ff22b09bcc4aaefca779a48d35afc96e42c500fd8bb2a"),
             (Doktyp.REDEPROTOKOLL, "ebd3db4b183641dc7c57985b6c9d039204fd42d93c1fa44a70e5d1fde092ada4"),
             (Doktyp.SONSTIG, "73a906dc649ce1c1a7e1a0acb8fabc94030ac2319f0b236bbb19c712d529d4d1"),  # GENERIC
