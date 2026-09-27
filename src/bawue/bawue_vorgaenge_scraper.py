@@ -560,7 +560,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         for fund in fundstellen:
             station = await self._build_station(fund, initiative, vorgang_titel, vorgang_vnr)
             if station is None:
-                self._drop(vorgang_id, fund, "no parseable date")
+                self._drop(vorgang_id, fund, "no parseable date", logging.ERROR)
                 continue
             station_typ_str = fund.get("station_typ", "")
             typ_lower = station_typ_str.lower()
@@ -1004,11 +1004,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         zp_start = _parse_fundstelle_date(fund)
         if zp_start is None:
-            logger.error(
-                "Skipping station for Fundstelle '%s' (Drucksache: %s) — no parseable date",
-                fund.get("raw", ""),
-                fund.get("drucksache", "unknown"),
-            )
             return None
 
         # The document keeps the PARLIS date as its `zp_referenz` (the Ausfertigung),

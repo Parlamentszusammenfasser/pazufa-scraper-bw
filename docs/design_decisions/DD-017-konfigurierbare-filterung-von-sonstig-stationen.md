@@ -38,7 +38,7 @@ Zähler je Vorgang, den die Run-Summary als „Vorgänge with dropped Fundstelle
 | Grund | Level |
 |---|---|
 | `<Typ> → sonstig` (dieser Filter, z. B. Mitteilung — DD-002) | INFO |
-| `no parseable date` | INFO (zusätzlich zum bestehenden ERROR) |
+| `no parseable date` | ERROR (ersetzt das frühere „Skipping station"-ERROR; die Ursache loggt `_parse_fundstelle_date`) |
 | `Stellungnahme without preceding station` (DD-005) | WARNING |
 | `Änderungsantrag/Entschließungsantrag without parl-vollvlsgn` (DD-001) | WARNING |
 
