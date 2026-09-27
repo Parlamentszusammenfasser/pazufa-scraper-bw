@@ -7,6 +7,7 @@ import re
 import ssl
 import time
 import uuid
+from collections import Counter
 from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
@@ -169,6 +170,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
     # the PARLIS date instead of reaching for the network.
     _gsblt_dates: "GesetzblattDateLookup | None" = None
 
+    # Dropped Fundstellen per vorgnr, for the run summary (issue #5). None on
+    # manual-construction paths (dry_run, unit tests): drops are only logged there.
+    _dropped_fundstellen: dict[str, list[str]] | None = None
+
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         # Load BaWue-specific config from TOML
         bawue_config = load_toml_section(config, "bawue")
@@ -220,6 +225,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._by_type: dict[str, int] = {}
         self._failed_items: list[FailedItem] = []
         self._parlis_errors: list[str] = []
+        self._dropped_fundstellen = {}
 
         # LLM document enrichment (optional, requires LLM_PROVIDER_KEY)
         llm_key = getattr(config, "llm_provider_key", None)
@@ -255,6 +261,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 self._llm_metrics if self._llm_enabled else None,
                 self._failed_items,
                 self._parlis_errors,
+                self._dropped_fundstellen,
             )
             send_mattermost_summary(self.config, "BaWue Vorgänge Run Summary", lines)
 
@@ -538,17 +545,18 @@ class BawueVorgaengeScraper(VorgangsScraper):
         preceding legislative step (e.g. a committee report). If a Stellungnahme appears
         before any station, it is discarded with a warning.
 
-        Änderungsanträge are attached as documents to the nearest parl-vollvlsgn station.
-        Entschließungsanträge are discarded entirely.
+        Änderungs- and Entschließungsanträge are attached as documents to the nearest
+        parl-vollvlsgn station. Every dropped Fundstelle is logged with its reason (issue #5).
         """
         stationen: list[Station] = []
-        pending_aenderungsantraege: list[list[Dokument]] = []
+        pending_aenderungsantraege: list[tuple[RawFundstelle, list[Dokument]]] = []
         seen_ausschber = False
         seen_vollvlsgn = False
         last_station_typ_str = ""
         for fund in fundstellen:
             station = await self._build_station(fund, initiative, vorgang_titel, vorgang_vnr)
             if station is None:
+                self._drop(vorgang_id, fund, "no parseable date", logging.ERROR)
                 continue
             station_typ_str = fund.get("station_typ", "")
             typ_lower = station_typ_str.lower()
@@ -574,12 +582,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 )
                 station.typ = Stationstyp.PARL_VOLLVLSGN
 
-            if typ_lower in self._ENTSCHLIESSUNGSANTRAG_TYPEN:
-                continue
-
-            if typ_lower in self._AENDERUNGSANTRAG_TYPEN:
+            # Both are voted on in the plenary reading, so their documents go to the
+            # next parl-vollvlsgn (DD-001; Entschließungsanträge since issue #5).
+            if typ_lower in self._AENDERUNGSANTRAG_TYPEN or typ_lower in self._ENTSCHLIESSUNGSANTRAG_TYPEN:
                 if station.dokumente:
-                    pending_aenderungsantraege.append(station.dokumente)
+                    pending_aenderungsantraege.append((fund, station.dokumente))
                 continue
 
             # Positional heuristic (Issue 1B / DD-019): PARLIS labels
@@ -596,19 +603,18 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     vorgang_id,
                 )
                 if station.dokumente:
-                    pending_aenderungsantraege.append(station.dokumente)
+                    pending_aenderungsantraege.append((fund, station.dokumente))
                 continue
 
             if self._is_stellungnahme(station, station_typ_str):
-                self._attach_stellungnahme(stationen, station.dokumente, vorgang_id)
+                if stationen:
+                    self._attach_stellungnahme(stationen, station.dokumente)
+                else:
+                    self._drop(vorgang_id, fund, "Stellungnahme without preceding station", logging.WARNING)
                 continue
 
             if self._filter_sonstig and station.typ == Stationstyp.SONSTIG:
-                logger.debug(
-                    "Filtering sonstig station (Fundstelle: %s) in %s",
-                    fund.get("raw", "?"),
-                    vorgang_id,
-                )
+                self._drop(vorgang_id, fund, f"{station_typ_str or 'unlabeled'} → sonstig")
                 continue
 
             if self._try_merge_station(stationen, station, station_typ_str, last_station_typ_str):
@@ -625,11 +631,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
             # Attach any buffered Änderungsanträge to this station if it's a vollvlsgn
             if station.typ == Stationstyp.PARL_VOLLVLSGN and pending_aenderungsantraege:
-                for docs in pending_aenderungsantraege:
+                for _, docs in pending_aenderungsantraege:
                     station.dokumente.extend(docs)
                 pending_aenderungsantraege.clear()
 
-        # Remaining Änderungsanträge: attach to the last vollvlsgn or warn
+        # Remaining Anträge: attach to the last vollvlsgn or drop
         if pending_aenderungsantraege:
             self._attach_pending_aenderungsantraege(stationen, pending_aenderungsantraege, vorgang_id)
 
@@ -815,26 +821,30 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     station.zp_modifiziert = bumped
             seen.setdefault(station.zp_start, set()).add(station.typ)
 
-    @staticmethod
     def _attach_pending_aenderungsantraege(
+        self,
         stationen: list[Station],
-        pending: list[list[Dokument]],
+        pending: list[tuple[RawFundstelle, list[Dokument]]],
         vorgang_id: str,
     ) -> None:
-        """Attach remaining Änderungsantrag docs to the last vollvlsgn, or warn."""
+        """Attach remaining Antrag docs to the last vollvlsgn, or drop them."""
         target = None
         for s in reversed(stationen):
             if s.typ == Stationstyp.PARL_VOLLVLSGN:
                 target = s
                 break
-        if target is not None:
-            for docs in pending:
+        for fund, docs in pending:
+            if target is not None:
                 target.dokumente.extend(docs)
-        else:
-            logger.warning(
-                "Discarding Änderungsanträge without vollvlsgn station for Vorgang %s",
-                vorgang_id,
-            )
+            else:
+                reason = "Änderungsantrag/Entschließungsantrag without parl-vollvlsgn"
+                self._drop(vorgang_id, fund, reason, logging.WARNING)
+
+    def _drop(self, vorgang_id: str, fund: RawFundstelle, reason: str, level: int = logging.INFO) -> None:
+        """Log a dropped Fundstelle with its reason and count it for the run summary (issue #5)."""
+        logger.log(level, "Dropping Fundstelle '%s' in %s: %s", fund.get("raw", "?"), vorgang_id, reason)
+        if self._dropped_fundstellen is not None:
+            self._dropped_fundstellen.setdefault(vorgang_id, []).append(reason)
 
     @staticmethod
     def _try_merge_station(
@@ -929,21 +939,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
         return not station.dokumente and station_typ_str.lower() in BawueVorgaengeScraper._STELLUNGNAHME_STATION_TYPEN
 
     @staticmethod
-    def _attach_stellungnahme(
-        stationen: list[Station],
-        dokumente: list[Dokument],
-        vorgang_id: str,
-    ) -> None:
+    def _attach_stellungnahme(stationen: list[Station], dokumente: list[Dokument]) -> None:
         """Attach Stellungnahme documents to the most recent station."""
-        if stationen:
-            if isinstance(stationen[-1].stellungnahmen, Unset):
-                stationen[-1].stellungnahmen = []
-            stationen[-1].stellungnahmen.extend(dokumente)
-        else:
-            logger.warning(
-                "Discarding Stellungnahme without preceding station for Vorgang %s",
-                vorgang_id,
-            )
+        if isinstance(stationen[-1].stellungnahmen, Unset):
+            stationen[-1].stellungnahmen = []
+        stationen[-1].stellungnahmen.extend(dokumente)
 
     async def _gesetzblatt_ausgabedatum(self, fund: RawFundstelle) -> datetime | None:
         """Resolve a Gesetzblatt Fundstelle to the day the Gesetzblatt was issued (DD-047).
@@ -1000,11 +1000,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         zp_start = _parse_fundstelle_date(fund)
         if zp_start is None:
-            logger.error(
-                "Skipping station for Fundstelle '%s' (Drucksache: %s) — no parseable date",
-                fund.get("raw", ""),
-                fund.get("drucksache", "unknown"),
-            )
             return None
 
         # The document keeps the PARLIS date as its `zp_referenz` (the Ausfertigung),
@@ -1427,6 +1422,7 @@ def _print_vorgaenge_summary(
     llm_metrics: LLMMetrics | None = None,
     failed_items: list[FailedItem] | None = None,
     parlis_errors: list[str] | None = None,
+    dropped_fundstellen: dict[str, list[str]] | None = None,
 ) -> list[str]:
     discovered = sum(by_type.values())
     lines = [
@@ -1445,6 +1441,12 @@ def _print_vorgaenge_summary(
         lines.extend(llm_metrics.format_lines())
     if failed_items:
         lines.extend(format_failed_section(failed_items, header="Failed Vorgänge"))
+    if dropped_fundstellen:
+        dropped = [
+            FailedItem(vid, None, ", ".join(f"{n}x {reason}" for reason, n in Counter(reasons).items()))
+            for vid, reasons in dropped_fundstellen.items()
+        ]
+        lines.extend(format_failed_section(dropped, header="Vorgänge with dropped Fundstellen"))
     if parlis_errors:
         lines.append("")
         lines.append(f":warning: PARLIS errors ({len(parlis_errors)}):")
