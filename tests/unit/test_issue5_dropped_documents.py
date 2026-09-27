@@ -104,7 +104,7 @@ class TestDroppedFundstellenSummary:
     def test_summary_omits_section_without_drops(self):
         lines = _print_vorgaenge_summary(17, {}, 0, 0, 0, 1.0, dropped_fundstellen={})
 
-        assert not any("Dropped" in line for line in lines)
+        assert not any("dropped Fundstellen" in line for line in lines)
 
 
 def _fund(raw: str, station_typ: str, datum: str | None = "10.02.2026", drucksache: str = "17/10300") -> dict:
@@ -143,3 +143,15 @@ class TestEveryDropIsCounted:
         await scraper._build_vorgang(raw)
 
         assert scraper._dropped_fundstellen == {"V-9": [reason]}
+
+    @pytest.mark.asyncio
+    async def test_missing_date_drop_logged_once_at_error(self, caplog):
+        """The drop replaces _build_station's own 'Skipping station' ERROR, not duplicates it."""
+        fund = _fund("Gesetzentwurf  Fraktion GRÜNE", "Gesetzentwurf", datum=None)
+        raw = {"vorgangs_id": "V-9", "titel": "T", "Vorgangstyp": "Gesetzgebung", "fundstellen_parsed": [fund]}
+
+        with caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"):
+            await _scraper()._build_vorgang(raw)
+
+        drops = [r for r in caplog.records if "Dropping" in r.message or "Skipping station" in r.message]
+        assert [(r.levelno, "V-9" in r.message) for r in drops] == [(logging.ERROR, True)]
