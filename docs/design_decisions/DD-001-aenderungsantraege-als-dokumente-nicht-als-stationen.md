@@ -30,3 +30,23 @@ Inhalt des Vorgangs.
 Die Erkennung basiert auf dem Feld `station_typ`, das aus dem Fundstellentext
 extrahiert wird (z. B. "Änderungsanträge", "Entschließungsantrag"), und wird
 geprüft, bevor das generische Enum-Mapping greift.
+
+---
+
+**Aktualisierung (27.09.2026, GitHub Issue #5):** Entschließungsanträge werden **nicht
+mehr verworfen**, sondern wie Änderungsanträge als Dokument (`antrag`) an die
+`parl-vollvlsgn`-Station gehängt, in der über sie abgestimmt wird. Die Begründung oben
+(„prozedural, ohne Bezug zum Inhalt") trifft nicht zu: Ein Entschließungsantrag begleitet
+den Gesetzentwurf inhaltlich (z. B. SPD, Drs. 17/10262 zum Juristenausbildungsgesetz,
+V-244180). Kosten entstehen keine zusätzlich — das PDF wurde schon vorher geladen und
+angereichert, nur danach weggeworfen. Keine neue Station, daher kein Track-Risiko; die
+Stations-`api_id` ist dokumentunabhängig (DD-034).
+
+Findet sich keine `parl-vollvlsgn`-Station, wird jede solche Fundstelle einzeln mit
+WARNING verworfen und gezählt (s. DD-017).
+
+**Rollout:** Der `vg2:`-Fingerprint (DD-052) hasht nur PARLIS-Daten; bereits gecachte
+Vorgänge erhalten ihre Entschließungsanträge erst bei der nächsten PARLIS-Änderung.
+
+**Tests:** `tests/unit/test_issue5_dropped_documents.py` (V-244180),
+`TestEntschliessungsantragHandling`.
