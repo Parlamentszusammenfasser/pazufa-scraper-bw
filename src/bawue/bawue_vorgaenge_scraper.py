@@ -121,6 +121,8 @@ DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [
     "Haushaltsgesetzgebung",
     "Volksantrag",
 ]
+# Its Vorgänge share one Initiativdrucksache per budget (DD-041).
+_HAUSHALT_VORGANGSTYP = "Haushaltsgesetzgebung"
 DEFAULT_WAHLPERIODE = 17
 DEFAULT_WAHLPERIODE_START = date(2021, 4, 26)  # WP 17 BW: Landtag constituted
 DEFAULT_PARLIS_DELAY = 1.0
@@ -157,12 +159,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
     wrapped in the async framework contract.
     """
 
-    # Emit the Initiativdrucksache as a cross-reference `vg_ident` (Issue #26).
-    # Default off as a backend workaround (DD-041): the backend merges unrelated
-    # Vorgänge that share this many-to-one ident. Class-level default so tests and
-    # other manual-construction paths inherit the safe value without setting it.
-    # see backend issue: https://codeberg.org/PaZuFa/pazufa-backend/issues/150
-    _emit_initdrucks_ident: bool = False
+    # Emit the Initiativdrucksache as a cross-reference `vg_ident` (Issue #26 / GitHub #3),
+    # except for Haushaltsgesetzgebung (DD-041). Class-level default so tests and other
+    # manual-construction paths inherit it without setting it.
+    _emit_initdrucks_ident: bool = True
 
     # Resolves a Gesetzblatt citation to its real Ausgabedatum (DD-047). Class-level
     # default of None so manual-construction paths (dry_run, unit tests) simply keep
@@ -181,9 +181,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         listing_urls = bawue_config.get("enabled-vorgangstypen", DEFAULT_ENABLED_VORGANGSTYPEN)
         self._enabled_vorgangstypen: frozenset[str] = frozenset(listing_urls)
         self._filter_sonstig = bawue_config.get("filter-sonstig-stations", True)
-        # DD-041 backend workaround toggle: keep the Initiativdrucksache off the
-        # `ids` until the backend stops merging on many-to-one `vg_ident`s.
-        self._emit_initdrucks_ident = bawue_config.get("emit-initdrucks-ident", False)
+        # DD-041 kill switch for the Initiativdrucksache `vg_ident`.
+        self._emit_initdrucks_ident = bawue_config.get("emit-initdrucks-ident", True)
 
         super().__init__(config, uuid.UUID(config.collector_id), listing_urls, session)
 
@@ -442,16 +441,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # parse vorgangs-id
         ids = [VgIdent(id=vorgang_id, typ="vorgnr")] if vorgang_id != "unknown" else None
 
-        # Cross-referencing aid (Issue #26): expose the Initiativdrucksache so
-        # consumers can join on the originating Gesetzentwurf/Antrag number.
-        # OFF by default (DD-041): the backend's `vorgang_merge_candidates` treats
-        # any single shared `vg_ident` as proof that two Vorgänge are the same
-        # process, and the Initiativdrucksache is many-to-one (every
-        # Haushalt-Einzelplan cites the same Staatshaushaltsgesetz), so emitting
-        # it merges unrelated Vorgänge → HTTP 500 `rel_station_dokument_pkey` /
-        # silent title corruption. Re-enable via `emit-initdrucks-ident = true`
-        # once the backend matches only on 1:1 identifiers.
-        if self._emit_initdrucks_ident:
+        # Cross-referencing aid (Issue #26 / GitHub #3): expose the Initiativdrucksache
+        # so consumers can join on the originating Gesetzentwurf/Antrag number.
+        # Never for Haushaltsgesetzgebung (DD-041): the Staatshaushaltsgesetz and its
+        # Einzelpläne share one Initiativdrucksache, and the backend merges Vorgänge
+        # on any shared `vg_ident` (backend #150) → HTTP 500 `rel_station_dokument_pkey`
+        # / silent title corruption. In WP17 no other Vorgangstyp shares one.
+        if self._emit_initdrucks_ident and vorgangstyp_str != _HAUSHALT_VORGANGSTYP:
             initiativ_drucks = _initiativ_drucksnr(stationen)
             if initiativ_drucks:
                 initdrucks_ident = VgIdent(id=initiativ_drucks, typ="initdrucks")
@@ -1246,7 +1242,7 @@ def _initiativ_drucksnr(stationen: list[Station]) -> str | None:
     parl-initiativ inserted after a government Gesetzentwurf has no document, so
     the preparl-regbsl Gesetzentwurf is matched in that case.
 
-    Only consulted when ``emit-initdrucks-ident`` is enabled (DD-041).
+    Not consulted for Haushaltsgesetzgebung or with ``emit-initdrucks-ident`` off (DD-041).
     """
     for station in stationen:
         if station.typ not in _INITIATIV_TYPEN:
