@@ -1,6 +1,6 @@
 [← Index](../design_decisions.md)
 
-# DD-041: WORKAROUND — Initiativdrucksache standardmäßig nicht als `vg_ident` senden (togglebar)
+# DD-041: Initiativdrucksache als `vg_ident` — nicht für Haushaltsgesetzgebung (togglebar)
 
 **Datum:** 13.07.2026
 
@@ -80,3 +80,30 @@ an (`_initiativ_drucksnr(stationen)` liefert die Nummer). Dokumentiert in
 (Schalter an → `initdrucks` = 17/10266 vorhanden), `test_ids_omit_initiativdrucksache_when_absent_though_enabled`
 (Schalter an, aber keine Drucksache → kein `initdrucks`). Backend-seitige Reproduktion
 & Evidenz: https://codeberg.org/PaZuFa/pazufa-backend/issues/150.
+
+---
+
+**Aktualisierung (27.09.2026, GitHub Issue #3):** `initdrucks` wird wieder gesendet —
+**außer bei Haushaltsgesetzgebung**. Backend #150 ist weiterhin offen, die Ursache
+lässt sich aber eingrenzen: Eine PARLIS-Abfrage aller WP17-Vorgänge (173 Gesetzgebung,
+2 Volksantrag, 60 Haushaltsgesetzgebung) zeigt geteilte Initiativdrucksachen **nur**
+bei den drei Haushalten (17/1000, 17/3500, 17/8000 — je Staatshaushaltsgesetz + 17
+Einzelpläne). Die übrigen 6 Haushaltsgesetzgebung-Vorgänge (Begleitgesetze, Nachträge)
+verlieren den Querverweis vorerst mit, dafür bleibt die Regel ein einfacher
+Vorgangstyp-Vergleich.
+
+- Default jetzt `true` (Klassenattribut und `[bawue] emit-initdrucks-ident`);
+  `false` bleibt Notschalter für alle Vorgänge. Cloud Run nutzt `config.sample.toml`
+  (Schalter auskommentiert), also greift der Code-Default.
+- **Rollout:** Der `vg2:`-Fingerprint (DD-052) hasht nur PARLIS-Daten. Bereits
+  gecachte Vorgänge erhalten `initdrucks` erst bei der nächsten PARLIS-Änderung —
+  oder sofort nach Löschen der `vg2:*`-Schlüssel.
+- **Ablösung:** Laut Beschluss zu Backend #150 werden die Einzelpläne eines Haushalts
+  zu einem Vorgang mit eigenem Haushalt-Vorgangstyp zusammengefasst (GitHub Issue #60).
+  Danach entfällt die Haushalt-Ausnahme.
+
+**Implementierung:** `_build_vorgang()` — `vorgangstyp_str != _HAUSHALT_VORGANGSTYP`.
+**Tests:** `TestBuildVorgang` — `test_ids_include_initiativdrucksache_by_default_issue3`,
+`test_ids_omit_initiativdrucksache_for_haushaltsgesetzgebung_issue3` (Einzelplan 11,
+V-237492 / 17/8000), `test_ids_omit_initiativdrucksache_when_disabled`,
+`test_ids_omit_initiativdrucksache_when_absent`.
