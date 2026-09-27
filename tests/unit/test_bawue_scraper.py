@@ -634,27 +634,8 @@ class TestBuildVorgang:
         assert _station_id(before, Stationstyp.PREPARL_REGBSL) == _station_id(after, Stationstyp.PREPARL_REGBSL)
 
     @pytest.mark.asyncio
-    async def test_ids_omit_initiativdrucksache_by_default(self, scraper_build_vorgang):
-        """DD-041: the Initiativdrucksache (Issue #26) is NOT emitted by default.
-
-        Backend workaround: `vorgang_merge_candidates` treats any shared vg_ident
-        as proof two Vorgänge are the same process, and the Initiativdrucksache is
-        many-to-one (every Haushalt-Einzelplan cites the same Staatshaushaltsgesetz),
-        so emitting it merges unrelated Vorgänge → HTTP 500 rel_station_dokument_pkey.
-        With `emit-initdrucks-ident` off (default), only the 1:1 `vorgnr` is emitted.
-        """
-        raw = _make_raw_vorgang("V-001")  # default fundstellen: Gesetzentwurf Drucksache 17/10266
-        vorgang = await scraper_build_vorgang(raw)
-
-        assert vorgang.ids is not None
-        idents = {(i.typ, i.id) for i in vorgang.ids}
-        assert ("vorgnr", "V-001") in idents
-        assert all(i.typ != "initdrucks" for i in vorgang.ids)
-
-    @pytest.mark.asyncio
-    async def test_ids_include_initiativdrucksache_when_enabled(self, scraper_build_vorgang):
-        """DD-041: `emit-initdrucks-ident = true` restores the Issue #26 cross-reference."""
-        scraper_build_vorgang.__self__._emit_initdrucks_ident = True
+    async def test_ids_include_initiativdrucksache_by_default_issue3(self, scraper_build_vorgang):
+        """Issue #3 / DD-041: the Initiativdrucksache is a cross-reference `vg_ident`."""
         raw = _make_raw_vorgang("V-001")  # default fundstellen: Gesetzentwurf Drucksache 17/10266
         vorgang = await scraper_build_vorgang(raw)
 
@@ -663,9 +644,42 @@ class TestBuildVorgang:
         assert ("initdrucks", "17/10266") in idents
 
     @pytest.mark.asyncio
-    async def test_ids_omit_initiativdrucksache_when_absent_though_enabled(self, scraper_build_vorgang):
-        """Even with the toggle on, no initdrucks id when the initiative has no Drucksache."""
-        scraper_build_vorgang.__self__._emit_initdrucks_ident = True
+    async def test_ids_omit_initiativdrucksache_for_haushaltsgesetzgebung_issue3(self, scraper_build_vorgang):
+        """DD-041: never for Haushaltsgesetzgebung — Staatshaushaltsgesetz and its 17
+        Einzelpläne share one Initiativdrucksache (17/8000), and the backend merges
+        Vorgänge on any shared vg_ident (backend #150) → HTTP 500 rel_station_dokument_pkey."""
+        raw = _make_raw_vorgang(
+            "V-237492",
+            titel="Staatshaushaltsplan 2025/2026 - Einzelplan 11: Rechnungshof",
+            vorgangstyp="Haushaltsgesetzgebung",
+            initiative="Landesregierung",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Landesregierung  22.10.2024 Drucksache 17/8000   (48 S.)",
+                    "datum": "22.10.2024",
+                    "drucksache": "17/8000",
+                    "station_typ": "Gesetzentwurf",
+                    "autor_text": "Landesregierung",
+                    "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8000%5FD.pdf",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert [(i.typ, i.id) for i in vorgang.ids] == [("vorgnr", "V-237492")]
+
+    @pytest.mark.asyncio
+    async def test_ids_omit_initiativdrucksache_when_disabled(self, scraper_build_vorgang):
+        """DD-041: `emit-initdrucks-ident = false` stays a kill switch for all Vorgänge."""
+        scraper_build_vorgang.__self__._emit_initdrucks_ident = False
+        raw = _make_raw_vorgang("V-001")
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert [(i.typ, i.id) for i in vorgang.ids] == [("vorgnr", "V-001")]
+
+    @pytest.mark.asyncio
+    async def test_ids_omit_initiativdrucksache_when_absent(self, scraper_build_vorgang):
+        """No initdrucks id when the initiative has no Drucksache."""
         raw = _make_raw_vorgang(
             "V-020",
             fundstellen=[
