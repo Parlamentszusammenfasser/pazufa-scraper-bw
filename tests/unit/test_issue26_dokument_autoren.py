@@ -108,7 +108,8 @@ class TestV244180Juristenausbildungsgesetz:
         """Acceptance criterion: the initiator appears on the document it actually wrote."""
         vorgang = await _build(_load("v244180"))
         carrying_spd = [d.titel for _, d in _dokumente(vorgang) if "Fraktion der SPD" in _autoren(d)]
-        assert carrying_spd == ["Gesetzentwurf"]
+        # The SPD also wrote the Entschließungsantrag, kept since issue #5.
+        assert sorted(carrying_spd) == ["Entschließungsantrag", "Gesetzentwurf"]
 
 
 class TestV217223Medienstaatsvertrag:

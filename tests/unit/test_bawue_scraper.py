@@ -2922,10 +2922,12 @@ class TestAenderungsantragHandling:
 
 
 class TestEntschliessungsantragHandling:
-    """Entschließungsanträge should be discarded entirely."""
+    """Entschließungsanträge attach to the plenary reading like Änderungsanträge (DD-001, issue #5)."""
 
     @pytest.mark.asyncio
-    async def test_entschliessungsantrag_discarded(self, scraper_build_vorgang):
+    async def test_entschliessungsantrag_without_vollversammlung_dropped_with_warning(
+        self, scraper_build_vorgang, caplog
+    ):
         raw = _make_raw_vorgang(
             "V-810",
             fundstellen=[
@@ -2947,13 +2949,14 @@ class TestEntschliessungsantragHandling:
                 },
             ],
         )
-        vorgang = await scraper_build_vorgang(raw)
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_vorgaenge_scraper"):
+            vorgang = await scraper_build_vorgang(raw)
 
         assert len(vorgang.stationen) == 1
         assert vorgang.stationen[0].typ == Stationstyp.PARL_INITIATIV
-        # Entschließungsantrag document should NOT appear anywhere
         all_drucksnrs = [d.drucksnr for s in vorgang.stationen for d in s.dokumente]
         assert "17/1215" not in all_drucksnrs
+        assert any("17/1215" in msg and "V-810" in msg for msg in caplog.messages)
 
 
 class TestAntragReclassification:
@@ -4602,8 +4605,8 @@ class TestFilterSonstigStations:
         assert vorgang.stationen[1].typ == Stationstyp.SONSTIG
 
     @pytest.mark.asyncio
-    async def test_sonstig_filtering_logs_debug_message(self, scraper_build_vorgang, caplog):
-        """Filtered sonstig stations are logged at DEBUG level."""
+    async def test_sonstig_filtering_logs_info_message(self, scraper_build_vorgang, caplog):
+        """Filtered sonstig stations are logged at INFO level (issue #5)."""
         raw = _make_raw_vorgang(
             "V-702",
             fundstellen=[
@@ -4624,10 +4627,10 @@ class TestFilterSonstigStations:
                 },
             ],
         )
-        with caplog.at_level(logging.DEBUG, logger="bawue.bawue_vorgaenge_scraper"):
+        with caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"):
             await scraper_build_vorgang(raw)
 
-        assert any("sonstig" in r.message.lower() for r in caplog.records)
+        assert any("sonstig" in r.message.lower() and r.levelno == logging.INFO for r in caplog.records)
 
 
 class TestUnlabeledPlenarprotokollFallback:
