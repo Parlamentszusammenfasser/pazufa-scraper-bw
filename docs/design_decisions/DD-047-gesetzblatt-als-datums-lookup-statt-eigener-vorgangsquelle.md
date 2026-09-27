@@ -38,7 +38,7 @@ Backend 0.2.15 bestätigt die Folge: Zwei verschiedene Gesetze mit demselben
 `VgIdent` führen dazu, dass der zweite PUT mit HTTP 400 scheitert (verdoppelte
 Stationsliste `I I L L …`) und der zweite Vorgang anschließend **nicht mehr
 existiert** (HTTP 404) — er wurde in den ersten hineingemerged. Das ist exakt der
-in [DD-041](DD-041-workaround-initiativdrucksache-standardmaessig-nicht-als-vg.md) beschriebene Schaden.
+in [DD-041](DD-041-initiativdrucksache-als-vg-ident-nicht-fuer-haushaltsgesetzgebung.md) beschriebene Schaden.
 
 **Der geteilte Gesetzblatt-PDF ist dagegen unkritisch** (ebenfalls gegen 0.2.15
 verifiziert): Zwei Vorgänge mit identischem `hash_` *und* identischem Link

@@ -109,9 +109,10 @@ zunächst eigenständige GSBLT-Vorgänge in der Datenbank.
 **Wichtig:** Auf der PARLIS-Seite wird `VgIdent(typ="initdrucks")` für
 Haushaltsgesetzgebung bewusst **nicht** emittiert (DD-041), weil geteilte
 `initdrucks` im Backend fremde Vorgänge zusammenführen → HTTP500
-`rel_station_dokument_pkey` (DD-034). Ein automatischer Cross-Source-Merge setzt
-daher voraus, dass Phase 2 sowohl die Drucksnr aus dem GSBLT-PDF extrahiert **als
-auch** die `initdrucks`-Emission auf beiden Seiten kollisionsfrei reaktiviert.
+`rel_station_dokument_pkey` (DD-034). Für alle übrigen Vorgangstypen emittiert
+PARLIS `initdrucks` bereits; ein automatischer Cross-Source-Merge setzt daher nur
+noch voraus, dass Phase 2 die Drucksnr aus dem GSBLT-PDF extrahiert und als
+`initdrucks` emittiert.
 
 ## Konfiguration
 
