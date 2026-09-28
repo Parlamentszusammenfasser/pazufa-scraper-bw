@@ -54,7 +54,7 @@ VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
 #   PREPARL_ECKPUP  — Eckpunktepapier (Vorentwurf mit Kernpunkten)
 #   PREPARL_REGBSL  — Regierungsbeschluss (Kabinettsbeschluss)
 #   PREPARL_VBEGDE  — Verbändebeteiligung / Begründung (Anhörung externer Verbände)
-#   PREPARL_FORMVS  — Formulierungshilfe der Regierung für Fraktionen (Bund; unmapped, DD-057)
+#   PREPARL_FORMVS  — Formulierungshilfe der Regierung für Fraktionen (nicht erkennbar; unmapped, DD-057)
 #
 # Parlamentarisch (parl-*):
 #   PARL_INITIATIV  — Parlamentarische Initiative (Gesetzentwurf, Antrag, Anfrage)
@@ -66,7 +66,7 @@ VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
 #   PARL_ZURUECKGZ  — Zurückgezogen (Vorgang vom Initiator zurückgezogen)
 #   PARL_GGENTWURF  — Gegenentwurf (Alternativentwurf zu einem Gesetzentwurf)
 #   PARL_VERMITTAS  — Vermittlungsausschuss (Bundestag/Bundesrat; unmapped, DD-057)
-#   PARL_VERFGSTOP  — Stopp durch Verfassungsgericht (unmapped, DD-057)
+#   PARL_VERFGSTOP  — Stopp durch Verfassungsgericht (Spec 0.2.7: postparl-vgstp; unmapped, DD-057)
 #
 # Nachparlamentarisch (postparl-*):
 #   POSTPARL_VESJA  — Volksentscheid Ja (Referendum angenommen)
