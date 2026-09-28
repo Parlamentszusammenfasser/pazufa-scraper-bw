@@ -57,7 +57,7 @@ eine Notiz an, deren Schlüsselwörter sonst den Stationstyp bestimmten
   DD-012; das SPD-Änderungsantrag-Dokument fand keine Lesung und wurde verworfen).
 
 Der Split-Fall oben bleibt abgedeckt: Der Zusatz „in Zweiter Beratung" steht vor
-der Referenz. `map_dokumententyp()` bekommt weiter den vollen Text — der
-`redeprotokoll`-Fallback für Plenarprotokolle (DD-031) hängt daran.
+der Referenz. Die Dokumenttypisierung (`map_dokumententyp()`) bleibt
+unverändert.
 Offline-Rebuild aller 238 WP17/WP18-Vorgänge (PARLIS-Stand 28.09.2026): nur
 V-230205 ändert sich. Test: `TestIssue13CitationNotesDoNotTypeStations`.

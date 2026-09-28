@@ -4796,27 +4796,47 @@ class TestIssue13CitationNotesDoNotTypeStations:
     """
 
     @pytest.mark.parametrize(
-        ("station_typ_str", "raw", "expected"),
+        ("station_typ_str", "raw", "initiative", "expected"),
         [
             # Unlabeled: the note is the only keyword → SONSTIG, left to DD-031.
-            ("", "Plenarprotokoll 17/85 24.01.2024  S. 5085-5086 (Zulassung des Volksantrags)", Stationstyp.SONSTIG),
+            (
+                "",
+                "Plenarprotokoll 17/85 24.01.2024  S. 5085-5086 (Zulassung des Volksantrags)",
+                "Fraktion GRÜNE",
+                Stationstyp.SONSTIG,
+            ),
             (
                 "Beratung",
                 "Beratung   Plenarprotokoll 17/92 17.04.2024  S. 5486-5494 (Gesetzentwurf wurde abgelehnt)",
+                "Fraktion GRÜNE",
+                Stationstyp.PARL_VOLLVLSGN,
+            ),
+            # Production path: DD-009 took "Landesregierung" from a Mitteilung, so the
+            # note's "Gesetzentwurf" mapped to preparl-regbsl (DD-003).
+            (
+                "Beratung",
+                "Beratung   Plenarprotokoll 17/92 17.04.2024  S. 5486-5494 (Gesetzentwurf wurde abgelehnt)",
+                "Landesregierung",
                 Stationstyp.PARL_VOLLVLSGN,
             ),
             # DD-011 cross-check still sees a qualifier split off before the citation.
             (
                 "Beschluss des Landtags",
                 "Beschluss des Landtags  in Zweiter Beratung   Plenarprotokoll 17/58 16.12.2022",
+                "Fraktion GRÜNE",
                 Stationstyp.PARL_VOLLVLSGN,
             ),
             # Raw-text fallback still finds a label behind a single-space separator.
-            ("", "Gesetzentwurf Fraktion GRÜNE 04.02.2026 Drucksache 17/10266", Stationstyp.PARL_INITIATIV),
+            (
+                "",
+                "Gesetzentwurf Fraktion GRÜNE 04.02.2026 Drucksache 17/10266",
+                "Fraktion GRÜNE",
+                Stationstyp.PARL_INITIATIV,
+            ),
         ],
     )
-    def test_mapping_ignores_text_after_citation(self, station_typ_str, raw, expected):
-        assert _map_fundstelle_stationstyp(station_typ_str, raw, "Fraktion GRÜNE") == expected
+    def test_mapping_ignores_text_after_citation(self, station_typ_str, raw, initiative, expected):
+        assert _map_fundstelle_stationstyp(station_typ_str, raw, initiative) == expected
 
     @pytest.mark.asyncio
     async def test_v230205_readings_recovered(self, scraper_build_vorgang):
@@ -4840,7 +4860,7 @@ class TestIssue13CitationNotesDoNotTypeStations:
             Stationstyp.PARL_AUSSCHBER,
             Stationstyp.PARL_VOLLVLSGN,  # Zulassung, was a second parl-initiativ
             Stationstyp.PARL_AUSSCHBER,
-            Stationstyp.PARL_VOLLVLSGN,  # Beratung, was preparl-regbsl + synthetic parl-initiativ
+            Stationstyp.PARL_VOLLVLSGN,  # Beratung, was parl-initiativ and merged away
         ]
         # The SPD Änderungsantrag now has a reading to attach to instead of being dropped.
         assert "https://example.com/4.pdf" in [d.link for d in vorgang.stationen[-1].dokumente]
