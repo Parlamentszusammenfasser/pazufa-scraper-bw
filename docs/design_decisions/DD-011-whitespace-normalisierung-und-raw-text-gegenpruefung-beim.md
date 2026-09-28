@@ -2,7 +2,7 @@
 
 # DD-011: Whitespace-Normalisierung und Raw-Text-Gegenprüfung beim Enum-Mapping
 
-**Datum:** 27.03.2026
+**Datum:** 27.03.2026 | **Aktualisiert:** 28.09.2026 (Issue #13)
 
 **Kontext:** PARLIS formatiert Fundstellentexte mit doppelten Leerzeichen als
 Trennzeichen zwischen Feldern (z. B. Stationstyp, Autor, Datum). Der Parser
@@ -40,5 +40,24 @@ präziser als der Rohtext ist (z. B. „Beschlussempfehlung und Bericht" im
 
 **Implementierung:** `enum_mapper.py`, Funktion `_normalize_whitespace()`,
 aufgerufen in `map_stationstyp()` und `map_dokumententyp()`.
-`bawue_vorgaenge_scraper.py`, Methode `_build_station()` — Gegenprüfung nach
-dem primären Mapping.
+`bawue_vorgaenge_scraper.py`, `_map_fundstelle_stationstyp()` (aus
+`_build_station()` aufgerufen) — Gegenprüfung nach dem primären Mapping.
+
+**Update (Issue #13): nur der Label-Teil des Rohtexts zählt.** Raw-Fallback und
+Gegenprüfung mappen nicht mehr den ganzen Rohtext, sondern nur den Teil **vor**
+der ersten Fundstellen-Referenz (`Drucksache`, `Plenarprotokoll` oder Datum
+`TT.MM.JJJJ`). PARLIS hängt hinter die Plenarprotokoll-Referenz gelegentlich
+eine Notiz an, deren Schlüsselwörter sonst den Stationstyp bestimmten
+(V-230205, G9-Volksantrag):
+
+- `Plenarprotokoll 17/85 … (Zulassung des Volksantrags)` → `parl-initiativ`
+  statt `sonstig` (und damit keine DD-031-Wiederherstellung als Lesung);
+- `Beratung   Plenarprotokoll 17/92 … (Gesetzentwurf wurde abgelehnt)` →
+  `preparl-regbsl` statt `parl-vollvlsgn` (plus synthetische `parl-initiativ`,
+  DD-012; das SPD-Änderungsantrag-Dokument fand keine Lesung und wurde verworfen).
+
+Der Split-Fall oben bleibt abgedeckt: Der Zusatz „in Zweiter Beratung" steht vor
+der Referenz. Die Dokumenttypisierung (`map_dokumententyp()`) bleibt
+unverändert.
+Offline-Rebuild aller 238 WP17/WP18-Vorgänge (PARLIS-Stand 28.09.2026): nur
+V-230205 ändert sich. Test: `TestIssue13CitationNotesDoNotTypeStations`.

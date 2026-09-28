@@ -977,26 +977,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         station_typ_str = fund.get("station_typ", "")
         raw_text = fund.get("raw", "")
 
-        # Fallback: when the regex-based station_typ extraction fails (e.g. single-space
-        # separator in the Fundstelle text), use the full raw text for enum mapping.
-        # map_stationstyp does substring matching, so it can find the type in the raw text.
         mapping_text = station_typ_str or raw_text
-        if not station_typ_str and raw_text:
-            logger.warning(
-                "Fundstelle station_typ not extracted by regex, using raw text fallback: '%s'",
-                raw_text[:80],
-            )
-
-        station_typ = map_stationstyp(mapping_text, initiator=initiative)
-
-        # Cross-check: the parser can truncate multi-word types at internal
-        # double-spaces (e.g. "Beschluss des Landtags  in Zweiter Beratung"
-        # → station_typ="Beschluss des Landtags", losing the "in" qualifier).
-        # If the full raw text maps to a different non-SONSTIG type, prefer it.
-        if station_typ_str and raw_text:
-            raw_typ = map_stationstyp(raw_text, initiator=initiative)
-            if raw_typ != station_typ and raw_typ != Stationstyp.SONSTIG:
-                station_typ = raw_typ
+        station_typ = _map_fundstelle_stationstyp(station_typ_str, raw_text, initiative)
 
         zp_start = _parse_fundstelle_date(fund)
         if zp_start is None:
@@ -1454,6 +1436,41 @@ def _print_vorgaenge_summary(
             lines.append(f"  - {err}")
     print("=== BaWue Vorgänge Run Summary ===\n" + "\n".join(lines))
     return lines
+
+
+# -- Stationstyp mapping -----------------------------------------------------------
+
+
+# The first Drucksache/Plenarprotokoll citation or date ends a Fundstelle's label part.
+_CITATION_RE = re.compile(r"Drucksache|Plenarprotokoll|\d{2}\.\d{2}\.\d{4}")
+
+
+def _map_fundstelle_stationstyp(station_typ_str: str, raw_text: str, initiative: str) -> Stationstyp:
+    """Map a Fundstelle to its Stationstyp: the parsed label, checked against the raw text (DD-011)."""
+    # Only the text before the first citation names the station type; the note PARLIS
+    # appends after it, e.g. "(Gesetzentwurf wurde abgelehnt)", must not (issue #13).
+    raw_label = _CITATION_RE.split(raw_text, maxsplit=1)[0]
+
+    # Fallback: when the regex-based station_typ extraction fails (e.g. single-space
+    # separator in the Fundstelle text), use the raw label for enum mapping.
+    # map_stationstyp does substring matching, so it can find the type in the raw text.
+    if not station_typ_str and raw_text:
+        logger.warning(
+            "Fundstelle station_typ not extracted by regex, using raw text fallback: '%s'",
+            raw_text[:80],
+        )
+
+    station_typ = map_stationstyp(station_typ_str or raw_label, initiator=initiative)
+
+    # Cross-check: the parser can truncate multi-word types at internal
+    # double-spaces (e.g. "Beschluss des Landtags  in Zweiter Beratung"
+    # → station_typ="Beschluss des Landtags", losing the "in" qualifier).
+    # If the raw label maps to a different non-SONSTIG type, prefer it.
+    if station_typ_str and raw_label:
+        raw_typ = map_stationstyp(raw_label, initiator=initiative)
+        if raw_typ != station_typ and raw_typ != Stationstyp.SONSTIG:
+            station_typ = raw_typ
+    return station_typ
 
 
 # -- Date parsing helpers ----------------------------------------------------------

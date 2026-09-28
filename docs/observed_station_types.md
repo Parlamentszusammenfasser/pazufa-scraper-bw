@@ -59,6 +59,14 @@ represents the Gesetzblatt publication, not a separate Inkrafttreten step.
   the `gg-land-parl` track's required second `V` (see DD-016, DD-031). Any
   *subsequent* unlabeled Plenarprotokoll Fundstelle in the same Vorgang is
   still filtered as `SONSTIG` as before.
+  **Inventory (issue #13, PARLIS as of 2026-09-28):** 17 unlabeled Fundstellen
+  in 6 of 235 WP17 Vorgänge, none in WP18. 14 of them (V-222724, V-223628,
+  V-214623, V-222763) are plenary follow-ups years after the Gesetz, following a
+  `Mitteilung` and its `Beschlussempfehlung und Bericht` (Kenntnisnahme of a
+  government report) — dropping them as `SONSTIG` is correct. The other 3, in the two Volksanträge
+  (V-232608, V-230205), are real readings as bare Plenarprotokolle; V-230205 was
+  mistyped by the note PARLIS appends after the citation, which the mapping now
+  ignores (DD-011 update).
 - **Reclassification** ("Antrag" → Änderungsantrag after Ausschussbericht): 1
   occurrence (V-214623), confirming DD-019 is exercised in production.
 
