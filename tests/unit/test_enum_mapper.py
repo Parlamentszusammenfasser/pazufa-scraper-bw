@@ -5,6 +5,7 @@ import pytest
 from bawue.enum_mapper import (
     VORGANGSTYP_MAP,
     map_dokumententyp,
+    map_sachgebiete,
     map_stationstyp,
     map_vorgangstyp,
 )
@@ -12,6 +13,7 @@ from bawue.types import (
     CanonicalOrganisation,
     Doktyp,
     ReservedGremium,
+    Sachgebiet,
     Stationstyp,
     Vorgangstyp,
     canonicalize_organisation,
@@ -624,3 +626,69 @@ class TestIsVerfassungsaendernd:
         result = is_verfassungsaendernd("Gesetz zur Änderung der Verfassung")
         assert result is True
         assert isinstance(result, bool)
+
+
+# Every distinct term in the PARLIS Sachgebiet field (WMV32) across WP 17 (235 Vorgänge)
+# and WP 18 (3 Vorgänge), dumped 28.09.2026 (issue #40, DD-058).
+# fmt: off
+OBSERVED_PARLIS_SACHGEBIETE = [
+    "Abfall", "Abgaben", "Abgeordnete", "Allgemeinbildende Schulen", "Alte Menschen",
+    "Arbeitsbedingungen", "Arbeitsentgelt", "Ausländer, Migranten", "Bauwesen",
+    "Berufsausbildung", "Boden", "Datenschutz", "Dienstleistungen", "Energie",
+    "Erneuerbare Energien", "Europäische Union", "Finanzmarkt", "Frauen, Männer", "Freizeit",
+    "Frühkindliche Bildung", "Gerichte und Staatsanwaltschaften", "Gesundheitseinrichtungen",
+    "Gesundheitsschutz", "Glücksspiel", "Handel", "Hochschulwesen",
+    "Informations- und Kommunikationstechnologien", "Informationsgesellschaft, Medien",
+    "Innere Sicherheit", "Jagd, Fischerei", "Juristische Berufe", "Justizvollzug",
+    "Katastrophen- und Zivilschutz", "Kinder, Jugendliche", "Klima", "Kommunale Angelegenheiten",
+    "Kunst, Kultur", "Landesregierung", "Landwirtschaft", "Lehrer", "Medizinische Berufe",
+    "Menschen mit Behinderungen", "Mitbestimmung", "Mittelständische Wirtschaft", "Nation",
+    "Natur", "Ordnungsrecht", "Parlament", "Pflege", "Politische Kräfte", "Polizei",
+    "Privatschulen", "Programme der EU", "Raumordnung", "Rauschmittel",
+    "Religionsgemeinschaften", "Rettungswesen", "Rundfunk, Fernsehen",
+    "Schadstoffe, Immissionen, Emissionen", "Schifffahrt", "Schulen", "Soziales",
+    "Sozialleistungen", "Sozialversicherung", "Staatsaufbau", "Stiftung", "Straßenverkehr",
+    "Technologie", "Tierkrankheiten", "Universitäten", "Verbraucher",
+    "Verfassungsgerichtsbarkeit", "Verfassungsschutz, Spionage", "Verkehr", "Verkehrswegebau",
+    "Vermessungs- und Katasterwesen", "Versicherungen", "Versorgung", "Verteidigung", "Wahlen",
+    "Wald, Forsten", "Wirtschaft", "Wissenschaft, Forschung", "Wohnungswesen", "Zivilrecht",
+    "Öffentliche Vergabe", "Öffentliche Verwaltung", "Öffentlicher Dienst",
+    "Öffentlicher Haushalt", "Öffentlicher Personenverkehr", "Öffentliches Recht",
+    "Öffentliches Vermögen",
+]
+# fmt: on
+
+
+class TestSachgebieteMapping:
+    """PARLIS Sachgebiet (WMV32) → Parlamentsspiegel numbers (issue #40, DD-058)."""
+
+    @pytest.mark.parametrize(
+        ("parlis", "expected"),
+        [
+            ("Medizinische Berufe", [5230]),
+            ("Ausländer, Migranten; Hochschulwesen", [5070, 4300]),
+            # corelib shortens Parlamentsspiegel pairs to their first name.
+            ("Jagd, Fischerei", [6700]),
+            ("Rundfunk, Fernsehen", [7720]),
+            # Fuzzy resolver absorbs case and whitespace drift.
+            ("öffentlicher  haushalt", [8300]),
+            (" Schulen ;  Hochschulwesen ", [4200, 4300]),
+        ],
+    )
+    def test_maps_to_numbers(self, parlis, expected):
+        assert map_sachgebiete(parlis) == [Sachgebiet(n) for n in expected]
+
+    def test_unresolvable_terms_are_dropped_not_unbekannt(self):
+        assert map_sachgebiete("Sonstiges; Schulen") == [Sachgebiet(4200)]
+        assert map_sachgebiete("Sonstiges") == []
+
+    def test_duplicates_collapse_in_first_seen_order(self):
+        assert map_sachgebiete("Schulen; Jagd; Jagd, Fischerei; Schulen") == [Sachgebiet(4200), Sachgebiet(6700)]
+
+    @pytest.mark.parametrize("parlis", [None, "", "  ", ";", " ; ; "])
+    def test_empty_input(self, parlis):
+        assert map_sachgebiete(parlis) == []
+
+    @pytest.mark.parametrize("term", OBSERVED_PARLIS_SACHGEBIETE)
+    def test_every_observed_term_resolves(self, term):
+        assert len(map_sachgebiete(term)) == 1

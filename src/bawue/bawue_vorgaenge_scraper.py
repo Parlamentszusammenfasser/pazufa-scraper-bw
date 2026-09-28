@@ -21,7 +21,7 @@ from bawue.api import build_client
 from bawue.bawue_dok import LLMMetrics, clear_hash_cache, vorgang_kurztitel, vorgang_ressort, zusammenfassung_text
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
-from bawue.enum_mapper import map_dokumententyp, map_stationstyp, map_vorgangstyp
+from bawue.enum_mapper import map_dokumententyp, map_sachgebiete, map_stationstyp, map_vorgangstyp
 from bawue.gesetzblatt_client import GesetzblattClient
 from bawue.gesetzblatt_lookup import GesetzblattDateLookup
 from bawue.log_context import get_vorgangs_id, reset_vorgangs_id, set_vorgangs_id
@@ -501,6 +501,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
             ids=ids,
             links=[detail_url] if detail_url else UNSET,
             ressort=ressort,
+            # PARLIS' own Parlamentsspiegel subject field (issue #40, DD-058).
+            sachgebiete=map_sachgebiete(raw.get("Sachgebiet")) or UNSET,
         )
 
     _POSTPARL_TYPEN: frozenset[Stationstyp] = frozenset(

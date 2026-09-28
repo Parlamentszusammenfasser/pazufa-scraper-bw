@@ -5,8 +5,11 @@ The matching functions use case-insensitive substring matching against dictionar
 """
 
 import re
+from functools import cache
 
-from bawue.types import Doktyp, Stationstyp, Vorgangstyp
+from pazufa_corelib.normalization.schlagworte import SchlagwortResolver
+
+from bawue.types import Doktyp, Sachgebiet, Stationstyp, Vorgangstyp
 
 # ---------------------------------------------------------------------------
 # Vorgangstyp mapping: PARLIS Vorgangstyp string → PaZuFa Vorgangstyp
@@ -192,3 +195,36 @@ def map_dokumententyp(context: str, is_vorparlamentarisch: bool = False) -> Dokt
                 return Doktyp.PREPARL_ENTWURF
             return DOKUMENTENTYP_MAP[key]
     return Doktyp.SONSTIG
+
+
+@cache
+def _sachgebiet_resolver() -> SchlagwortResolver:
+    return SchlagwortResolver()
+
+
+def map_sachgebiete(parlis_sachgebiet: str | None) -> list[Sachgebiet]:
+    """Map the PARLIS Sachgebiet field (WMV32, ``;``-separated) to Parlamentsspiegel numbers (DD-058).
+
+    Unresolvable terms are dropped rather than mapped to "Unbekannt".
+    """
+    resolver = _sachgebiet_resolver()
+    result: list[Sachgebiet] = []
+    for part in (parlis_sachgebiet or "").split(";"):
+        term = _normalize_whitespace(part)
+        if not term:
+            continue
+        # corelib names Parlamentsspiegel pairs by their first name only:
+        # "Jagd, Fischerei" → "Jagd". Exact checks first, so only real misses warn.
+        head = term.split(",")[0].strip()
+        if resolver.check_sachgebiet_id(term):
+            sachgebiet_id = term
+        elif resolver.check_sachgebiet_id(head):
+            sachgebiet_id = head
+        else:
+            sachgebiet_id = resolver.canonicalise_sachgebiet(term)
+        if sachgebiet_id is None:
+            continue
+        sachgebiet = Sachgebiet(resolver.get_sachgebiet_number(sachgebiet_id))
+        if sachgebiet not in result:
+            result.append(sachgebiet)
+    return result
