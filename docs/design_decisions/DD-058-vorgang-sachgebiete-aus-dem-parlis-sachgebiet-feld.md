@@ -25,14 +25,20 @@ ist also dasselbe Sachgebiet. Der Fuzzy-Resolver von corelib findet diese Paare 
 1. **Quelle ist WMV32**, nicht die Deskriptoren. Das Feld stammt aus derselben
    Systematik, ein Mapping über freie Schlagworte ist nicht nötig. Die Deskriptoren
    bleiben Thema von #33 (`schlagworte`).
-2. **Auflösung je Begriff** (`enum_mapper.map_sachgebiete`):
-   - zuerst exakt;
-   - dann exakt der Teil vor dem ersten Komma (Paare);
-   - zuletzt `SchlagwortResolver.canonicalise_sachgebiet` (fuzzy, fängt Groß-/Kleinschreibung
-     und Leerraum ab).
+2. **Auflösung je Begriff** (`enum_mapper.map_sachgebiete`) gegen das corelib-Vokabular
+   (`SchlagwortResolver.get_sachgebiete_json`), ohne Unterschied von Groß-/Kleinschreibung
+   und Leerraum:
+   - zuerst der ganze Begriff;
+   - dann der Teil vor dem ersten Komma (Paare). Bei einem unbekannten künftigen Paar
+     geht damit der zweite Teil verloren. Das ist verlustbehaftet, aber nicht falsch.
 
-   Die exakten Prüfungen kommen zuerst, damit nur echte Fehltreffer eine Warnung loggen.
-3. **Nicht auflösbare Begriffe werden verworfen**, nicht auf 9900 „Unbekannt“ gemappt.
+   **Kein Fuzzy-Matching:** `canonicalise_sachgebiet` macht aus „Öffentliche Schulen“
+   8310 „Öffentliche Schulden“. PARLIS nutzt ein geschlossenes Vokabular, und alle
+   beobachteten Begriffe lösen exakt auf. Fuzzy bringt also nichts außer dem Risiko
+   einer stillen Fehlzuordnung.
+3. **Nicht auflösbare Begriffe werden verworfen** und mit einer Warnung geloggt, damit
+   neue PARLIS-Begriffe auffallen. Die Platzhalter 9900 „Unbekannt“ und 9999
+   „ohne @-Systematik“ werden nie gesendet, auch wenn PARLIS sie wörtlich liefert.
    Doppelte Nummern fallen weg, die Reihenfolge von PARLIS bleibt erhalten.
 4. **Leeres Ergebnis ⇒ Feld `UNSET`** und damit nicht im Payload, wie bei `ressort` (DD-055).
 
@@ -41,14 +47,15 @@ ist also dasselbe Sachgebiet. Der Fuzzy-Resolver von corelib findet diese Paare 
 
 **Migrationshinweis:** Der `vg2:`-Fingerprint hasht das Sachgebiet bewusst nicht (DD-052).
 Bereits gecachte Vorgänge bekommen `sachgebiete` erst beim nächsten Neubau, also wenn sich
-ihr PARLIS-Record ändert. Für einen sofortigen Backfill die `vg2:`-Einträge löschen
-(DD-052, Punkt 4).
+ihr PARLIS-Record ändert. Die meisten WP-17-Vorgänge sind abgeschlossen und ändern sich
+nicht mehr, sie bekämen das Feld also nie. Für einen Backfill die `vg2:`-Einträge
+löschen (DD-052, Punkt 4). Das ist eine bewusste Rollout-Entscheidung, kein Automatismus.
 
 **Code:** `enum_mapper.map_sachgebiete`, `BawueVorgaengeScraper._build_vorgang`,
 `types.Sachgebiet`
 
 **Tests:**
-- `tests/unit/test_enum_mapper.py::TestSachgebieteMapping`: Paare, Mehrfachwerte, Fuzzy,
-  Verwerfen, Duplikate, leere Eingaben und alle 92 beobachteten PARLIS-Begriffe
+- `tests/unit/test_enum_mapper.py::TestSachgebieteMapping`: Paare, Mehrfachwerte, Groß-/Kleinschreibung,
+  keine Fuzzy-Fehlzuordnung, Platzhalter, Verwerfen, Duplikate, leere Eingaben und alle 92 beobachteten PARLIS-Begriffe
   (`OBSERVED_PARLIS_SACHGEBIETE`)
 - `tests/unit/test_bawue_scraper.py::TestIssue40SachgebieteFromParlis`

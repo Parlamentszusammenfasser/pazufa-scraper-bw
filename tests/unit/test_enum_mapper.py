@@ -670,8 +670,9 @@ class TestSachgebieteMapping:
             # corelib shortens Parlamentsspiegel pairs to their first name.
             ("Jagd, Fischerei", [6700]),
             ("Rundfunk, Fernsehen", [7720]),
-            # Fuzzy resolver absorbs case and whitespace drift.
+            # Case and whitespace drift, also for pairs.
             ("öffentlicher  haushalt", [8300]),
+            ("jagd,  fischerei", [6700]),
             (" Schulen ;  Hochschulwesen ", [4200, 4300]),
         ],
     )
@@ -681,6 +682,14 @@ class TestSachgebieteMapping:
     def test_unresolvable_terms_are_dropped_not_unbekannt(self):
         assert map_sachgebiete("Sonstiges; Schulen") == [Sachgebiet(4200)]
         assert map_sachgebiete("Sonstiges") == []
+
+    def test_no_fuzzy_false_positive(self):
+        # Fuzzy matching would turn this into 8310 "Öffentliche Schulden".
+        assert map_sachgebiete("Öffentliche Schulen") == []
+
+    @pytest.mark.parametrize("placeholder", ["Unbekannt", "ohne@-Systematik"])
+    def test_placeholder_sachgebiete_are_dropped(self, placeholder):
+        assert map_sachgebiete(f"{placeholder}; Schulen") == [Sachgebiet(4200)]
 
     def test_duplicates_collapse_in_first_seen_order(self):
         assert map_sachgebiete("Schulen; Jagd; Jagd, Fischerei; Schulen") == [Sachgebiet(4200), Sachgebiet(6700)]
