@@ -19,6 +19,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _fallback_date_from_year,
     _initiativ_drucksnr_from_fundstellen,
     _initiativ_zusammenfassung,
+    _map_fundstelle_stationstyp,
     _parse_autoren,
     _parse_fundstelle_date,
     _reading_round,
@@ -4783,6 +4784,66 @@ class TestUnlabeledPlenarprotokollFallback:
 
         assert len(vorgang.stationen) == 1
         assert vorgang.stationen[0].typ == Stationstyp.PARL_INITIATIV
+
+
+class TestIssue13CitationNotesDoNotTypeStations:
+    """Issue #13: the note PARLIS appends after a Plenarprotokoll citation must not type the station.
+
+    The raw-text fallback and the DD-011 cross-check matched keywords anywhere in the
+    Fundstelle, so the trailing "(Zulassung des Volksantrags)" made a bare
+    Plenarprotokoll a parl-initiativ, and "(Gesetzentwurf wurde abgelehnt)" made a
+    "Beratung" a preparl-regbsl (V-230205, G9-Gesetz, WP17).
+    """
+
+    @pytest.mark.parametrize(
+        ("station_typ_str", "raw", "expected"),
+        [
+            # Unlabeled: the note is the only keyword → SONSTIG, left to DD-031.
+            ("", "Plenarprotokoll 17/85 24.01.2024  S. 5085-5086 (Zulassung des Volksantrags)", Stationstyp.SONSTIG),
+            (
+                "Beratung",
+                "Beratung   Plenarprotokoll 17/92 17.04.2024  S. 5486-5494 (Gesetzentwurf wurde abgelehnt)",
+                Stationstyp.PARL_VOLLVLSGN,
+            ),
+            # DD-011 cross-check still sees a qualifier split off before the citation.
+            (
+                "Beschluss des Landtags",
+                "Beschluss des Landtags  in Zweiter Beratung   Plenarprotokoll 17/58 16.12.2022",
+                Stationstyp.PARL_VOLLVLSGN,
+            ),
+            # Raw-text fallback still finds a label behind a single-space separator.
+            ("", "Gesetzentwurf Fraktion GRÜNE 04.02.2026 Drucksache 17/10266", Stationstyp.PARL_INITIATIV),
+        ],
+    )
+    def test_mapping_ignores_text_after_citation(self, station_typ_str, raw, expected):
+        assert _map_fundstelle_stationstyp(station_typ_str, raw, "Fraktion GRÜNE") == expected
+
+    @pytest.mark.asyncio
+    async def test_v230205_readings_recovered(self, scraper_build_vorgang):
+        texts = [
+            "Gesetzentwurf durch Volksantrag      26.10.2023 Drucksache 17/5729   (11 S.)",
+            "Beschlussempfehlung und Bericht    Ausschuss für Kultus, Jugend und Sport  18.01.2024 Drucksache 17/6089",
+            "Plenarprotokoll 17/85 24.01.2024  S. 5085-5086 (Zulassung des Volksantrags)",
+            "Beschlussempfehlung und Bericht    Ausschuss für Kultus, Jugend und Sport  14.03.2024 Drucksache 17/6363",
+            "Änderungsantrag    Fraktion der SPD  16.04.2024 Drucksache 17/6616",
+            "Beratung   Plenarprotokoll 17/92 17.04.2024  S. 5486-5494 (Gesetzentwurf wurde abgelehnt)",
+        ]
+        fundstellen = [
+            {**parse_fundstelle_text(t), "pdf_url": f"https://example.com/{i}.pdf"} for i, t in enumerate(texts)
+        ]
+        raw = _make_raw_vorgang("V-230205", vorgangstyp="Volksantrag", initiative="", fundstellen=fundstellen)
+
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert [s.typ for s in vorgang.stationen] == [
+            Stationstyp.PARL_INITIATIV,
+            Stationstyp.PARL_AUSSCHBER,
+            Stationstyp.PARL_VOLLVLSGN,  # Zulassung, was a second parl-initiativ
+            Stationstyp.PARL_AUSSCHBER,
+            Stationstyp.PARL_VOLLVLSGN,  # Beratung, was preparl-regbsl + synthetic parl-initiativ
+        ]
+        # The SPD Änderungsantrag now has a reading to attach to instead of being dropped.
+        assert "https://example.com/4.pdf" in [d.link for d in vorgang.stationen[-1].dokumente]
 
 
 class TestConstructDrucksachePdfUrl:
