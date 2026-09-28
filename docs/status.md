@@ -1,6 +1,6 @@
 # Implementation Status: BaWue Scraper
 
-## Completeness (as of April 2026)
+## Completeness (as of September 2026)
 
 | Category                     | Estimate  | Notes                                                                                                                                                                               |
 |------------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -22,7 +22,7 @@
 Bei aktivem LLM (`[llm]`): `zusammenfassung`, `schlagworte`, `kurztitel` und `meinung` werden auf **Dokument-Ebene**
 gefüllt. Auf **Vorgang-Ebene** bleiben Lücken.
 
-Missing fields: `links` (Vorgang), `lobbyregister`,
+Missing fields: `lobbyregister`,
 `sachgebiete` (Vorgang, #40), `schlagworte` (Station), `stellungnahmen`,
 `subdoc_id` (Dokument, #41), `vorwort`, `zp_modifiziert` (Station), `gremium_federf`
 
@@ -38,10 +38,11 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Vorgang  | `titel`               | ✅ Complete  | From PARLIS / Beteiligungsportal                                                     |
 | Vorgang  | `kurztitel`           | ✅ LLM       | ≤ 60 chars, own LLM call; falls back to `titel` without `[llm]` (DD-053)             |
 | Vorgang  | `typ`                 | ✅ Complete  | Enum-mapped                                                                          |
-| Vorgang  | `wahlperiode`         | ✅ Complete  | Fixed WP 17                                                                          |
+| Vorgang  | `wahlperiode`         | ⚠️ Partial  | Prod/sample config default WP 17; staging/dev already on WP 18 — decision open in #63 |
 | Vorgang  | `verfassungsaendernd` | ✅ Heuristik | Title regex (DD-023); PARLIS has no native attribute                                 |
 | Vorgang  | `initiatoren`         | ✅ Complete  | From Initiative field                                                                |
 | Vorgang  | `stationen`           | ✅ Complete  | From Fundstellen parsing                                                             |
+| Vorgang  | `links`               | ✅ Complete  | PARLIS detail URL (`bawue_vorgaenge_scraper.py:495`) or Beteiligungsportal URL (issue #31) |
 | Vorgang  | `ressort`             | ✅ LLM       | Eigener LLM-Call je Vorgang, Schwerpunkt statt Akteur (DD-055); `UNSET` ohne LLM, bei `null`, unauflösbarer Antwort oder Fehler |
 | Station  | `typ`                 | ✅ Complete  | Context-aware enum mapping                                                           |
 | Station  | `dokumente`           | ✅ Complete  | PDF links from Fundstelle                                                            |
@@ -84,7 +85,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | JSON-comment parsing         | ✅ Working            | Primary PARLIS parsing path via embedded JSON comments. HTML/XPath as fallback (DD-014).                                                                                                                                                                                                                                  |
 | Synthetic stations           | ✅ Working            | `parl-initiativ` after `preparl-regent` (DD-012), `parl-ablehnung` from "Aktueller Stand" (DD-010)                                                                                                                                                                                                                        |
 | Upload throttle              | ✅ Working            | Adaptive rate limiting for API uploads with 429 retry (`upload_throttle.py`)                                                                                                                                                                                                                                              |
-| CI enforcement               | ✅ Working            | Woodpecker: ruff-lint + ruff-format + pytest + pip-audit. DoD lists "black, ruff" — ruff's formatter is black-compatible.                                                                                                                                                                                                 |
+| CI enforcement               | ✅ Working            | GitHub Actions (`.github/workflows/ci.yml`): Trivy dependency scan → ruff-lint + ruff-format → pytest. DoD lists "black, ruff" — ruff's formatter is black-compatible.                                                                                                                                                                                                 |
 | Supply-chain pinning         | ✅ Working            | `pazufa-scraper-core` pinned to git tag `v0.2.1` (API spec 0.2.5) in `pyproject.toml` (poetry fetches it at install).                                                                                                                                                                                                                      |
 | Canonical name normalization | ✅ Working            | `canonicalize_organisation()` + `CanonicalOrganisation` StrEnum (DD-022) applied in `_parse_autoren` (vorgaenge) and Beteiligung ministry Autor. Covers 5 Landtag-BW-Fraktionen + `Landesregierung` + `Landtag`; ministries/externals pass through (backed by backend pg_trgm canary).                                                |
 | Reserved entity names        | ✅ Working            | `ReservedGremium` StrEnum (DD-021) covers `plenum`, `regierung`, `gesetzesblatt`, `volk`. `_determine_gremium` routes by station typ (`gsblt → gesetzesblatt`, `preparl-* → regierung` per DD-045/issue #10, else `plenum`); synthetic Ablehnung/Initiativ stations (`parl-*`) also `plenum`. Matches BY reference scraper. Backend `Landtag`-row cleanup pending re-scrape cycle. |
