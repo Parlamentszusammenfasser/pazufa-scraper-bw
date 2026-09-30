@@ -688,6 +688,8 @@ class TestEnrichDokument:
         assert result.dokument.autoren[0].person == "Max Mustermann"
         assert result.dokument.drucksnr == "17/10266"
         assert result.dokument.zp_modifiziert == datetime(2026, 1, 15, tzinfo=UTC)
+        assert result.dokument.zp_referenz == datetime(2026, 1, 15, tzinfo=UTC)
+        assert result.dokument.zp_erstellt is UNSET  # no Ausgegeben header in the text (issue #23)
         assert result.dokument.typ == Doktyp.ENTWURF
 
     @pytest.mark.asyncio
@@ -988,14 +990,6 @@ class TestEnrichDokumentAusgegebenDatum:
 
         assert result.dokument.zp_erstellt == datetime(2021, 12, 10, tzinfo=UTC)
         assert result.dokument.zp_modifiziert == datetime(2021, 12, 10, tzinfo=UTC)
-
-    @pytest.mark.asyncio
-    async def test_without_header_the_parlis_dates_stay(self):
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF):
-            result = await enrich_dokument(MagicMock(), _make_llm_mock(), self._beschlussempf())
-
-        assert result.dokument.zp_erstellt is UNSET
-        assert result.dokument.zp_modifiziert == datetime(2021, 11, 25, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
