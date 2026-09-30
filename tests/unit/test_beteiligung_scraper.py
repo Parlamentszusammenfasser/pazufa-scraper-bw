@@ -8,7 +8,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 
-from bawue.bawue_beteiligung_scraper import DEFAULT_WAHLPERIODE, BawueBeteiligungScraper
+from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
 from bawue.bawue_dok import LLMMetrics
 from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
 from bawue.types import (
@@ -586,9 +586,10 @@ class TestRunDurationLog:
 
 
 class TestInit:
-    def test_init_reads_wahlperiode_from_config(self, tmp_path):
+    def test_issue6_init_reads_wahlperiode_from_bawue_section(self, tmp_path, caplog):
+        """One Wahlperiode for all scrapers; a leftover [beteiligung] key is ignored, loudly."""
         config_file = tmp_path / "config.toml"
-        config_file.write_text("[beteiligung]\nwahlperiode = 16\n")
+        config_file.write_text("[bawue]\nwahlperiode = 16\n\n[beteiligung]\nwahlperiode = 17\n")
 
         mock_config = MagicMock()
         mock_config.config_file = str(config_file)
@@ -598,44 +599,12 @@ class TestInit:
         with (
             patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.__init__", return_value=None),
             patch("bawue.bawue_beteiligung_scraper.BeteiligungClient"),
+            caplog.at_level(logging.WARNING, logger="bawue.bawue_beteiligung_scraper"),
         ):
             scraper = BawueBeteiligungScraper(mock_config, MagicMock())
 
         assert scraper._wahlperiode == 16
-
-    def test_init_uses_default_wahlperiode(self):
-        mock_config = MagicMock()
-        mock_config.config_file = None
-        mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
-        mock_config.llm_provider_key = None
-
-        with (
-            patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.__init__", return_value=None),
-            patch("bawue.bawue_beteiligung_scraper.BeteiligungClient"),
-        ):
-            scraper = BawueBeteiligungScraper(mock_config, MagicMock())
-
-        assert scraper._wahlperiode == DEFAULT_WAHLPERIODE
-
-    def test_load_toml_section_returns_empty_on_no_file(self):
-        from bawue.config_loader import load_toml_section
-
-        mock_config = MagicMock()
-        mock_config.config_file = None
-
-        assert load_toml_section(mock_config, "beteiligung") == {}
-
-    def test_load_toml_section_returns_empty_on_bad_file(self, tmp_path, caplog):
-        from bawue.config_loader import load_toml_section
-
-        mock_config = MagicMock()
-        mock_config.config_file = str(tmp_path / "nonexistent.toml")
-
-        with caplog.at_level(logging.WARNING, logger="bawue.config_loader"):
-            result = load_toml_section(mock_config, "beteiligung")
-
-        assert result == {}
-        assert any("Could not load" in msg for msg in caplog.messages)
+        assert "[beteiligung] wahlperiode is ignored" in caplog.text
 
 
 class TestIssue39Ressort:

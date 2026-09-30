@@ -3,6 +3,8 @@
 from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from bawue.bawue_vorgaenge_scraper import DEFAULT_ENABLED_VORGANGSTYPEN
 from bawue.dry_run import (
     _load_enabled_vorgangstypen,
@@ -47,8 +49,8 @@ class TestParseArgs:
     def test_defaults(self):
         args = parse_args([])
         assert args.scraper == "all"
-        assert args.wahlperiode_start_date == date(2021, 4, 26)
-        assert args.wahlperiode == 17
+        assert args.wahlperiode_start_date is None  # derived from the Wahlperiode (issue #6)
+        assert args.wahlperiode == 18  # issue #63
         assert args.limit is None
         assert args.verbosity == 0
         assert args.json is False
@@ -361,6 +363,24 @@ class TestMain:
         mock_rb.assert_called_once()
         mock_rs.assert_called_once()
 
+    @pytest.mark.parametrize(
+        ("argv", "start"),
+        [
+            (["--wahlperiode", "17"], date(2021, 4, 26)),
+            (["--wahlperiode", "17", "--wahlperiode-start-date", "2022-01-01"], date(2022, 1, 1)),
+        ],
+    )
+    def test_issue6_search_start_follows_the_wahlperiode(self, argv, start):
+        with (
+            patch("bawue.dry_run.run_vorgaenge", return_value=([], [])) as mock_rv,
+            patch("bawue.dry_run.check_for_newer_wahlperiode"),
+            patch("bawue.dry_run.build_summary", return_value=self._mock_summary()),
+            patch("bawue.dry_run.format_summary", return_value="ok"),
+        ):
+            main(["--scraper", "vorgaenge", *argv])
+
+        assert mock_rv.call_args.kwargs["wahlperiode_start_date"] == start
+
     def test_main_runs_only_vorgaenge_scraper(self):
         with (
             patch("bawue.dry_run.run_vorgaenge", return_value=([], [])) as mock_rv,
@@ -431,7 +451,7 @@ class TestMain:
         ):
             main([])
 
-        mock_check.assert_called_once_with(17)
+        mock_check.assert_called_once_with(18)
 
     def test_main_loads_vorgangstypen_from_config(self):
         """When no --vorgangstyp flag, main() loads enabled-vorgangstypen from config."""

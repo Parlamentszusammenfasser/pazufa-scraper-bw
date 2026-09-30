@@ -14,8 +14,7 @@ name: Deploy prod
 #                       WIF_PROVIDER, WIF_SERVICE_ACCOUNT
 # Environment "prod" — variables: COLLECTOR_ID, LTZF_API_URL (required),
 #                                    WAHLPERIODE, WAHLPERIODE_START_DATE,
-#                                    PARLIS_REQUEST_DELAY_S,
-#                                    BETEILIGUNG_WAHLPERIODE (all optional —
+#                                    PARLIS_REQUEST_DELAY_S (all optional —
 #                                    unset falls back to the image's config.toml)
 #
 # Secret *values* live only in Secret Manager (see bootstrap.sh); this workflow
@@ -91,7 +90,6 @@ jobs:
           WAHLPERIODE: ${{ vars.WAHLPERIODE }}
           WAHLPERIODE_START_DATE: ${{ vars.WAHLPERIODE_START_DATE }}
           PARLIS_REQUEST_DELAY_S: ${{ vars.PARLIS_REQUEST_DELAY_S }}
-          BETEILIGUNG_WAHLPERIODE: ${{ vars.BETEILIGUNG_WAHLPERIODE }}
         run: |
           gcloud run jobs deploy "$JOB_NAME" \
             --image "docker.io/${DOCKER_IMAGE}:${IMAGE_TAG}" \
@@ -101,7 +99,7 @@ jobs:
             --task-timeout 21600s \
             --max-retries 1 \
             --service-account "bawue-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
-            --set-env-vars "PYTHONUNBUFFERED=1,MAX_CONCURRENCY=3,ENVIRONMENT=${ENVIRONMENT},COLLECTOR_ID=${COLLECTOR_ID},LTZF_API_URL=${LTZF_API_URL},WAHLPERIODE=${WAHLPERIODE},WAHLPERIODE_START_DATE=${WAHLPERIODE_START_DATE},PARLIS_REQUEST_DELAY_S=${PARLIS_REQUEST_DELAY_S},BETEILIGUNG_WAHLPERIODE=${BETEILIGUNG_WAHLPERIODE}" \
+            --set-env-vars "PYTHONUNBUFFERED=1,MAX_CONCURRENCY=3,ENVIRONMENT=${ENVIRONMENT},COLLECTOR_ID=${COLLECTOR_ID},LTZF_API_URL=${LTZF_API_URL},WAHLPERIODE=${WAHLPERIODE},WAHLPERIODE_START_DATE=${WAHLPERIODE_START_DATE},PARLIS_REQUEST_DELAY_S=${PARLIS_REQUEST_DELAY_S}" \
             --set-secrets "LTZF_API_KEY=${SECRET_PREFIX}-ltzf-api-key:latest,LLM_PROVIDER_KEY=${SECRET_PREFIX}-llm-provider-key:latest,REDIS_URL=${SECRET_PREFIX}-redis-url:latest,MATTERMOST_HOOK=${SECRET_PREFIX}-mattermost-hook:latest"
 
       # Daily. --max-retry-attempts so one transient 5xx from the Run Admin API

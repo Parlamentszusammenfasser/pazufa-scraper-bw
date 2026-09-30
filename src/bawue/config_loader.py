@@ -21,9 +21,6 @@ _ENV_OVERRIDES: dict[str, dict[str, tuple[str, Callable[[str], Any]]]] = {
         "wahlperiode-start-date": ("WAHLPERIODE_START_DATE", str),
         "parlis-request-delay-s": ("PARLIS_REQUEST_DELAY_S", float),
     },
-    "beteiligung": {
-        "wahlperiode": ("BETEILIGUNG_WAHLPERIODE", int),
-    },
     "notifications": {
         "mattermost-hook": ("MATTERMOST_HOOK", str),
     },

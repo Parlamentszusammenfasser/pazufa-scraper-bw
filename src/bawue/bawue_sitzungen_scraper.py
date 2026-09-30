@@ -21,10 +21,10 @@ from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
 from bawue.types import Gremium, Parlament, Sitzung, none_if_blank
 from bawue.upload_throttle import with_upload_retry
+from bawue.wahlperiode import CURRENT_WAHLPERIODE
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_WAHLPERIODE = 17
 DEFAULT_ICS_URL = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkalender.ics"
 BERLIN_TZ = ZoneInfo("Europe/Berlin")
 
@@ -37,7 +37,7 @@ class BawueSitzungenScraper(SitzungsScraper):
 
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         bawue_config = load_toml_section(config, "bawue")
-        self._wahlperiode = bawue_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
+        self._wahlperiode = bawue_config.get("wahlperiode", CURRENT_WAHLPERIODE)
         ics_url = bawue_config.get("ics-url", DEFAULT_ICS_URL)
 
         super().__init__(config, uuid.UUID(config.collector_id), [ics_url], session)

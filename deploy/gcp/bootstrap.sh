@@ -175,8 +175,8 @@ Done.
 3) GitHub Environment "${ENVIRONMENT}" — variables:
 
      required: COLLECTOR_ID, LTZF_API_URL
-     optional: WAHLPERIODE, WAHLPERIODE_START_DATE, PARLIS_REQUEST_DELAY_S,
-               BETEILIGUNG_WAHLPERIODE   (unset = the image's config.toml default)
+     optional: WAHLPERIODE, WAHLPERIODE_START_DATE, PARLIS_REQUEST_DELAY_S
+               (unset = the image's config.toml default)
 
    Add a protection rule restricting deployment branches — the WIF condition
    requires an environment claim, so that rule is the actual deploy gate.
