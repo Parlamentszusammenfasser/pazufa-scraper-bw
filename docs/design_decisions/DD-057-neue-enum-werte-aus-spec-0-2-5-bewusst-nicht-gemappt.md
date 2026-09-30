@@ -2,7 +2,7 @@
 
 # DD-057: Neue Enum-Werte aus Spec 0.2.5 bleiben bewusst ungemappt (GitHub Issue #43)
 
-**Datum:** 28.09.2026
+**Datum:** 28.09.2026 | **Aktualisiert:** 30.09.2026 (corelib v0.3.0, DD-059)
 
 **Kontext:** Spec 0.2.5 (corelib v0.2.1, DD-051) brachte vier neue `Stationstyp`-Werte
 (`preparl-formvs`, `parl-antragsst`, `parl-vermittas`, `parl-verfgstop`) und den `Doktyp`
@@ -44,7 +44,8 @@ statt Teilmenge, wie der Test für `Doktyp` schon (er schlug in DD-051 an). Nebe
 Werten stehen die bewusst nicht erzeugten in `UNPRODUCED_STATIONSTYPEN`. Ein neuer
 Spec-Wert lässt den Test also scheitern, bis er gemappt oder dort eingetragen ist.
 Beim Upgrade auf corelib 0.2.2 (Spec 0.2.7) meldet der Test die Umbenennung
-`parl-verfgstop` → `postparl-vgstp`. Ein zweiter Test stellt sicher, dass
+`parl-verfgstop` → `postparl-vgstp`; mit DD-059 ist das geschehen, die Liste führt jetzt
+`postparl-vgstp`. Ein zweiter Test stellt sicher, dass
 `STATIONSTYP_MAP` keinen dieser Werte und `DOKUMENTENTYP_MAP` kein `eckpunktepapier`
 liefert. Er prüft nur die Mapping-Tabellen, nicht die im Code direkt gesetzten
 Stationen (synthetische Stationen, Beteiligungs-Scraper). `preparl-regbsl` fehlte in der alten Liste, obwohl BW den Wert erzeugt

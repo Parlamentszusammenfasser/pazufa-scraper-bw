@@ -54,7 +54,7 @@ VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
 }
 
 # ---------------------------------------------------------------------------
-# Stationstyp-Referenz: Alle 20 Enum-Werte aus der OpenAPI-Spezifikation (0.2.5)
+# Stationstyp-Referenz: Alle 20 Enum-Werte aus der OpenAPI-Spezifikation (0.2.7)
 #
 # Vorparlamentarisch (preparl-*):
 #   PREPARL_REGENT  — Regierungsentwurf (Gesetzentwurf der Landesregierung)
@@ -73,13 +73,13 @@ VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
 #   PARL_ZURUECKGZ  — Zurückgezogen (Vorgang vom Initiator zurückgezogen)
 #   PARL_GGENTWURF  — Gegenentwurf (Alternativentwurf zu einem Gesetzentwurf)
 #   PARL_VERMITTAS  — Vermittlungsausschuss (Bundestag/Bundesrat; unmapped, DD-057)
-#   PARL_VERFGSTOP  — Stopp durch Verfassungsgericht (Spec 0.2.7: postparl-vgstp; unmapped, DD-057)
 #
 # Nachparlamentarisch (postparl-*):
 #   POSTPARL_VESJA  — Volksentscheid Ja (Referendum angenommen)
 #   POSTPARL_VESNE  — Volksentscheid Nein (Referendum abgelehnt)
 #   POSTPARL_GSBLT  — Gesetzblatt (Verkündung im Gesetzblatt)
 #   POSTPARL_KRAFT  — Inkrafttreten (Gesetz tritt in Kraft)
+#   POSTPARL_VGSTP  — Stopp durch Verfassungsgericht (bis Spec 0.2.5 parl-verfgstop; unmapped, DD-057)
 #
 # Sonstige:
 #   SONSTIG               — Nicht zuordenbare Stationen

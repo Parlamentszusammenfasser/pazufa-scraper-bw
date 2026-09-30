@@ -124,9 +124,9 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 Enum-Member ersetzen den Bindestrich durch `_` (z.B. `Stationstyp.PARL_VOLLVLSGN` für `parl-vollvlsgn`).
 Die Tabellen unten zeigen nur die Werte, die BaWue tatsächlich erzeugt (`enum_mapper.py`); die
 volle Werteliste pro Enum gibt die OpenAPI-Spezifikation (`pazufa_corelib.api_client.models`) vor —
-spec 0.2.5 führt zusätzlich `parl-antragsst`, `parl-verfgstop`, `parl-vermittas`, `preparl-formvs`
-(Stationstyp), `gg-einspruch`, `gg-zustimmung` (Vorgangstyp) und `eckpunktepapier` (Doktyp) ein, die
-BaWue (noch) nicht abbildet.
+spec 0.2.7 kennt zusätzlich `parl-antragsst`, `postparl-vgstp`, `parl-vermittas`, `preparl-formvs`
+(Stationstyp), die Bundes-Vorgangstypen `bu-*` (Vorgangstyp) und `eckpunktepapier` (Doktyp), die
+BaWue bewusst nicht abbildet (DD-057).
 
 ### Stationstypen
 

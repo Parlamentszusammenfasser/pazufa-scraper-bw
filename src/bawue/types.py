@@ -12,7 +12,7 @@ from typing import TypedDict
 # directly from the generated client. Phase 1 flipped this single re-export from
 # the collector's `openapi_client.models` (openapi-generator-cli, Pydantic v2,
 # spec v0.2.2) to `pazufa_corelib.api_client.models.*` (openapi-python-client,
-# attrs, spec v0.2.5 since corelib v0.2.1, DD-051).
+# attrs; spec 0.2.7 since corelib v0.3.0, DD-059).
 #
 # Consequences of the new (attrs) client, handled across the call sites:
 #   - Optional fields default to `UNSET` (not `None`); `UNSET` is omitted from
