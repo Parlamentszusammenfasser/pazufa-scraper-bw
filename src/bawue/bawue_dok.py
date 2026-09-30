@@ -14,7 +14,7 @@ import logging
 import re
 import ssl
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import urlparse
@@ -658,28 +658,39 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tupl
 
 
 _DRUCKSNR_RE = re.compile(r"(\d+)/(\d+)")
+# Landtag BW prints the issue date once, in the page-1 footer: "Ausgegeben: 10.12.2021",
+# on Entwürfe/Anträge "Eingegangen: 19.10.2021/Ausgegeben: 20.10.2021". Where the footer
+# lands in the extracted text varies (native vs. OCR), so the first occurrence is taken.
+_AUSGEGEBEN_RE = re.compile(r"Ausgegeben:\s*(\d{1,2})\.(\d{1,2})\.(\d{4})(?!\d)")
+# 150 staging Dokumente: issued 0 to 42 days after the PARLIS date (DD-061).
+_MAX_AUSGABE_VERZUG = timedelta(days=90)
 
 
-def ausgegeben_datum(text: str, drucksnr: str | None) -> datetime | None:
-    """The issue date printed on page 1 of a Drucksache ("Drucksache 17 / 1102 Ausgegeben: 10.12.2021").
+def ausgegeben_datum(text: str, drucksnr: str | None, parlis_datum: datetime) -> datetime | None:
+    """The issue date printed in the page-1 footer of Drucksache *drucksnr*, or None.
 
-    PARLIS only gives the session date, which precedes the issue date by up to weeks
-    (issue #23, DD-061). The header must carry the document's own number, so a
-    quoted header of another Drucksache is never taken.
+    PARLIS only gives the session/Eingang date, which precedes the issue date by up to
+    weeks (issue #23, DD-061). The text must carry the document's own header, and a date
+    outside ``[parlis_datum, parlis_datum + 90 days]`` is dropped as a misread.
     """
     nummer = _DRUCKSNR_RE.fullmatch(drucksnr or "")
     if nummer is None:
         return None
     wp, nr = nummer.groups()
-    match = re.search(rf"Drucksache\s+{wp}\s*/\s*{nr}\s+Ausgegeben:\s*(\d{{1,2}})\.(\d{{1,2}})\.(\d{{4}})", text)
+    if not re.search(rf"Drucksache\s+{wp}\s*/\s*{nr}(?!\d)", text):
+        return None
+    match = _AUSGEGEBEN_RE.search(text)
     if match is None:
         return None
     day, month, year = map(int, match.groups())
     try:
-        return datetime(year, month, day, tzinfo=UTC)
+        datum = datetime(year, month, day, tzinfo=UTC)
     except ValueError:
-        logger.warning("Drucksache %s prints an impossible Ausgegeben date: %s", drucksnr, match.group(0))
+        datum = None
+    if datum is None or not parlis_datum <= datum <= parlis_datum + _MAX_AUSGABE_VERZUG:
+        logger.warning("Drucksache %s: implausible Ausgegeben date %s.%s.%s, keeping PARLIS", drucksnr, *match.groups())
         return None
+    return datum
 
 
 # ---------------------------------------------------------------------------
@@ -1161,8 +1172,9 @@ async def enrich_dokument(
             dok.typ, drucksnr=context_drucksnr, titel=context_titel, vorgang_vnr=context_vorgang_vnr
         )
         cache_key = _cache_key(cache_hash, prompt_hash)
-        # zp_referenz stays the PARLIS session date; creation = the printed issue date (issue #23).
-        ausgegeben = ausgegeben_datum(full_text, dok.drucksnr)
+        # zp_referenz stays the PARLIS date; zp_modifiziert = the printed issue date, which
+        # only a window including page 1 carries (issue #23).
+        ausgegeben = ausgegeben_datum(full_text, dok.drucksnr, dok.zp_referenz) if page_hint in (None, 1) else None
         text_fields = {
             "titel": dok.titel,
             "volltext": full_text,
@@ -1170,7 +1182,7 @@ async def enrich_dokument(
             "typ": dok.typ,
             "zp_modifiziert": ausgegeben or dok.zp_modifiziert,
             "zp_referenz": dok.zp_referenz,
-            "zp_erstellt": ausgegeben or dok.zp_erstellt,
+            "zp_erstellt": dok.zp_erstellt,
             "link": dok.link,
             "autoren": dok.autoren,
             "drucksnr": dok.drucksnr,
