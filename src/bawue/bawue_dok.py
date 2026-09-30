@@ -1107,8 +1107,6 @@ async def enrich_dokument(
         # Extract text + hash, then normalize
         full_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint)
         full_text = normalize_volltext(full_text)
-        # zp_referenz stays the PARLIS session date; creation = the printed issue date (issue #23).
-        ausgegeben = ausgegeben_datum(full_text, dok.drucksnr)
 
         # A #page=N anchor marks one Fundstelle's window into a PDF that several
         # references share: separate logical documents packed into one
@@ -1163,6 +1161,20 @@ async def enrich_dokument(
             dok.typ, drucksnr=context_drucksnr, titel=context_titel, vorgang_vnr=context_vorgang_vnr
         )
         cache_key = _cache_key(cache_hash, prompt_hash)
+        # zp_referenz stays the PARLIS session date; creation = the printed issue date (issue #23).
+        ausgegeben = ausgegeben_datum(full_text, dok.drucksnr)
+        text_fields = {
+            "titel": dok.titel,
+            "volltext": full_text,
+            "hash_": doc_hash,
+            "typ": dok.typ,
+            "zp_modifiziert": ausgegeben or dok.zp_modifiziert,
+            "zp_referenz": dok.zp_referenz,
+            "zp_erstellt": ausgegeben or dok.zp_erstellt,
+            "link": dok.link,
+            "autoren": dok.autoren,
+            "drucksnr": dok.drucksnr,
+        }
         try:
             if cache_key in _hash_cache:
                 logger.info(
@@ -1203,16 +1215,7 @@ async def enrich_dokument(
 
             return EnrichmentResult(
                 dokument=Dokument(
-                    titel=dok.titel,
-                    volltext=full_text,
-                    hash_=doc_hash,
-                    typ=dok.typ,
-                    zp_modifiziert=ausgegeben or dok.zp_modifiziert,
-                    zp_referenz=dok.zp_referenz,
-                    zp_erstellt=ausgegeben or dok.zp_erstellt,
-                    link=dok.link,
-                    autoren=dok.autoren,
-                    drucksnr=dok.drucksnr,
+                    **text_fields,
                     zusammenfassung=_llm_zusammenfassung(semantics),
                     schlagworte=_sanitize_llm_strings(semantics.get("schlagworte")),
                     kurztitel=_sanitize_llm_text(semantics.get("kurztitel")),
@@ -1224,20 +1227,7 @@ async def enrich_dokument(
             logger.warning("LLM extraction failed for %s, using text-only fallback", dok.link, exc_info=True)
             if metrics is not None:
                 metrics.failed += 1
-            return EnrichmentResult(
-                dokument=Dokument(
-                    titel=dok.titel,
-                    volltext=full_text,
-                    hash_=doc_hash,
-                    typ=dok.typ,
-                    zp_modifiziert=ausgegeben or dok.zp_modifiziert,
-                    zp_referenz=dok.zp_referenz,
-                    zp_erstellt=ausgegeben or dok.zp_erstellt,
-                    link=dok.link,
-                    autoren=dok.autoren,
-                    drucksnr=dok.drucksnr,
-                ),
-            )
+            return EnrichmentResult(dokument=Dokument(**text_fields))
 
     except Exception:
         logger.warning("PDF download/extraction failed for %s, returning original document", dok.link, exc_info=True)
