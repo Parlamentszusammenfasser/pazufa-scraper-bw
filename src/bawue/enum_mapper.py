@@ -205,6 +205,11 @@ def map_dokumententyp(context: str, is_vorparlamentarisch: bool = False) -> Dokt
     return Doktyp.SONSTIG
 
 
+@cache
+def _schlagwort_resolver() -> SchlagwortResolver:
+    return SchlagwortResolver()
+
+
 # Parlamentsspiegel placeholders "Unbekannt" and "ohne @-Systematik" carry no subject.
 _SACHGEBIET_PLACEHOLDERS = frozenset({9900, 9999})
 
@@ -212,7 +217,7 @@ _SACHGEBIET_PLACEHOLDERS = frozenset({9900, 9999})
 @cache
 def _sachgebiet_numbers() -> dict[str, int]:
     """corelib Sachgebiet vocabulary as casefolded id → number (DD-058)."""
-    vocabulary = json.loads(SchlagwortResolver().get_sachgebiete_json())
+    vocabulary = json.loads(_schlagwort_resolver().get_sachgebiete_json())
     return {s["id"].casefold(): s["number"] for s in vocabulary if s["number"] not in _SACHGEBIET_PLACEHOLDERS}
 
 
@@ -237,11 +242,6 @@ def map_sachgebiete(parlis_sachgebiet: str | None) -> list[Sachgebiet]:
         if sachgebiet not in result:
             result.append(sachgebiet)
     return result
-
-
-@cache
-def _schlagwort_resolver() -> SchlagwortResolver:
-    return SchlagwortResolver()
 
 
 def map_schlagworte(deskriptoren: list[str] | None) -> list[str]:
