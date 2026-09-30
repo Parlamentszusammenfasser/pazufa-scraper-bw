@@ -22,9 +22,8 @@ plus mehrere rein additive Felder.
    Score-Validierung (`_SCORE_RANGES`) und `EnrichmentResult`. Ein Wert, den kein Feld
    mehr aufnimmt, ist sonst nur bezahlter LLM-Output ohne Abnehmer. `meinung` (1–5)
    bleibt unverändert, es ist ein `Dokument`-Feld.
-2. ~~**`put_kalender` sendet keinen `X-Scraper-Id`-Header mehr.**~~ *Aufgehoben durch DD-059: Spec 0.2.7 verlangt den Header wieder.* Der `scraper_id`-Parameter
-   bleibt in der Signatur, damit die Aufrufstelle in `bawue_sitzungen_scraper` und
-   `put_vorgang` symmetrisch bleiben; er wird nur nicht mehr weitergereicht.
+2. ~~**`put_kalender` sendet keinen `X-Scraper-Id`-Header mehr.**~~ *Aufgehoben durch DD-059: Spec 0.2.7 verlangt den Header wieder, `put_kalender` sendet
+   `scraper_id` erneut.*
 3. **„Gesetzblatt" und „Gesetz" mappen auf `Doktyp.GESETZ`** statt auf `mitteilung`.
    Das verkündete Gesetz ist der Gesetzestext selbst, nicht die Bekanntgabe darüber;
    `mitteilung` war die beste verfügbare Näherung, solange es `gesetz` nicht gab.
@@ -52,6 +51,7 @@ alten `mitteilung`-Typ, bis sie erneut hochgeladen werden.
   gegen `pazufa_corelib.api_model.Vorgang` (das handgehärtete Pydantic-Modell derselben
   Spec) validiert. Der attrs-Client serialisiert ungeprüft, sonst würde ein Spec-Drift
   erst als HTTP 422 in Produktion auffallen.
-- `tests/unit/test_api.py::TestPutKalender::test_path_params_positional_body_kwarg_and_no_scraper_id`
+- `tests/unit/test_api.py::TestPutKalender::test_path_params_positional_body_and_scraper_id_kwargs`
+  (seit DD-059: Header wird wieder gesendet)
 - `tests/unit/test_enum_mapper.py::TestEnumValuesExistInFramework::test_all_doktyp_values_valid`
   (Kanarienvogel: kennt jetzt `gesetz` und `eckpunktepapier`) und `test_known_patterns`
