@@ -133,10 +133,13 @@ class TestSendRunReport:
         import json
 
         assert len(responses_lib.calls) == 1
-        text = json.loads(responses_lib.calls[0].request.body)["text"]
-        assert text.count("prod") == 1
-        assert text.index("Vorgänge") < text.index("Beteiligung") < text.index("Sitzungen")
-        assert "Found: 3" in text and "Found: 1" in text and "Dates found: 50" in text
+        # Environment once; each section keeps its own code block for column alignment.
+        assert json.loads(responses_lib.calls[0].request.body)["text"] == (
+            "**[prod] BaWue Run Summary**"
+            "\n**Vorgänge**\n```\nFound: 3\n```"
+            "\n**Beteiligung**\n```\nFound: 1\n```"
+            "\n**Sitzungen**\n```\nDates found: 50\n```"
+        )
 
     @responses_lib.activate
     def test_issue52_no_post_without_sections(self, mock_config):

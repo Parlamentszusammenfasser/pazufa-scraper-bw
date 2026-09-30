@@ -174,8 +174,8 @@ class BawueSitzungenScraper(SitzungsScraper):
 
 def _print_sitzungen_summary(
     total_dates: int,
-    new_dates: int,
-    unchanged_dates: int,
+    new_or_retried_dates: int,
+    cached_dates: int,
     published_dates: int,
     failed_dates: int,
     published_sitzungen: int,
@@ -184,7 +184,7 @@ def _print_sitzungen_summary(
 ) -> list[str]:
     lines = [
         f"Duration: {format_duration(duration)}",
-        f"Dates found:      {total_dates}  (new/changed {new_dates}, unchanged {unchanged_dates})",
+        f"Dates found:      {total_dates}  (new or retried {new_or_retried_dates}, cached {cached_dates})",
         f"Dates published:  {published_dates}",
         f"Dates failed:     {failed_dates}",
         f"Total sitzungen:  {published_sitzungen}",

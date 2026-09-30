@@ -272,8 +272,8 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
 
 def _print_beteiligung_summary(
-    new: int,
-    unchanged: int,
+    new_or_retried: int,
+    cached: int,
     published: int,
     skipped: int,
     failed: int,
@@ -283,7 +283,7 @@ def _print_beteiligung_summary(
 ) -> list[str]:
     lines = [
         f"Duration: {format_duration(duration)}",
-        f"Found:       {new + unchanged}  (new {new}, unchanged {unchanged})",
+        f"Found:       {new_or_retried + cached}  (new or retried {new_or_retried}, cached {cached})",
         f"Published:   {published}",
         f"Skipped:     {skipped}  (no legislative PDFs)",
         f"Failed:      {failed}",

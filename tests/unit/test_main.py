@@ -80,6 +80,23 @@ class TestIssue52OneRunReport:
         assert [title for title, _ in send.call_args.args[1]] == ["Vorgänge"]
 
     @pytest.mark.asyncio
+    async def test_failure_is_named_in_the_report(self):
+        """A crash before run() sets its summary (e.g. in check_for_newer_wahlperiode) must
+        not vanish from the report; a crash after it is marked in its section."""
+        scrapers = [_FakeScraper(None, fail=True), _FakeScraper("Sitzungen", fail=True)]
+
+        with (
+            patch("bawue.__main__.load_scrapers", return_value=scrapers),
+            patch("bawue.__main__.send_run_report") as send,
+        ):
+            await main(_config(False))
+
+        assert send.call_args.args[1] == [
+            ("_FakeScraper", ["FAILED: RuntimeError: None boom"]),
+            ("Sitzungen", ["Sitzungen line", "FAILED: RuntimeError: Sitzungen boom"]),
+        ]
+
+    @pytest.mark.asyncio
     async def test_scraper_without_summary_is_left_out(self):
         scrapers = [_FakeScraper(None), _FakeScraper("Sitzungen")]
 

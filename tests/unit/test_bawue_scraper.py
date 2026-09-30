@@ -1190,7 +1190,6 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     scraper._published = 0
     scraper._failed = 0
     scraper._skipped = 0
-    scraper._changed = 0
     scraper._by_type = {}
     scraper._failed_items = []
     scraper._parlis_errors = []
@@ -1355,7 +1354,7 @@ class _InMemoryCache:
 
 
 class TestIssue52RunReport:
-    """Issue #52: the run report tells new, changed and unchanged Vorgänge apart and
+    """Issue #52: the run report tells cached, changed and other (new or retried) Vorgänge apart and
     goes into the cycle's single Mattermost message instead of its own."""
 
     @staticmethod
@@ -1363,6 +1362,7 @@ class TestIssue52RunReport:
         with (
             patch("bawue.bawue_vorgaenge_scraper.asyncio.to_thread", return_value=raws),
             patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+            patch("bawue.notifications.load_toml_section", return_value={"mattermost-hook": "https://hook.example"}),
             patch("bawue.notifications.requests.post") as post,
         ):
             await scraper.run()
@@ -1373,7 +1373,7 @@ class TestIssue52RunReport:
     async def test_new_changed_and_unchanged_are_counted_per_cycle(self):
         first = TestVorgangRefreshIssue46._scraper()
         report = await self._run(first, [_make_raw_vorgang("V-1"), _make_raw_vorgang("V-2")])
-        assert "Found:       2  (new 2, changed 0, unchanged 0)" in report
+        assert "Found:       2  (new or retried 2, changed 0, cached 0)" in report
 
         # Each cycle builds fresh scrapers (__main__.load_scrapers); only the cache persists.
         second = TestVorgangRefreshIssue46._scraper()
@@ -1383,11 +1383,12 @@ class TestIssue52RunReport:
         report = await self._run(second, [_make_raw_vorgang("V-1"), changed, _make_raw_vorgang("V-3")])
 
         assert second.summary[0] == "Vorgänge"
-        assert "Found:       3  (new 1, changed 1, unchanged 1)" in report
+        assert "Found:       3  (new or retried 1, changed 1, cached 1)" in report
 
     @pytest.mark.asyncio
-    async def test_failed_upload_is_retried_as_changed_only_if_it_was_cached(self):
-        """A Vorgang whose upload failed was never cached, so the next cycle reports it as new."""
+    async def test_failed_upload_is_new_or_retried_next_cycle(self):
+        """Only a successful upload is cached, so a failed (or skipped) Vorgang is retried
+        every cycle and never counts as cached or changed."""
         first = TestVorgangRefreshIssue46._scraper()
 
         async def _fail(item):
@@ -1400,7 +1401,7 @@ class TestIssue52RunReport:
         second.config.cache = first.config.cache
         report = await self._run(second, [_make_raw_vorgang("V-1")])
 
-        assert "(new 1, changed 0, unchanged 0)" in report
+        assert "(new or retried 1, changed 0, cached 0)" in report
 
 
 class TestVorgangRefreshIssue46:
@@ -1762,6 +1763,7 @@ class TestRunSummary:
 
         captured = capsys.readouterr()
         assert "=== BaWue Vorgänge Run Summary ===" in captured.out
+        assert scraper.summary[0] == "Vorgänge"  # issue #52: the cycle report still gets it
 
     @pytest.mark.asyncio
     async def test_summary_duration_is_human_readable(self, capsys):
@@ -1819,7 +1821,6 @@ class TestRunDurationLog:
         scraper._published = 0
         scraper._failed = 0
         scraper._skipped = 0
-        scraper._changed = 0
         scraper._by_type = {}
         scraper._failed_items = []
         scraper._parlis_errors = []
@@ -1844,7 +1845,6 @@ class TestRunDurationLog:
         scraper._published = 0
         scraper._failed = 0
         scraper._skipped = 0
-        scraper._changed = 0
         scraper._by_type = {}
         scraper._failed_items = []
         scraper._parlis_errors = []

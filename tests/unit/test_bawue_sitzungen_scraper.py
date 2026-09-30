@@ -310,8 +310,8 @@ class TestIssue52RunReport:
     single Mattermost message instead of its own."""
 
     @pytest.mark.asyncio
-    async def test_found_dates_split_into_new_and_unchanged(self):
-        """The cache key hashes the date's content, so a changed date is a cache miss too."""
+    async def test_found_dates_split_into_cached_and_the_rest(self):
+        """The cache key is the date alone: a date stays cached once uploaded."""
         scraper = _make_scraper()
         scraper._total_dates = 50
         scraper.cached_count = 48
@@ -319,6 +319,7 @@ class TestIssue52RunReport:
 
         with (
             patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()),
+            patch("bawue.notifications.load_toml_section", return_value={"mattermost-hook": "https://hook.example"}),
             patch("bawue.notifications.requests.post") as post,
         ):
             await scraper.run()
@@ -326,7 +327,7 @@ class TestIssue52RunReport:
         post.assert_not_called()
         title, lines = scraper.summary
         assert title == "Sitzungen"
-        assert "Dates found:      50  (new/changed 2, unchanged 48)" in lines
+        assert "Dates found:      50  (new or retried 2, cached 48)" in lines
 
 
 class TestRunSummary:
@@ -390,6 +391,7 @@ class TestRunSummary:
 
         captured = capsys.readouterr()
         assert "=== BaWue Sitzungen Run Summary ===" in captured.out
+        assert scraper.summary[0] == "Sitzungen"  # issue #52: the cycle report still gets it
 
     @pytest.mark.asyncio
     async def test_summary_duration_is_human_readable(self, capsys):

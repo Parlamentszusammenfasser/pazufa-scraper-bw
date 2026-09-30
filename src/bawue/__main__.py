@@ -56,6 +56,7 @@ async def main(config: BawueConfig) -> None:
             scraper_tasks.append(scraper.run())
 
         logger.info("Running %d scraper tasks concurrently", len(scraper_tasks))
+        results: list = []
         try:
             if not config.linearize:
                 results = await asyncio.gather(*scraper_tasks, return_exceptions=True)
@@ -67,7 +68,21 @@ async def main(config: BawueConfig) -> None:
                     await t
         finally:
             # One Mattermost message per cycle, not one per scraper (issue #52).
-            send_run_report(config, [s.summary for s in scrapers if s.summary])
+            send_run_report(config, _report_sections(scrapers, results))
+
+
+def _report_sections(scrapers: list[Scraper], results: list) -> list[tuple[str, list[str]]]:
+    """Each scraper's summary, plus a FAILED line for one that raised, so a crash is never
+    silent in the report (issue #52). *results* are gather's, aligned with *scrapers*."""
+    sections = []
+    for i, scraper in enumerate(scrapers):
+        title, lines = scraper.summary or (type(scraper).__name__, [])
+        error = results[i] if i < len(results) else None
+        if isinstance(error, Exception):
+            lines = [*lines, f"FAILED: {type(error).__name__}: {' '.join(str(error).split())[:200]}"]
+        if lines:
+            sections.append((title, lines))
+    return sections
 
 
 if __name__ == "__main__":
