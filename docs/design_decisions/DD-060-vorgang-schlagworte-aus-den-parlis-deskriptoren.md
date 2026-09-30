@@ -51,6 +51,15 @@ dort auf. Neue PARLIS-Begriffe deckt der Test nicht ab.
 Bereits gecachte Vorgänge bekommen `schlagworte` erst beim nächsten Neubau. Ein Backfill
 braucht das Löschen der `vg2:`-Einträge und ist eine bewusste Rollout-Entscheidung.
 
+**Laufende Vorgänge:** Aus demselben Grund erreicht eine reine Deskriptor-Änderung in
+PARLIS (Begriff ergänzt oder korrigiert, ohne neue Fundstelle und ohne neuen „Aktuellen
+Stand“) das Backend nicht. `schlagworte` bleibt dann bis zum nächsten Neubau veraltet.
+Das wird in Kauf genommen, wie bei Titel und Sachgebiet (DD-052, Punkt 3): Neue
+Deskriptoren kommen vermutlich meist mit einer neuen Drucksache oder Sitzung, die ohnehin
+einen Neubau auslöst, und ein fehlender Begriff ist unkritisch. Wie oft es vorkommt, ist
+nicht gemessen (nur ein Dump vom 30.09.2026). Die Deskriptoren mitzuhashen würde jeden
+Fingerprint ändern und alle Vorgänge einmal neu bauen, samt erneutem PDF-Download.
+
 **Code:** `parlis_parser._deskriptoren`, `enum_mapper.map_schlagworte`,
 `BawueVorgaengeScraper._build_vorgang`, `types.RawVorgang`
 
