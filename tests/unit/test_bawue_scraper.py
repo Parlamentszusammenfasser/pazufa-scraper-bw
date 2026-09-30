@@ -26,7 +26,16 @@ from bawue.bawue_vorgaenge_scraper import (
     _same_round_label,
 )
 from bawue.parlis_parser import parse_fundstelle_text
-from bawue.types import UNSET, Doktyp, Ressort, Stationstyp, Vorgangstyp, Zusammenfassungstupel, placeholder_hash
+from bawue.types import (
+    UNSET,
+    Doktyp,
+    Ressort,
+    Sachgebiet,
+    Stationstyp,
+    Vorgangstyp,
+    Zusammenfassungstupel,
+    placeholder_hash,
+)
 
 
 def _make_raw_vorgang(
@@ -4864,6 +4873,28 @@ class TestIssue13CitationNotesDoNotTypeStations:
         ]
         # The SPD Änderungsantrag now has a reading to attach to instead of being dropped.
         assert "https://example.com/4.pdf" in [d.link for d in vorgang.stationen[-1].dokumente]
+
+
+class TestIssue40SachgebieteFromParlis:
+    """GitHub issue #40 (DD-058): PARLIS' own Sachgebiet field fills `Vorgang.sachgebiete`."""
+
+    @pytest.mark.asyncio
+    async def test_sachgebiete_reach_the_vorgang_as_numbers(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang("V-232033")
+        raw["Sachgebiet"] = "Medizinische Berufe; Jagd, Fischerei"
+        vorgang = await scraper_build_vorgang(raw)
+        assert vorgang.sachgebiete == [Sachgebiet(5230), Sachgebiet(6700)]
+        assert vorgang.to_dict()["sachgebiete"] == [5230, 6700]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("sachgebiet", [None, "Sonstiges"])
+    async def test_missing_or_unresolvable_leaves_field_unset(self, scraper_build_vorgang, sachgebiet):
+        raw = _make_raw_vorgang("V-001")
+        if sachgebiet is not None:
+            raw["Sachgebiet"] = sachgebiet
+        vorgang = await scraper_build_vorgang(raw)
+        assert vorgang.sachgebiete is UNSET
+        assert "sachgebiete" not in vorgang.to_dict()
 
 
 class TestConstructDrucksachePdfUrl:

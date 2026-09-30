@@ -4,9 +4,16 @@ The dictionaries below are fully populated from the architecture document.
 The matching functions use case-insensitive substring matching against dictionary keys.
 """
 
+import json
+import logging
 import re
+from functools import cache
 
-from bawue.types import Doktyp, Stationstyp, Vorgangstyp
+from pazufa_corelib.normalization.schlagworte import SchlagwortResolver
+
+from bawue.types import Doktyp, Sachgebiet, Stationstyp, Vorgangstyp
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Vorgangstyp mapping: PARLIS Vorgangstyp string → PaZuFa Vorgangstyp
@@ -196,3 +203,37 @@ def map_dokumententyp(context: str, is_vorparlamentarisch: bool = False) -> Dokt
                 return Doktyp.PREPARL_ENTWURF
             return DOKUMENTENTYP_MAP[key]
     return Doktyp.SONSTIG
+
+
+# Parlamentsspiegel placeholders "Unbekannt" and "ohne @-Systematik" carry no subject.
+_SACHGEBIET_PLACEHOLDERS = frozenset({9900, 9999})
+
+
+@cache
+def _sachgebiet_numbers() -> dict[str, int]:
+    """corelib Sachgebiet vocabulary as casefolded id → number (DD-058)."""
+    vocabulary = json.loads(SchlagwortResolver().get_sachgebiete_json())
+    return {s["id"].casefold(): s["number"] for s in vocabulary if s["number"] not in _SACHGEBIET_PLACEHOLDERS}
+
+
+def map_sachgebiete(parlis_sachgebiet: str | None) -> list[Sachgebiet]:
+    """Map the PARLIS Sachgebiet field (WMV32, ``;``-separated) to Parlamentsspiegel numbers (DD-058).
+
+    Unresolvable terms are dropped rather than mapped to "Unbekannt".
+    """
+    numbers = _sachgebiet_numbers()
+    result: list[Sachgebiet] = []
+    for part in (parlis_sachgebiet or "").split(";"):
+        term = _normalize_whitespace(part).casefold()
+        if not term:
+            continue
+        # corelib names Parlamentsspiegel pairs by their first name only: "Jagd, Fischerei"
+        # → "Jagd". No fuzzy matching: it turns "Öffentliche Schulen" into "Öffentliche Schulden".
+        number = numbers.get(term) or numbers.get(term.split(",")[0].strip())
+        if number is None:
+            logger.warning("Unknown PARLIS Sachgebiet %r dropped", part.strip())
+            continue
+        sachgebiet = Sachgebiet(number)
+        if sachgebiet not in result:
+            result.append(sachgebiet)
+    return result
