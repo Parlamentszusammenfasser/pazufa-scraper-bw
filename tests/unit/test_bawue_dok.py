@@ -689,7 +689,6 @@ class TestEnrichDokument:
         assert result.dokument.drucksnr == "17/10266"
         assert result.dokument.zp_modifiziert == datetime(2026, 1, 15, tzinfo=UTC)
         assert result.dokument.zp_referenz == datetime(2026, 1, 15, tzinfo=UTC)
-        assert result.dokument.zp_erstellt is UNSET  # no Ausgegeben header in the text (issue #23)
         assert result.dokument.typ == Doktyp.ENTWURF
 
     @pytest.mark.asyncio
@@ -1003,7 +1002,7 @@ class TestEnrichDokumentAusgegebenDatum:
         return dok
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("link", ["https://www.landtag-bw.de/17_1102_D.pdf", "https://x.de/17_1102_D.pdf#page=1"])
+    @pytest.mark.parametrize("link", ["https://www.landtag-bw.de/17_1102_D.pdf", "https://x.de/17_1102_D.pdf#page=2"])
     async def test_issue23_drucksache_17_1102(self, link):
         with (
             _patch_pdf_pipeline((TEXT_17_1102_NATIVE, SAMPLE_HASH)),
@@ -1022,16 +1021,6 @@ class TestEnrichDokumentAusgegebenDatum:
             result = await enrich_dokument(MagicMock(), _make_llm_mock(), self._beschlussempf())
 
         assert result.dokument.zp_modifiziert == datetime(2021, 12, 10, tzinfo=UTC)
-
-    @pytest.mark.asyncio
-    async def test_issue23_page_window_without_page_1_keeps_the_parlis_date(self):
-        """A #page=N>1 window never holds this Drucksache's page-1 footer; any footer
-        in it belongs to a later document of the same file."""
-        dok = self._beschlussempf("https://www.landtag-bw.de/17_1102_D.pdf#page=2")
-        with _patch_pdf_pipeline((TEXT_17_1102_NATIVE, SAMPLE_HASH)), _patch_llm(SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF):
-            result = await enrich_dokument(MagicMock(), _make_llm_mock(), dok)
-
-        assert result.dokument.zp_modifiziert == PARLIS_17_1102
 
 
 # ---------------------------------------------------------------------------

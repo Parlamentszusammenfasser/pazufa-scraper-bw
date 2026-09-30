@@ -15,9 +15,11 @@ und Anträgen das Eingangsdatum. Ausgegeben wird die Drucksache erst später: 17
 Ausgabedatum genau einmal in die Fußzeile von Seite 1: `Ausgegeben: 10.12.2021`, bei
 Entwürfen und Anträgen `Eingegangen: 19.10.2021/Ausgegeben: 20.10.2021`. Wo diese Zeile
 im extrahierten Text landet, schwankt stark: direkt nach dem Kopf `Drucksache 17 / 1102`,
-davor, nach dem Titelblock (OCR) oder erst nach Seite-2-Text. Mit der Regel unten erhalten
-77 von 79 infrage kommenden Dokumenten ein Datum, alle 0 bis 42 Tage nach dem
-PARLIS-Datum (Beschlussempfehlungen bis 42, Entwürfe bis 16, Mitteilungen bis 13).
+davor, nach dem Titelblock (OCR) oder erst nach Seite-2-Text. Mit der Regel unten erhält
+jede Drucksache mit Fußzeile ein Datum, alle 0 bis 42 Tage nach dem PARLIS-Datum
+(Beschlussempfehlungen bis 42, Entwürfe bis 16, Mitteilungen bis 13). Auch die
+`#page=N`-Fenster einer Sammeldrucksache (17/569, Seite 2 und 19) tragen deren eigene
+Fußzeile mit demselben Ausgabedatum.
 
 **Entscheidung:**
 
@@ -38,8 +40,7 @@ PARLIS-Datum (Beschlussempfehlungen bis 42, Entwürfe bis 16, Mitteilungen bis 1
 
 - Nur bei aktivem LLM, denn nur dann lädt der Scraper das PDF (`enrich_dokument`). Ohne
   LLM, bei fehlgeschlagenem Download oder leerem Text bleibt das PARLIS-Datum.
-- Fenster `#page=N` mit N > 1 (Sammeldrucksachen) enthalten Seite 1 nicht. Eine Fußzeile
-  darin gehört zu einem anderen Dokument der Datei. Sie werden nicht ausgewertet.
+- Ein `#page=N`-Fenster ohne eigene Fußzeile behält das PARLIS-Datum.
 - Station (`zp_start`) und damit die Track-Validierung sind nicht betroffen.
 - Bereits gecachte Vorgänge (`vg2:`) erhalten das Datum erst, wenn sie sich in PARLIS
   ändern oder ihr Cache-Eintrag gelöscht wird.

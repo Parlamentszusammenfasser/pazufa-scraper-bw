@@ -1172,9 +1172,8 @@ async def enrich_dokument(
             dok.typ, drucksnr=context_drucksnr, titel=context_titel, vorgang_vnr=context_vorgang_vnr
         )
         cache_key = _cache_key(cache_hash, prompt_hash)
-        # zp_referenz stays the PARLIS date; zp_modifiziert = the printed issue date, which
-        # only a window including page 1 carries (issue #23).
-        ausgegeben = ausgegeben_datum(full_text, dok.drucksnr, dok.zp_referenz) if page_hint in (None, 1) else None
+        # zp_referenz stays the PARLIS date; zp_modifiziert = the printed issue date (issue #23).
+        ausgegeben = ausgegeben_datum(full_text, dok.drucksnr, dok.zp_referenz)
         text_fields = {
             "titel": dok.titel,
             "volltext": full_text,
