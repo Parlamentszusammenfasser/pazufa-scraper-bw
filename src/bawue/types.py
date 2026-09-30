@@ -288,3 +288,4 @@ class RawVorgang(TypedDict, total=False):
     # Dynamic PARLIS keys (from <dt>/<dd> parsing):
     Vorgangstyp: str
     Initiative: str
+    Deskriptoren: list[str]
