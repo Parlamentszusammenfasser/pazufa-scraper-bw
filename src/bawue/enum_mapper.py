@@ -237,3 +237,20 @@ def map_sachgebiete(parlis_sachgebiet: str | None) -> list[Sachgebiet]:
         if sachgebiet not in result:
             result.append(sachgebiet)
     return result
+
+
+@cache
+def _schlagwort_resolver() -> SchlagwortResolver:
+    return SchlagwortResolver()
+
+
+def map_schlagworte(deskriptoren: list[str] | None) -> list[str]:
+    """Canonicalise PARLIS Deskriptoren against the corelib tag vocabulary (DD-060).
+
+    Non-strict: close matches take the vocabulary spelling ("Schule" → "Schulen"), all
+    other terms are kept verbatim — strict mode would drop 97 % of the Deskriptoren.
+    """
+    terms = [term.strip() for term in deskriptoren or [] if term.strip()]
+    if not terms:
+        return []
+    return list(dict.fromkeys(_schlagwort_resolver().canonicalise_tags(terms, strict=False)))

@@ -1,5 +1,8 @@
 """Tests for the PARLIS→PaZuFa enum mapper."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from bawue.enum_mapper import (
@@ -8,6 +11,7 @@ from bawue.enum_mapper import (
     VORGANGSTYP_MAP,
     map_dokumententyp,
     map_sachgebiete,
+    map_schlagworte,
     map_stationstyp,
     map_vorgangstyp,
 )
@@ -730,3 +734,44 @@ class TestSachgebieteMapping:
     @pytest.mark.parametrize("term", OBSERVED_PARLIS_SACHGEBIETE)
     def test_every_observed_term_resolves(self, term):
         assert len(map_sachgebiete(term)) == 1
+
+
+# Every distinct PARLIS Deskriptor (EWBV34) across WP 17 and WP 18 (239 Vorgänge),
+# dumped 30.09.2026 (issue #33, DD-060).
+OBSERVED_PARLIS_DESKRIPTOREN = json.loads(
+    (Path(__file__).parent.parent / "fixtures" / "parlis" / "deskriptoren_wp17_wp18.json").read_text()
+)
+
+
+class TestSchlagworteMapping:
+    """PARLIS Deskriptoren → Vorgang.schlagworte, canonicalised non-strictly (issue #33, DD-060)."""
+
+    def test_known_terms_take_the_vocabulary_spelling(self):
+        assert map_schlagworte(["Schule", "Privatschule"]) == ["Schulen", "Privatschulen"]
+
+    def test_unknown_terms_are_kept_verbatim(self):
+        assert map_schlagworte(["Landesbesoldungsgesetz Baden-Württemberg"]) == [
+            "Landesbesoldungsgesetz Baden-Württemberg"
+        ]
+
+    def test_duplicates_after_canonicalisation_collapse_in_order(self):
+        assert map_schlagworte(["Schule", "Klimaschutz", "Schulen"]) == ["Schulen", "Klimaschutz"]
+
+    @pytest.mark.parametrize("terms", [None, [], ["", "  "]])
+    def test_empty_input(self, terms):
+        assert map_schlagworte(terms) == []
+
+    def test_only_expected_observed_terms_change(self):
+        """Pins the fuzzy matcher on real data: a vocabulary change in corelib that starts
+        rewriting other Deskriptoren (e.g. "Schulen" → "Schulden") fails here."""
+        changed = {t: c for t in OBSERVED_PARLIS_DESKRIPTOREN if (c := map_schlagworte([t])) != [t]}
+        assert changed == {
+            "Berufsbildende Schule": ["Berufsbildende Schulen"],
+            "Dienstleistung": ["Dienstleistungen"],
+            "Erneuerbare Energie": ["Erneuerbare Energien"],
+            "Informations- und Kommunikationstechnik": ["Informations- und Kommunikationstechnologien"],
+            "Privatschule": ["Privatschulen"],
+            "Religionsgemeinschaft": ["Religionsgemeinschaften"],
+            "Schule": ["Schulen"],
+            "Öffentlicher Personennahverkehr": ["Öffentlicher Personenverkehr"],
+        }

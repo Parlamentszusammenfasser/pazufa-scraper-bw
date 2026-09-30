@@ -4948,6 +4948,28 @@ class TestIssue40SachgebieteFromParlis:
         assert "sachgebiete" not in vorgang.to_dict()
 
 
+class TestIssue33SchlagworteFromParlis:
+    """GitHub issue #33 (DD-060): PARLIS Deskriptoren fill `Vorgang.schlagworte`."""
+
+    @pytest.mark.asyncio
+    async def test_deskriptoren_reach_the_vorgang(self, scraper_build_vorgang):
+        raw = _make_raw_vorgang("V-232033")
+        raw["Deskriptoren"] = ["Architekt", "Schule", "Heilberufe-Kammergesetz"]
+        vorgang = await scraper_build_vorgang(raw)
+        assert vorgang.schlagworte == ["Architekt", "Schulen", "Heilberufe-Kammergesetz"]
+        assert vorgang.to_dict()["schlagworte"] == ["Architekt", "Schulen", "Heilberufe-Kammergesetz"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("deskriptoren", [None, []])
+    async def test_missing_deskriptoren_leave_field_unset(self, scraper_build_vorgang, deskriptoren):
+        raw = _make_raw_vorgang("V-001")
+        if deskriptoren is not None:
+            raw["Deskriptoren"] = deskriptoren
+        vorgang = await scraper_build_vorgang(raw)
+        assert vorgang.schlagworte is UNSET
+        assert "schlagworte" not in vorgang.to_dict()
+
+
 class TestConstructDrucksachePdfUrl:
     """Pure URL construction from a Drucksache number (PARLIS PDF-link fallback)."""
 
