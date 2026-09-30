@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import responses as responses_lib
 
-from bawue.notifications import _extract_environment, send_mattermost_summary
+from bawue.notifications import _extract_environment, send_run_report
 
 HOOK_URL = "https://chat.pazufa.de/hooks/testhook"
 
@@ -73,79 +73,77 @@ class TestExtractEnvironment:
         assert _extract_environment(config) == "production"
 
 
-class TestSendMattermostSummary:
+class TestSendRunReport:
     @responses_lib.activate
     def test_sends_post_to_hook(self, mock_config):
         responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
         with _patch_notif():
-            send_mattermost_summary(mock_config, "Vorgänge Run", ["Published: 5", "Failed: 0"])
+            send_run_report(mock_config, [("Vorgänge Run", ["Published: 5", "Failed: 0"])])
         assert len(responses_lib.calls) == 1
         assert responses_lib.calls[0].request.url == HOOK_URL
 
     @responses_lib.activate
     def test_skips_post_when_hook_empty(self, mock_config):
         with _patch_notif(hook=""):
-            send_mattermost_summary(mock_config, "Vorgänge Run", ["Published: 5"])
+            send_run_report(mock_config, [("Vorgänge Run", ["Published: 5"])])
         assert len(responses_lib.calls) == 0
 
     @responses_lib.activate
     def test_skips_post_when_hook_whitespace_only(self, mock_config):
         with _patch_notif(hook="   "):
-            send_mattermost_summary(mock_config, "Vorgänge Run", ["Published: 5"])
+            send_run_report(mock_config, [("Vorgänge Run", ["Published: 5"])])
         assert len(responses_lib.calls) == 0
 
     @responses_lib.activate
     def test_payload_includes_username(self, mock_config):
         responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
         with _patch_notif(username="my-bot"):
-            send_mattermost_summary(mock_config, "Title", [])
+            send_run_report(mock_config, [("Title", [])])
         import json
 
         body = json.loads(responses_lib.calls[0].request.body)
         assert body["username"] == "my-bot"
 
     @responses_lib.activate
-    def test_payload_text_includes_environment(self, mock_config):
-        mock_config.config_file = "config.staging.toml"
-        responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
-        with _patch_notif():
-            send_mattermost_summary(mock_config, "Vorgänge Run", ["Published: 5"])
-        import json
-
-        body = json.loads(responses_lib.calls[0].request.body)
-        assert "staging" in body["text"]
-
-    @responses_lib.activate
-    def test_payload_text_includes_title(self, mock_config):
-        responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
-        with _patch_notif():
-            send_mattermost_summary(mock_config, "Sitzungen Run Summary", ["some line"])
-        import json
-
-        body = json.loads(responses_lib.calls[0].request.body)
-        assert "Sitzungen Run Summary" in body["text"]
-
-    @responses_lib.activate
-    def test_payload_text_includes_summary_lines(self, mock_config):
-        responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
-        with _patch_notif():
-            send_mattermost_summary(mock_config, "Run", ["Published: 42", "Failed: 1"])
-        import json
-
-        body = json.loads(responses_lib.calls[0].request.body)
-        assert "Published: 42" in body["text"]
-        assert "Failed: 1" in body["text"]
-
-    @responses_lib.activate
     def test_does_not_raise_on_http_error(self, mock_config, caplog):
         responses_lib.add(responses_lib.POST, HOOK_URL, status=500)
         with _patch_notif(), caplog.at_level(logging.WARNING, logger="bawue.notifications"):
-            send_mattermost_summary(mock_config, "Run", ["line"])
+            send_run_report(mock_config, [("Run", ["line"])])
         assert "Failed to send Mattermost notification" in caplog.text
+        assert "testhook" not in caplog.text  # the hook URL is the secret
 
     @responses_lib.activate
     def test_does_not_raise_on_connection_error(self, mock_config, caplog):
         responses_lib.add(responses_lib.POST, HOOK_URL, body=ConnectionError("timeout"))
         with _patch_notif(), caplog.at_level(logging.WARNING, logger="bawue.notifications"):
-            send_mattermost_summary(mock_config, "Run", ["line"])
+            send_run_report(mock_config, [("Run", ["line"])])
         assert "Failed to send Mattermost notification" in caplog.text
+        assert "testhook" not in caplog.text  # the hook URL is the secret
+
+    @responses_lib.activate
+    def test_issue52_one_post_for_all_sections(self, mock_config):
+        """Issue #52: one message per cycle and environment, not one per scraper."""
+        mock_config.config_file = "config.prod.toml"
+        responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
+        with _patch_notif():
+            send_run_report(
+                mock_config,
+                [("Vorgänge", ["Found: 3"]), ("Beteiligung", ["Found: 1"]), ("Sitzungen", ["Dates found: 50"])],
+            )
+        import json
+
+        assert len(responses_lib.calls) == 1
+        # Environment once; each section keeps its own code block for column alignment.
+        assert json.loads(responses_lib.calls[0].request.body)["text"] == (
+            "**[prod] BaWue Run Summary**"
+            "\n**Vorgänge**\n```\nFound: 3\n```"
+            "\n**Beteiligung**\n```\nFound: 1\n```"
+            "\n**Sitzungen**\n```\nDates found: 50\n```"
+        )
+
+    @responses_lib.activate
+    def test_issue52_no_post_without_sections(self, mock_config):
+        """No scraper enabled or none reported: nothing to say."""
+        with _patch_notif():
+            send_run_report(mock_config, [])
+        assert len(responses_lib.calls) == 0

@@ -16,7 +16,6 @@ from bawue.api import BawueApiError, build_client, put_kalender
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.ics_parser import group_events_by_date, parse_ics_feed
-from bawue.notifications import send_mattermost_summary
 from bawue.pipeline import SitzungsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
@@ -63,13 +62,15 @@ class BawueSitzungenScraper(SitzungsScraper):
             logger.info("Completed in %.1fs", duration)
             lines = _print_sitzungen_summary(
                 self._total_dates,
+                self.item_count,
+                self.cached_count,
                 self._published_dates,
                 self._failed_dates,
                 self._published_sitzungen,
                 duration,
                 self._failed_items,
             )
-            send_mattermost_summary(self.config, "BaWue Sitzungen Run Summary", lines)
+            self.summary = ("Sitzungen", lines)
 
     async def listing_page_extractor(self, url: str) -> list[str]:
         """Fetch the ICS feed and return ISO date strings as listing keys."""
@@ -173,6 +174,8 @@ class BawueSitzungenScraper(SitzungsScraper):
 
 def _print_sitzungen_summary(
     total_dates: int,
+    new_or_retried_dates: int,
+    cached_dates: int,
     published_dates: int,
     failed_dates: int,
     published_sitzungen: int,
@@ -181,7 +184,7 @@ def _print_sitzungen_summary(
 ) -> list[str]:
     lines = [
         f"Duration: {format_duration(duration)}",
-        f"Dates found:      {total_dates}",
+        f"Dates found:      {total_dates}  (new or retried {new_or_retried_dates}, cached {cached_dates})",
         f"Dates published:  {published_dates}",
         f"Dates failed:     {failed_dates}",
         f"Total sitzungen:  {published_sitzungen}",

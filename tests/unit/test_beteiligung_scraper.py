@@ -403,6 +403,29 @@ class TestItemExtractor:
         assert result is None
 
 
+class TestIssue52RunReport:
+    """Issue #52: Found counts cached processes too, and the summary goes into the
+    cycle's single Mattermost message instead of its own."""
+
+    @pytest.mark.asyncio
+    async def test_found_includes_cached_processes(self):
+        scraper = _make_scraper()
+        scraper.cached_count = 3
+        scraper.item_count = 1
+
+        with (
+            patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()),
+            patch("bawue.notifications.load_toml_section", return_value={"mattermost-hook": "https://hook.example"}),
+            patch("bawue.notifications.requests.post") as post,
+        ):
+            await scraper.run()
+
+        post.assert_not_called()
+        title, lines = scraper.summary
+        assert title == "Beteiligung"
+        assert "Found:       4  (new or retried 1, cached 3)" in lines
+
+
 class TestRunSummary:
     @pytest.mark.asyncio
     async def test_summary_printed_to_stdout(self, capsys):
@@ -489,6 +512,7 @@ class TestRunSummary:
 
         captured = capsys.readouterr()
         assert "=== BaWue Beteiligung Run Summary ===" in captured.out
+        assert scraper.summary[0] == "Beteiligung"  # issue #52: the cycle report still gets it
 
     @pytest.mark.asyncio
     async def test_summary_duration_is_human_readable(self, capsys):

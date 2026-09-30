@@ -1353,6 +1353,57 @@ class _InMemoryCache:
         return True
 
 
+class TestIssue52RunReport:
+    """Issue #52: the run report tells cached, changed and other (new or retried) Vorgänge apart and
+    goes into the cycle's single Mattermost message instead of its own."""
+
+    @staticmethod
+    async def _run(scraper, raws):
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.asyncio.to_thread", return_value=raws),
+            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+            patch("bawue.notifications.load_toml_section", return_value={"mattermost-hook": "https://hook.example"}),
+            patch("bawue.notifications.requests.post") as post,
+        ):
+            await scraper.run()
+        post.assert_not_called()
+        return "\n".join(scraper.summary[1])
+
+    @pytest.mark.asyncio
+    async def test_new_changed_and_unchanged_are_counted_per_cycle(self):
+        first = TestVorgangRefreshIssue46._scraper()
+        report = await self._run(first, [_make_raw_vorgang("V-1"), _make_raw_vorgang("V-2")])
+        assert "Found:       2  (new or retried 2, changed 0, cached 0)" in report
+
+        # Each cycle builds fresh scrapers (__main__.load_scrapers); only the cache persists.
+        second = TestVorgangRefreshIssue46._scraper()
+        second.config.cache = first.config.cache
+        changed = _make_raw_vorgang("V-2")
+        changed["Aktueller Stand"] = "Abgelehnt"
+        report = await self._run(second, [_make_raw_vorgang("V-1"), changed, _make_raw_vorgang("V-3")])
+
+        assert second.summary[0] == "Vorgänge"
+        assert "Found:       3  (new or retried 1, changed 1, cached 1)" in report
+
+    @pytest.mark.asyncio
+    async def test_failed_upload_is_new_or_retried_next_cycle(self):
+        """Only a successful upload is cached, so a failed (or skipped) Vorgang is retried
+        every cycle and never counts as cached or changed."""
+        first = TestVorgangRefreshIssue46._scraper()
+
+        async def _fail(item):
+            return None
+
+        first.send_result = _fail
+        await self._run(first, [_make_raw_vorgang("V-1")])
+
+        second = TestVorgangRefreshIssue46._scraper()
+        second.config.cache = first.config.cache
+        report = await self._run(second, [_make_raw_vorgang("V-1")])
+
+        assert "(new or retried 1, changed 0, cached 0)" in report
+
+
 class TestVorgangRefreshIssue46:
     """Issue #46: a cached Vorgang is rebuilt and re-uploaded once PARLIS reports
     progress on it (new Fundstelle, changed "Aktueller Stand"), and skipped otherwise.
@@ -1712,6 +1763,7 @@ class TestRunSummary:
 
         captured = capsys.readouterr()
         assert "=== BaWue Vorgänge Run Summary ===" in captured.out
+        assert scraper.summary[0] == "Vorgänge"  # issue #52: the cycle report still gets it
 
     @pytest.mark.asyncio
     async def test_summary_duration_is_human_readable(self, capsys):
