@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from bawue.parlis_parser import (
     _extract_json_comments,
     _json_comment_to_raw_vorgang,
@@ -66,6 +68,10 @@ SAMPLE_JSON_COMMENT_FULL = {
     "WMV30": [{"main": " Fraktion GRÜNE, Fraktion CDU"}],
     "WMV31": [{"main": "Verkündet"}],
     "WMV32": [{"main": "Umwelt; Energie"}],
+    "EWBV34": [
+        {"S": '"ERNEUERBARE ENERGIE"', "main": "Erneuerbare Energie"},
+        {"S": '"KLIMASCHUTZ"', "main": "Klimaschutz", "C": "HS"},
+    ],
     "WMV35": [
         {
             "main": (
@@ -112,6 +118,23 @@ class TestJsonCommentToRawVorgang:
 
     def test_returns_none_for_empty_data(self):
         assert _json_comment_to_raw_vorgang({}) is None
+
+    def test_extracts_deskriptoren_in_parlis_order(self):
+        """Issue #33: EWBV34 carries every Deskriptor; WMV33 is truncated for long lists."""
+        result = _json_comment_to_raw_vorgang(SAMPLE_JSON_COMMENT_FULL)
+        assert result["Deskriptoren"] == ["Erneuerbare Energie", "Klimaschutz"]
+
+    def test_deskriptoren_skip_blank_and_malformed_entries(self):
+        data = {
+            **SAMPLE_JSON_COMMENT_FULL,
+            "EWBV34": [{"main": " Schule "}, {"main": "  "}, {"S": "X"}, "kaputt", {"main": None}],
+        }
+        assert _json_comment_to_raw_vorgang(data)["Deskriptoren"] == ["Schule"]
+
+    @pytest.mark.parametrize("ewbv34", [None, [], "kaputt", [{"main": ""}]])
+    def test_no_deskriptoren_leaves_key_absent(self, ewbv34):
+        data = {**SAMPLE_JSON_COMMENT_FULL, "EWBV34": ewbv34}
+        assert "Deskriptoren" not in _json_comment_to_raw_vorgang(data)
 
     def test_returns_none_without_vorgangs_id(self):
         data = {"EWBV10": [{"main": "Title Only"}]}
