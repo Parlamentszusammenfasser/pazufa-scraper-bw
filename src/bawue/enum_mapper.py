@@ -54,22 +54,26 @@ VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
 }
 
 # ---------------------------------------------------------------------------
-# Stationstyp-Referenz: Alle 16 Enum-Werte aus der OpenAPI-Spezifikation
+# Stationstyp-Referenz: Alle 20 Enum-Werte aus der OpenAPI-Spezifikation (0.2.5)
 #
 # Vorparlamentarisch (preparl-*):
 #   PREPARL_REGENT  — Regierungsentwurf (Gesetzentwurf der Landesregierung)
 #   PREPARL_ECKPUP  — Eckpunktepapier (Vorentwurf mit Kernpunkten)
 #   PREPARL_REGBSL  — Regierungsbeschluss (Kabinettsbeschluss)
 #   PREPARL_VBEGDE  — Verbändebeteiligung / Begründung (Anhörung externer Verbände)
+#   PREPARL_FORMVS  — Formulierungshilfe der Regierung für Fraktionen (nicht erkennbar; unmapped, DD-057)
 #
 # Parlamentarisch (parl-*):
 #   PARL_INITIATIV  — Parlamentarische Initiative (Gesetzentwurf, Antrag, Anfrage)
+#   PARL_ANTRAGSST  — Antrag stellen (z. B. Bundeswehreinsatz; unmapped, DD-057)
 #   PARL_AUSSCHBER  — Ausschussberatung (Beratung in Fachausschüssen)
 #   PARL_VOLLVLSGN  — Vollversammlung / Lesung (1./2./3. Lesung im Plenum)
 #   PARL_AKZEPTANZ  — Akzeptanz (Verabschiedung / Annahme durch den Landtag)
 #   PARL_ABLEHNUNG  — Ablehnung (Ablehnung durch den Landtag)
 #   PARL_ZURUECKGZ  — Zurückgezogen (Vorgang vom Initiator zurückgezogen)
 #   PARL_GGENTWURF  — Gegenentwurf (Alternativentwurf zu einem Gesetzentwurf)
+#   PARL_VERMITTAS  — Vermittlungsausschuss (Bundestag/Bundesrat; unmapped, DD-057)
+#   PARL_VERFGSTOP  — Stopp durch Verfassungsgericht (Spec 0.2.7: postparl-vgstp; unmapped, DD-057)
 #
 # Nachparlamentarisch (postparl-*):
 #   POSTPARL_VESJA  — Volksentscheid Ja (Referendum angenommen)

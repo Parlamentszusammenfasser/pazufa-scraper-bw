@@ -3,6 +3,8 @@
 import pytest
 
 from bawue.enum_mapper import (
+    DOKUMENTENTYP_MAP,
+    STATIONSTYP_MAP,
     VORGANGSTYP_MAP,
     map_dokumententyp,
     map_sachgebiete,
@@ -410,9 +412,29 @@ class TestUmlautPluralForms:
 class TestEnumValuesExistInFramework:
     """Verify that all enum values used by the BaWue scraper exist in the generated models."""
 
+    # Spec values BaWue never produces — equality below makes a new spec value fail
+    # this test until it is either mapped or listed here (Issue #43, DD-057).
+    UNPRODUCED_STATIONSTYPEN = frozenset(
+        {
+            "preparl-eckpup",
+            "preparl-vbegde",
+            "parl-zurueckgz",
+            "parl-ggentwurf",
+            # Volksentscheid: no PARLIS label maps to it (DD-021).
+            "postparl-vesja",
+            "postparl-vesne",
+            # Added by spec 0.2.5, deliberately unmapped (DD-057).
+            "preparl-formvs",
+            "parl-antragsst",
+            "parl-vermittas",
+            "parl-verfgstop",
+        }
+    )
+
     def test_all_stationstyp_values_valid(self):
         bawue_values = {
             "preparl-regent",
+            "preparl-regbsl",
             "parl-initiativ",
             "parl-ausschber",
             "parl-vollvlsgn",
@@ -423,7 +445,13 @@ class TestEnumValuesExistInFramework:
             "sonstig",
         }
         framework_values = {m.value for m in Stationstyp}
-        assert bawue_values.issubset(framework_values)
+        assert bawue_values | self.UNPRODUCED_STATIONSTYPEN == framework_values
+        assert not bawue_values & self.UNPRODUCED_STATIONSTYPEN
+
+    def test_unmapped_spec_values_not_in_mappings(self):
+        mapped = {typ.value for typ in STATIONSTYP_MAP.values()}
+        assert not mapped & self.UNPRODUCED_STATIONSTYPEN
+        assert Doktyp.ECKPUNKTEPAPIER not in DOKUMENTENTYP_MAP.values()
 
     def test_all_vorgangstyp_values_valid(self):
         bawue_values = {"gg-land-parl", "gg-land-volk", "bw-einsatz", "sonstig"}
@@ -447,7 +475,7 @@ class TestEnumValuesExistInFramework:
             "tops-ergz",
             "sonstig",
             # Added by spec 0.2.5: "gesetz" is mapped (Gesetzblatt publication,
-            # DD-051), "eckpunktepapier" is known but currently unmapped.
+            # DD-051), "eckpunktepapier" is deliberately unmapped (DD-057).
             "gesetz",
             "eckpunktepapier",
         }
