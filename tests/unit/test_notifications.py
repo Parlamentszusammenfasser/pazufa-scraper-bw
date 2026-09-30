@@ -110,6 +110,7 @@ class TestSendRunReport:
         with _patch_notif(), caplog.at_level(logging.WARNING, logger="bawue.notifications"):
             send_run_report(mock_config, [("Run", ["line"])])
         assert "Failed to send Mattermost notification" in caplog.text
+        assert "testhook" not in caplog.text  # the hook URL is the secret
 
     @responses_lib.activate
     def test_does_not_raise_on_connection_error(self, mock_config, caplog):
@@ -117,6 +118,7 @@ class TestSendRunReport:
         with _patch_notif(), caplog.at_level(logging.WARNING, logger="bawue.notifications"):
             send_run_report(mock_config, [("Run", ["line"])])
         assert "Failed to send Mattermost notification" in caplog.text
+        assert "testhook" not in caplog.text  # the hook URL is the secret
 
     @responses_lib.activate
     def test_issue52_one_post_for_all_sections(self, mock_config):

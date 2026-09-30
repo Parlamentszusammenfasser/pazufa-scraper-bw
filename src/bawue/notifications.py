@@ -51,5 +51,6 @@ def send_run_report(config: BawueConfig, sections: list[tuple[str, list[str]]]) 
     try:
         resp = requests.post(hook, json={"username": username, "text": text}, timeout=10)
         resp.raise_for_status()
-    except Exception:
-        logger.warning("Failed to send Mattermost notification", exc_info=True)
+    except Exception as e:
+        # Only the type: requests puts the hook URL, i.e. the secret, into the message.
+        logger.warning("Failed to send Mattermost notification: %s", type(e).__name__)
