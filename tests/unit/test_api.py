@@ -39,7 +39,7 @@ class TestPutVorgang:
         scraper_id = uuid4()
         item = MagicMock()
         client = MagicMock()
-        with patch("bawue.api._vorgang_put.sync_detailed", return_value=_resp(201)) as mock_put:
+        with patch("bawue.api._vorgang_put.sync_detailed", autospec=True, return_value=_resp(201)) as mock_put:
             put_vorgang(client, scraper_id, item)
         mock_put.assert_called_once_with(client=client, body=item, x_scraper_id=str(scraper_id))
 
