@@ -317,8 +317,8 @@ def _paragraph_quality_score(text: str) -> float:
 def normalize_volltext(text: str) -> str:
     r"""Normalize extracted PDF text: fix encoding, strip garbled sections, escape XSS.
 
-    Delegates the shared cleaning pipeline (NFKC, invisible/control-char and
-    HTML-entity stripping, garbled-paragraph removal, ``-\n`` line-break
+    Delegates the shared cleaning pipeline (NFKC, invisible/control-char,
+    HTML-markup and HTML-entity stripping, garbled-paragraph removal, ``-\n`` line-break
     rejoining, guillemet XSS neutralization) to ``pazufa_corelib`` so the bulk
     of the logic lives in one place. Two BaWue-specific passes are layered on
     top of it:
