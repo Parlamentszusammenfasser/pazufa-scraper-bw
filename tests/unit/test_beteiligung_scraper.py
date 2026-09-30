@@ -403,6 +403,29 @@ class TestItemExtractor:
         assert result is None
 
 
+class TestIssue52RunReport:
+    """Issue #52: Found counts cached processes too, and the summary goes into the
+    cycle's single Mattermost message instead of its own."""
+
+    @pytest.mark.asyncio
+    async def test_found_includes_cached_processes(self):
+        scraper = _make_scraper()
+        scraper.cached_count = 3
+        scraper.item_count = 1
+        scraper._skipped = 1
+
+        with (
+            patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()),
+            patch("bawue.notifications.requests.post") as post,
+        ):
+            await scraper.run()
+
+        post.assert_not_called()
+        title, lines = scraper.summary
+        assert title == "Beteiligung"
+        assert "Found:       4  (new 1, unchanged 3)" in lines
+
+
 class TestRunSummary:
     @pytest.mark.asyncio
     async def test_summary_printed_to_stdout(self, capsys):

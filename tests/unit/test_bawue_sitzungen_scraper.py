@@ -305,6 +305,30 @@ class TestSendResult:
         assert any("Unexpected error" in msg for msg in caplog.messages)
 
 
+class TestIssue52RunReport:
+    """Issue #52: cached dates are visible, and the summary goes into the cycle's
+    single Mattermost message instead of its own."""
+
+    @pytest.mark.asyncio
+    async def test_found_dates_split_into_new_and_unchanged(self):
+        """The cache key hashes the date's content, so a changed date is a cache miss too."""
+        scraper = _make_scraper()
+        scraper._total_dates = 50
+        scraper.cached_count = 48
+        scraper.item_count = 2
+
+        with (
+            patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()),
+            patch("bawue.notifications.requests.post") as post,
+        ):
+            await scraper.run()
+
+        post.assert_not_called()
+        title, lines = scraper.summary
+        assert title == "Sitzungen"
+        assert "Dates found:      50  (new/changed 2, unchanged 48)" in lines
+
+
 class TestRunSummary:
     @pytest.mark.asyncio
     async def test_summary_printed_to_stdout(self, capsys):

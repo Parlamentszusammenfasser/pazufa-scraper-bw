@@ -25,7 +25,6 @@ from bawue.enum_mapper import map_dokumententyp, map_sachgebiete, map_stationsty
 from bawue.gesetzblatt_client import GesetzblattClient
 from bawue.gesetzblatt_lookup import GesetzblattDateLookup
 from bawue.log_context import get_vorgangs_id, reset_vorgangs_id, set_vorgangs_id
-from bawue.notifications import send_mattermost_summary
 from bawue.parlis_client import ParlisClient
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
@@ -222,6 +221,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._published: int = 0
         self._failed: int = 0
         self._skipped: int = 0
+        # Cache misses whose PARLIS record changed since its last upload (issue #52).
+        self._changed: int = 0
         self._by_type: dict[str, int] = {}
         self._failed_items: list[FailedItem] = []
         self._parlis_errors: list[str] = []
@@ -254,6 +255,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
             lines = _print_vorgaenge_summary(
                 self._wahlperiode,
                 self._by_type,
+                self.item_count - self._changed,
+                self._changed,
+                self.cached_count,
                 self._published,
                 self._skipped,
                 self._failed,
@@ -263,7 +267,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 self._parlis_errors,
                 self._dropped_fundstellen,
             )
-            send_mattermost_summary(self.config, "BaWue Vorgänge Run Summary", lines)
+            self.summary = ("Vorgänge", lines)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
         outcome = upload_vorgang(
@@ -361,7 +365,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
     async def get_cached_result(self, item_key: str) -> str | None:
         """A cache hit only while the PARLIS record is unchanged (issue #46, DD-052)."""
         cached = await super().get_cached_result(item_key)
-        return cached if cached == self._fingerprints.get(item_key) else None
+        if cached == self._fingerprints.get(item_key):
+            return cached
+        if cached is not None:
+            self._changed += 1
+        return None
 
     async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
         """Cache the uploaded Vorgang's fingerprint — unless a PDF download failed (issue #66).
@@ -1399,6 +1407,9 @@ def _widen_span(station: Station, new_date: datetime) -> None:
 def _print_vorgaenge_summary(
     wahlperiode: int,
     by_type: dict[str, int],
+    new: int,
+    changed: int,
+    unchanged: int,
     published: int,
     skipped: int,
     failed: int,
@@ -1408,10 +1419,9 @@ def _print_vorgaenge_summary(
     parlis_errors: list[str] | None = None,
     dropped_fundstellen: dict[str, list[str]] | None = None,
 ) -> list[str]:
-    discovered = sum(by_type.values())
     lines = [
         f"Wahlperiode: {wahlperiode} | Duration: {format_duration(duration)}",
-        f"Discovered:  {discovered}",
+        f"Found:       {new + changed + unchanged}  (new {new}, changed {changed}, unchanged {unchanged})",
         f"Published:   {published}",
         f"Skipped:     {skipped}",
         f"Failed:      {failed}",

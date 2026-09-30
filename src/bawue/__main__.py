@@ -16,6 +16,7 @@ from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
 from bawue.bawue_sitzungen_scraper import BawueSitzungenScraper
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.config import BawueConfig
+from bawue.notifications import send_run_report
 from bawue.pipeline import Scraper
 
 load_dotenv()
@@ -55,14 +56,18 @@ async def main(config: BawueConfig) -> None:
             scraper_tasks.append(scraper.run())
 
         logger.info("Running %d scraper tasks concurrently", len(scraper_tasks))
-        if not config.linearize:
-            results = await asyncio.gather(*scraper_tasks, return_exceptions=True)
-            for r in results:
-                if isinstance(r, Exception):
-                    logger.error("Some Task failed: %s", r)
-        else:
-            for t in scraper_tasks:
-                await t
+        try:
+            if not config.linearize:
+                results = await asyncio.gather(*scraper_tasks, return_exceptions=True)
+                for r in results:
+                    if isinstance(r, Exception):
+                        logger.error("Some Task failed: %s", r)
+            else:
+                for t in scraper_tasks:
+                    await t
+        finally:
+            # One Mattermost message per cycle, not one per scraper (issue #52).
+            send_run_report(config, [s.summary for s in scrapers if s.summary])
 
 
 if __name__ == "__main__":

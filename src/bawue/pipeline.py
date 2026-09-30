@@ -31,6 +31,11 @@ class Scraper(ABC):
     scraper_id: UUID | None = None
     config: BawueConfig | None = None
     session: aiohttp.ClientSession | None = None
+    item_count: int = 0
+    # Items skipped this cycle because their cache entry is current.
+    cached_count: int = 0
+    # (title, lines) set by run(); __main__ sends a cycle's summaries as one message (issue #52).
+    summary: tuple[str, list[str]] | None = None
 
     def __init__(
         self,
@@ -118,6 +123,7 @@ class Scraper(ABC):
             processed_count += 1
 
         self.item_count = len(tasks)
+        self.cached_count = skipped_count
         logger.info(
             "%s: Processing %d items, skipping %d cached items",
             self.__class__.__name__,

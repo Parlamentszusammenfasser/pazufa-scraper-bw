@@ -89,6 +89,9 @@ class TestDroppedFundstellenSummary:
             0,
             0,
             0,
+            0,
+            0,
+            0,
             1.0,
             dropped_fundstellen={
                 "V-244180": ["Mitteilung → sonstig"],
@@ -102,7 +105,7 @@ class TestDroppedFundstellenSummary:
         assert "V-222724 | 7x Mitteilung → sonstig" in text
 
     def test_summary_omits_section_without_drops(self):
-        lines = _print_vorgaenge_summary(17, {}, 0, 0, 0, 1.0, dropped_fundstellen={})
+        lines = _print_vorgaenge_summary(17, {}, 0, 0, 0, 0, 0, 0, 1.0, dropped_fundstellen={})
 
         assert not any("dropped Fundstellen" in line for line in lines)
 

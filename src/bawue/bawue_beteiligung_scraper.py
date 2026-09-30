@@ -19,7 +19,6 @@ from bawue.beteiligung_parser import (
 )
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
-from bawue.notifications import send_mattermost_summary
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, format_duration, format_failed_section
@@ -98,6 +97,8 @@ class BawueBeteiligungScraper(VorgangsScraper):
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
             lines = _print_beteiligung_summary(
+                self.item_count,
+                self.cached_count,
                 self._published,
                 self._skipped,
                 self._failed,
@@ -105,7 +106,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
                 self._llm_metrics if self._llm_enabled else None,
                 self._failed_items,
             )
-            send_mattermost_summary(self.config, "BaWue Beteiligung Run Summary", lines)
+            self.summary = ("Beteiligung", lines)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
         outcome = upload_vorgang(
@@ -271,6 +272,8 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
 
 def _print_beteiligung_summary(
+    new: int,
+    unchanged: int,
     published: int,
     skipped: int,
     failed: int,
@@ -278,10 +281,9 @@ def _print_beteiligung_summary(
     llm_metrics: LLMMetrics | None = None,
     failed_items: list[FailedItem] | None = None,
 ) -> list[str]:
-    discovered = published + skipped + failed
     lines = [
         f"Duration: {format_duration(duration)}",
-        f"Discovered:  {discovered}",
+        f"Found:       {new + unchanged}  (new {new}, unchanged {unchanged})",
         f"Published:   {published}",
         f"Skipped:     {skipped}  (no legislative PDFs)",
         f"Failed:      {failed}",

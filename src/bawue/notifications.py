@@ -28,15 +28,14 @@ def _extract_environment(config: BawueConfig) -> str:
     return "local"
 
 
-def send_mattermost_summary(
-    config: BawueConfig,
-    title: str,
-    lines: list[str],
-) -> None:
-    """Post a run summary to the configured Mattermost channel.
+def send_run_report(config: BawueConfig, sections: list[tuple[str, list[str]]]) -> None:
+    """Post one cycle's scraper summaries as a single Mattermost message (issue #52).
 
-    Silently skips if mattermost-hook is empty or missing.
+    *sections* are ``(title, lines)`` pairs, one per scraper. Silently skips if
+    mattermost-hook is empty or missing, or there is nothing to report.
     """
+    if not sections:
+        return
     notif = load_toml_section(config, "notifications")
     hook = notif.get("mattermost-hook", "").strip()
     if not hook:
@@ -45,7 +44,9 @@ def send_mattermost_summary(
     username = notif.get("mattermost-username", "bawue-scraper")
     environment = _extract_environment(config)
 
-    text = f"**[{environment}] {title}**\n```\n" + "\n".join(lines) + "\n```"
+    text = f"**[{environment}] BaWue Run Summary**" + "".join(
+        f"\n**{title}**\n```\n" + "\n".join(lines) + "\n```" for title, lines in sections
+    )
 
     try:
         resp = requests.post(hook, json={"username": username, "text": text}, timeout=10)

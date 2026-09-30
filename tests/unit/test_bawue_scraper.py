@@ -1190,6 +1190,7 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     scraper._published = 0
     scraper._failed = 0
     scraper._skipped = 0
+    scraper._changed = 0
     scraper._by_type = {}
     scraper._failed_items = []
     scraper._parlis_errors = []
@@ -1351,6 +1352,55 @@ class _InMemoryCache:
     def store_raw(self, key, value, typehint=""):
         self.data[key] = value
         return True
+
+
+class TestIssue52RunReport:
+    """Issue #52: the run report tells new, changed and unchanged Vorgänge apart and
+    goes into the cycle's single Mattermost message instead of its own."""
+
+    @staticmethod
+    async def _run(scraper, raws):
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.asyncio.to_thread", return_value=raws),
+            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+            patch("bawue.notifications.requests.post") as post,
+        ):
+            await scraper.run()
+        post.assert_not_called()
+        return "\n".join(scraper.summary[1])
+
+    @pytest.mark.asyncio
+    async def test_new_changed_and_unchanged_are_counted_per_cycle(self):
+        first = TestVorgangRefreshIssue46._scraper()
+        report = await self._run(first, [_make_raw_vorgang("V-1"), _make_raw_vorgang("V-2")])
+        assert "Found:       2  (new 2, changed 0, unchanged 0)" in report
+
+        # Each cycle builds fresh scrapers (__main__.load_scrapers); only the cache persists.
+        second = TestVorgangRefreshIssue46._scraper()
+        second.config.cache = first.config.cache
+        changed = _make_raw_vorgang("V-2")
+        changed["Aktueller Stand"] = "Abgelehnt"
+        report = await self._run(second, [_make_raw_vorgang("V-1"), changed, _make_raw_vorgang("V-3")])
+
+        assert second.summary[0] == "Vorgänge"
+        assert "Found:       3  (new 1, changed 1, unchanged 1)" in report
+
+    @pytest.mark.asyncio
+    async def test_failed_upload_is_retried_as_changed_only_if_it_was_cached(self):
+        """A Vorgang whose upload failed was never cached, so the next cycle reports it as new."""
+        first = TestVorgangRefreshIssue46._scraper()
+
+        async def _fail(item):
+            return None
+
+        first.send_result = _fail
+        await self._run(first, [_make_raw_vorgang("V-1")])
+
+        second = TestVorgangRefreshIssue46._scraper()
+        second.config.cache = first.config.cache
+        report = await self._run(second, [_make_raw_vorgang("V-1")])
+
+        assert "(new 1, changed 0, unchanged 0)" in report
 
 
 class TestVorgangRefreshIssue46:
@@ -1769,6 +1819,7 @@ class TestRunDurationLog:
         scraper._published = 0
         scraper._failed = 0
         scraper._skipped = 0
+        scraper._changed = 0
         scraper._by_type = {}
         scraper._failed_items = []
         scraper._parlis_errors = []
@@ -1793,6 +1844,7 @@ class TestRunDurationLog:
         scraper._published = 0
         scraper._failed = 0
         scraper._skipped = 0
+        scraper._changed = 0
         scraper._by_type = {}
         scraper._failed_items = []
         scraper._parlis_errors = []
