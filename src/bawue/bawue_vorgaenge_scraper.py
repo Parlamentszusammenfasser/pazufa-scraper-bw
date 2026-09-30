@@ -986,7 +986,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if zp_start is None:
             return None
 
-        # The document keeps the PARLIS date as its `zp_referenz` (the Ausfertigung),
+        # The document keeps the PARLIS date as its `zp_referenz` (for a Gesetzblatt: the Ausfertigung),
         # so `_build_dokumente` is deliberately still given the unmodified zp_start.
         gremium = self._determine_gremium(fund, station_typ)
         dokumente = await self._build_dokumente(

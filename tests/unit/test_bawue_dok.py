@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 import ssl
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -29,6 +29,7 @@ from bawue.bawue_dok import (
     _sanitize_llm_strings,
     _sanitize_llm_text,
     _validate_scores,
+    ausgegeben_datum,
     clear_hash_cache,
     download_pdf,
     enrich_dokument,
@@ -687,6 +688,7 @@ class TestEnrichDokument:
         assert result.dokument.autoren[0].person == "Max Mustermann"
         assert result.dokument.drucksnr == "17/10266"
         assert result.dokument.zp_modifiziert == datetime(2026, 1, 15, tzinfo=UTC)
+        assert result.dokument.zp_referenz == datetime(2026, 1, 15, tzinfo=UTC)
         assert result.dokument.typ == Doktyp.ENTWURF
 
     @pytest.mark.asyncio
@@ -899,6 +901,126 @@ class TestEnrichDokument:
             await enrich_dokument(session, llm, dok)
 
         assert not tmp_path.exists(), "Temporary PDF should be cleaned up"
+
+
+# ---------------------------------------------------------------------------
+# TestAusgegebenDatum — issue #23
+# ---------------------------------------------------------------------------
+
+# Real page-1 layouts from staging / local extraction. The footer with the issue date
+# lands anywhere relative to the "Drucksache WP / Nr" header.
+PARLIS_17_1102 = datetime(2021, 11, 25, tzinfo=UTC)  # Ausschuss session, Fundstelle date
+TEXT_17_1102_NATIVE = (
+    "Landtag von Baden-Württemberg\n17. Wahlperiode\nDrucksache 17 / 1102\n"
+    "Ausgegeben: 10.12.2021 1\nBeschlussempfehlung\nDer Landtag wolle beschließen:\n"
+)
+TEXT_17_1102_OCR = (
+    "Landtag von Baden-Württemberg Drucksache 17 / 1102\n17. Wahlperiode\n\n"
+    "Beschlussempfehlung und Bericht\n\ndes Ausschusses für Finanzen\n\n"
+    "Der Landtag wolle beschließen:\n\nAusgegeben: 10.12.2021 1\n\n"
+    "Drucksachen und Plenarprotokolle sind im Internet"
+)
+# Anträge/Entwürfe: "Eingegangen … / Ausgegeben …" footer *before* the header (17/1026).
+TEXT_17_1026_FOOTER_FIRST = (
+    "Landtag von Baden-Württemberg\n17. Wahlperiode\n1\n"
+    "Drucksachen und Plenarprotokolle sind im Internet\n… digitaler \n"
+    "Eingegangen: 19.10.2021/Ausgegeben: 20.10.2021\nDrucksache 17 / 1026\n19.10.2021\n"
+)
+
+
+class TestAusgegebenDatum:
+    """Issue #23: the issue date printed in a Drucksache's page-1 footer."""
+
+    @pytest.mark.parametrize("text", [TEXT_17_1102_NATIVE, TEXT_17_1102_OCR])
+    def test_issue23_drucksache_17_1102_native_and_ocr_layout(self, text):
+        assert ausgegeben_datum(text, "17/1102", PARLIS_17_1102) == datetime(2021, 12, 10, tzinfo=UTC)
+
+    def test_issue23_eingegangen_footer_before_header_17_1026(self):
+        parlis = datetime(2021, 10, 19, tzinfo=UTC)
+        assert ausgegeben_datum(TEXT_17_1026_FOOTER_FIRST, "17/1026", parlis) == datetime(2021, 10, 20, tzinfo=UTC)
+
+    def test_issue23_single_digit_day_17_1104(self):
+        text = "Drucksache 17 / 1104\nAusgegeben: 9.12.2021 1\n"
+        parlis = datetime(2021, 11, 26, tzinfo=UTC)
+        assert ausgegeben_datum(text, "17/1104", parlis) == datetime(2021, 12, 9, tzinfo=UTC)
+
+    def test_issue23_without_footer_returns_none(self):
+        assert ausgegeben_datum("Drucksache 17 / 1102\n" + SAMPLE_FULL_TEXT, "17/1102", PARLIS_17_1102) is None
+
+    def test_issue23_without_own_header_returns_none(self):
+        """No header of its own: not this Drucksache's PDF (e.g. a protocol or a quote)."""
+        text = "Drucksache 17 / 999\nAusgegeben: 10.12.2021"
+        assert ausgegeben_datum(text, "17/1102", PARLIS_17_1102) is None
+
+    @pytest.mark.parametrize("drucksnr", ["17/110", "17/11020", "7/1102", "117/1102"])
+    def test_issue23_number_must_match_exactly(self, drucksnr):
+        assert ausgegeben_datum(TEXT_17_1102_NATIVE, drucksnr, PARLIS_17_1102) is None
+
+    @pytest.mark.parametrize("drucksnr", [None, "", "17-1102", "17/1102.*", ".*/.*"])
+    def test_issue23_missing_or_malformed_drucksnr_returns_none(self, drucksnr):
+        assert ausgegeben_datum(TEXT_17_1102_NATIVE, drucksnr, PARLIS_17_1102) is None
+
+    @pytest.mark.parametrize(
+        "footer",
+        [
+            "Ausgegeben: 31.02.2021",  # impossible date
+            "Ausgegeben: 24.11.2021",  # before the PARLIS date
+            "Ausgegeben: 24.2.2022",  # 91 days after it
+            "Ausgegeben: 10.12.2027",  # OCR-misread year
+        ],
+    )
+    def test_issue23_implausible_date_is_dropped_with_warning(self, footer, caplog):
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"):
+            assert ausgegeben_datum(f"Drucksache 17 / 1102\n{footer}", "17/1102", PARLIS_17_1102) is None
+        assert "17/1102" in caplog.text
+
+    @pytest.mark.parametrize("days", [0, 90])
+    def test_issue23_plausibility_window_is_inclusive(self, days):
+        datum = PARLIS_17_1102 + timedelta(days=days)
+        text = f"Drucksache 17 / 1102\nAusgegeben: {datum.day}.{datum.month}.{datum.year}"
+        assert ausgegeben_datum(text, "17/1102", PARLIS_17_1102) == datum
+
+    def test_issue23_five_digit_year_does_not_match(self):
+        assert ausgegeben_datum("Drucksache 17 / 1102\nAusgegeben: 10.12.20219", "17/1102", PARLIS_17_1102) is None
+
+
+class TestEnrichDokumentAusgegebenDatum:
+    """Issue #23: zp_modifiziert is the printed issue date; zp_referenz stays the PARLIS
+    session date and zp_erstellt stays unset (the Eingang, not the issue, is the creation)."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    @staticmethod
+    def _beschlussempf(link: str = "https://www.landtag-bw.de/17_1102_D.pdf") -> Dokument:
+        dok = _make_plain_dokument(typ=Doktyp.BESCHLUSSEMPF, link=link)
+        dok.drucksnr = "17/1102"
+        dok.zp_referenz = dok.zp_modifiziert = PARLIS_17_1102
+        return dok
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("link", ["https://www.landtag-bw.de/17_1102_D.pdf", "https://x.de/17_1102_D.pdf#page=2"])
+    async def test_issue23_drucksache_17_1102(self, link):
+        with (
+            _patch_pdf_pipeline((TEXT_17_1102_NATIVE, SAMPLE_HASH)),
+            _patch_llm(SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF),
+        ):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), self._beschlussempf(link))
+
+        assert result.dokument.zp_modifiziert == datetime(2021, 12, 10, tzinfo=UTC)
+        assert result.dokument.zp_referenz == PARLIS_17_1102
+        assert result.dokument.zp_erstellt is UNSET
+
+    @pytest.mark.asyncio
+    async def test_issue23_text_only_fallback_also_gets_the_date(self):
+        llm_fail = patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, side_effect=Exception("down"))
+        with _patch_pdf_pipeline((TEXT_17_1102_NATIVE, SAMPLE_HASH)), llm_fail:
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), self._beschlussempf())
+
+        assert result.dokument.zp_modifiziert == datetime(2021, 12, 10, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
