@@ -1333,11 +1333,10 @@ class TestNormalizeVolltext:
         assert result == "Absatz eins\n\nAbsatz zwei"
 
     def test_trailing_whitespace_collapsed(self):
-        """corelib collapses runs of spaces to one and strips the document ends
-        (a single interior trailing space before a newline may remain)."""
+        """corelib strips trailing spaces at every line end since v0.3.0 (DD-059)."""
         text = "Zeile mit Leerzeichen   \nNächste Zeile  "
         result = normalize_volltext(text)
-        assert result == "Zeile mit Leerzeichen \nNächste Zeile"
+        assert result == "Zeile mit Leerzeichen\nNächste Zeile"
 
     def test_angle_brackets_replaced_with_guillemets(self):
         text = "Kontakt: <poststelle@sm.bwl.de> für Anfragen"

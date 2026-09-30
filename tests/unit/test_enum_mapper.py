@@ -427,7 +427,8 @@ class TestEnumValuesExistInFramework:
             "preparl-formvs",
             "parl-antragsst",
             "parl-vermittas",
-            "parl-verfgstop",
+            # Spec 0.2.7 renamed parl-verfgstop (DD-059).
+            "postparl-vgstp",
         }
     )
 

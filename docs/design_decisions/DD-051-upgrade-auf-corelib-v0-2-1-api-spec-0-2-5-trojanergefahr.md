@@ -2,7 +2,7 @@
 
 # DD-051: Upgrade auf corelib v0.2.1 / API-Spec 0.2.5 — `trojanergefahr` entfällt, Gesetzblatt wird `gesetz`
 
-**Datum:** 09.09.2026
+**Datum:** 09.09.2026 | **Aktualisiert:** 30.09.2026 (Punkt 2 durch DD-059 aufgehoben)
 
 **Kontext:** `pazufa-corelib` war auf `v0.1.2` (Spec 0.2.3) gepinnt. Der Sprung auf
 `v0.2.1` bringt Spec 0.2.5 und damit drei Änderungen, die BaWue direkt betreffen,
@@ -22,7 +22,7 @@ plus mehrere rein additive Felder.
    Score-Validierung (`_SCORE_RANGES`) und `EnrichmentResult`. Ein Wert, den kein Feld
    mehr aufnimmt, ist sonst nur bezahlter LLM-Output ohne Abnehmer. `meinung` (1–5)
    bleibt unverändert, es ist ein `Dokument`-Feld.
-2. **`put_kalender` sendet keinen `X-Scraper-Id`-Header mehr.** Der `scraper_id`-Parameter
+2. ~~**`put_kalender` sendet keinen `X-Scraper-Id`-Header mehr.**~~ *Aufgehoben durch DD-059: Spec 0.2.7 verlangt den Header wieder.* Der `scraper_id`-Parameter
    bleibt in der Signatur, damit die Aufrufstelle in `bawue_sitzungen_scraper` und
    `put_vorgang` symmetrisch bleiben; er wird nur nicht mehr weitergereicht.
 3. **„Gesetzblatt" und „Gesetz" mappen auf `Doktyp.GESETZ`** statt auf `mitteilung`.
