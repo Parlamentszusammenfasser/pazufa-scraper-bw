@@ -29,6 +29,7 @@ from bawue.bawue_dok import (
     _sanitize_llm_strings,
     _sanitize_llm_text,
     _validate_scores,
+    ausgegeben_datum,
     clear_hash_cache,
     download_pdf,
     enrich_dokument,
@@ -899,6 +900,102 @@ class TestEnrichDokument:
             await enrich_dokument(session, llm, dok)
 
         assert not tmp_path.exists(), "Temporary PDF should be cleaned up"
+
+
+# ---------------------------------------------------------------------------
+# TestAusgegebenDatum — issue #23
+# ---------------------------------------------------------------------------
+
+# Page-1 header of Drucksache 17/1102 as extracted on staging; the trailing "1"
+# is the page number.
+DRUCKSACHE_17_1102_HEADER = (
+    "Landtag von Baden-Württemberg\n17. Wahlperiode\nDrucksache 17 / 1102\n"
+    "Ausgegeben: 10.12.2021 1\nBeschlussempfehlung\nDer Landtag wolle beschließen:\n"
+)
+
+
+class TestAusgegebenDatum:
+    """Issue #23: the date printed on page 1 of a Drucksache, anchored to its own number."""
+
+    def test_issue23_drucksache_17_1102(self):
+        assert ausgegeben_datum(DRUCKSACHE_17_1102_HEADER, "17/1102") == datetime(2021, 12, 10, tzinfo=UTC)
+
+    def test_single_digit_day_17_1104(self):
+        text = "Drucksache 17 / 1104\nAusgegeben: 9.12.2021 1\n"
+        assert ausgegeben_datum(text, "17/1104") == datetime(2021, 12, 9, tzinfo=UTC)
+
+    def test_compact_spacing(self):
+        assert ausgegeben_datum("Drucksache 17/1102 Ausgegeben:10.12.2021", "17/1102") == datetime(
+            2021, 12, 10, tzinfo=UTC
+        )
+
+    def test_no_header_returns_none(self):
+        assert ausgegeben_datum(SAMPLE_FULL_TEXT, "17/1102") is None
+
+    def test_header_of_another_drucksache_is_ignored(self):
+        assert ausgegeben_datum("Drucksache 17 / 999\nAusgegeben: 1.1.2021", "17/1102") is None
+
+    def test_own_header_wins_over_an_earlier_quoted_one(self):
+        text = "Drucksache 17 / 999\nAusgegeben: 1.1.2021\n…\nDrucksache 17 / 1102\nAusgegeben: 10.12.2021"
+        assert ausgegeben_datum(text, "17/1102") == datetime(2021, 12, 10, tzinfo=UTC)
+
+    @pytest.mark.parametrize("drucksnr", ["17/110", "17/11020", "7/1102", "117/1102"])
+    def test_number_must_match_exactly(self, drucksnr):
+        assert ausgegeben_datum(DRUCKSACHE_17_1102_HEADER, drucksnr) is None
+
+    @pytest.mark.parametrize("drucksnr", [None, "", "17-1102", "17/1102.*", ".*/.*"])
+    def test_missing_or_malformed_drucksnr_returns_none(self, drucksnr):
+        assert ausgegeben_datum(DRUCKSACHE_17_1102_HEADER, drucksnr) is None
+
+    def test_impossible_date_returns_none(self):
+        assert ausgegeben_datum("Drucksache 17 / 1102\nAusgegeben: 31.02.2021", "17/1102") is None
+
+
+class TestEnrichDokumentAusgegebenDatum:
+    """Issue #23: zp_erstellt/zp_modifiziert come from the printed Ausgegeben date,
+    zp_referenz stays the PARLIS session date."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    @staticmethod
+    def _beschlussempf() -> Dokument:
+        dok = _make_plain_dokument(typ=Doktyp.BESCHLUSSEMPF)
+        dok.drucksnr = "17/1102"
+        dok.zp_referenz = dok.zp_modifiziert = datetime(2021, 11, 25, tzinfo=UTC)
+        return dok
+
+    @pytest.mark.asyncio
+    async def test_issue23_drucksache_17_1102(self):
+        with (
+            _patch_pdf_pipeline((DRUCKSACHE_17_1102_HEADER, SAMPLE_HASH)),
+            _patch_llm(SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF),
+        ):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), self._beschlussempf())
+
+        assert result.dokument.zp_erstellt == datetime(2021, 12, 10, tzinfo=UTC)
+        assert result.dokument.zp_modifiziert == datetime(2021, 12, 10, tzinfo=UTC)
+        assert result.dokument.zp_referenz == datetime(2021, 11, 25, tzinfo=UTC)
+
+    @pytest.mark.asyncio
+    async def test_text_only_fallback_also_gets_the_date(self):
+        llm_fail = patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, side_effect=Exception("down"))
+        with _patch_pdf_pipeline((DRUCKSACHE_17_1102_HEADER, SAMPLE_HASH)), llm_fail:
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), self._beschlussempf())
+
+        assert result.dokument.zp_erstellt == datetime(2021, 12, 10, tzinfo=UTC)
+        assert result.dokument.zp_modifiziert == datetime(2021, 12, 10, tzinfo=UTC)
+
+    @pytest.mark.asyncio
+    async def test_without_header_the_parlis_dates_stay(self):
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), self._beschlussempf())
+
+        assert result.dokument.zp_erstellt is UNSET
+        assert result.dokument.zp_modifiziert == datetime(2021, 11, 25, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------

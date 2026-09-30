@@ -14,6 +14,7 @@ import logging
 import re
 import ssl
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import urlparse
@@ -656,6 +657,31 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tupl
     return text, doc_hash
 
 
+_DRUCKSNR_RE = re.compile(r"(\d+)/(\d+)")
+
+
+def ausgegeben_datum(text: str, drucksnr: str | None) -> datetime | None:
+    """The issue date printed on page 1 of a Drucksache ("Drucksache 17 / 1102 Ausgegeben: 10.12.2021").
+
+    PARLIS only gives the session date, which precedes the issue date by up to weeks
+    (issue #23, DD-061). The header must carry the document's own number, so a
+    quoted header of another Drucksache is never taken.
+    """
+    nummer = _DRUCKSNR_RE.fullmatch(drucksnr or "")
+    if nummer is None:
+        return None
+    wp, nr = nummer.groups()
+    match = re.search(rf"Drucksache\s+{wp}\s*/\s*{nr}\s+Ausgegeben:\s*(\d{{1,2}})\.(\d{{1,2}})\.(\d{{4}})", text)
+    if match is None:
+        return None
+    day, month, year = map(int, match.groups())
+    try:
+        return datetime(year, month, day, tzinfo=UTC)
+    except ValueError:
+        logger.warning("Drucksache %s prints an impossible Ausgegeben date: %s", drucksnr, match.group(0))
+        return None
+
+
 # ---------------------------------------------------------------------------
 # LLM semantic extraction
 # ---------------------------------------------------------------------------
@@ -1081,6 +1107,8 @@ async def enrich_dokument(
         # Extract text + hash, then normalize
         full_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint)
         full_text = normalize_volltext(full_text)
+        # zp_referenz stays the PARLIS session date; creation = the printed issue date (issue #23).
+        ausgegeben = ausgegeben_datum(full_text, dok.drucksnr)
 
         # A #page=N anchor marks one Fundstelle's window into a PDF that several
         # references share: separate logical documents packed into one
@@ -1179,9 +1207,9 @@ async def enrich_dokument(
                     volltext=full_text,
                     hash_=doc_hash,
                     typ=dok.typ,
-                    zp_modifiziert=dok.zp_modifiziert,
+                    zp_modifiziert=ausgegeben or dok.zp_modifiziert,
                     zp_referenz=dok.zp_referenz,
-                    zp_erstellt=dok.zp_erstellt,
+                    zp_erstellt=ausgegeben or dok.zp_erstellt,
                     link=dok.link,
                     autoren=dok.autoren,
                     drucksnr=dok.drucksnr,
@@ -1202,9 +1230,9 @@ async def enrich_dokument(
                     volltext=full_text,
                     hash_=doc_hash,
                     typ=dok.typ,
-                    zp_modifiziert=dok.zp_modifiziert,
+                    zp_modifiziert=ausgegeben or dok.zp_modifiziert,
                     zp_referenz=dok.zp_referenz,
-                    zp_erstellt=dok.zp_erstellt,
+                    zp_erstellt=ausgegeben or dok.zp_erstellt,
                     link=dok.link,
                     autoren=dok.autoren,
                     drucksnr=dok.drucksnr,

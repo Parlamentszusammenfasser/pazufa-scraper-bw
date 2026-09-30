@@ -53,7 +53,8 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Dokument | `volltext`            | ✅ Complete* | Scraper-level extraction via `bawue_dok.py` (when LLM enabled); else `TODO` placeholder |
 | Dokument | `hash`                | ✅ Complete* | Scraper-level SHA256 via `bawue_dok.py` (when LLM enabled); else link-derived placeholder (DD-048). Structured `DokumentHash` list (sha256 + sha1) pending, #41 |
 | Dokument | `typ`                 | ✅ Complete  | Enum-mapped                                                                          |
-| Dokument | `zp_modifiziert`      | ✅ Complete  | Fundstelle date                                                                      |
+| Dokument | `zp_modifiziert`      | ✅ Complete  | Printed Drucksache issue date ("Ausgegeben", when LLM enabled, DD-061); else Fundstelle date |
+| Dokument | `zp_erstellt`         | ⚠️ Partial  | Printed Drucksache issue date ("Ausgegeben", when LLM enabled, DD-061); else unset   |
 | Dokument | `zp_referenz`         | ✅ Complete  | Fundstelle date                                                                      |
 | Dokument | `link`                | ✅ Complete  | PDF URL from Fundstelle                                                              |
 | Dokument | `autoren`             | ✅ Complete  | Fundstelle author, else committee, else issuing body (Landtag/Landesregierung, DD-042), else Initiative |
