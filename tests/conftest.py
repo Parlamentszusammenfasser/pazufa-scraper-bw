@@ -9,6 +9,13 @@ import pytest
 from bawue.types import Autor, Vorgang, Vorgangstyp
 
 
+@pytest.fixture(autouse=True)
+def _no_wahlperiode_env(monkeypatch):
+    """A WAHLPERIODE* var in the developer's shell (.env.example) must not leak into config tests."""
+    monkeypatch.delenv("WAHLPERIODE", raising=False)
+    monkeypatch.delenv("WAHLPERIODE_START_DATE", raising=False)
+
+
 @pytest.fixture()
 def mock_parlis_client():
     """A mock ParlisClient."""

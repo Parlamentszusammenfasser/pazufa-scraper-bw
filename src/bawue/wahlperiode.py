@@ -12,12 +12,19 @@ CURRENT_WAHLPERIODE = max(WAHLPERIODE_START)
 def wahlperiode_start(wahlperiode: int, override: str | date | None = None) -> date:
     """Where the search starts: *override* ([bawue] wahlperiode-start-date, to narrow the
     lookback), else the Wahlperiode's constitution date."""
-    if override is not None:
-        return date.fromisoformat(override) if isinstance(override, str) else override
-    try:
-        return WAHLPERIODE_START[wahlperiode]
-    except KeyError:
+    known = WAHLPERIODE_START.get(wahlperiode)
+    if override is None:
+        if known is None:
+            raise ValueError(
+                f"Start of Wahlperiode {wahlperiode} unknown: add it to WAHLPERIODE_START "
+                "or set [bawue] wahlperiode-start-date"
+            )
+        return known
+    start = date.fromisoformat(override) if isinstance(override, str) else override
+    # Only narrows: a stale date from an earlier Wahlperiode or a future one is a misconfiguration.
+    if not isinstance(start, date) or start > date.today() or (known is not None and start < known):
         raise ValueError(
-            f"Start of Wahlperiode {wahlperiode} unknown: add it to WAHLPERIODE_START "
-            "or set [bawue] wahlperiode-start-date"
-        ) from None
+            f"wahlperiode-start-date {override!r} must be a date between the start of "
+            f"Wahlperiode {wahlperiode} and today"
+        )
+    return start

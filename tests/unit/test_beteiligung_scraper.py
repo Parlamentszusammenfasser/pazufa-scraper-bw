@@ -586,15 +586,24 @@ class TestRunDurationLog:
 
 
 class TestInit:
-    def test_issue6_init_reads_wahlperiode_from_bawue_section(self, tmp_path, caplog):
+    @pytest.mark.parametrize(
+        ("toml", "wp", "warns"),
+        [
+            (None, 18, False),
+            ("[bawue]\nwahlperiode = 16\n", 16, False),
+            ("[bawue]\nwahlperiode = 16\n\n[beteiligung]\nwahlperiode = 17\n", 16, True),
+        ],
+    )
+    def test_issue6_wahlperiode_comes_from_bawue_section(self, tmp_path, caplog, toml, wp, warns):
         """One Wahlperiode for all scrapers; a leftover [beteiligung] key is ignored, loudly."""
-        config_file = tmp_path / "config.toml"
-        config_file.write_text("[bawue]\nwahlperiode = 16\n\n[beteiligung]\nwahlperiode = 17\n")
-
         mock_config = MagicMock()
-        mock_config.config_file = str(config_file)
+        mock_config.config_file = None
         mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
         mock_config.llm_provider_key = None
+        if toml is not None:
+            config_file = tmp_path / "config.toml"
+            config_file.write_text(toml)
+            mock_config.config_file = str(config_file)
 
         with (
             patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.__init__", return_value=None),
@@ -603,8 +612,8 @@ class TestInit:
         ):
             scraper = BawueBeteiligungScraper(mock_config, MagicMock())
 
-        assert scraper._wahlperiode == 16
-        assert "[beteiligung] wahlperiode is ignored" in caplog.text
+        assert scraper._wahlperiode == wp
+        assert ("[beteiligung] wahlperiode is ignored" in caplog.text) is warns
 
 
 class TestIssue39Ressort:

@@ -77,7 +77,7 @@ make run
 Runs the scraper pipeline without posting to the API — useful for local diagnosis:
 
 ```bash
-.venv/bin/python -m bawue.dry_run                                            # all scrapers, 7-day lookback
+.venv/bin/python -m bawue.dry_run                                            # all scrapers, whole Wahlperiode
 .venv/bin/python -m bawue.dry_run --scraper vorgaenge --limit 3 --verbosity 2  # quick PARLIS check
 .venv/bin/python -m bawue.dry_run --scraper sitzungen                          # ICS calendar only
 .venv/bin/python -m bawue.dry_run --json --limit 5                             # JSON output
@@ -87,8 +87,8 @@ Runs the scraper pipeline without posting to the API — useful for local diagno
 |-------------------|--------------|-----------------------------------------------------------|
 | `--scraper`       | `all`        | `vorgaenge`, `beteiligung`, `sitzungen`, or `all`         |
 | `--vorgangstyp`   | *(all)*      | Limit to one PARLIS Vorgangstyp (e.g. `"Kleine Anfrage"`) |
-| `--lookback-days` | 7            | Days to look back for PARLIS search                       |
-| `--wahlperiode`   | 17           | Wahlperiode number                                        |
+| `--lookback-days` | *(whole WP)* | Days to look back for PARLIS search                       |
+| `--wahlperiode`   | 18           | Wahlperiode number (start date derived, DD-062)           |
 | `--limit`         | *(no limit)* | Max items per scraper                                     |
 | `--verbosity`     | 0            | 0=summary, 1=type breakdown, 2=per-item detail            |
 | `--json`          | off          | Output JSON instead of formatted text                     |

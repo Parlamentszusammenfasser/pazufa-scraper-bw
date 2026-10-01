@@ -585,7 +585,6 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.lookback_days is not None:
         args.wahlperiode_start_date = date.today() - timedelta(days=args.lookback_days)
-    args.wahlperiode_start_date = wahlperiode_start(args.wahlperiode, args.wahlperiode_start_date)
 
     start = time.monotonic()
 
@@ -606,7 +605,7 @@ def main(argv: list[str] | None = None) -> None:
             wahlperiode=args.wahlperiode,
             vorgangstypen=vorgangstypen,
             limit=args.limit,
-            wahlperiode_start_date=args.wahlperiode_start_date,
+            wahlperiode_start_date=wahlperiode_start(args.wahlperiode, args.wahlperiode_start_date),
             max_workers=args.workers,
         )
 

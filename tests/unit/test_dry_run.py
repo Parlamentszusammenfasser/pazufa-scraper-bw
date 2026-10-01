@@ -381,6 +381,18 @@ class TestMain:
 
         assert mock_rv.call_args.kwargs["wahlperiode_start_date"] == start
 
+    def test_search_start_is_only_needed_for_vorgaenge(self):
+        """Sitzungen never search PARLIS, so an unknown Wahlperiode must not stop them."""
+        with (
+            patch("bawue.dry_run.run_sitzungen", return_value=([], 0, 0)) as mock_rs,
+            patch("bawue.dry_run.check_for_newer_wahlperiode"),
+            patch("bawue.dry_run.build_summary", return_value=self._mock_summary()),
+            patch("bawue.dry_run.format_summary", return_value="ok"),
+        ):
+            main(["--scraper", "sitzungen", "--wahlperiode", "19"])
+
+        mock_rs.assert_called_once()
+
     def test_main_runs_only_vorgaenge_scraper(self):
         with (
             patch("bawue.dry_run.run_vorgaenge", return_value=([], [])) as mock_rv,

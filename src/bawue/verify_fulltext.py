@@ -169,9 +169,9 @@ def collect_pdf_urls(
     limit: int = 5,
 ) -> list[str]:
     """Search PARLIS and extract unique PDF URLs from fundstellen."""
-    start_date = wahlperiode_start(wahlperiode, wahlperiode_start_date)
     if lookback_days is not None:
-        start_date = date.today() - timedelta(days=lookback_days)
+        wahlperiode_start_date = date.today() - timedelta(days=lookback_days)
+    start_date = wahlperiode_start(wahlperiode, wahlperiode_start_date)
 
     client = ParlisClient(
         wahlperiode=wahlperiode,
