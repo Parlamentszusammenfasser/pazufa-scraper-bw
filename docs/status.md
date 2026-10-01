@@ -38,7 +38,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Vorgang  | `titel`               | ✅ Complete  | From PARLIS / Beteiligungsportal                                                     |
 | Vorgang  | `kurztitel`           | ✅ LLM       | ≤ 60 chars, own LLM call; falls back to `titel` without `[llm]` (DD-053)             |
 | Vorgang  | `typ`                 | ✅ Complete  | Enum-mapped                                                                          |
-| Vorgang  | `wahlperiode`         | ⚠️ Partial  | Prod/sample config default WP 17; staging/dev already on WP 18 — decision open in #63 |
+| Vorgang  | `wahlperiode`         | ✅ Complete  | WP 18 (default and prod); one `[bawue] wahlperiode` setting for all scrapers (DD-062) |
 | Vorgang  | `verfassungsaendernd` | ✅ Heuristik | Title regex (DD-023); PARLIS has no native attribute                                 |
 | Vorgang  | `initiatoren`         | ✅ Complete  | From Initiative field                                                                |
 | Vorgang  | `stationen`           | ✅ Complete  | From Fundstellen parsing                                                             |

@@ -18,7 +18,8 @@ def check_for_newer_wahlperiode(current_wahlperiode: int) -> None:
         if resp.status_code == 200:
             logger.warning("!" * 60)
             logger.warning("  NEUE WAHLPERIODE VERFÜGBAR: WP %d", next_wp)
-            logger.warning("  Bitte 'wahlperiode' in config.toml auf %d aktualisieren!", next_wp)
+            logger.warning("  Bitte 'wahlperiode' (env WAHLPERIODE) auf %d setzen und den Beginn", next_wp)
+            logger.warning("  in bawue/wahlperiode.py (WAHLPERIODE_START) eintragen!")
             logger.warning("  URL: %s", url)
             logger.warning("!" * 60)
         else:

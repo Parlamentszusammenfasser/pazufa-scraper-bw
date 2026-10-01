@@ -12,7 +12,6 @@ import pytest
 from bawue.bawue_dok import LLMMetrics
 from bawue.bawue_vorgaenge_scraper import (
     DEFAULT_ENABLED_VORGANGSTYPEN,
-    DEFAULT_WAHLPERIODE,
     BawueVorgaengeScraper,
     _assign_stable_station_ids,
     _construct_drucksache_pdf_url,
@@ -1817,7 +1816,7 @@ class TestRunDurationLog:
         from unittest.mock import AsyncMock, MagicMock
 
         scraper = object.__new__(BawueVorgaengeScraper)
-        scraper._wahlperiode = DEFAULT_WAHLPERIODE
+        scraper._wahlperiode = 18
         scraper._published = 0
         scraper._failed = 0
         scraper._skipped = 0
@@ -1841,7 +1840,7 @@ class TestRunDurationLog:
         from unittest.mock import AsyncMock, MagicMock
 
         scraper = object.__new__(BawueVorgaengeScraper)
-        scraper._wahlperiode = DEFAULT_WAHLPERIODE
+        scraper._wahlperiode = 18
         scraper._published = 0
         scraper._failed = 0
         scraper._skipped = 0
@@ -5375,3 +5374,44 @@ class TestIssue39Ressort:
 
         assert vorgang.ressort is UNSET
         assert "ressort" not in vorgang.to_dict()
+
+
+class TestIssue63WahlperiodeConfig:
+    """Issues #6/#63: [bawue] wahlperiode is the one setting; the PARLIS search start
+    follows from it unless wahlperiode-start-date narrows it."""
+
+    @staticmethod
+    def _parlis_kwargs(tmp_path, toml: str | None) -> dict:
+        config = MagicMock()
+        config.collector_id = "00000000-0000-0000-0000-000000000001"
+        config.llm_provider_key = None
+        config.config_file = None
+        if toml is not None:
+            path = tmp_path / "config.toml"
+            path.write_text(toml)
+            config.config_file = str(path)
+        with (
+            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.__init__", return_value=None),
+            patch("bawue.bawue_vorgaenge_scraper.ParlisClient") as parlis,
+            patch("bawue.bawue_vorgaenge_scraper.build_client"),
+            patch("bawue.bawue_vorgaenge_scraper.GesetzblattClient"),
+        ):
+            BawueVorgaengeScraper(config, MagicMock())
+        return parlis.call_args.kwargs
+
+    @pytest.mark.parametrize(
+        ("toml", "wp", "start"),
+        [
+            (None, 18, date(2026, 5, 1)),
+            ("[bawue]\nwahlperiode = 17\n", 17, date(2021, 4, 26)),
+            ('[bawue]\nwahlperiode = 18\nwahlperiode-start-date = "2026-09-01"\n', 18, date(2026, 9, 1)),
+            ("[bawue]\nwahlperiode = 18\nwahlperiode-start-date = 2026-09-01\n", 18, date(2026, 9, 1)),
+        ],
+    )
+    def test_search_range_follows_the_wahlperiode(self, tmp_path, toml, wp, start):
+        kwargs = self._parlis_kwargs(tmp_path, toml)
+        assert (kwargs["wahlperiode"], kwargs["wahlperiode_start_date"]) == (wp, start)
+
+    def test_unknown_wahlperiode_without_start_date_fails_at_startup(self, tmp_path):
+        with pytest.raises(ValueError, match="Wahlperiode 19"):
+            self._parlis_kwargs(tmp_path, "[bawue]\nwahlperiode = 19\n")

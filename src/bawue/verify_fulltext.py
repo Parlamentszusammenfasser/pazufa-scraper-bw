@@ -28,8 +28,8 @@ from bawue.bawue_dok import (
     extract_pdf_text,
     normalize_volltext,
 )
-from bawue.bawue_vorgaenge_scraper import DEFAULT_WAHLPERIODE_START
 from bawue.parlis_client import ParlisClient
+from bawue.wahlperiode import CURRENT_WAHLPERIODE, wahlperiode_start
 
 logger = logging.getLogger(__name__)
 
@@ -163,15 +163,15 @@ async def process_one_pdf(session: aiohttp.ClientSession, url: str, ocr_handler:
 def collect_pdf_urls(
     *,
     vorgangstyp: str = "Gesetzgebung",
-    wahlperiode: int = 17,
+    wahlperiode: int = CURRENT_WAHLPERIODE,
     wahlperiode_start_date: date | None = None,
     lookback_days: int | None = None,
     limit: int = 5,
 ) -> list[str]:
     """Search PARLIS and extract unique PDF URLs from fundstellen."""
-    start_date = wahlperiode_start_date or DEFAULT_WAHLPERIODE_START
     if lookback_days is not None:
-        start_date = date.today() - timedelta(days=lookback_days)
+        wahlperiode_start_date = date.today() - timedelta(days=lookback_days)
+    start_date = wahlperiode_start(wahlperiode, wahlperiode_start_date)
 
     client = ParlisClient(
         wahlperiode=wahlperiode,
@@ -383,7 +383,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="Gesetzgebung",
         help="PARLIS Vorgangstyp (default: Gesetzgebung)",
     )
-    parser.add_argument("--wahlperiode", type=int, default=17, help="Wahlperiode (default: 17)")
+    parser.add_argument(
+        "--wahlperiode", type=int, default=CURRENT_WAHLPERIODE, help=f"Wahlperiode (default: {CURRENT_WAHLPERIODE})"
+    )
     parser.add_argument(
         "--verbosity",
         type=int,
@@ -394,7 +396,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--wahlperiode-start-date",
         type=date.fromisoformat,
-        default=DEFAULT_WAHLPERIODE_START,
+        default=None,
+        help="Start of the search (default: the Wahlperiode's constitution date)",
     )
     parser.add_argument("--lookback-days", type=int, default=None, help="Only check last N days")
     return parser.parse_args(argv)

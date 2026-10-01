@@ -6,6 +6,7 @@ import requests
 
 from bawue.beteiligung_parser import RawBeteiligungProcess, parse_process_list
 from bawue.rate_limiter import AdaptiveRateLimiter
+from bawue.wahlperiode import CURRENT_WAHLPERIODE
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ BASE_URL = "https://beteiligungsportal.baden-wuerttemberg.de"
 class BeteiligungClient:
     """Handles HTTP communication with the Beteiligungsportal."""
 
-    def __init__(self, wahlperiode: int = 17, request_delay_s: float = 1.0) -> None:
+    def __init__(self, wahlperiode: int = CURRENT_WAHLPERIODE, request_delay_s: float = 1.0) -> None:
         self._wahlperiode = wahlperiode
         self._rate_limiter = AdaptiveRateLimiter(
             initial_delay=request_delay_s,

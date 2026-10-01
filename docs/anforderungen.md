@@ -53,7 +53,7 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 | `api_id`              | UUID             | Ja      | `uuid5(NAMESPACE_URL, vorgangs_id)`                                                                                                                                                                                                                                                                      |
 | `titel`               | string           | Ja      |                                                                                                                                                                                                                                                                                                          |
 | `typ`                 | Vorgangstyp      | Ja      |                                                                                                                                                                                                                                                                                                          |
-| `wahlperiode`         | integer          | Ja      | Konfigurationsdefault: 17 (`config.sample.toml`/`config.prod.toml`); Landtag ist seit 2026-05-01 in WP 18, `config.staging.toml`/`config.dev.toml` laufen bereits auf 18 — Entscheidung offen in [#63](https://github.com/Parlamentszusammenfasser/pazufa-scraper-bw/issues/63)                          |
+| `wahlperiode`         | integer          | Ja      | `[bawue] wahlperiode`, Default 18 (aktuelle WP seit 2026-05-01; nur WP 18 in Prod, DD-062)                                                                                                                                                                                                               |
 | `verfassungsaendernd` | boolean          | Ja      | Titel-Heuristik: `True` bei Match auf `Änderung der (Landes)?Verfassung` oder `Verfassungsänderung`, sonst `False`. PARLIS liefert das Attribut nicht — DoD-Konflikt zur „omit object"-Regel dokumentiert in [DD-023](design_decisions/DD-023-verfassungsaendernd-titel-heuristik-statt-omit-object.md). |
 | `initiatoren`         | list[Autor]      | Ja      |                                                                                                                                                                                                                                                                                                          |
 | `stationen`           | list[Station]    | Ja      |                                                                                                                                                                                                                                                                                                          |
@@ -231,11 +231,10 @@ PDFs mit Blob-IDs (`/resource/blob/{id}/...`). Kein REST-API, kein RSS-Feed.
 | `[llm]`         | `provider-key`           |                                                            | Nein    | API-Key für LLM-Provider (via `LLM_PROVIDER_KEY` Umgebungsvariable)                                  |
 | `[llm]`         | `model`                  | *(gpt-5-nano)*                                             | Nein    | LLM-Modellname (z.B. `gpt-5-nano`, `gpt-4.1-nano`)                                                   |
 | `[bawue]`       | `enabled-vorgangstypen`  | `["Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag"]` | Nein    | PARLIS-Vorgangstypen die gescrapt werden (`listing_urls` der Pipeline)                               |
-| `[bawue]`       | `wahlperiode`            | 17                                                         | Nein    | Wahlperiode; Prod/Sample-Default 17, Staging/Dev bereits 18 (s. #63)                                 |
+| `[bawue]`       | `wahlperiode`            | 18                                                         | Nein    | Die eine Wahlperiode aller Scraper (env `WAHLPERIODE`, DD-062)                                       |
 | `[bawue]`       | `parlis-request-delay-s` | 1.0                                                        | Nein    | Verzögerung zwischen PARLIS-Anfragen (s)                                                             |
-| `[bawue]`       | `wahlperiode-start-date` | `"2021-04-26"`                                             | Nein    | Startdatum der Wahlperiode (Suchbereich)                                                             |
+| `[bawue]`       | `wahlperiode-start-date` | *(Konstituierung der WP)*                                  | Nein    | Beginn des PARLIS-Suchbereichs; nur zum Eingrenzen (Tabelle in `bawue/wahlperiode.py`)               |
 | `[bawue]`       | `ics-url`                | *(landtag-bw.de)*                                          | Nein    | ICS-Kalender-Feed für Sitzungen                                                                      |
-| `[beteiligung]` | `wahlperiode`            | 17                                                         | Nein    | Wahlperiode für Beteiligungsportal-Index                                                             |
 | `[beteiligung]` | `request-delay-s`        | 2.0                                                        | Nein    | Verzögerung zwischen Anfragen (s)                                                                    |
 | `[gesetzblatt]` | `request-delay-s`        | 1.0                                                        | Nein    | Verzögerung zwischen Gesetzblatt-Anfragen (s), s. [gesetzblatt_scraping.md](gesetzblatt_scraping.md) |
 
@@ -249,8 +248,8 @@ Konkret:
 1. **Vorgänge + Sitzungen** im PaZuFa-Format erzeugen (alle drei Scraper)
 2. **Einlieferung** ans Backend (über `bawue.api`)
 3. **Automatisierung** (Cloud-Run-Job mit Cloud Scheduler; lokal Docker-Compose mit `CYCLE_TIME_S`)
-4. **Abdeckung der aktuellen Wahlperiode** (Prod/Sample-Default `wahlperiode = 17`,
-   `wahlperiode-start-date = 2021-04-26`; Landtag ist seit 2026-05-01 in WP 18 — s. #63)
+4. **Abdeckung der aktuellen Wahlperiode** (`wahlperiode = 18` seit 2026-05-01, Prod scrapt nur
+   WP 18; DD-062)
 
 ### Coding-Regeln
 

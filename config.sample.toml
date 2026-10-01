@@ -41,10 +41,10 @@ model = "gpt-5-nano"
 # those instead of baking its own TOML into the image.
 [bawue]
 parlis-request-delay-s = 1.0            # env: PARLIS_REQUEST_DELAY_S
-# WP 17: Landtag constituted - 2021-04-26
-# WP 18: Landtag constituted - 2026-05-01
-wahlperiode = 17                        # env: WAHLPERIODE
-wahlperiode-start-date = "2021-04-26"   # env: WAHLPERIODE_START_DATE
+# The one Wahlperiode setting for all scrapers (issue #6). The search starts at its
+# constitution date (bawue/wahlperiode.py); wahlperiode-start-date only narrows that.
+wahlperiode = 18                        # env: WAHLPERIODE
+#wahlperiode-start-date = "2026-05-01"  # env: WAHLPERIODE_START_DATE
 # Only scrape Vorgangstypen supported by the backend. Others map to SONSTIG and are rejected.
 # Available values: "Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag", "Antrag",
 #   "Kleine Anfrage", "Große Anfrage", "Anfrage", "Entschließungsantrag", "Dringlicher Antrag",
@@ -64,7 +64,6 @@ ics-url = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkal
 
 # Beteiligungsportal-specific configuration
 [beteiligung]
-# wahlperiode = 17                      # env: BETEILIGUNG_WAHLPERIODE
 # request-delay-s = 2.0
 
 # Gesetzblatt Baden-Württemberg-specific configuration

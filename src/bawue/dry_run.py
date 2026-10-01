@@ -24,7 +24,6 @@ from icalendar import Calendar
 
 from bawue.bawue_vorgaenge_scraper import (
     DEFAULT_ENABLED_VORGANGSTYPEN,
-    DEFAULT_WAHLPERIODE_START,
     BawueVorgaengeScraper,
 )
 from bawue.beteiligung_client import BeteiligungClient
@@ -32,6 +31,7 @@ from bawue.beteiligung_parser import parse_process_detail
 from bawue.enum_mapper import VORGANGSTYP_MAP
 from bawue.ics_parser import group_events_by_date, parse_ics_feed
 from bawue.parlis_client import ParlisClient
+from bawue.wahlperiode import CURRENT_WAHLPERIODE, wahlperiode_start
 from bawue.wahlperiode_check import check_for_newer_wahlperiode
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ class DryRunSummary:
     sitzung_reports: list[SitzungReport] = field(default_factory=list)
 
     duration_s: float = 0.0
-    wahlperiode: int = 17
+    wahlperiode: int = CURRENT_WAHLPERIODE
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +200,7 @@ def build_summary(
     sitzung_reports: list[SitzungReport],
     raw_vorgaenge: list[dict[str, Any]],
     duration_s: float = 0.0,
-    wahlperiode: int = 17,
+    wahlperiode: int = CURRENT_WAHLPERIODE,
 ) -> DryRunSummary:
     """Build the top-level aggregate summary."""
     by_type: dict[str, int] = {}
@@ -372,7 +372,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--config-file", type=str, default="config.toml", help="Path to config TOML file")
     parser.add_argument("--vorgangstyp", type=str, default=None, help="Limit to one PARLIS Vorgangstyp")
-    parser.add_argument("--wahlperiode", type=int, default=17, help="Wahlperiode (default: 17)")
+    parser.add_argument(
+        "--wahlperiode", type=int, default=CURRENT_WAHLPERIODE, help=f"Wahlperiode (default: {CURRENT_WAHLPERIODE})"
+    )
     parser.add_argument("--limit", type=int, default=None, help="Max items per scraper")
     parser.add_argument("--verbosity", type=int, choices=[0, 1, 2], default=0, help="Output detail level")
     parser.add_argument("--json", action="store_true", help="Output JSON instead of formatted text")
@@ -380,8 +382,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--wahlperiode-start-date",
         type=date.fromisoformat,
-        default=DEFAULT_WAHLPERIODE_START,
-        help="Start date of the Wahlperiode (default: 2021-04-26)",
+        default=None,
+        help="Start of the search (default: the Wahlperiode's constitution date)",
     )
     parser.add_argument(
         "--lookback-days",
@@ -445,7 +447,7 @@ def _search_one_type(
 
 def run_vorgaenge(
     *,
-    wahlperiode: int = 17,
+    wahlperiode: int = CURRENT_WAHLPERIODE,
     vorgangstypen: list[str] | None = None,
     limit: int | None = None,
     wahlperiode_start_date=None,
@@ -504,7 +506,7 @@ def run_vorgaenge(
 
 def run_beteiligung(
     *,
-    wahlperiode: int = 17,
+    wahlperiode: int = CURRENT_WAHLPERIODE,
     limit: int | None = None,
 ) -> list:
     """Fetch Beteiligungsportal processes and analyze."""
@@ -603,7 +605,7 @@ def main(argv: list[str] | None = None) -> None:
             wahlperiode=args.wahlperiode,
             vorgangstypen=vorgangstypen,
             limit=args.limit,
-            wahlperiode_start_date=args.wahlperiode_start_date,
+            wahlperiode_start_date=wahlperiode_start(args.wahlperiode, args.wahlperiode_start_date),
             max_workers=args.workers,
         )
 

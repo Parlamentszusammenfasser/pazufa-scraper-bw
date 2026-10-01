@@ -4,6 +4,7 @@ These are what let a cloud deployment run the image's default config.toml
 instead of baking a per-environment TOML into the image.
 """
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -55,14 +56,6 @@ def test_env_overrides_file_and_keeps_types(config, monkeypatch):
     assert section["ics-url"] == "https://example.org/cal.ics"
 
 
-def test_beteiligung_wahlperiode_is_a_separate_knob(config, monkeypatch):
-    monkeypatch.setenv("WAHLPERIODE", "18")
-    assert load_toml_section(config, "beteiligung")["wahlperiode"] == 17
-
-    monkeypatch.setenv("BETEILIGUNG_WAHLPERIODE", "18")
-    assert load_toml_section(config, "beteiligung")["wahlperiode"] == 18
-
-
 def test_mattermost_hook_from_env(config, monkeypatch):
     monkeypatch.setenv("MATTERMOST_HOOK", "https://chat.example.org/hooks/from-env")
     section = load_toml_section(config, "notifications")
@@ -89,6 +82,11 @@ def test_uncastable_env_fails_loudly(config, monkeypatch):
         load_toml_section(config, "bawue")
 
 
-def test_missing_section_still_gets_env_overrides(config, monkeypatch):
-    monkeypatch.setenv("MATTERMOST_HOOK", "https://chat.example.org/hooks/from-env")
-    assert load_toml_section(config, "gesetzblatt") == {}
+def test_unreadable_file_warns_and_yields_empty_section(tmp_path, caplog):
+    cfg = MagicMock()
+    cfg.config_file = str(tmp_path / "nonexistent.toml")
+
+    with caplog.at_level(logging.WARNING, logger="bawue.config_loader"):
+        assert load_toml_section(cfg, "beteiligung") == {}
+
+    assert "Could not load" in caplog.text

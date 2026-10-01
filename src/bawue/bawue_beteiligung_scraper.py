@@ -41,10 +41,10 @@ from bawue.types import (
     todo_if_blank,
 )
 from bawue.upload_throttle import upload_vorgang
+from bawue.wahlperiode import CURRENT_WAHLPERIODE
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_WAHLPERIODE = 17
 DEFAULT_BETEILIGUNG_DELAY = 2.0
 
 
@@ -56,7 +56,10 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         beteiligung_config = load_toml_section(config, "beteiligung")
-        self._wahlperiode = beteiligung_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
+        # One Wahlperiode for all scrapers (issue #6).
+        self._wahlperiode = load_toml_section(config, "bawue").get("wahlperiode", CURRENT_WAHLPERIODE)
+        if "wahlperiode" in beteiligung_config:
+            logger.warning("[beteiligung] wahlperiode is ignored; set [bawue] wahlperiode instead (issue #6)")
         delay = beteiligung_config.get("request-delay-s", DEFAULT_BETEILIGUNG_DELAY)
 
         listing_urls = [f"lp-{self._wahlperiode}"]

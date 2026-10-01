@@ -9,6 +9,7 @@ import requests
 from bawue.parlis_parser import parse_results
 from bawue.rate_limiter import AdaptiveRateLimiter
 from bawue.types import RawVorgang
+from bawue.wahlperiode import CURRENT_WAHLPERIODE
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class ParlisClient:
 
     def __init__(
         self,
-        wahlperiode: int = 17,
+        wahlperiode: int = CURRENT_WAHLPERIODE,
         request_delay_s: float = 1.0,
         wahlperiode_start_date: date | None = None,
     ) -> None:

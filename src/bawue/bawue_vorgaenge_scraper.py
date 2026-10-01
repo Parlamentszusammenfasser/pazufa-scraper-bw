@@ -53,6 +53,7 @@ from bawue.types import (
     todo_if_blank,
 )
 from bawue.upload_throttle import upload_vorgang
+from bawue.wahlperiode import CURRENT_WAHLPERIODE, wahlperiode_start
 from bawue.wahlperiode_check import check_for_newer_wahlperiode
 
 logger = logging.getLogger(__name__)
@@ -123,8 +124,6 @@ DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [
 ]
 # Its Vorgänge share one Initiativdrucksache per budget (DD-041).
 _HAUSHALT_VORGANGSTYP = "Haushaltsgesetzgebung"
-DEFAULT_WAHLPERIODE = 17
-DEFAULT_WAHLPERIODE_START = date(2021, 4, 26)  # WP 17 BW: Landtag constituted
 DEFAULT_PARLIS_DELAY = 1.0
 DEFAULT_GSBLT_DELAY = 1.0
 
@@ -179,9 +178,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         # Load BaWue-specific config from TOML
         bawue_config = load_toml_section(config, "bawue")
-        self._wahlperiode = bawue_config.get("wahlperiode", DEFAULT_WAHLPERIODE)
-        wp_start = bawue_config.get("wahlperiode-start-date", DEFAULT_WAHLPERIODE_START)
-        self._wahlperiode_start_date = date.fromisoformat(wp_start) if isinstance(wp_start, str) else wp_start
+        self._wahlperiode = bawue_config.get("wahlperiode", CURRENT_WAHLPERIODE)
+        self._wahlperiode_start_date = wahlperiode_start(self._wahlperiode, bawue_config.get("wahlperiode-start-date"))
         parlis_delay = bawue_config.get("parlis-request-delay-s", DEFAULT_PARLIS_DELAY)
 
         # The listing_urls are Vorgangstyp strings — the framework passes them to listing_page_extractor
