@@ -58,4 +58,9 @@ ENV PYTHONPATH=/app/src
 RUN chown -R app:app /app
 USER app
 
+# Logged at startup (issue #84); CI passes the release or the sha-<sha7> tag. Set last so a
+# new version doesn't invalidate the layers above.
+ARG SCRAPER_VERSION=dev
+ENV SCRAPER_VERSION=$SCRAPER_VERSION
+
 ENTRYPOINT ["python", "-m", "bawue", "--config-file", "config.toml", "--once"]

@@ -1,10 +1,11 @@
 """Tests for the scraping cycle in bawue.__main__."""
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bawue.__main__ import main
+from bawue.__main__ import log_startup, main
 
 
 class _FakeScraper:
@@ -107,3 +108,24 @@ class TestIssue52OneRunReport:
             await main(_config(False))
 
         assert send.call_args.args[1] == [("Sitzungen", ["Sitzungen line"])]
+
+
+class TestIssue84StartupVersion:
+    """Issue #84: the run log names the image's version (Dockerfile ARG/ENV SCRAPER_VERSION)."""
+
+    @pytest.mark.parametrize(
+        ("env", "version"),
+        [
+            ("2.1.1", "2.1.1"),
+            ("", "dev"),  # an empty build-arg
+            (None, "dev"),  # local run, no image
+        ],
+    )
+    def test_startup_line_names_the_version(self, monkeypatch, caplog, env, version):
+        if env is None:
+            monkeypatch.delenv("SCRAPER_VERSION", raising=False)
+        else:
+            monkeypatch.setenv("SCRAPER_VERSION", env)
+        with caplog.at_level(logging.INFO, logger="bawue"):
+            log_startup()
+        assert caplog.messages == [f"Starting BaWue scraper manager (version {version})."]
