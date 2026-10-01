@@ -7,6 +7,7 @@ and avoids importlib plugin-loading machinery.
 
 import asyncio
 import logging
+import os
 import time
 
 import aiohttp
@@ -85,6 +86,13 @@ def _report_sections(scrapers: list[Scraper], results: list) -> list[tuple[str, 
     return sections
 
 
+def log_startup() -> None:
+    """Name the running image's version, set at build time (Dockerfile ARG, issue #84).
+    pyproject.toml can't tell: CI only pushes the release tag (semantic-release --no-commit)."""
+    version = os.environ.get("SCRAPER_VERSION") or "dev"
+    logger.info("Starting BaWue scraper manager (version %s).", version)
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
@@ -94,7 +102,7 @@ if __name__ == "__main__":
     config = BawueConfig()
     config.load()
 
-    logger.info("Starting BaWue scraper manager.")
+    log_startup()
     logger.info("Configuration Complete")
     if config.dry_run:
         logger.warning("DRY RUN mode enabled — no data will be submitted to the API")
