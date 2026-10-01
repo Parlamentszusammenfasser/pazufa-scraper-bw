@@ -113,15 +113,19 @@ class TestIssue52OneRunReport:
 class TestIssue84StartupVersion:
     """Issue #84: the run log names the image's version (Dockerfile ARG/ENV SCRAPER_VERSION)."""
 
-    @pytest.mark.parametrize(("env", "version"), [("2.1.1", "2.1.1"), ("main-1a2b3c4", "main-1a2b3c4"), ("", "dev")])
+    @pytest.mark.parametrize(
+        ("env", "version"),
+        [
+            ("2.1.1", "2.1.1"),
+            ("", "dev"),  # an empty build-arg
+            (None, "dev"),  # local run, no image
+        ],
+    )
     def test_startup_line_names_the_version(self, monkeypatch, caplog, env, version):
-        monkeypatch.setenv("SCRAPER_VERSION", env)
+        if env is None:
+            monkeypatch.delenv("SCRAPER_VERSION", raising=False)
+        else:
+            monkeypatch.setenv("SCRAPER_VERSION", env)
         with caplog.at_level(logging.INFO, logger="bawue"):
             log_startup()
         assert caplog.messages == [f"Starting BaWue scraper manager (version {version})."]
-
-    def test_local_run_without_build_arg_logs_dev(self, monkeypatch, caplog):
-        monkeypatch.delenv("SCRAPER_VERSION", raising=False)
-        with caplog.at_level(logging.INFO, logger="bawue"):
-            log_startup()
-        assert "(version dev)" in caplog.text

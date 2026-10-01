@@ -98,11 +98,12 @@ if __name__ == "__main__":
         level=logging.INFO,
         format="%(asctime)s | %(levelname)-5s: %(filename)-20s: %(message)s",
     )
+    # Before config.load(): a broken config must still say which image ran.
+    log_startup()
 
     config = BawueConfig()
     config.load()
 
-    log_startup()
     logger.info("Configuration Complete")
     if config.dry_run:
         logger.warning("DRY RUN mode enabled — no data will be submitted to the API")
