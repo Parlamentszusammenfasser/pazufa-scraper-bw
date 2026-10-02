@@ -25,7 +25,21 @@ from bawue.types import TODO_MARKER
 
 TITEL = "Gesetz zur Förderung des Ausbaus der Windenergie in Baden-Württemberg"
 SUMMARY = "Der Entwurf beschleunigt Genehmigungen für Windkraftanlagen."
-RESSORT_COUNTERS = ("ressort_classified", "ressort_null", "ressort_rejected", "ressort_failed")
+VORGANG_COUNTERS = (
+    "kurztitel_generated",
+    "kurztitel_fallback",
+    "ressort_classified",
+    "ressort_null",
+    "ressort_rejected",
+    "ressort_failed",
+)
+
+
+@pytest.fixture(autouse=True)
+def _no_unplanned_llm_call():
+    """A call no test planned for is counted as failed — and never leaves the machine."""
+    with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, side_effect=AssertionError):
+        yield
 
 
 def _llm():
@@ -36,7 +50,7 @@ def _llm():
     return llm
 
 
-def _patch_llm(*answers: dict):
+def _patch_llm(*answers: object):
     replies = []
     for answer in answers:
         reply = MagicMock()
@@ -52,8 +66,9 @@ def _cache(stored: str | None = None):
     return cache
 
 
-def _ressort_counts(metrics: LLMMetrics) -> dict[str, int]:
-    return {name: getattr(metrics, name) for name in RESSORT_COUNTERS}
+def _only(counter: str | None) -> dict[str, int]:
+    """Every counter, document ones included, at 0 — except *counter* at 1."""
+    return {**vars(LLMMetrics()), **({counter: 1} if counter else {})}
 
 
 class TestRessortCounters:
@@ -67,7 +82,7 @@ class TestRessortCounters:
         with _patch_llm({"begruendung": "…", "ressort": answer}):
             await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_cache(), metrics=metrics)
 
-        assert _ressort_counts(metrics) == {name: int(name == counter) for name in RESSORT_COUNTERS}
+        assert vars(metrics) == _only(counter)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("answer", ["", "   ", 42, ["Energie"], {"ressort": "Energie"}])
@@ -78,9 +93,20 @@ class TestRessortCounters:
         with _patch_llm({"ressort": answer}), caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"):
             assert await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_cache(), metrics=metrics) is None
 
-        assert metrics.ressort_rejected == 1
-        assert metrics.ressort_null == 0
+        assert vars(metrics) == _only("ressort_rejected")
         assert "unknown Ressort" in caplog.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reply", [["Finanzen"], "Finanzen"])
+    async def test_a_reply_that_is_no_json_object_counts_as_failed(self, reply):
+        """Valid JSON, but no object: one Vorgang's odd reply must not fail its build."""
+        metrics = LLMMetrics()
+        cache = _cache()
+        with _patch_llm(reply):
+            assert await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=cache, metrics=metrics) is None
+
+        assert vars(metrics) == _only("ressort_failed")
+        cache.store_raw.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_failed_call_counts_as_failed(self):
@@ -88,7 +114,7 @@ class TestRessortCounters:
         with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, side_effect=RuntimeError("boom")):
             await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_cache(), metrics=metrics)
 
-        assert _ressort_counts(metrics) == {**dict.fromkeys(RESSORT_COUNTERS, 0), "ressort_failed": 1}
+        assert vars(metrics) == _only("ressort_failed")
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -97,13 +123,15 @@ class TestRessortCounters:
             ('{"ressort": "Umwelt"}', "ressort_classified"),
             ('{"ressort": null}', "ressort_null"),
             ('{"ressort": "Windkraft"}', "ressort_rejected"),
+            ("Umwelt", "ressort_classified"),  # the first iteration of this cache stored the bare value
+            ("not json at all", "ressort_rejected"),  # a corrupt entry is read as a raw answer
         ],
     )
     async def test_cache_hit_counts_by_its_outcome(self, stored, counter):
         metrics = LLMMetrics()
         await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_cache(stored), metrics=metrics)
 
-        assert getattr(metrics, counter) == 1
+        assert vars(metrics) == _only(counter)
 
     @pytest.mark.asyncio
     async def test_rejected_answer_stays_rejected_on_the_next_run(self):
@@ -118,16 +146,29 @@ class TestRessortCounters:
         await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_cache(stored), metrics=metrics)
 
         assert json.loads(stored) == {"ressort": "Windkraft", "begruendung": "Windkraft halt."}
-        assert metrics.ressort_rejected == 1
+        assert vars(metrics) == _only("ressort_rejected")
+
+    @pytest.mark.asyncio
+    async def test_the_answer_is_logged_short_and_on_one_line(self, caplog):
+        """The raw answer is re-logged on every cache hit, and the model's text must not
+        forge log lines in the plain-text production log."""
+        with (
+            _patch_llm({"begruendung": "Kurz.\nERROR forged line", "ressort": "x" * 10_000}),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_dok"),
+        ):
+            await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_cache())
+
+        messages = [r.getMessage() for r in caplog.records]
+        assert messages
+        assert all(len(m) < 300 and "\n" not in m for m in messages)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(("llm", "titel"), [(None, TITEL), (_llm(), TODO_MARKER), (_llm(), "  ")])
     async def test_nothing_is_counted_without_a_classification(self, llm, titel):
         metrics = LLMMetrics()
-        with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock):
-            await vorgang_ressort(llm, titel, SUMMARY, cache=_cache(), metrics=metrics)
+        await vorgang_ressort(llm, titel, SUMMARY, cache=_cache(), metrics=metrics)
 
-        assert not any(_ressort_counts(metrics).values())
+        assert vars(metrics) == _only(None)
 
 
 class TestKurztitelCounters:
@@ -145,14 +186,14 @@ class TestKurztitelCounters:
         with _patch_llm(*({"kurztitel": a} for a in answers)):
             await vorgang_kurztitel(_llm(), TITEL, SUMMARY, cache=_cache(), metrics=metrics)
 
-        assert (metrics.kurztitel_generated, metrics.kurztitel_fallback) == (1, 0)
+        assert vars(metrics) == _only("kurztitel_generated")
 
     @pytest.mark.asyncio
     async def test_cache_hit_counts_as_generated(self):
         metrics = LLMMetrics()
         await vorgang_kurztitel(_llm(), TITEL, SUMMARY, cache=_cache(self.GOOD), metrics=metrics)
 
-        assert (metrics.kurztitel_generated, metrics.kurztitel_fallback) == (1, 0)
+        assert vars(metrics) == _only("kurztitel_generated")
 
     @pytest.mark.asyncio
     async def test_still_invalid_after_reprompt_counts_as_fallback(self):
@@ -160,7 +201,7 @@ class TestKurztitelCounters:
         with _patch_llm({"kurztitel": self.TOO_LONG}, {"kurztitel": self.TOO_LONG}):
             await vorgang_kurztitel(_llm(), TITEL, SUMMARY, cache=_cache(), metrics=metrics)
 
-        assert (metrics.kurztitel_generated, metrics.kurztitel_fallback) == (0, 1)
+        assert vars(metrics) == _only("kurztitel_fallback")
 
     @pytest.mark.asyncio
     async def test_failed_call_counts_as_fallback(self):
@@ -168,14 +209,14 @@ class TestKurztitelCounters:
         with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, side_effect=RuntimeError("boom")):
             await vorgang_kurztitel(_llm(), TITEL, SUMMARY, cache=_cache(), metrics=metrics)
 
-        assert (metrics.kurztitel_generated, metrics.kurztitel_fallback) == (0, 1)
+        assert vars(metrics) == _only("kurztitel_fallback")
 
     @pytest.mark.asyncio
     async def test_nothing_is_counted_without_an_llm(self):
         metrics = LLMMetrics()
         await vorgang_kurztitel(None, TITEL, SUMMARY, metrics=metrics)
 
-        assert (metrics.kurztitel_generated, metrics.kurztitel_fallback) == (0, 0)
+        assert vars(metrics) == _only(None)
 
 
 def _vorgang_metrics() -> LLMMetrics:
@@ -189,16 +230,26 @@ class TestReport:
     def test_vorgang_counters_have_their_own_block(self):
         lines = _vorgang_metrics().format_lines()
 
-        assert "LLM per Vorgang:" in lines
-        assert "  Kurztitel:   12 generated, 1 fallback to titel" in lines
-        assert "  Ressort:     10 classified, 2 null, 1 rejected, 0 failed" in lines
+        assert "LLM enrichment:" not in lines
+        assert lines[-3:] == [
+            "LLM per Vorgang:",
+            "  Kurztitel:   12 generated, 1 fallback to titel",
+            "  Ressort:     10 classified, 2 null, 1 rejected, 0 failed",
+        ]
 
-    def test_block_without_counts_is_omitted(self):
+    @pytest.mark.parametrize("counter", VORGANG_COUNTERS)
+    def test_any_single_counter_shows_the_block(self, counter):
+        """Above all a run where every call failed — a provider outage — must show."""
+        metrics = LLMMetrics()
+        setattr(metrics, counter, 1)
+
+        assert "LLM per Vorgang:" in metrics.format_lines()
+
+    def test_document_counts_alone_show_no_vorgang_block(self):
         metrics = LLMMetrics()
         metrics.success = 3
 
         assert "LLM per Vorgang:" not in metrics.format_lines()
-        assert "LLM enrichment:" not in _vorgang_metrics().format_lines()
 
     def test_vorgaenge_report_shows_counters_without_enriched_documents(self):
         """A run whose only changed Vorgang has an unpublished PDF enriches nothing,
@@ -216,9 +267,9 @@ class TestReport:
             llm_metrics=_vorgang_metrics(),
         )
 
-        assert "  Ressort:     10 classified, 2 null, 1 rejected, 0 failed" in lines
+        assert "LLM per Vorgang:" in lines
 
     def test_beteiligung_report_shows_counters_without_enriched_documents(self):
         lines = _print_beteiligung_summary(1, 0, 1, 0, 0, 1.0, _vorgang_metrics())
 
-        assert "  Ressort:     10 classified, 2 null, 1 rejected, 0 failed" in lines
+        assert "LLM per Vorgang:" in lines

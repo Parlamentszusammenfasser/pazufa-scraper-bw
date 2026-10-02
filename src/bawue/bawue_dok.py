@@ -80,8 +80,9 @@ class LLMMetrics:
             lines += [
                 "",
                 "LLM per Vorgang:",
-                "  Kurztitel:   {} generated, {} fallback to titel".format(*kurztitel),
-                "  Ressort:     {} classified, {} null, {} rejected, {} failed".format(*ressort),
+                f"  Kurztitel:   {self.kurztitel_generated} generated, {self.kurztitel_fallback} fallback to titel",
+                f"  Ressort:     {self.ressort_classified} classified, {self.ressort_null} null, "
+                f"{self.ressort_rejected} rejected, {self.ressort_failed} failed",
             ]
         return lines
 
@@ -1023,13 +1024,14 @@ async def vorgang_ressort(
         ]
         try:
             answer = await _llm_json(llm, model, messages)
+            raw = answer.get("ressort")  # inside: valid JSON need not be an object
         except Exception:
             logger.warning("Ressort classification failed for %r", titel[:60], exc_info=True)
             if metrics is not None:
                 metrics.ressort_failed += 1
             return None
-        raw = answer.get("ressort")
-        logger.info("Ressort: %s → %r (%s)", titel[:40], raw, str(answer.get("begruendung"))[:60])
+        # %.60r: the answer is untrusted model output — bounded, and on one log line.
+        logger.info("Ressort: %s → %.60r (%.60r)", titel[:40], raw, answer.get("begruendung"))
         # The raw answer travels with its begründung: a wrong classification can be
         # examined later without re-calling the model, and a rejected one stays
         # rejected instead of reading back as null (issue #56).
@@ -1090,7 +1092,7 @@ def _parse_ressort(raw: object, titel: str) -> Ressort | None:
         return None
     ressort = _RESSORT_BY_KEY.get(_ressort_lookup_key(raw)) if isinstance(raw, str) else None
     if ressort is None:
-        logger.warning("LLM returned unknown Ressort %r for %r", raw, titel[:60])
+        logger.warning("LLM returned unknown Ressort %.60r for %r", raw, titel[:60])
     return ressort
 
 

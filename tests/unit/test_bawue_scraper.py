@@ -5316,6 +5316,33 @@ class TestIssue39Ressort:
     """GitHub issue #39 (DD-055): `ressort` comes from the LLM classification of the
     subject matter, so it is omitted entirely when the LLM is off."""
 
+    @staticmethod
+    def _llm_scraper(monkeypatch, ressort, summary_for):
+        """LLM on, both per-Vorgang calls mocked; each document's summary is `summary_for(dok)`."""
+        from bawue.bawue_dok import EnrichmentResult
+
+        async def _fake_enrich(session, llm, dok, **kwargs):
+            if inhalt := summary_for(dok):
+                dok.zusammenfassung = [Zusammenfassungstupel(typ="full-llm", inhalt=inhalt)]
+            return EnrichmentResult(dokument=dok)
+
+        ressort_mock = AsyncMock(return_value=ressort)
+        kurztitel_mock = AsyncMock(return_value="Kurz")
+        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
+        monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.vorgang_ressort", ressort_mock)
+        monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.vorgang_kurztitel", kurztitel_mock)
+        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 17
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._llm_metrics = LLMMetrics()
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper.config = MagicMock()
+        return scraper, ressort_mock, kurztitel_mock
+
     @pytest.mark.asyncio
     async def test_no_llm_leaves_ressort_unset(self, scraper_build_vorgang):
         vorgang = await scraper_build_vorgang(_make_raw_vorgang("V-001"))
@@ -5327,27 +5354,9 @@ class TestIssue39Ressort:
     async def test_classified_ressort_reaches_the_vorgang(self, monkeypatch):
         """The classifier gets the titel and the initiating document's summary, and both
         per-Vorgang calls count into the run's metrics (issue #56)."""
-        from bawue.bawue_dok import EnrichmentResult
-
-        async def _fake_enrich(session, llm, dok, **kwargs):
-            dok.zusammenfassung = [Zusammenfassungstupel(typ="full-llm", inhalt="Das Land wird klimaneutral.")]
-            return EnrichmentResult(dokument=dok)
-
-        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
-        ressort = AsyncMock(return_value=Ressort.UMWELT)
-        kurztitel = AsyncMock(return_value="Kurz")
-        monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.vorgang_ressort", ressort)
-        monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.vorgang_kurztitel", kurztitel)
-        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
-        scraper._wahlperiode = 17
-        scraper._llm_enabled = True
-        scraper._llm = MagicMock()
-        scraper._llm_model = "gpt-5-nano"
-        scraper._llm_metrics = LLMMetrics()
-        scraper._filter_sonstig = True
-        scraper.session = MagicMock()
-        scraper._client = MagicMock()
-        scraper.config = MagicMock()
+        scraper, ressort, kurztitel = self._llm_scraper(
+            monkeypatch, Ressort.UMWELT, lambda dok: "Das Land wird klimaneutral."
+        )
 
         vorgang = await scraper._build_vorgang(_make_raw_vorgang("V-002", titel="Klimaschutzgesetz"))
 
@@ -5364,27 +5373,25 @@ class TestIssue39Ressort:
         assert kurztitel.call_args.kwargs["metrics"] is scraper._llm_metrics
 
     @pytest.mark.asyncio
+    async def test_ressort_is_never_classified_from_a_protocol(self, monkeypatch):
+        """DD-055 point 4: a Plenarprotokoll's summary describes the debate, not the
+        regulation — the classifier gets none, while the Kurztitel may fall back to it."""
+        scraper, ressort, kurztitel = self._llm_scraper(
+            monkeypatch, None, lambda dok: "Debatte im Plenum." if dok.drucksnr is None else None
+        )
+        raw = _make_raw_vorgang("V-004")
+        raw["fundstellen_parsed"][1]["pdf_url"] = "https://www.landtag-bw.de/resource/blob/999/plenarprotokoll.pdf"
+
+        await scraper._build_vorgang(raw)
+
+        assert ressort.call_args.args[2] is None
+        assert kurztitel.call_args.args[2] == "Debatte im Plenum."
+
+    @pytest.mark.asyncio
     async def test_unclassified_vorgang_omits_the_field(self, monkeypatch):
         """LLM on, but nothing fits: the key must be absent, not `null` — the backend
         distinguishes the two, and every other test passes with a plain `None` too."""
-        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
-        monkeypatch.setattr(
-            "bawue.bawue_vorgaenge_scraper.vorgang_ressort",
-            AsyncMock(return_value=None),
-        )
-        monkeypatch.setattr(
-            "bawue.bawue_vorgaenge_scraper.vorgang_kurztitel",
-            AsyncMock(return_value="Kurz"),
-        )
-        scraper._wahlperiode = 17
-        scraper._llm_enabled = True
-        scraper._llm = MagicMock()
-        scraper._llm_model = "gpt-5-nano"
-        scraper._llm_metrics = LLMMetrics()
-        scraper._filter_sonstig = True
-        scraper.session = MagicMock()
-        scraper._client = MagicMock()
-        scraper.config = MagicMock()
+        scraper, _, _ = self._llm_scraper(monkeypatch, None, lambda dok: None)
 
         vorgang = await scraper._build_vorgang(_make_raw_vorgang("V-003"))
 
