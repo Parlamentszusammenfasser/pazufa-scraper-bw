@@ -45,28 +45,45 @@ class EnrichmentResult(NamedTuple):
 
 
 class LLMMetrics:
-    """Tracks LLM enrichment statistics for a scraper run."""
+    """Tracks LLM statistics for a scraper run: document enrichment and, per Vorgang,
+    Kurztitel and Ressort (issue #56 — the numbers DD-055's live check needs)."""
 
     def __init__(self) -> None:
         self.success: int = 0
         self.failed: int = 0
         self.cache_hits: int = 0
+        self.kurztitel_generated: int = 0
+        self.kurztitel_fallback: int = 0
+        self.ressort_classified: int = 0
+        self.ressort_null: int = 0
+        self.ressort_rejected: int = 0
+        self.ressort_failed: int = 0
 
     @property
     def total(self) -> int:
         return self.success + self.failed + self.cache_hits
 
     def format_lines(self) -> list[str]:
-        total = self.total
-        ratio_suffix = f" ({self.cache_hits / total:.0%})" if total > 0 else ""
-        return [
-            "",
-            "LLM enrichment:",
-            f"  Success:     {self.success}",
-            f"  Failed:      {self.failed}",
-            f"  Cache hits:  {self.cache_hits}{ratio_suffix}",
-            f"  Total:       {total}",
-        ]
+        lines = []
+        if total := self.total:
+            lines += [
+                "",
+                "LLM enrichment:",
+                f"  Success:     {self.success}",
+                f"  Failed:      {self.failed}",
+                f"  Cache hits:  {self.cache_hits} ({self.cache_hits / total:.0%})",
+                f"  Total:       {total}",
+            ]
+        kurztitel = (self.kurztitel_generated, self.kurztitel_fallback)
+        ressort = (self.ressort_classified, self.ressort_null, self.ressort_rejected, self.ressort_failed)
+        if any(kurztitel + ressort):
+            lines += [
+                "",
+                "LLM per Vorgang:",
+                "  Kurztitel:   {} generated, {} fallback to titel".format(*kurztitel),
+                "  Ressort:     {} classified, {} null, {} rejected, {} failed".format(*ressort),
+            ]
+        return lines
 
 
 MAX_JSON_RETRIES = 3
@@ -895,6 +912,7 @@ async def vorgang_kurztitel(
     zusammenfassung: str | None,
     model: str = "gpt-5-nano",
     cache: BawueCache | None = None,
+    metrics: LLMMetrics | None = None,
 ) -> str:
     """Short, human-readable Vorgang title of at most KURZTITEL_MAX_LEN characters.
 
@@ -911,6 +929,8 @@ async def vorgang_kurztitel(
     cache_key = hashlib.sha256(f"{_SYSTEM_PROMPT}\n{user_message}".encode()).hexdigest()
     cached = _redis_get(cache, cache_key, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
     if cached is not None:
+        if metrics is not None:
+            metrics.kurztitel_generated += 1
         return cached
 
     messages = [
@@ -923,6 +943,8 @@ async def vorgang_kurztitel(
             problem = _kurztitel_problem(kurztitel)
             if problem is None:
                 _redis_set(cache, cache_key, kurztitel, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
+                if metrics is not None:
+                    metrics.kurztitel_generated += 1
                 return kurztitel
             logger.info("Kurztitel attempt %d rejected (%s): %r", attempt + 1, problem, kurztitel)
             messages += [
@@ -931,6 +953,8 @@ async def vorgang_kurztitel(
             ]
     except Exception:
         logger.warning("Kurztitel generation failed for %r, using titel", titel[:60], exc_info=True)
+    if metrics is not None:
+        metrics.kurztitel_fallback += 1
     return titel
 
 
@@ -968,6 +992,7 @@ async def vorgang_ressort(
     zusammenfassung: str | None,
     model: str = "gpt-5-nano",
     cache: BawueCache | None = None,
+    metrics: LLMMetrics | None = None,
 ) -> Ressort | None:
     """The Ressort a Vorgang belongs to, classified from *titel* + *zusammenfassung*.
 
@@ -980,6 +1005,8 @@ async def vorgang_ressort(
     prefix, so the `llm-semantics:` cache stays untouched (DD-052/DD-053) and a
     permanent null is not re-asked on every re-derivation. Only a failed call stays
     uncached, so a transient error does not pin an empty result.
+
+    Each classification — cached or not — is counted into *metrics* (issue #56).
     """
     if llm is None or not titel.strip() or titel.strip() == TODO_MARKER:
         return None
@@ -988,29 +1015,40 @@ async def vorgang_ressort(
     cache_key = hashlib.sha256(f"{_SYSTEM_PROMPT}\n{user_message}".encode()).hexdigest()
     cached = _redis_get(cache, cache_key, prefix=_RESSORT_CACHE_PREFIX, typehint="Vorgang Ressort")
     if cached is not None:
-        return _parse_ressort(_cached_ressort(cached), titel)
+        raw = _cached_ressort(cached)
+    else:
+        messages = [
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ]
+        try:
+            answer = await _llm_json(llm, model, messages)
+        except Exception:
+            logger.warning("Ressort classification failed for %r", titel[:60], exc_info=True)
+            if metrics is not None:
+                metrics.ressort_failed += 1
+            return None
+        raw = answer.get("ressort")
+        logger.info("Ressort: %s → %r (%s)", titel[:40], raw, str(answer.get("begruendung"))[:60])
+        # The raw answer travels with its begründung: a wrong classification can be
+        # examined later without re-calling the model, and a rejected one stays
+        # rejected instead of reading back as null (issue #56).
+        _redis_set(
+            cache,
+            cache_key,
+            json.dumps({"ressort": raw, "begruendung": answer.get("begruendung")}),
+            prefix=_RESSORT_CACHE_PREFIX,
+            typehint="Vorgang Ressort",
+        )
 
-    messages = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user", "content": user_message},
-    ]
-    try:
-        answer = await _llm_json(llm, model, messages)
-    except Exception:
-        logger.warning("Ressort classification failed for %r", titel[:60], exc_info=True)
-        return None
-
-    ressort = _parse_ressort(answer.get("ressort"), titel)
-    logger.info("Ressort: %s → %s (%s)", titel[:40], ressort, str(answer.get("begruendung"))[:60])
-    # The begründung travels with the value so a wrong classification can be
-    # examined later without re-calling the model.
-    _redis_set(
-        cache,
-        cache_key,
-        json.dumps({"ressort": ressort.value if ressort else None, "begruendung": answer.get("begruendung")}),
-        prefix=_RESSORT_CACHE_PREFIX,
-        typehint="Vorgang Ressort",
-    )
+    ressort = _parse_ressort(raw, titel)
+    if metrics is not None:
+        if ressort is not None:
+            metrics.ressort_classified += 1
+        elif raw is None:
+            metrics.ressort_null += 1
+        else:
+            metrics.ressort_rejected += 1
     return ressort
 
 
@@ -1043,13 +1081,14 @@ _RESSORT_BY_KEY: dict[str, Ressort] = {_ressort_lookup_key(r.value): r for r in 
 def _parse_ressort(raw: object, titel: str) -> Ressort | None:
     """The `Ressort` member *raw* names, None for null or anything off the enum.
 
-    A near-miss spelling of a compound value is normalised rather than dropped; a
-    value that is no Ressort at all is logged at warning level, so a drift between
-    the model and the enum shows up in the run log instead of as a quiet gap.
+    A near-miss spelling of a compound value is normalised rather than dropped;
+    anything else but null — an unknown value, an empty string, a non-string — is
+    logged at warning level, so a drift between the model and the enum shows up in
+    the run log instead of as a quiet gap.
     """
-    if not isinstance(raw, str) or not raw.strip():
+    if raw is None:
         return None
-    ressort = _RESSORT_BY_KEY.get(_ressort_lookup_key(raw))
+    ressort = _RESSORT_BY_KEY.get(_ressort_lookup_key(raw)) if isinstance(raw, str) else None
     if ressort is None:
         logger.warning("LLM returned unknown Ressort %r for %r", raw, titel[:60])
     return ressort

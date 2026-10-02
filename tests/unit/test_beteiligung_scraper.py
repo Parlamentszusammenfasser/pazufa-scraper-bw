@@ -631,23 +631,37 @@ class TestIssue39Ressort:
 
     @pytest.mark.asyncio
     async def test_classified_ressort_reaches_the_vorgang(self, monkeypatch):
+        """The classifier gets the page title and the draft's summary — not the slug —
+        and both per-Vorgang calls count into the run's metrics (issue #56)."""
+        from bawue.bawue_dok import EnrichmentResult
+
+        async def _fake_enrich(session, llm, dok, **kwargs):
+            dok.zusammenfassung = [Zusammenfassungstupel(typ="full-llm", inhalt="Gerichte werden digital.")]
+            return EnrichmentResult(dokument=dok)
+
+        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
+        ressort = AsyncMock(return_value=Ressort.JUSTIZ)
+        kurztitel = AsyncMock(return_value="Kurz")
+        monkeypatch.setattr("bawue.bawue_beteiligung_scraper.vorgang_ressort", ressort)
+        monkeypatch.setattr("bawue.bawue_beteiligung_scraper.vorgang_kurztitel", kurztitel)
         scraper = _make_scraper()
         scraper._llm_enabled = True
         scraper._llm = MagicMock()
         scraper._llm_model = "gpt-5-nano"
-        monkeypatch.setattr(
-            "bawue.bawue_beteiligung_scraper.vorgang_ressort",
-            AsyncMock(return_value=Ressort.JUSTIZ),
-        )
-        monkeypatch.setattr(
-            "bawue.bawue_beteiligung_scraper.vorgang_kurztitel",
-            AsyncMock(return_value="Kurz"),
-        )
 
-        vorgang = await scraper._build_vorgang("justizgesetz", _make_detail())
+        vorgang = await scraper._build_vorgang("justizgesetz", _make_detail(title="Justizdigitalisierungsgesetz"))
 
         assert vorgang.ressort == Ressort.JUSTIZ
         assert vorgang.to_dict()["ressort"] == "Justiz"
+        ressort.assert_awaited_once_with(
+            scraper._llm,
+            "Justizdigitalisierungsgesetz",
+            "Gerichte werden digital.",
+            model="gpt-5-nano",
+            cache=scraper.config.cache,
+            metrics=scraper._llm_metrics,
+        )
+        assert kurztitel.call_args.kwargs["metrics"] is scraper._llm_metrics
 
     @pytest.mark.asyncio
     async def test_unclassified_vorgang_omits_the_field(self, monkeypatch):

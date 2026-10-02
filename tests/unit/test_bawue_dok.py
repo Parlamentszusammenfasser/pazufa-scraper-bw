@@ -1923,11 +1923,9 @@ class TestLLMMetrics:
         cache_line = next(line for line in lines if "Cache hits" in line)
         assert "25%" in cache_line
 
-    def test_format_lines_ratio_omitted_when_no_calls(self):
-        m = LLMMetrics()
-        lines = m.format_lines()
-        cache_line = next(line for line in lines if "Cache hits" in line)
-        assert "%" not in cache_line
+    def test_format_lines_empty_when_nothing_counted(self):
+        """Issue #56: the summaries print the block without a `total > 0` guard."""
+        assert LLMMetrics().format_lines() == []
 
     def test_above_threshold_is_garbled(self):
         """Just above the threshold should be flagged."""

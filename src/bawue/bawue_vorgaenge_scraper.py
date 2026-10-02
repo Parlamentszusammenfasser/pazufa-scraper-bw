@@ -485,6 +485,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 initiativ_zusammenfassung,
                 model=self._llm_model,
                 cache=self.config.cache,
+                metrics=self._llm_metrics,
             )
             # Classified from the subject matter, not from the initiator (issue #39,
             # DD-055) — and only from the initiating document, never from a protocol.
@@ -495,6 +496,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     _initiativ_zusammenfassung(stationen, any_document=False),
                     model=self._llm_model,
                     cache=self.config.cache,
+                    metrics=self._llm_metrics,
                 )
                 or UNSET
             )
@@ -1435,7 +1437,7 @@ def _print_vorgaenge_summary(
         lines.append("By type:")
         for typ, count in by_type.items():
             lines.append(f"  {typ}:  {count}")
-    if llm_metrics is not None and llm_metrics.total > 0:
+    if llm_metrics is not None:
         lines.extend(llm_metrics.format_lines())
     if failed_items:
         lines.extend(format_failed_section(failed_items, header="Failed Vorgänge"))
