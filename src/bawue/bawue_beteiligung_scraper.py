@@ -252,11 +252,23 @@ class BawueBeteiligungScraper(VorgangsScraper):
         if self._llm_enabled and self._llm is not None:
             zusammenfassung = next(filter(None, map(zusammenfassung_text, dokumente)), None)
             kurztitel = await vorgang_kurztitel(
-                self._llm, titel, zusammenfassung, model=self._llm_model, cache=self.config.cache
+                self._llm,
+                titel,
+                zusammenfassung,
+                model=self._llm_model,
+                cache=self.config.cache,
+                metrics=self._llm_metrics,
             )
             # Classified from the subject matter, not from the ministry (issue #39, DD-055).
             ressort = (
-                await vorgang_ressort(self._llm, titel, zusammenfassung, model=self._llm_model, cache=self.config.cache)
+                await vorgang_ressort(
+                    self._llm,
+                    titel,
+                    zusammenfassung,
+                    model=self._llm_model,
+                    cache=self.config.cache,
+                    metrics=self._llm_metrics,
+                )
                 or UNSET
             )
 
@@ -291,7 +303,7 @@ def _print_beteiligung_summary(
         f"Skipped:     {skipped}  (no legislative PDFs)",
         f"Failed:      {failed}",
     ]
-    if llm_metrics is not None and llm_metrics.total > 0:
+    if llm_metrics is not None:
         lines.extend(llm_metrics.format_lines())
     if failed_items:
         lines.extend(format_failed_section(failed_items, header="Failed Vorgänge"))
