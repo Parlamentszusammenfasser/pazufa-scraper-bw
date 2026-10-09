@@ -9,7 +9,7 @@ Ressort means the same thing across Länder:
    full enum must reach the model, and the prompt carries the shared rules.
 3. ``None`` when nothing fits, when the LLM is off, or when it fails; the caller
    then omits the field (``UNSET``).
-4. Cached per (titel, summary, prompt) under its own prefix, so the
+4. Cached per (model, titel, summary, prompt) under its own prefix (DD-063), so the
    ``llm-semantics:`` cache stays untouched. A classified "nothing fits" is a
    permanent answer and is cached too; only a failed call stays uncached.
 5. The model reasons in a ``begruendung`` before naming the Ressort, and a

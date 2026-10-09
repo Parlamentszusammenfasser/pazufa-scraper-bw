@@ -24,7 +24,7 @@ Kopie davon. Laut Wiki ist der Kurztitel „eine etwas griffigere Überschrift".
    neutralisiert (DD-027). Ein Regelverstoß wird **einmal** mit Begründung nachgefragt.
 3. **Fallback `titel`** bei LLM aus, Fehler oder zweitem Verstoß — nie `null` (das
    Backend überschreibt), nie der Slug.
-4. **Eigener Redis-Namespace** `vorgang-kurztitel:<sha256(system prompt + prompt + titel + zusammenfassung)>`:
+4. **Eigener Redis-Namespace** `vorgang-kurztitel:<sha256(Modell + system prompt + prompt + titel + zusammenfassung)>` (Modell seit DD-063):
    stabil zwischen Läufen, die `llm-semantics:`-Caches der Dokumente bleiben gültig. Nur
    generierte Titel werden gecacht, der Fallback nicht (sonst bliebe ein transienter
    Fehler dauerhaft).

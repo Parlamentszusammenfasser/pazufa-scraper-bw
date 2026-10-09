@@ -9,7 +9,7 @@ Agreed requirement (https://github.com/Parlamentszusammenfasser/pazufa-scraper-b
    violation is re-prompted once.
 3. Fallback (LLM off, error, still invalid after the retry): ``kurztitel = titel``.
    Never ``None``, never a URL slug.
-4. Cached per (titel, summary, prompt) so it stays stable between runs.
+4. Cached per (model, titel, summary, prompt) so it stays stable between runs (DD-063).
 """
 
 import json

@@ -57,8 +57,8 @@ gemeinsame Quelle ist die Enum-Liste selbst.
    Klassifiziert wird nur aus dem **Initiativdokument** (`_initiativ_zusammenfassung(...,
    any_document=False)`); die Zusammenfassung eines Plenarprotokolls beschreibt die Debatte, nicht
    den Regelungsgegenstand. Der Kurztitel behält seinen Fallback auf ein beliebiges Dokument.
-5. **Eigener Redis-Namespace** `vorgang-ressort:<sha256(System-Prompt + Prompt + Titel +
-   Zusammenfassung)>` wie beim Kurztitel (DD-053). `llm-semantics:` und `vorgang-kurztitel:`
+5. **Eigener Redis-Namespace** `vorgang-ressort:<sha256(Modell + System-Prompt + Prompt + Titel +
+   Zusammenfassung)>` wie beim Kurztitel (DD-053; Modell seit DD-063). `llm-semantics:` und `vorgang-kurztitel:`
    bleiben unberührt; eine Prompt- oder Enum-Änderung invalidiert nur den Ressort-Cache (die
    Enum-Liste steht im Prompt). Gespeichert wird `{"ressort": …, "begruendung": …}` — **auch ein
    klassifiziertes `null`**: „nichts passt" ist eine dauerhafte Antwort, kein Fehler, und würde
