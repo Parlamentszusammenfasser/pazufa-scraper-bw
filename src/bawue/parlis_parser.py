@@ -36,6 +36,8 @@ _FIELD_VORGANGSTYP = "WMV41"
 _FIELD_INITIATIVE = "WMV30"
 _FIELD_AKTUELLER_STAND = "WMV31"
 _FIELD_SACHGEBIET = "WMV32"
+# Structured Deskriptoren; WMV33 has the same terms as one string, truncated for long lists.
+_FIELD_DESKRIPTOREN = "EWBV34"
 _FIELD_FUNDSTELLEN = "WMV35"
 
 _BASE_URL = "https://parlis.landtag-bw.de/parlis/"
@@ -88,6 +90,15 @@ def _parse_wmv35_fundstellen(wmv35_raw: str) -> list[dict]:
     return results
 
 
+def _deskriptoren(data: dict) -> list[str]:
+    """All non-blank PARLIS Deskriptoren (EWBV34) in PARLIS order (issue #33)."""
+    entries = data.get(_FIELD_DESKRIPTOREN)
+    if not isinstance(entries, list):
+        return []
+    terms = (entry.get("main") for entry in entries if isinstance(entry, dict))
+    return [term.strip() for term in terms if isinstance(term, str) and term.strip()]
+
+
 def _json_comment_to_raw_vorgang(data: dict) -> RawVorgang | None:
     """Convert a PARLIS embedded JSON comment to a RawVorgang dict."""
     vorgangs_id = _safe_main(data, _FIELD_VORGANGS_ID) or _safe_main(data, _FIELD_VORGANGS_ID_ALT)
@@ -119,6 +130,10 @@ def _json_comment_to_raw_vorgang(data: dict) -> RawVorgang | None:
     sachgebiet = _safe_main(data, _FIELD_SACHGEBIET)
     if sachgebiet:
         result["Sachgebiet"] = sachgebiet
+
+    deskriptoren = _deskriptoren(data)
+    if deskriptoren:
+        result["Deskriptoren"] = deskriptoren
 
     wmv35 = _safe_main(data, _FIELD_FUNDSTELLEN)
     if wmv35:
@@ -323,7 +338,13 @@ def _parse_results_from_html(html_content: str) -> list[RawVorgang]:
             if label == "Vorgangs-ID":
                 label = "vorgangs_id"
             dd = dt.getnext()
-            if dd is not None:
+            if dd is None:
+                continue
+            if label == "Deskriptoren":
+                # A list like the JSON path's; the <dd> text repeats each term in a print-only <span>
+                # (issue #33, DD-060).
+                item[label] = [term for a in dd.xpath("./a") if (term := a.text_content().strip())]
+            else:
                 item[label] = dd.text_content().strip()
 
         fundstellen = _extract_fundstellen(record)

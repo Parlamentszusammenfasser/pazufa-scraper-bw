@@ -133,7 +133,7 @@ Dashed lines mark stages not yet implemented. See [status.md](status.md) for imp
 | `icalendar`           | ICS calendar feed parsing for Sitzungen                         | BaWue scraper |
 | `aiohttp`             | Async HTTP sessions for the scraping loop                       | BaWue scraper |
 | `httpx`               | Transport for the PaZuFa API client                             | scraper-core  |
-| `pazufa-scraper-core` | API client + models (spec v0.2.5), `LLMConnector`, normalisation | Shared library |
+| `pazufa-scraper-core` | API client + models (spec v0.2.7), `LLMConnector`, normalisation | Shared library |
 | `kreuzberg`           | PDF text extraction (normal + OCR fallback)                     | BaWue scraper |
 | `redis`               | Caching of processed Vorgänge/Dokumente (`bawue.cache`)         | BaWue scraper |
 | `litellm`             | LLM integration: token counting + LLM calls                     | BaWue + scraper-core |
@@ -470,7 +470,7 @@ LLM-derived values now live on the `Dokument` itself.
 ### Types
 
 TypedDict definitions for internal data exchange:
-- `RawVorgang` — titel, vorgangs_id, Vorgangstyp, Initiative, fundstellen_parsed
+- `RawVorgang` — titel, vorgangs_id, Vorgangstyp, Initiative, Deskriptoren, fundstellen_parsed
 - `RawFundstelle` — station_typ, datum, drucksache, plenarprotokoll, ausschuss, autor_text, pdf_url
 
 ## 6. PARLIS Scraping Strategy
