@@ -13,7 +13,7 @@ Erst Spec 0.2.7 kennt `Vorgang.schlagworte`.
 | `PUT /api/v2/kalender/{parlament}/{datum}` verlangt `X-Scraper-Id` wieder (0.2.5 hatte ihn versehentlich gestrichen) | `kal_date_put()` hat `x_scraper_id` als Pflichtargument. `put_kalender` rief es ohne auf, das wäre im Betrieb ein `TypeError` gewesen. Die Unit-Tests merkten es nicht, weil sie den Client ohne Signaturprüfung mockten |
 | `Stationstyp.parl-verfgstop` → `postparl-vgstp` | BaWue erzeugt den Wert nicht (DD-057). Der Kanarienvogel-Test hat die Umbenennung wie vorgesehen gemeldet |
 | `Vorgangstyp`: `gg-einspruch`/`gg-zustimmung` → elf `bu-*`-Typen | Keine; BaWue nutzt `gg-land-parl`, `gg-land-volk` und `sonstig`, die unverändert sind |
-| `Vorgang.schlagworte` neu, `Station.schlagworte` veraltet | BaWue füllt `Station.schlagworte` nicht. `Vorgang.schlagworte` bleibt vorerst leer (#33) |
+| `Vorgang.schlagworte` neu, `Station.schlagworte` veraltet | BaWue füllt `Station.schlagworte` nicht. `Vorgang.schlagworte` bleibt vorerst leer (#33, inzwischen DD-060) |
 | `normalize_volltext`: entfernt HTML-Markup, behält echte Bindestriche am Zeilenende (`Baden-\nWürttemberg` → `Baden-Württemberg`), entfernt alle Unicode-Formatzeichen und Leerraum am Zeilenanfang und -ende | Der `volltext` der Dokumente wird sauberer. BaWues Zusatzpässe (Garbled-Filter, Issue #20) bleiben wirksam; die Bindestriche, die corelib jetzt behält, entfernt Pass 2 nicht (er greift nur zwischen zwei Kleinbuchstaben). Risiko siehe unten |
 | `hash_text` normalisiert nicht mehr, `If-Modified-Since`-Schreibweise, `CreateApiKey.keytag_prefix`, Bulk-Delete | Keine; BaWue nutzt nichts davon (`Dokument.hash` ist der Digest der PDF-Datei, der Link-Platzhalter aus DD-048 nur der Fehlerfall) |
 

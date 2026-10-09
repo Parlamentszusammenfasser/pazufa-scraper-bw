@@ -62,7 +62,8 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 | `links`               | list[string]     | Nein    | PARLIS-Detailseiten-URL (`bawue_vorgaenge_scraper.py`) bzw. Beteiligungsportal-URL (`bawue_beteiligung_scraper.py`) als Backlink zur Quelle (Issue #31)                                                                                                                                                  |
 | `lobbyregister`       | list[...]        | Nein    | Noch nicht befüllt                                                                                                                                                                                                                                                                                       |
 | `ressort`             | Ressort          | Nein    | LLM-klassifiziert nach sachlichem Schwerpunkt (nicht Akteur), eigener LLM-Call je Vorgang (DD-055). `UNSET` ohne LLM, bei `null`, unauflösbarer Antwort oder Fehler                                                                                                                                      |
-| `sachgebiete`         | list[Sachgebiet] | Nein    | Noch nicht befüllt (Issue #40)                                                                                                                                                                                                                                                                           |
+| `sachgebiete`         | list[Sachgebiet] | Nein    | PARLIS-Feld Sachgebiet (WMV32) → Parlamentsspiegel-Nummern (DD-058); `UNSET`, wenn nichts auflöst                                                                                                                                                                                                        |
+| `schlagworte`         | list[string]     | Nein    | PARLIS-Deskriptoren (EWBV34), gegen das corelib-Vokabular kanonisiert, sonst wörtlich (DD-060); `UNSET`, wenn keine vorliegen                                                                                                                                                                            |
 
 ### Station
 
@@ -73,7 +74,7 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 | `zp_start`    | datetime                    | Ja      |                                                                              |
 | `gremium`     | Gremium                     | Ja      | Aus PARLIS-Fundstellen abgeleitet — siehe [architecture.md](architecture.md) |
 | `titel`       | string                      | Nein    |                                                                              |
-| `schlagworte` | list[string]                | Nein    |                                                                              |
+| `schlagworte` | list[string]                | Nein    | Seit Spec 0.2.7 veraltet, nicht befüllt (→ `Vorgang.schlagworte`, DD-060)    |
 
 ### Dokument
 
