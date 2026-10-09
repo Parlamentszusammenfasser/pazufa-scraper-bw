@@ -839,6 +839,11 @@ def _cache_key(doc_hash: str, prompt_hash: str) -> str:
     return f"{doc_hash}:{prompt_hash}"
 
 
+def _prompt_cache_key(user_message: str) -> str:
+    """Cache key of a per-Vorgang LLM answer (Kurztitel, Ressort)."""
+    return hashlib.sha256(f"{_SYSTEM_PROMPT}\n{user_message}".encode()).hexdigest()
+
+
 def _redis_get(
     cache: BawueCache | None, key: str, prefix: str = _REDIS_CACHE_PREFIX, typehint: str = "LLM Semantics"
 ) -> str | None:
@@ -927,7 +932,7 @@ async def vorgang_kurztitel(
         return titel
 
     user_message = f"{KURZTITEL_PROMPT}\n\nOffizieller Titel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
-    cache_key = hashlib.sha256(f"{_SYSTEM_PROMPT}\n{user_message}".encode()).hexdigest()
+    cache_key = _prompt_cache_key(user_message)
     cached = _redis_get(cache, cache_key, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
     if cached is not None:
         if metrics is not None:
@@ -1013,7 +1018,7 @@ async def vorgang_ressort(
         return None
 
     user_message = f"{RESSORT_PROMPT}\n\nTitel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
-    cache_key = hashlib.sha256(f"{_SYSTEM_PROMPT}\n{user_message}".encode()).hexdigest()
+    cache_key = _prompt_cache_key(user_message)
     cached = _redis_get(cache, cache_key, prefix=_RESSORT_CACHE_PREFIX, typehint="Vorgang Ressort")
     if cached is not None:
         raw = _cached_ressort(cached)
