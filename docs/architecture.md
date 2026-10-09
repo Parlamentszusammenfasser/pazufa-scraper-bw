@@ -470,7 +470,7 @@ LLM-derived values now live on the `Dokument` itself.
 ### Types
 
 TypedDict definitions for internal data exchange:
-- `RawVorgang` — titel, vorgangs_id, Vorgangstyp, Initiative, fundstellen_parsed
+- `RawVorgang` — titel, vorgangs_id, Vorgangstyp, Initiative, Deskriptoren, fundstellen_parsed
 - `RawFundstelle` — station_typ, datum, drucksache, plenarprotokoll, ausschuss, autor_text, pdf_url
 
 ## 6. PARLIS Scraping Strategy

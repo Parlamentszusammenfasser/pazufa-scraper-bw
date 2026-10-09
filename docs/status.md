@@ -45,7 +45,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Vorgang  | `links`               | ✅ Complete  | PARLIS detail URL (`bawue_vorgaenge_scraper.py:495`) or Beteiligungsportal URL (issue #31) |
 | Vorgang  | `ressort`             | ✅ LLM       | Eigener LLM-Call je Vorgang, Schwerpunkt statt Akteur (DD-055); `UNSET` ohne LLM, bei `null`, unauflösbarer Antwort oder Fehler |
 | Vorgang  | `sachgebiete`         | ✅ Complete  | PARLIS-Feld Sachgebiet (WMV32) → Parlamentsspiegel-Nummern (DD-058); `UNSET`, wenn nichts auflöst |
-| Vorgang  | `schlagworte`         | ✅ Complete  | PARLIS-Deskriptoren (EWBV34), gegen das corelib-Vokabular kanonisiert, sonst wörtlich (DD-060); `Station.schlagworte` ist seit Spec 0.2.7 veraltet |
+| Vorgang  | `schlagworte`         | ⚠️ Partial  | PARLIS-Deskriptoren (EWBV34), gegen das corelib-Vokabular kanonisiert, sonst wörtlich (DD-060). Kommen nur bei neu angelegten Vorgängen an: Backend v0.3.3 übernimmt sie beim Merge nicht |
 | Station  | `typ`                 | ✅ Complete  | Context-aware enum mapping                                                           |
 | Station  | `dokumente`           | ✅ Complete  | PDF links from Fundstelle                                                            |
 | Station  | `zp_start`            | ✅ Complete  | From Fundstelle date (with fallbacks)                                                |

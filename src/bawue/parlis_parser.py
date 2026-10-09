@@ -341,7 +341,8 @@ def _parse_results_from_html(html_content: str) -> list[RawVorgang]:
             if dd is None:
                 continue
             if label == "Deskriptoren":
-                # A list like the JSON path's; the <dd> text repeats each term in a print-only <span>.
+                # A list like the JSON path's; the <dd> text repeats each term in a print-only <span>
+                # (issue #33, DD-060).
                 item[label] = [term for a in dd.xpath("./a") if (term := a.text_content().strip())]
             else:
                 item[label] = dd.text_content().strip()

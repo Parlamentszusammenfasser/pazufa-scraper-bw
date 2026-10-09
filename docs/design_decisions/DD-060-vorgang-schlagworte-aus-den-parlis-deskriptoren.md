@@ -47,15 +47,29 @@ Sachgebieten macht es aus „Öffentliche Schulen“ „Öffentliche Schulden“
 In den 986 echten Deskriptoren passiert das nicht. Ein Test über alle 986 Begriffe
 (`tests/fixtures/parlis/deskriptoren_wp17_wp18.json`) pinnt genau die 8 erwarteten
 Änderungen. Eine Vokabular-Änderung in corelib, die weitere Begriffe umschreibt, fällt
-dort auf. Neue PARLIS-Begriffe deckt der Test nicht ab.
+dort auf. Neue PARLIS-Begriffe deckt der Test nicht ab, und für solche trifft es zu:
+„Schulden“ → „Schulen“, „Lehre“ → „Lehrer“ (Review 09.10.2026). Ein höherer Schwellwert
+hilft nicht, denn „Schulden“ → „Schulen“ erreicht 93,3 Punkte, das gewollte
+„Schule“ → „Schulen“ nur 92,3.
 
-**Migrationshinweis:** Deskriptoren gehen nicht in den `vg2:`-Fingerprint ein (DD-052).
-Bereits gecachte Vorgänge bekommen `schlagworte` erst beim nächsten Neubau. Ein Backfill
-braucht das Löschen der `vg2:`-Einträge und ist eine bewusste Rollout-Entscheidung.
+**Backend (v0.3.3, Commit `8d45a1b8`, geprüft 09.10.2026):**
 
-**Laufende Vorgänge:** Aus demselben Grund erreicht eine reine Deskriptor-Änderung in
-PARLIS (Begriff ergänzt oder korrigiert, ohne neue Fundstelle und ohne neuen „Aktuellen
-Stand“) das Backend nicht. `schlagworte` bleibt dann bis zum nächsten Neubau veraltet.
+- `Vorgang.schlagworte` werden nur beim **ersten Anlegen** eines Vorgangs gespeichert
+  (`insert_vorgang`). Beim Merge in einen bestehenden Vorgang (`execute_merge_vorgang`)
+  fallen sie stillschweigend weg, die Antwort ist trotzdem 201.
+- Das Backend speichert Schlagworte nur hinzu (`ON CONFLICT DO NOTHING`) und in
+  Kleinschreibung. Ein korrigierter, entfernter oder anders kanonisierter Begriff bleibt
+  neben dem neuen stehen; ein falscher Fuzzy-Treffer ist damit dauerhaft.
+
+**Migrationshinweis:** Neue Vorgänge bekommen `schlagworte` beim ersten Upload. Bereits
+hochgeladene bekommen sie erst, wenn das Backend sie auch beim Merge übernimmt. Bis dahin
+bringt ein Backfill (Löschen der `vg2:`-Einträge) nichts; er baut nur alle Vorgänge samt
+PDF-Download neu.
+
+**Laufende Vorgänge:** Deskriptoren gehen nicht in den `vg2:`-Fingerprint ein (DD-052).
+Auch mit einem Backend-Fix erreicht eine reine Deskriptor-Änderung in PARLIS (Begriff
+ergänzt, ohne neue Fundstelle und ohne neuen „Aktuellen Stand“) das Backend daher erst mit
+dem nächsten Neubau.
 Das wird in Kauf genommen, wie bei Titel und Sachgebiet (DD-052, Punkt 3): Neue
 Deskriptoren kommen vermutlich meist mit einer neuen Drucksache oder Sitzung, die ohnehin
 einen Neubau auslöst, und ein fehlender Begriff ist unkritisch. Wie oft es vorkommt, ist
