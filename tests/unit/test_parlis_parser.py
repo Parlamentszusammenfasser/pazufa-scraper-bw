@@ -434,6 +434,19 @@ class TestParseResults:
         results = parse_results("<html><body></body></html>")
         assert results == []
 
+    def test_deskriptoren_are_a_list_of_terms(self):
+        """Same shape as the JSON path (issue #33): the <dd> text alone would be one
+        string with every term doubled by its print-only <span> copy."""
+        html_content = (FIXTURES_DIR / "gesetzgebung_backlink_real_results.html").read_text()
+        assert parse_results(html_content)[0]["Deskriptoren"] == [
+            "Baden-württembergisches Ausführungsgesetz zum Bundesmeldegesetz",
+            "Bundesmeldegesetz",
+            "Datenaustausch",
+            "E-Government",
+            "Meldewesen",
+            "Personenbezogene Daten",
+        ]
+
 
 _SAMPLE_JSON_COMMENT = (
     '{"EWBV10": [{"main": "JSON-Parsed Title"}],'

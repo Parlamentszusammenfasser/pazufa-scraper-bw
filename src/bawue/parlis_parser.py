@@ -338,7 +338,12 @@ def _parse_results_from_html(html_content: str) -> list[RawVorgang]:
             if label == "Vorgangs-ID":
                 label = "vorgangs_id"
             dd = dt.getnext()
-            if dd is not None:
+            if dd is None:
+                continue
+            if label == "Deskriptoren":
+                # A list like the JSON path's; the <dd> text repeats each term in a print-only <span>.
+                item[label] = [term for a in dd.xpath("./a") if (term := a.text_content().strip())]
+            else:
                 item[label] = dd.text_content().strip()
 
         fundstellen = _extract_fundstellen(record)

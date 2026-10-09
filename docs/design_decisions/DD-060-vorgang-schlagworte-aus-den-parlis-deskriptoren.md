@@ -31,7 +31,9 @@ Spec 0.2.7 (corelib v0.3.0, DD-059) führt dafür `Vorgang.schlagworte` ein;
 
 1. **Quelle ist `EWBV34`**, alle Begriffe in PARLIS-Reihenfolge. Das Hauptschlagwort wird
    nicht gesondert behandelt. Leere oder kaputte Einträge überspringt der Parser
-   (`RawVorgang["Deskriptoren"]`).
+   (`RawVorgang["Deskriptoren"]`). Der HTML-Fallback (DD-014) liest dieselbe Liste aus den
+   Links im `<dd>` „Deskriptoren“; dessen Text allein wäre ein String, in dem jeder Begriff
+   doppelt steht (Druckkopie im `<span>`), und würde zeichenweise kanonisiert.
 2. **Kanonisierung nicht-strikt** (`enum_mapper.map_schlagworte`), wie vom Maintainer
    entschieden. Bekannte Begriffe bekommen die Schreibweise des Vokabulars, alle anderen
    bleiben wörtlich. Ein Begriff, der durch die Kanonisierung doppelt wird, fällt weg;
@@ -60,10 +62,11 @@ einen Neubau auslöst, und ein fehlender Begriff ist unkritisch. Wie oft es vork
 nicht gemessen (nur ein Dump vom 30.09.2026). Die Deskriptoren mitzuhashen würde jeden
 Fingerprint ändern und alle Vorgänge einmal neu bauen, samt erneutem PDF-Download.
 
-**Code:** `parlis_parser._deskriptoren`, `enum_mapper.map_schlagworte`,
+**Code:** `parlis_parser._deskriptoren`, `parlis_parser._parse_results_from_html`, `enum_mapper.map_schlagworte`,
 `BawueVorgaengeScraper._build_vorgang`, `types.RawVorgang`
 
 **Tests:**
 - `tests/unit/test_parlis_parser.py::TestJsonCommentToRawVorgang` (`…deskriptoren…`)
+- `tests/unit/test_parlis_parser.py::TestParseResults::test_deskriptoren_are_a_list_of_terms`
 - `tests/unit/test_enum_mapper.py::TestSchlagworteMapping`
 - `tests/unit/test_bawue_scraper.py::TestIssue33SchlagworteFromParlis`
