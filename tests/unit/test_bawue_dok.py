@@ -161,17 +161,22 @@ def _patch_llm(json_str: str):
 # ---------------------------------------------------------------------------
 
 
+def _mock_session(status: int) -> MagicMock:
+    """aiohttp-like session whose GET answers *status* with SAMPLE_PDF_BYTES."""
+    response = AsyncMock()
+    response.status = status
+    response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
+    response.__aenter__ = AsyncMock(return_value=response)
+    response.__aexit__ = AsyncMock(return_value=False)
+    session = MagicMock()
+    session.get = MagicMock(return_value=response)
+    return session
+
+
 class TestDownloadPdf:
     @pytest.mark.asyncio
     async def test_downloads_to_tempfile(self):
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.get = MagicMock(return_value=mock_response)
+        session = _mock_session(200)
 
         path = await download_pdf(session, "https://example.com/test.pdf")
         try:
@@ -183,13 +188,7 @@ class TestDownloadPdf:
 
     @pytest.mark.asyncio
     async def test_raises_on_http_error(self):
-        mock_response = AsyncMock()
-        mock_response.status = 404
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.get = MagicMock(return_value=mock_response)
+        session = _mock_session(404)
 
         with pytest.raises(Exception, match="404"):
             await download_pdf(session, "https://example.com/missing.pdf")
@@ -197,14 +196,7 @@ class TestDownloadPdf:
     @pytest.mark.asyncio
     async def test_download_pdf_strips_url_fragment(self):
         """URL fragment (#page=33) should be stripped before HTTP request."""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.get = MagicMock(return_value=mock_response)
+        session = _mock_session(200)
 
         path = await download_pdf(session, "https://www.landtag-bw.de/files/plp/17_141.pdf#page=33")
         try:
@@ -216,14 +208,7 @@ class TestDownloadPdf:
     @pytest.mark.asyncio
     async def test_passes_ssl_context_and_timeout(self):
         """download_pdf should pass an SSL context (certifi) and a 60s timeout."""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.get = MagicMock(return_value=mock_response)
+        session = _mock_session(200)
 
         path = await download_pdf(session, "https://example.com/test.pdf")
         try:
@@ -237,13 +222,7 @@ class TestDownloadPdf:
     @pytest.mark.asyncio
     async def test_http_error_raises_pdf_not_available_without_logging(self, caplog):
         """Issue #69: the raise carries status + URL; the caller logs it once."""
-        mock_response = AsyncMock()
-        mock_response.status = 404
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.get = MagicMock(return_value=mock_response)
+        session = _mock_session(404)
 
         with (
             pytest.raises(PdfNotAvailableError, match=r"HTTP 404: https://example.com/missing.pdf"),
