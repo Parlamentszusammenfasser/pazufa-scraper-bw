@@ -516,15 +516,17 @@ class TestIssue83SummaryAddsUp:
         with (
             patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", side_effect=_to_thread),
             patch("bawue.bawue_beteiligung_scraper.upload_vorgang", side_effect=lambda *a, **_: UploadOutcome(a[3])),
-            patch("bawue.notifications.load_toml_section", return_value={}),
         ):
             await scraper.run()
 
         lines = scraper.summary[1]
         assert "Found:       2  (new or retried 2, cached 0)" in lines
         assert "Published:   1" in lines
+        assert "Skipped:     0" in lines
         assert "Failed:      1" in lines
         assert "  - timeout | Timeout-Gesetz | TimeoutError: portal timeout" in lines
+        stored = [c.args[0] for c in scraper.config.cache.store_raw.call_args_list]
+        assert stored == ["vg2:effizienzgesetz"]  # the crashed one is retried next cycle
 
 
 class TestRunSummary:

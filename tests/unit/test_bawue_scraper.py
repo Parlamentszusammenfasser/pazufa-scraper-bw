@@ -1419,8 +1419,11 @@ class TestIssue83SummaryAddsUp:
 
         assert "Found:       2  (new or retried 2, changed 0, cached 0)" in report
         assert "Published:   1" in report
+        assert "Skipped:     0" in report
         assert "Failed:      1" in report
         assert "  - V-2 | Test Gesetz | ValueError: boom" in report
+        assert "vg2:V-1" in scraper.config.cache.data
+        assert "vg2:V-2" not in scraper.config.cache.data  # retried next cycle
 
 
 class TestVorgangRefreshIssue46:

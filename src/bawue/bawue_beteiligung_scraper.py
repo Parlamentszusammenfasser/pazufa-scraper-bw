@@ -314,7 +314,7 @@ def _print_beteiligung_summary(
         f"Duration: {format_duration(duration)}",
         f"Found:       {new_or_retried + cached}  (new or retried {new_or_retried}, cached {cached})",
         f"Published:   {published}",
-        f"Skipped:     {skipped}  (no Gesetzentwurf)",
+        f"Skipped:     {skipped}",
         f"Failed:      {failed}",
     ]
     if llm_metrics is not None:

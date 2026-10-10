@@ -310,7 +310,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             vid = raw.get("vorgangs_id", "")
             typ = raw.get("Vorgangstyp", "")
             if typ not in self._enabled_vorgangstypen:
-                # Not listed for this scraper: neither Found nor Skipped (issue #83).
+                # Vorgangstyp not enabled: neither Found nor Skipped (issue #83).
                 logger.debug("Skipping Vorgang %s with unsupported type '%s'", vid, typ)
                 continue
             if vid:
