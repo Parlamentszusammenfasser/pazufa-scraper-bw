@@ -1010,11 +1010,18 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if station_typ == Stationstyp.POSTPARL_GSBLT:
             zp_start = await self._gesetzblatt_ausgabedatum(fund) or zp_start
 
+        # Only the federführende committee reports with a Beschlussempfehlung (DD-065).
+        federf = (
+            station_typ == Stationstyp.PARL_AUSSCHBER
+            and station_typ_str.startswith("Beschlussempfehlung")
+            and bool(fund.get("ausschuss"))
+        )
         return Station(
             typ=station_typ,
             dokumente=dokumente,
             zp_start=zp_start,
             gremium=gremium,
+            gremium_federf=True if federf else UNSET,
         )
 
     def _determine_gremium(self, fund: RawFundstelle, station_typ: Stationstyp) -> Gremium:
