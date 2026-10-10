@@ -28,7 +28,7 @@ from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.parlis_client import ParlisClient
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
-from bawue.run_report import FailedItem, format_duration, format_failed_section
+from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
 from bawue.types import (
     TODO_MARKER,
     UNSET,
@@ -310,8 +310,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
             vid = raw.get("vorgangs_id", "")
             typ = raw.get("Vorgangstyp", "")
             if typ not in self._enabled_vorgangstypen:
+                # Vorgangstyp not enabled: neither Found nor Skipped (issue #83).
                 logger.debug("Skipping Vorgang %s with unsupported type '%s'", vid, typ)
-                self._skipped += 1
                 continue
             if vid:
                 self._raw_cache[vid] = raw
@@ -334,7 +334,14 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 self._skipped += 1
                 return None
 
-            vorgang = await self._build_vorgang(raw)
+            try:
+                vorgang = await self._build_vorgang(raw)
+            except Exception as exc:
+                # Counted so the summary adds up (issue #83); not cached, so retried next cycle.
+                logger.exception("Building Vorgang %s failed", vorgang_id)
+                self._failed += 1
+                self._failed_items.append(FailedItem(vorgang_id, raw.get("titel"), api_exception_reason(exc)))
+                return None
 
             # Skip Vorgänge where all Fundstellen had unparseable dates → no stations.
             if not vorgang.stationen:

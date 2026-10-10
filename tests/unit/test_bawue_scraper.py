@@ -1397,6 +1397,35 @@ class TestIssue52RunReport:
         assert "(new or retried 1, changed 0, cached 0)" in report
 
 
+class TestIssue83SummaryAddsUp:
+    """Issue #83: Found = cached + Published + Skipped + Failed, also when a build crashes."""
+
+    @pytest.mark.asyncio
+    async def test_crashed_build_counts_as_failed(self):
+        from bawue.upload_throttle import UploadOutcome
+
+        scraper = TestVorgangRefreshIssue46._scraper()
+        del scraper.send_result  # the real one counts Published
+        build = scraper._build_vorgang
+
+        async def _build(raw):
+            if raw["vorgangs_id"] == "V-2":
+                raise ValueError("boom")
+            return await build(raw)
+
+        scraper._build_vorgang = _build
+        with patch("bawue.bawue_vorgaenge_scraper.upload_vorgang", side_effect=lambda *a, **_: UploadOutcome(a[3])):
+            report = await TestIssue52RunReport._run(scraper, [_make_raw_vorgang("V-1"), _make_raw_vorgang("V-2")])
+
+        assert "Found:       2  (new or retried 2, changed 0, cached 0)" in report
+        assert "Published:   1" in report
+        assert "Skipped:     0" in report
+        assert "Failed:      1" in report
+        assert "  - V-2 | Test Gesetz | ValueError: boom" in report
+        assert "vg2:V-1" in scraper.config.cache.data
+        assert "vg2:V-2" not in scraper.config.cache.data  # retried next cycle
+
+
 class TestVorgangRefreshIssue46:
     """Issue #46: a cached Vorgang is rebuilt and re-uploaded once PARLIS reports
     progress on it (new Fundstelle, changed "Aktueller Stand"), and skipped otherwise.
@@ -2866,7 +2895,8 @@ class TestEnabledVorgangstypen:
         assert "V-003" in scraper._raw_cache
         assert "V-002" not in scraper._raw_cache
         assert "V-004" not in scraper._raw_cache
-        assert scraper._skipped == 2
+        # Not listed for this scraper, so neither Found nor Skipped (issue #83).
+        assert scraper._skipped == 0
 
 
 class TestAenderungsantragHandling:
