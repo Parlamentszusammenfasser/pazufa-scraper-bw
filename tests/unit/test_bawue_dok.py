@@ -187,13 +187,6 @@ class TestDownloadPdf:
             path.unlink(missing_ok=True)
 
     @pytest.mark.asyncio
-    async def test_raises_on_http_error(self):
-        session = _mock_session(404)
-
-        with pytest.raises(Exception, match="404"):
-            await download_pdf(session, "https://example.com/missing.pdf")
-
-    @pytest.mark.asyncio
     async def test_download_pdf_strips_url_fragment(self):
         """URL fragment (#page=33) should be stripped before HTTP request."""
         session = _mock_session(200)
@@ -842,22 +835,17 @@ class TestEnrichDokument:
     async def test_issue69_unpublished_pdf_logs_one_warning_without_traceback(self, caplog):
         """Issue #69: an unpublished PDF (HTTP 404) is expected, so it logs exactly
         one WARNING with status + URL and no traceback (Cloud Run tags it ERROR)."""
-        dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL)
-        failure = PdfNotAvailableError("PDF download returned HTTP 404: https://example.com/plp.pdf")
+        dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link="https://example.com/plp.pdf")
 
-        with (
-            patch("bawue.bawue_dok.download_pdf", new_callable=AsyncMock, side_effect=failure),
-            caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"),
-        ):
-            result = await enrich_dokument(MagicMock(), AsyncMock(), dok)
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"):
+            result = await enrich_dokument(_mock_session(404), AsyncMock(), dok)
 
         assert result.download_failed is True
         assert len(caplog.records) == 1
         record = caplog.records[0]
         assert record.levelno == logging.WARNING
         assert record.exc_info is None
-        assert "HTTP 404" in record.getMessage()
-        assert "https://example.com/plp.pdf" in record.getMessage()
+        assert "HTTP 404: https://example.com/plp.pdf" in record.getMessage()
 
     @pytest.mark.asyncio
     async def test_unexpected_download_error_keeps_traceback(self, caplog):
