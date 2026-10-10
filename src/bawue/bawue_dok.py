@@ -880,7 +880,7 @@ Regeln:
 - höchstens {KURZTITEL_MAX_LEN} Zeichen
 - einfache, verständliche Sprache; benenne, worum es inhaltlich geht
 - keine juristischen Floskeln wie „Gesetz zur Änderung des …“, keine Artikel- oder Paragrafenverweise
-- kein Verfahrensstand oder Ergebnis wie „umgesetzt“, „beschlossen“, „abgelehnt“ oder „in Kraft“
+- als Substantivgruppe, ohne Verfahrensstand oder Ergebnis wie „umgesetzt“, „beschlossen“, „abgelehnt“ oder „in Kraft“
 - eine Zeile, kein Punkt am Ende, keine Anführungszeichen
 Ist der offizielle Titel bereits kurz und verständlich, übernimm ihn unverändert.
 Antworte ausschließlich mit validem JSON: {{"kurztitel": "..."}}"""
@@ -890,9 +890,11 @@ _SLUG_RE = re.compile(r"[a-z0-9äöüß]+(?:-[a-z0-9äöüß]+)+")
 # Legal boilerplate the prompt forbids; checked so an echoed title gets the re-prompt.
 _BOILERPLATE_RE = re.compile(r"^(?:Entwurf eines )?Gesetz(?:es)? zur Änderung\b|§|\bArt(?:ikel|\.)\s*\d")
 # Status/outcome words: a kurztitel is cached for the Vorgang's lifetime (issue #72).
+# Bare participles only: inflected ones describe the subject ("abgelehnte Asylbewerber").
 _STATUS_RE = re.compile(
-    r"\b(?:umgesetzt|beschlossen|verabschiedet|abgelehnt|angenommen|eingebracht|zurückgezogen|gescheitert)"
-    r"(?:e[mnrs]?)?\b|\bin Kraft\b",
+    r"\b(?:umgesetzt|beschlossen|verabschiedet|abgelehnt|angenommen|eingebracht|zurückgezogen|gescheitert"
+    r"|ratifiziert|gebilligt|genehmigt|eingeführt|abgeschafft|verlängert|geändert)\b"
+    r"|\b(?:in|außer) Kraft\b(?!-)",
     re.IGNORECASE,
 )
 _KURZTITEL_QUOTES = " \t\"'„“”«»"

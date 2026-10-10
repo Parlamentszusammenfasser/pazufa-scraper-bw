@@ -20,8 +20,10 @@ Kopie davon. Laut Wiki ist der Kurztitel „eine etwas griffigere Überschrift".
    Fallback: erstes Dokument mit Zusammenfassung) und liefert höchstens **60 Zeichen**.
    Ein bereits kurzer, verständlicher Titel darf unverändert zurückkommen.
 2. **Regeln:** einfache Sprache, keine Floskeln wie „Gesetz zur Änderung des …", eine
-   Zeile, kein Slug, kein Verfahrensstand wie „umgesetzt", „beschlossen", „in Kraft"
-   (Issue #72: der Kurztitel bleibt gecacht, während der Vorgang fortschreitet).
+   Zeile, kein Slug; eine Substantivgruppe ohne Verfahrensstand wie „umgesetzt",
+   „beschlossen", „in Kraft" (Issue #72: der Kurztitel bleibt gecacht, während der
+   Vorgang fortschreitet). Geprüft werden nur unflektierte Partizipien, flektierte
+   beschreiben den Gegenstand („abgelehnte Asylbewerber").
    Anführungszeichen und Schlusspunkt werden entfernt, spitze Klammern neutralisiert
    (DD-027). Ein Regelverstoß wird **einmal** mit Begründung nachgefragt.
 3. **Fallback `titel`** bei LLM aus, Fehler oder zweitem Verstoß — nie `null` (das
