@@ -162,25 +162,16 @@ def todo_if_blank(value: str | None) -> str:
     return TODO_MARKER
 
 
-def placeholder_hash(link: str) -> str:
-    """Stand-in ``Dokument.hash_`` for a document whose content could not be read (DD-048).
+def placeholder_hash(identity: str) -> str:
+    """Stand-in ``Dokument.hash_`` while the PDF content is unread (DD-048).
 
-    ``hash_`` is normally the SHA-256 of the PDF bytes, filled in by
-    :func:`bawue.bawue_dok.enrich_dokument`. When the download or text extraction
-    fails — or LLM enrichment is off entirely, which is the default — the document
-    is still uploaded for its metadata, and previously carried the literal
-    ``TODO`` marker. That is unusable as an identity: the backend matches
-    document-bearing Stationen on a shared document hash, so every unreadable
-    document collided across Vorgänge (HTTP 500 ``rel_station_dokument_pkey``,
-    the same failure mode DD-028/DD-034 fixed for Stationen). Backend v0.3.0
-    additionally validates the field as hex digits, which ``TODO`` is not.
-
-    The link is the document's stable identity and already carries the ``#page=N``
-    anchor that keeps sections of a shared Sammeldrucksache distinct (DD-043), so
-    hashing it yields a valid, deterministic, per-document value. A real content
-    digest replaces it as soon as extraction succeeds.
+    The backend merges Dokumente by hash, so a shared literal (formerly ``TODO``)
+    merged unrelated documents. *identity* names one Dokument row: its link, which
+    carries the ``#page=N`` anchor (DD-043), scoped to Vorgang and Fundstelle where
+    several Vorgänge cite one PDF (issue #70). Extraction replaces it with the
+    content digest.
     """
-    return hashlib.sha256(link.encode()).hexdigest()
+    return hashlib.sha256(identity.encode()).hexdigest()
 
 
 def none_if_blank(value: str | None) -> str | None:

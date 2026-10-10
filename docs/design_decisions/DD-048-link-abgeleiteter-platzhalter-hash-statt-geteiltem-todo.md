@@ -36,6 +36,16 @@ Fallback-Zweigen von `enrich_dokument` — damit sind alle vier Pfade inklusive
 „LLM aus" mit einer Änderung abgedeckt. Ein echter Inhalts-Digest ersetzt ihn,
 sobald die Extraktion gelingt.
 
+**Nachtrag (GitHub Issue #70, 10.10.2026):** Der Link allein genügt nicht. Ein
+noch unveröffentlichtes Plenarprotokoll steht in PARLIS ohne `S. x–y`, also ohne
+`#page`-Anker, in mehreren Vorgängen (Plenarprotokoll 18/11: V-247603 „Erste
+Beratung", V-247045 „Zweite Beratung"). Gleicher Link → gleicher Platzhalter → das
+Backend merged beide zu einem Dokument, der letzte Upload überschreibt `titel`.
+PARLIS hasht deshalb `sha256(vorgangs_id | Fundstelle-raw | link)`: ein Dokument je
+Fundstelle, stabil zwischen Läufen. Der Beteiligungsportal-Scraper behält
+`sha256(link)` (seine PDFs gehören zu genau einem Prozess). Bereits hochgeladene
+Platzhalter-Dokumente erhalten beim nächsten Neubau des Vorgangs einen neuen Hash.
+
 **Bewusst nicht geändert:** `volltext` trägt weiterhin `TODO_MARKER`. Das Feld ist
 ein Pflicht-String, den das Backend nur auf „nicht leer" prüft; es ist keine
 Identität und löst keine Merges aus.
@@ -49,13 +59,14 @@ LLM-Anreicherung wäre die Quote 100 %.
 zu einem Objekt kollabiert. Nach dieser Änderung entstehen daraus eigenständige
 Dokumente — erwartete, gewollte Korrektur, aber sichtbar als neue Objekte.
 
-**Code:** `types.placeholder_hash`, `_build_dokumente`,
+**Code:** `types.placeholder_hash`, `_build_dokumente` (Issue #70: `vorgang_id` über `_build_station`),
 `bawue_beteiligung_scraper._build_vorgang`
 
 **Tests:**
 - `tests/unit/test_bawue_scraper.py::TestPlaceholderHash` — Hex-Form,
-  Determinismus, Unterscheidbarkeit je Link und je `#page=N`-Anker; unangereicherte
-  Dokumente tragen den link-abgeleiteten Hash; zwei Vorgänge teilen keinen Hash.
+  Determinismus, Unterscheidbarkeit je Link und je `#page=N`-Anker; zwei Vorgänge
+  teilen keinen Hash, auch nicht bei gleichem Link ohne Anker
+  (`test_issue70_shared_unanchored_protocol_gets_one_hash_per_fundstelle`).
 - `tests/unit/test_bawue_scraper.py::TestBuildVorgang::test_dokument_placeholders_when_llm_disabled`
   und `tests/unit/test_beteiligung_scraper.py::TestBuildVorgang::test_dokument_placeholders_when_llm_disabled`
-  — `volltext` bleibt `TODO`, `hash_` ist link-abgeleitet.
+  — `volltext` bleibt `TODO`, `hash_` ist ein gültiger Platzhalter.

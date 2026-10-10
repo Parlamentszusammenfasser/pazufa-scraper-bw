@@ -570,7 +570,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         seen_vollvlsgn = False
         last_station_typ_str = ""
         for fund in fundstellen:
-            station = await self._build_station(fund, initiative, vorgang_titel, vorgang_vnr)
+            station = await self._build_station(fund, initiative, vorgang_id, vorgang_titel, vorgang_vnr)
             if station is None:
                 self._drop(vorgang_id, fund, "no parseable date", logging.ERROR)
                 continue
@@ -981,7 +981,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
         return zp
 
     async def _build_station(
-        self, fund: RawFundstelle, initiative: str, vorgang_titel: str = "", vorgang_vnr: str | None = None
+        self,
+        fund: RawFundstelle,
+        initiative: str,
+        vorgang_id: str,
+        vorgang_titel: str = "",
+        vorgang_vnr: str | None = None,
     ) -> Station | None:
         """Convert a parsed Fundstelle dict into a framework Station.
 
@@ -1004,7 +1009,15 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # so `_build_dokumente` is deliberately still given the unmodified zp_start.
         gremium = self._determine_gremium(fund, station_typ)
         dokumente = await self._build_dokumente(
-            fund, station_typ_str, mapping_text, station_typ, initiative, zp_start, vorgang_titel, vorgang_vnr
+            fund,
+            station_typ_str,
+            mapping_text,
+            station_typ,
+            initiative,
+            zp_start,
+            vorgang_id,
+            vorgang_titel,
+            vorgang_vnr,
         )
 
         if station_typ == Stationstyp.POSTPARL_GSBLT:
@@ -1056,6 +1069,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         station_typ: Stationstyp,
         initiative: str,
         zp_start: datetime,
+        vorgang_id: str,
         vorgang_titel: str = "",
         vorgang_vnr: str | None = None,
     ) -> list[Dokument]:
@@ -1103,14 +1117,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
         else:
             autoren = _parse_autoren(initiative)
 
-        # volltext carries the TODO marker until LLM enrichment fills it with
-        # extracted PDF text. The new backend rejects empty strings; without
-        # LLM, the placeholder remains. hash_ gets a link-derived placeholder
-        # instead — a shared literal would collide across Vorgänge (DD-048).
+        # volltext/hash_ are placeholders until enrichment reads the PDF; the backend
+        # rejects an empty volltext. The hash is Fundstelle-scoped: a link-only one
+        # merged the Dokumente of Vorgänge citing one unread protocol (DD-048, issue #70).
         dok = Dokument(
             titel=station_typ_str or "Dokument",
             volltext=TODO_MARKER,
-            hash_=placeholder_hash(pdf_url),
+            hash_=placeholder_hash(f"{vorgang_id}|{fund.get('raw', '')}|{pdf_url}"),
             typ=doc_typ,
             zp_modifiziert=zp_start,
             zp_referenz=zp_start,
