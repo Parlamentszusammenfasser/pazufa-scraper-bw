@@ -47,6 +47,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BETEILIGUNG_DELAY = 2.0
 
+# Only Verordnung pages have this phase; Gesetz pages end in "Geltendes Gesetz" (issue #71).
+_VERORDNUNG_PHASE = "Beschluss der geltenden Verordnung"
+
 
 class BawueBeteiligungScraper(VorgangsScraper):
     """Scrapes pre-parliamentary draft laws from the Beteiligungsportal Baden-Württemberg.
@@ -161,10 +164,15 @@ class BawueBeteiligungScraper(VorgangsScraper):
     async def _build_vorgang(self, slug: str, detail: RawBeteiligungDetail) -> Vorgang | None:
         """Convert parsed Beteiligungsportal data into a framework Vorgang model.
 
-        Returns None if the detail page has no PDF links (non-legislative content).
+        Returns None if the detail page has no PDF links (non-legislative content)
+        or the process is a Verordnung (DD-007).
         """
         if not detail.pdf_links:
             logger.info("Skipping '%s' — no Entwurf PDFs found", detail.title)
+            self._skipped += 1
+            return None
+        if any(phase.startswith(_VERORDNUNG_PHASE) for phase in detail.phases):
+            logger.info("Skipping '%s' — Verordnung, not a Gesetzentwurf", detail.title)
             self._skipped += 1
             return None
 
@@ -300,7 +308,7 @@ def _print_beteiligung_summary(
         f"Duration: {format_duration(duration)}",
         f"Found:       {new_or_retried + cached}  (new or retried {new_or_retried}, cached {cached})",
         f"Published:   {published}",
-        f"Skipped:     {skipped}  (no legislative PDFs)",
+        f"Skipped:     {skipped}  (no Gesetzentwurf)",
         f"Failed:      {failed}",
     ]
     if llm_metrics is not None:
