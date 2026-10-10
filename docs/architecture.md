@@ -276,7 +276,7 @@ IDs. Items whose `Vorgangstyp` field doesn't match the enabled set are dropped d
 | Capability          | Provided by                                              |
 |---------------------|----------------------------------------------------------|
 | Scheduling          | `bawue.__main__` cycle loop at configurable intervals    |
-| Redis caching       | `bawue.cache` — no TTL, `vg2:`/`sz:` keys (DD-052)      |
+| Redis caching       | `bawue.cache` — no TTL, `vg2:`/`sz:` keys (DD-052/066)  |
 | API client          | `pazufa-scraper-core` httpx client + `bawue.upload_throttle` retry |
 | Models              | `pazufa-scraper-core` models generated from OpenAPI spec |
 | Document processing | Kreuzberg/OCR + LLM pipeline (`bawue.bawue_dok`)         |
