@@ -129,6 +129,32 @@ class TestVorgangKurztitel:
         assert acomp.call_count == 2
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "Zweiter Glücksspielstaatsvertrag 2021 umgesetzt",  # V-247045, still pending
+            "Neues Polizeigesetz beschlossen",
+            "Landtag verabschiedet Haushalt 2027",
+            "Abgelehnte Reform der Schulpflicht",
+            "Neue Bauordnung tritt in Kraft",
+        ],
+    )
+    async def test_issue72_status_words_are_reprompted(self, bad):
+        """Issue #72: a kurztitel names the subject, never a Verfahrensstand."""
+        with _patch_llm(bad, GOOD) as acomp:
+            assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == GOOD
+        assert acomp.call_count == 2
+        assert "Verfahrensstand" in acomp.call_args.kwargs["messages"][-1]["content"]
+
+    @pytest.mark.asyncio
+    async def test_issue72_subject_nouns_are_not_status_words(self):
+        """Issue #72: nouns like "Umsetzung" or "Inkrafttreten" are subjects, not a status."""
+        ok = "Umsetzung der EU-Richtlinie zum Inkrafttreten"
+        with _patch_llm(ok) as acomp:
+            assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == ok
+        assert acomp.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_abbreviation_period_is_kept(self):
         with _patch_llm("Förderung für Sportvereine e.V."):
             assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == "Förderung für Sportvereine e.V."

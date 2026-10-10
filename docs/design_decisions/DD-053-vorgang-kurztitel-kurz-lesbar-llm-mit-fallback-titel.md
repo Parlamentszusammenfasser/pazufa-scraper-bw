@@ -20,8 +20,10 @@ Kopie davon. Laut Wiki ist der Kurztitel „eine etwas griffigere Überschrift".
    Fallback: erstes Dokument mit Zusammenfassung) und liefert höchstens **60 Zeichen**.
    Ein bereits kurzer, verständlicher Titel darf unverändert zurückkommen.
 2. **Regeln:** einfache Sprache, keine Floskeln wie „Gesetz zur Änderung des …", eine
-   Zeile, kein Slug. Anführungszeichen und Schlusspunkt werden entfernt, spitze Klammern
-   neutralisiert (DD-027). Ein Regelverstoß wird **einmal** mit Begründung nachgefragt.
+   Zeile, kein Slug, kein Verfahrensstand wie „umgesetzt", „beschlossen", „in Kraft"
+   (Issue #72: der Kurztitel bleibt gecacht, während der Vorgang fortschreitet).
+   Anführungszeichen und Schlusspunkt werden entfernt, spitze Klammern neutralisiert
+   (DD-027). Ein Regelverstoß wird **einmal** mit Begründung nachgefragt.
 3. **Fallback `titel`** bei LLM aus, Fehler oder zweitem Verstoß — nie `null` (das
    Backend überschreibt), nie der Slug.
 4. **Eigener Redis-Namespace** `vorgang-kurztitel:<sha256(Modell + system prompt + prompt + titel + zusammenfassung)>` (Modell seit DD-063):
@@ -33,7 +35,8 @@ Kopie davon. Laut Wiki ist der Kurztitel „eine etwas griffigere Überschrift".
 
 **Rollout:** Bestehende Vorgänge sind über `vg2:` gecacht (DD-052, Beteiligung: Slug ohne
 TTL) und erhalten den neuen Kurztitel erst nach Änderung am Record oder Löschen der
-`vg2:`-Einträge.
+`vg2:`-Einträge. Die Prompt-Änderung aus Issue #72 verwaist alle `vorgang-kurztitel:`-Einträge;
+neu generiert wird ebenfalls erst beim nächsten Neubau.
 
 **Code:** `bawue_dok.vorgang_kurztitel`, `KURZTITEL_PROMPT`, `_kurztitel_problem`,
 `_clean_kurztitel`; `_initiativ_zusammenfassung`, `_build_vorgang`;
