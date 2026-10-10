@@ -572,14 +572,19 @@ def _extract_relevant_pages(text: str, start_page: int, max_pages: int = 30) -> 
 # ---------------------------------------------------------------------------
 
 
+class PdfNotAvailableError(RuntimeError):
+    """Non-200 response for a PDF, e.g. a Plenarprotokoll not published yet.
+
+    Expected, so callers log it without a traceback (issue #69)."""
+
+
 async def download_pdf(session, url: str) -> Path:
     """Download a PDF to a temporary file via aiohttp session."""
     clean_url = url.split("#")[0] if "#" in url else url
     ssl_ctx = ssl.create_default_context(cafile=certifi.where())
     async with session.get(clean_url, ssl=ssl_ctx, timeout=aiohttp.ClientTimeout(total=60)) as response:
         if response.status != 200:
-            logger.warning("PDF download returned HTTP %d: %s", response.status, clean_url)
-            raise RuntimeError(f"PDF download failed with status {response.status}: {clean_url}")
+            raise PdfNotAvailableError(f"PDF download returned HTTP {response.status}: {clean_url}")
         content = await response.read()
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
@@ -1160,6 +1165,9 @@ async def enrich_dokument(
         page_hint = _parse_page_hint(dok.link)
         try:
             pdf_path = await download_pdf(session, dok.link)
+        except PdfNotAvailableError as exc:
+            logger.warning("%s, returning original document", exc)
+            return EnrichmentResult(dokument=dok, download_failed=True)
         except Exception:
             logger.warning("PDF download failed for %s, returning original document", dok.link, exc_info=True)
             return EnrichmentResult(dokument=dok, download_failed=True)

@@ -17,6 +17,7 @@ from bawue.bawue_dok import (
     ZUSAMMENFASSUNG_TEILE,
     EnrichmentResult,
     LLMMetrics,
+    PdfNotAvailableError,
     _cache_key,
     _extract_relevant_pages,
     _hash_cache,
@@ -160,17 +161,22 @@ def _patch_llm(json_str: str):
 # ---------------------------------------------------------------------------
 
 
+def _mock_session(status: int) -> MagicMock:
+    """aiohttp-like session whose GET answers *status* with SAMPLE_PDF_BYTES."""
+    response = AsyncMock()
+    response.status = status
+    response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
+    response.__aenter__ = AsyncMock(return_value=response)
+    response.__aexit__ = AsyncMock(return_value=False)
+    session = MagicMock()
+    session.get = MagicMock(return_value=response)
+    return session
+
+
 class TestDownloadPdf:
     @pytest.mark.asyncio
     async def test_downloads_to_tempfile(self):
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.get = MagicMock(return_value=mock_response)
+        session = _mock_session(200)
 
         path = await download_pdf(session, "https://example.com/test.pdf")
         try:
@@ -181,29 +187,9 @@ class TestDownloadPdf:
             path.unlink(missing_ok=True)
 
     @pytest.mark.asyncio
-    async def test_raises_on_http_error(self):
-        mock_response = AsyncMock()
-        mock_response.status = 404
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.get = MagicMock(return_value=mock_response)
-
-        with pytest.raises(Exception, match="404"):
-            await download_pdf(session, "https://example.com/missing.pdf")
-
-    @pytest.mark.asyncio
     async def test_download_pdf_strips_url_fragment(self):
         """URL fragment (#page=33) should be stripped before HTTP request."""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.get = MagicMock(return_value=mock_response)
+        session = _mock_session(200)
 
         path = await download_pdf(session, "https://www.landtag-bw.de/files/plp/17_141.pdf#page=33")
         try:
@@ -215,14 +201,7 @@ class TestDownloadPdf:
     @pytest.mark.asyncio
     async def test_passes_ssl_context_and_timeout(self):
         """download_pdf should pass an SSL context (certifi) and a 60s timeout."""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.get = MagicMock(return_value=mock_response)
+        session = _mock_session(200)
 
         path = await download_pdf(session, "https://example.com/test.pdf")
         try:
@@ -234,23 +213,17 @@ class TestDownloadPdf:
             path.unlink(missing_ok=True)
 
     @pytest.mark.asyncio
-    async def test_logs_http_status_on_download_failure(self, caplog):
-        """Non-200 status should be logged as warning before raising."""
-        mock_response = AsyncMock()
-        mock_response.status = 404
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.get = MagicMock(return_value=mock_response)
+    async def test_http_error_raises_pdf_not_available_without_logging(self, caplog):
+        """Issue #69: the raise carries status + URL; the caller logs it once."""
+        session = _mock_session(404)
 
         with (
-            pytest.raises(RuntimeError),
+            pytest.raises(PdfNotAvailableError, match=r"HTTP 404: https://example.com/missing.pdf"),
             caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"),
         ):
             await download_pdf(session, "https://example.com/missing.pdf")
 
-        assert any("404" in r.message for r in caplog.records)
+        assert caplog.records == []
 
 
 # ---------------------------------------------------------------------------
@@ -851,12 +824,43 @@ class TestEnrichDokument:
         session = MagicMock()
         llm = AsyncMock()
 
-        failure = RuntimeError("PDF download failed with status 404: https://example.com/plp.pdf")
+        failure = PdfNotAvailableError("PDF download returned HTTP 404: https://example.com/plp.pdf")
         with patch("bawue.bawue_dok.download_pdf", new_callable=AsyncMock, side_effect=failure):
             result = await enrich_dokument(session, llm, dok)
 
         assert result.dokument is dok
         assert result.download_failed is True
+
+    @pytest.mark.asyncio
+    async def test_issue69_unpublished_pdf_logs_one_warning_without_traceback(self, caplog):
+        """Issue #69: an unpublished PDF (HTTP 404) is expected, so it logs exactly
+        one WARNING with status + URL and no traceback (Cloud Run tags it ERROR)."""
+        dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link="https://example.com/plp.pdf")
+
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"):
+            result = await enrich_dokument(_mock_session(404), AsyncMock(), dok)
+
+        assert result.download_failed is True
+        assert len(caplog.records) == 1
+        record = caplog.records[0]
+        assert record.levelno == logging.WARNING
+        assert record.exc_info is None
+        assert "HTTP 404: https://example.com/plp.pdf" in record.getMessage()
+
+    @pytest.mark.asyncio
+    async def test_unexpected_download_error_keeps_traceback(self, caplog):
+        """Network errors and timeouts are unexpected — they keep the stack (issue #69)."""
+        dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL)
+
+        with (
+            patch("bawue.bawue_dok.download_pdf", new_callable=AsyncMock, side_effect=aiohttp.ClientError("boom")),
+            caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"),
+        ):
+            result = await enrich_dokument(MagicMock(), AsyncMock(), dok)
+
+        assert result.download_failed is True
+        assert len(caplog.records) == 1
+        assert caplog.records[0].exc_info is not None
 
     @pytest.mark.asyncio
     async def test_empty_extracted_text_is_not_a_download_failure(self):
