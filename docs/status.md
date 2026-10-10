@@ -11,7 +11,7 @@
 ### Known Gaps — Required Fields
 
 - `tops` in `Sitzung` always `[]` (Phase 3: Tagesordnungen-PDFs not yet parsed)
-- `nummer` in `Sitzung` always `0` for committee sessions (no regex match in ICS feed)
+- `nummer` in `Sitzung` always `0`: no source carries committee numbers, and the ICS currently drops Plenum ones too (DD-064)
 - ~~`verfassungsaendernd` always `False`~~ — resolved in DD-023: title-based heuristic (`Änderung der (Landes)?Verfassung`
   / `Verfassungsänderung`) replaces the hardcoded stub; "omit object" rule is documented as inapplicable (would drop
   100 % of Vorgänge since PARLIS exposes the attribute for none of them).
@@ -64,7 +64,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Dokument | `meinung`             | ✅ LLM       | LLM-generated opinion score (1–5). Only for Stellungnahme/Beschlussempfehlung.       |
 | Sitzung  | `termin`              | ✅ Complete  | ICS DTSTART (Berlin TZ → UTC)                                                        |
 | Sitzung  | `gremium`             | ✅ Complete  | From ICS SUMMARY                                                                     |
-| Sitzung  | `nummer`              | ⚠️ Partial  | Regex for Plenum; committees = `0`                                                   |
+| Sitzung  | `nummer`              | ⚠️ Partial  | Regex on ICS SUMMARY; currently no match → `0` + warning (DD-064)                    |
 | Sitzung  | `tops`                | ❌ Missing   | Always `[]` (Phase 3: Tagesordnungen-PDFs)                                           |
 | Sitzung  | `public`              | ✅ Complete  | Always `True`                                                                        |
 
