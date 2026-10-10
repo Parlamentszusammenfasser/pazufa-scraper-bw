@@ -106,6 +106,15 @@ class BawueSitzungenScraper(SitzungsScraper):
 
             api_id = uuid5(NAMESPACE_URL, event.uid)
 
+            if not event.nummer:
+                # Fail-loud: no source carries the number (DD-064).
+                logger.warning(
+                    "No session number for %s on %s in %r, sending nummer=0",
+                    event.gremium_name,
+                    date_key,
+                    event.summary,
+                )
+
             gremium = Gremium(
                 parlament=Parlament.BW,
                 wahlperiode=self._wahlperiode,

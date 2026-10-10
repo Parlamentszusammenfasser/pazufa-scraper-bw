@@ -157,6 +157,32 @@ class TestItemExtractor:
         assert sitzungen[0].termin.tzinfo is not None
 
 
+class TestIssue65SessionNumber:
+    """Issue #65: a Sitzung without a session number stays 0 and is logged (DD-064)."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("date_key", "gremium"),
+        [
+            ("2026-02-24", "Finanzausschuss"),
+            ("2026-02-27", "plenum"),  # bare "Plenarsitzung:", as in the live feed
+        ],
+    )
+    async def test_missing_number_stays_zero_and_is_logged(self, ics_scraper_with_events, caplog, date_key, gremium):
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_sitzungen_scraper"):
+            _termin, sitzungen = await ics_scraper_with_events.item_extractor(date_key)
+
+        assert sitzungen[0].nummer == 0
+        assert f"No session number for {gremium} on {date_key}" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_known_number_is_not_logged(self, ics_scraper_with_events, caplog):
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_sitzungen_scraper"):
+            await ics_scraper_with_events.item_extractor("2026-02-25")
+
+        assert not caplog.records
+
+
 class TestInit:
     def test_init_reads_ics_url_from_config(self, tmp_path):
         config_file = tmp_path / "config.toml"

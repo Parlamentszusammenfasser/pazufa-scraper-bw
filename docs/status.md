@@ -4,14 +4,14 @@
 
 | Category                     | Estimate  | Notes                                                                                                                                                                               |
 |------------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Pflichtfunktionalität**    | **~85 %** | Core fields complete; `volltext`/`hash` now also filled at scraper level (LLM). `tops=[]` and `nummer=0` for committees outstanding.                                                |
+| **Pflichtfunktionalität**    | **~85 %** | Core fields complete; `volltext`/`hash` now also filled at scraper level (LLM). `tops=[]` and `nummer=0` (DD-064) outstanding.                                                      |
 | **Optionale Funktionalität** | **~50 %** | LLM füllt `zusammenfassung`, `schlagworte`, `kurztitel`, `meinung` auf Dokument-Ebene. `ressort` wird per LLM klassifiziert (DD-055); `sachgebiete` kommt aus dem PARLIS-Feld Sachgebiet (DD-058), `schlagworte` aus den PARLIS-Deskriptoren (DD-060); strukturierter `hash` ist noch leer; `zusammenfassung` geht als Typ `full-llm` raus (DD-054), bei Entwurf/Beschlussempfehlung plus drei Teil-Zusammenfassungen (DD-056) — Issues #40–#43. Zusätzliche Datenquellen fehlen weiterhin. |
 | **Community DoD**            | **~90 %** | Core Completion ✅; Coding-Regeln ✅ (bis auf Einzelfälle s.u.); CI/Tests ✅; `verfassungsaendernd`-Konflikt dokumentiert (DD-023); offen: Wiki-Mirror der DDs, Gesetzblatt-Quelle.    |
 
 ### Known Gaps — Required Fields
 
 - `tops` in `Sitzung` always `[]` (Phase 3: Tagesordnungen-PDFs not yet parsed)
-- `nummer` in `Sitzung` always `0` for committee sessions (no regex match in ICS feed)
+- `nummer` in `Sitzung` always `0`: no source carries committee numbers, and the ICS currently drops Plenum ones too (DD-064)
 - ~~`verfassungsaendernd` always `False`~~ — resolved in DD-023: title-based heuristic (`Änderung der (Landes)?Verfassung`
   / `Verfassungsänderung`) replaces the hardcoded stub; "omit object" rule is documented as inapplicable (would drop
   100 % of Vorgänge since PARLIS exposes the attribute for none of them).
@@ -64,7 +64,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Dokument | `meinung`             | ✅ LLM       | LLM-generated opinion score (1–5). Only for Stellungnahme/Beschlussempfehlung.       |
 | Sitzung  | `termin`              | ✅ Complete  | ICS DTSTART (Berlin TZ → UTC)                                                        |
 | Sitzung  | `gremium`             | ✅ Complete  | From ICS SUMMARY                                                                     |
-| Sitzung  | `nummer`              | ⚠️ Partial  | Regex for Plenum; committees = `0`                                                   |
+| Sitzung  | `nummer`              | ⚠️ Partial  | Regex on ICS SUMMARY; currently no match → `0` + warning (DD-064)                    |
 | Sitzung  | `tops`                | ❌ Missing   | Always `[]` (Phase 3: Tagesordnungen-PDFs)                                           |
 | Sitzung  | `public`              | ✅ Complete  | Always `True`                                                                        |
 
@@ -94,7 +94,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Codeberg hosting             | ✅ Working            | BW scraper is [hosted on codeberg](https://codeberg.org/PaZuFa/scraper_bawue)                                                                                                                                                                                                                                             |
 | Wiki documentation           | ✅ Working            | All local design-decisions are mirrored to the wiki                                                                                                                                                                                                                                                                       |
 | Beteiligungsportal           | ✅ Working            | Pre-parliamentary drafts (`preparl-regent` station with Entwurf PDFs)                                                                                                                                                                                                                                                     |
-| Sitzungskalender Phase 1+2   | ✅ Working            | ICS feed parsing; `nummer` extracted for Plenum via regex; `tops=[]`                                                                                                                                                                                                                                                      |
+| Sitzungskalender Phase 1+2   | ✅ Working            | ICS feed parsing; `nummer` regex on SUMMARY, currently no match (DD-064); `tops=[]`                                                                                                                                                                                                                                       |
 | PARLIS detail pages          | Not implemented      | Additional metadata from individual Vorgang detail pages                                                                                                                                                                                                                                                                  |
 | Kabinettsbeschlüsse (STM)    | Not implemented      | Signal source for new Regierungsentwürfe                                                                                                                                                                                                                                                                                  |
 | Gesetzblatt publications     | ✅ Working (MVP)      | Post-parliamentary phase (`postparl-gsblt` station) am PARLIS-Vorgang; das Ausgabedatum kommt aus dem Gesetzblatt-Lookup und fixt issue #9 (DD-047). Digital ab 2024, ältere Zitate behalten die PARLIS-Datierung. `postparl-kraft` ist Phase 3.                                                                                        |
