@@ -219,14 +219,7 @@ class TestBuildVorgang:
 
         monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
 
-        # item_extractor sets the vorgangs-id context before building (log_context).
-        from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
-
-        token = set_vorgangs_id("V-246637")
-        try:
-            await scraper._build_vorgang(_make_raw_vorgang("V-246637"))
-        finally:
-            reset_vorgangs_id(token)
+        await scraper._build_vorgang(_make_raw_vorgang("V-246637"))
 
         assert "V-246637" in scraper._pending_pdf_downloads
 

@@ -24,7 +24,7 @@ from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_sachgebiete, map_schlagworte, map_stationstyp, map_vorgangstyp
 from bawue.gesetzblatt_client import GesetzblattClient
 from bawue.gesetzblatt_lookup import GesetzblattDateLookup
-from bawue.log_context import get_vorgangs_id, reset_vorgangs_id, set_vorgangs_id
+from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.parlis_client import ParlisClient
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
@@ -1147,8 +1147,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     cache=self.config.cache,
                 )
                 dok = result.dokument
-                if result.download_failed and (vorgnr := get_vorgangs_id()):
-                    self._pending_pdf_downloads.add(vorgnr)
+                if result.download_failed:
+                    self._pending_pdf_downloads.add(vorgang_id)
             except Exception:
                 logger.warning("Document enrichment failed for %s", pdf_url)
 
