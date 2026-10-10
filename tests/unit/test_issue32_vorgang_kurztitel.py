@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bawue.bawue_dok import KURZTITEL_MAX_LEN, vorgang_kurztitel
+from bawue.bawue_dok import KURZTITEL_MAX_LEN, _kurztitel_problem, vorgang_kurztitel
 
 LONG_TITEL = (
     "Gesetz zum besseren Schutz vor Straftaten gegen die sexuelle Selbstbestimmung "
@@ -129,6 +129,13 @@ class TestVorgangKurztitel:
         assert acomp.call_count == 2
 
     @pytest.mark.asyncio
+    async def test_issue72_status_word_is_reprompted(self):
+        """Issue #72: V-247045 was still pending when its kurztitel said "umgesetzt"."""
+        with _patch_llm("Zweiter Glücksspielstaatsvertrag 2021 umgesetzt", GOOD) as acomp:
+            assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == GOOD
+        assert "Verfahrensstand („umgesetzt“)" in acomp.call_args.kwargs["messages"][-1]["content"]
+
+    @pytest.mark.asyncio
     async def test_abbreviation_period_is_kept(self):
         with _patch_llm("Förderung für Sportvereine e.V."):
             assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == "Förderung für Sportvereine e.V."
@@ -184,3 +191,26 @@ class TestVorgangKurztitel:
         with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, side_effect=RuntimeError("down")):
             await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY, cache=cache)
         cache.store_raw.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("kurztitel", "is_status"),
+    [
+        ("Zweiter Glücksspielstaatsvertrag 2021 umgesetzt", True),
+        ("Neues Polizeigesetz beschlossen", True),
+        ("Landtag verabschiedet Haushalt 2027", True),
+        ("Staatsvertrag zum Rundfunk ratifiziert", True),
+        ("Mietpreisbremse verlängert", True),
+        ("NEUE BAUORDNUNG TRITT IN KRAFT", True),
+        ("Kohlesteuer tritt außer Kraft", True),
+        ("Umsetzung der EU-Richtlinie zum Inkrafttreten", False),
+        ("Rückführung abgelehnter Asylbewerber", False),
+        ("Unterhalt für angenommene Kinder", False),
+        ("Investitionen in Kraft-Wärme-Kopplung", False),
+        ("Verlängerung der Mietpreisbremse", False),
+    ],
+)
+def test_issue72_status_words(kurztitel, is_status):
+    """Issue #72: a bare participle or "in Kraft" claims a Verfahrensstand; nouns don't."""
+    problem = _kurztitel_problem(kurztitel)
+    assert (problem is not None and "Verfahrensstand" in problem) is is_status
