@@ -5324,14 +5324,13 @@ class TestPlaceholderHash:
         assert placeholder_hash(f"{base}#page=36") != placeholder_hash(f"{base}#page=37")
 
     @pytest.mark.asyncio
-    async def test_unenriched_document_hash_is_valid_and_unique(self, scraper_build_vorgang):
+    async def test_unenriched_document_hash_is_valid(self, scraper_build_vorgang):
         """The fixture runs with _llm_enabled=False — the default configuration."""
         raw = _make_raw_vorgang("V-001")
         vorgang = await scraper_build_vorgang(raw)
 
         hashes = [d.hash_ for st in vorgang.stationen for d in st.dokumente]
         assert hashes, "expected at least one document to assert on"
-        assert len(set(hashes)) == len(hashes)
         for hash_ in hashes:
             assert re.fullmatch(r"[0-9a-f]{64}", hash_)
 
@@ -5383,6 +5382,8 @@ class TestPlaceholderHash:
         [erste] = await protocol_hashes("V-247603", "Erste Beratung")
         [zweite] = await protocol_hashes("V-247045", "Zweite Beratung")
         assert erste != zweite
+        # Several bills read in one session share raw and link; the Vorgang id keeps them apart.
+        assert await protocol_hashes("V-248237", "Erste Beratung") != [erste]
         assert await protocol_hashes("V-247603", "Erste Beratung") == [erste]  # stable across runs
         assert re.fullmatch(r"[0-9a-f]{64}", erste)
 

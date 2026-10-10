@@ -45,6 +45,10 @@ PARLIS hasht deshalb `sha256(vorgangs_id | Fundstelle-raw | link)`: ein Dokument
 Fundstelle, stabil zwischen Läufen. Der Beteiligungsportal-Scraper behält
 `sha256(link)` (seine PDFs gehören zu genau einem Prozess). Bereits hochgeladene
 Platzhalter-Dokumente erhalten beim nächsten Neubau des Vorgangs einen neuen Hash.
+Bekannte Lücke: Ist das Protokoll lesbar, aber noch ohne Anker, gilt der reine
+Datei-Hash ([DD-049](DD-049-ein-dokument-row-je-fundstelle-der-page-n-anker-gilt-auch.md)), und die Vorgänge teilen wieder einen Row. Das heilt, sobald
+PARLIS `S. x–y` nachträgt: der Fingerprint (DD-052) ändert sich, der Neubau setzt
+den Anker.
 
 **Bewusst nicht geändert:** `volltext` trägt weiterhin `TODO_MARKER`. Das Feld ist
 ein Pflicht-String, den das Backend nur auf „nicht leer" prüft; es ist keine

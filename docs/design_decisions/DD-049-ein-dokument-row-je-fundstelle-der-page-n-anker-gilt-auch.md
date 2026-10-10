@@ -53,8 +53,8 @@ sich bisher aus derselben Variable ab; das war die eigentliche Ursache der Konfl
   Redeprotokolle inhaltlich passt, ist eine eigene Frage.
 
 **Warum das Backend N Rows über ein PDF verträgt:** Der Standardfall tut es längst.
-Ohne LLM-Anreicherung — der Default — trägt jedes Dokument `sha256(link)` inklusive
-Anker ([DD-048](DD-048-link-abgeleiteter-platzhalter-hash-statt-geteiltem-todo.md)), also einen Row je Fundstelle. [DD-047](DD-047-gesetzblatt-als-datums-lookup-statt-eigener-vorgangsquelle.md) hat
+Ohne LLM-Anreicherung — der Default — trägt jedes Dokument einen Platzhalter aus Link
+inklusive Anker (seit Issue #70 zusätzlich Vorgang und Fundstelle, [DD-048](DD-048-link-abgeleiteter-platzhalter-hash-statt-geteiltem-todo.md)), also einen Row je Fundstelle. [DD-047](DD-047-gesetzblatt-als-datums-lookup-statt-eigener-vorgangsquelle.md) hat
 zusätzlich geprüft, dass zwei Vorgänge, die ein PDF teilen, beide mit HTTP 201
 angenommen werden; Vorgangs-Matching läuft über `vg_ident`, nicht über Dokument-Hashes.
 
