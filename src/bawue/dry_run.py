@@ -167,7 +167,7 @@ def analyze_beteiligung(process: Any, detail: Any) -> BeteiligungReport:
         title=detail.title,
         ministry=detail.ministry,
         pdf_count=pdf_count,
-        skipped=pdf_count == 0,
+        skipped=pdf_count == 0 or detail.is_verordnung,
     )
 
 

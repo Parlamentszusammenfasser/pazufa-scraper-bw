@@ -231,7 +231,7 @@ class TestRunBeteiligung:
     @patch("bawue.dry_run.parse_process_detail")
     @patch("bawue.dry_run.BeteiligungClient")
     def test_fetches_and_analyzes(self, MockBetClient, mock_parse_detail):
-        from bawue.beteiligung_parser import RawBeteiligungProcess
+        from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
 
         mock_client = MockBetClient.return_value
         mock_client.fetch_process_list.return_value = [
@@ -243,15 +243,9 @@ class TestRunBeteiligung:
             ),
         ]
         mock_client.fetch_process_detail.return_value = "<html></html>"
-        mock_parse_detail.return_value = type(
-            "D",
-            (),
-            {
-                "title": "Klimaschutzgesetz",
-                "ministry": "UM",
-                "pdf_links": [{"title": "E", "url": "http://x.pdf"}],
-            },
-        )()
+        mock_parse_detail.return_value = RawBeteiligungDetail(
+            title="Klimaschutzgesetz", ministry="UM", pdf_links=[{"title": "E", "url": "http://x.pdf"}]
+        )
 
         reports = run_beteiligung(wahlperiode=17, limit=None)
 
@@ -262,7 +256,7 @@ class TestRunBeteiligung:
     @patch("bawue.dry_run.parse_process_detail")
     @patch("bawue.dry_run.BeteiligungClient")
     def test_limit(self, MockBetClient, mock_parse_detail):
-        from bawue.beteiligung_parser import RawBeteiligungProcess
+        from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
 
         mock_client = MockBetClient.return_value
         mock_client.fetch_process_list.return_value = [
@@ -270,19 +264,30 @@ class TestRunBeteiligung:
             RawBeteiligungProcess(title="B", url="/b", slug="b", status="open"),
         ]
         mock_client.fetch_process_detail.return_value = "<html></html>"
-        mock_parse_detail.return_value = type(
-            "D",
-            (),
-            {
-                "title": "A",
-                "ministry": "M",
-                "pdf_links": [],
-            },
-        )()
+        mock_parse_detail.return_value = RawBeteiligungDetail(title="A", ministry="M")
 
         reports = run_beteiligung(wahlperiode=17, limit=1)
 
         assert len(reports) == 1
+
+    @patch("bawue.dry_run.BeteiligungClient")
+    def test_issue71_verordnung_is_reported_as_skipped(self, MockBetClient):
+        """The dry-run applies the scraper's rule: a Verordnung is skipped despite its PDFs."""
+        from pathlib import Path
+
+        from bawue.beteiligung_parser import RawBeteiligungProcess
+
+        page = Path(__file__).parent.parent / "fixtures" / "beteiligung" / "mietpreisbegrenzung_detail.html"
+        mock_client = MockBetClient.return_value
+        mock_client.fetch_process_list.return_value = [
+            RawBeteiligungProcess(title="Mietpreisbegrenzung", url="/x", slug="mietpreisbegrenzung", status="open")
+        ]
+        mock_client.fetch_process_detail.return_value = page.read_text()
+
+        [report] = run_beteiligung(wahlperiode=18, limit=None)
+
+        assert report.pdf_count == 4
+        assert report.skipped is True
 
 
 # ---------------------------------------------------------------------------
