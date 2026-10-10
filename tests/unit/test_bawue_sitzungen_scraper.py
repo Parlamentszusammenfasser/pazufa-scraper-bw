@@ -231,18 +231,34 @@ class TestSitzungenRefreshIssue85:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "changed",
+        ("first", "second"),
         [
-            ICS_BYTES.replace(b"143. Sitzung", b"144. Sitzung"),
-            ICS_BYTES.replace(b"DTSTART:20260226T090000", b"DTSTART:20260226T100000"),
-            _ICS_ADDED_LAST,
+            (ICS_BYTES, ICS_BYTES.replace(b"143. Sitzung", b"144. Sitzung")),
+            (ICS_BYTES, ICS_BYTES.replace(b"DTSTART:20260226T090000", b"DTSTART:20260226T100000")),
+            (ICS_BYTES, _ICS_ADDED_LAST),
+            (_ICS_ADDED_LAST, ICS_BYTES),
         ],
-        ids=["summary", "time", "added"],
+        ids=["summary", "time", "added", "removed"],
     )
-    async def test_changed_date_is_reuploaded(self, changed):
+    async def test_changed_date_is_reuploaded(self, first, second):
+        scraper = self._scraper()
+        await self._run_cycle(scraper, first)
+        assert await self._run_cycle(scraper, second) == ["2026-02-26"]
+
+    @pytest.mark.asyncio
+    async def test_parser_change_is_reuploaded(self):
+        """Parsed values are hashed too: a parser fix must reach cached dates."""
         scraper = self._scraper()
         await self._run_cycle(scraper, ICS_BYTES)
-        assert await self._run_cycle(scraper, changed) == ["2026-02-26"]
+        with patch("bawue.ics_parser.extract_session_number", return_value=7):
+            assert len(await self._run_cycle(scraper, ICS_BYTES)) == 5
+
+    @pytest.mark.asyncio
+    async def test_wahlperiode_change_is_reuploaded(self):
+        scraper = self._scraper()
+        await self._run_cycle(scraper, ICS_BYTES)
+        scraper._wahlperiode = 18
+        assert len(await self._run_cycle(scraper, ICS_BYTES)) == 5
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

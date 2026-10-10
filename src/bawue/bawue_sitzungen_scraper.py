@@ -88,7 +88,7 @@ class BawueSitzungenScraper(SitzungsScraper):
         for dt, evts in sorted(grouped.items()):
             key = dt.isoformat()
             self._events_by_date[key] = evts
-            self._fingerprints[await self.make_cache_key(key)] = _events_fingerprint(evts)
+            self._fingerprints[await self.make_cache_key(key)] = _events_fingerprint(evts, self._wahlperiode)
             date_keys.append(key)
 
         self._total_events = len(events)
@@ -194,10 +194,10 @@ class BawueSitzungenScraper(SitzungsScraper):
             return None
 
 
-def _events_fingerprint(events: list[ParsedEvent]) -> str:
-    """Fingerprint of what a date uploads: UID, start and SUMMARY per event, order ignored (DD-066)."""
-    payload = json.dumps(sorted([e.uid, e.dtstart.isoformat(), e.summary] for e in events), ensure_ascii=False)
-    return sha256(payload.encode()).hexdigest()
+def _events_fingerprint(events: list[ParsedEvent], wahlperiode: int) -> str:
+    """Fingerprint of what a date uploads, parsed values included, order ignored (DD-066)."""
+    rows = sorted([e.uid, e.dtstart.isoformat(), e.summary, e.gremium_name, e.nummer] for e in events)
+    return sha256(json.dumps([wahlperiode, rows], ensure_ascii=False).encode()).hexdigest()
 
 
 def _print_sitzungen_summary(

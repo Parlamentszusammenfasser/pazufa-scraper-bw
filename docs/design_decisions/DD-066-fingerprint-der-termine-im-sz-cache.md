@@ -16,13 +16,13 @@ GitHub Issue #85; DD-052 hat dasselbe Problem für `vg2:` gelöst.
 1. **Wie DD-052:** Der Schlüssel bleibt `sz:sha256(datum)`, der Wert ist der Fingerprint der
    Termine dieses Tages. Ein Treffer zählt nur, wenn er dem aktuellen Fingerprint gleicht;
    sonst wird der Tag neu gebaut und per `PUT` hochgeladen.
-2. **Gehasht werden die Feed-Felder, aus denen der Upload entsteht:** je Termin `UID`
-   (→ `api_id`), `DTSTART` (→ `termin`) und SUMMARY (→ `titel`, Gremium, `nummer`), sortiert,
-   die Reihenfolge zählt also nicht.
+2. **Gehasht wird, was hochgeladen wird:** je Termin `UID` (→ `api_id`), `DTSTART` (→ `termin`),
+   SUMMARY (→ `titel`) und die daraus geparsten Werte Gremium und `nummer`, dazu die
+   Wahlperiode; sortiert, die Reihenfolge zählt also nicht. Anders als DD-052 (Punkt 3) also
+   auch Parser- und Config-Werte: Ein Neu-Upload kostet je Tag nur einen `PUT` (kein PDF, kein
+   LLM), und eine Parser-Korrektur, etwa an der `nummer` (DD-064), soll gecachte Tage erreichen.
    Nicht gehasht: `DTEND` (nicht hochgeladen), `DTSTAMP` (der Downloadzeitpunkt, würde jeden
-   Lauf neu hochladen) und nach DD-006 verworfene Termine. Wie bei DD-052 (Punkt 3) auch keine
-   Parser- oder Config-Werte (Gremium-Mapping, `nummer`-Regex, Wahlperiode): Ändern sie sich,
-   erreichen sie gecachte Tage nur nach Löschen der `sz:`-Einträge.
+   Lauf neu hochladen) und nach DD-006 verworfene Termine.
 3. `PUT kalender` ersetzt alle Sitzungen des Tages. Ein neu hochgeladener Tag verliert damit
    auch einen entfallenen Termin, solange der Tag noch mindestens einen behält.
 
@@ -45,6 +45,6 @@ gegen das echte Backend (Issue #85, Verifikation von 2.1.1).
 (`_fingerprints`), `get_cached_result`, `store_extracted_result`
 
 **Tests:** `tests/unit/test_bawue_sitzungen_scraper.py::TestSitzungenRefreshIssue85`
-(unveränderter Feed → übersprungen; geänderter SUMMARY, neue Uhrzeit, neuer Termin am
-selben Tag → nur dieser Tag neu; geändertes `DTEND`/`DTSTAMP` oder andere Reihenfolge →
-übersprungen; Alt-Eintrag → einmal neu)
+(unveränderter Feed → übersprungen; geänderter SUMMARY, neue Uhrzeit, neuer oder entfallener
+Termin am selben Tag → nur dieser Tag neu; geänderter Parser-Wert oder Wahlperiode → alle neu;
+geändertes `DTEND`/`DTSTAMP` oder andere Reihenfolge → übersprungen; Alt-Eintrag → einmal neu)
