@@ -102,6 +102,7 @@ class BawueSitzungenScraper(SitzungsScraper):
         return cached if cached == self._fingerprints.get(item_key) else None
 
     async def store_extracted_result(self, item_key: str, result: Any) -> None:
+        """Store the fingerprint, not the item: nothing reads it back (DD-066)."""
         await super().store_extracted_result(item_key, self._fingerprints[item_key])
 
     async def item_extractor(self, date_key: str) -> Any:

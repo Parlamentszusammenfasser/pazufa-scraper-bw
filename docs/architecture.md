@@ -120,7 +120,8 @@ Dashed lines mark stages not yet implemented. See [status.md](status.md) for imp
 **Key characteristics:**
 - Parliament code: `BW`, Wahlperiode: 17
 - Authentication: `X-API-Key` header with `collector` scope (see `bawue.api`)
-- Caching: Redis `BawueCache`, no TTL; a Vorgang is skipped only while its PARLIS fingerprint is unchanged (DD-052)
+- Caching: Redis `BawueCache`, no TTL; a Vorgang is skipped only while its PARLIS fingerprint is unchanged (DD-052),
+  a Sitzungen date only while its events are unchanged (DD-066)
 - Models: Generated from the OpenAPI spec by `pazufa-scraper-core` — no hand-written models
 - The PaZuFa backend handles deduplication/merging — the scraper does not need to
 

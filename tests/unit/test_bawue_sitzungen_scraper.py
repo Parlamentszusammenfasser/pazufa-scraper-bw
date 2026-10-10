@@ -186,12 +186,14 @@ class TestIssue65SessionNumber:
 
 _ADDED_EVENT = (
     b"BEGIN:VEVENT\nDTSTART:20260226T140000\nDTEND:20260226T160000\nUID:evt-fina-002@landtag-bw.de\n"
-    b"SUMMARY:Fraktions- und Ausschusssitzungen: FinA\nEND:VEVENT\nEND:VCALENDAR"
+    b"SUMMARY:Fraktions- und Ausschusssitzungen: FinA\nEND:VEVENT\n"
 )
+_ICS_ADDED_LAST = ICS_BYTES.replace(b"END:VCALENDAR", _ADDED_EVENT + b"END:VCALENDAR")
+_ICS_ADDED_FIRST = ICS_BYTES.replace(b"PRODID:-//Test//Test//EN\n", b"PRODID:-//Test//Test//EN\n" + _ADDED_EVENT)
 
 
-class TestSitzungenRefresh:
-    """DD-066: a cached date is re-uploaded once its events change, and skipped otherwise.
+class TestSitzungenRefreshIssue85:
+    """Issue #85 / DD-066: a cached date is re-uploaded once its events change, and skipped otherwise.
 
     Runs the real listing → cache check → extract → store pipeline; only the ICS
     download and the upload are stubbed.
@@ -204,7 +206,6 @@ class TestSitzungenRefresh:
         scraper = _make_scraper()
         scraper.config = MagicMock(linearize=True, max_concurrency=1, api_obj_log=None, cache=_InMemoryCache())
         scraper.items_done = 0
-        scraper.uploaded = []
 
         async def _send(item):
             scraper.uploaded.append(item[0].date().isoformat())
@@ -230,17 +231,34 @@ class TestSitzungenRefresh:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("old", "new"),
+        "changed",
         [
-            (b"143. Sitzung", b"144. Sitzung"),  # SUMMARY
-            (b"DTSTART:20260226T090000", b"DTSTART:20260226T100000"),  # moved
-            (b"END:VCALENDAR", _ADDED_EVENT),  # added on the same date
+            ICS_BYTES.replace(b"143. Sitzung", b"144. Sitzung"),
+            ICS_BYTES.replace(b"DTSTART:20260226T090000", b"DTSTART:20260226T100000"),
+            _ICS_ADDED_LAST,
         ],
+        ids=["summary", "time", "added"],
     )
-    async def test_changed_date_is_reuploaded(self, old, new):
+    async def test_changed_date_is_reuploaded(self, changed):
         scraper = self._scraper()
         await self._run_cycle(scraper, ICS_BYTES)
-        assert await self._run_cycle(scraper, ICS_BYTES.replace(old, new)) == ["2026-02-26"]
+        assert await self._run_cycle(scraper, changed) == ["2026-02-26"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("first", "second"),
+        [
+            (ICS_BYTES, ICS_BYTES.replace(b"DTEND:20260226T180000", b"DTEND:20260226T190000")),
+            # DTSTAMP is the download time: hashing it would re-upload every date on every run
+            (ICS_BYTES, ICS_BYTES.replace(b"UID:evt-plenar-002", b"DTSTAMP:20261010T075346\nUID:evt-plenar-002")),
+            (_ICS_ADDED_LAST, _ICS_ADDED_FIRST),
+        ],
+        ids=["dtend", "dtstamp", "order"],
+    )
+    async def test_irrelevant_change_is_skipped(self, first, second):
+        scraper = self._scraper()
+        await self._run_cycle(scraper, first)
+        assert await self._run_cycle(scraper, second) == []
 
     @pytest.mark.asyncio
     async def test_legacy_entry_is_reuploaded_once(self):
