@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from datetime import UTC, datetime
@@ -46,6 +47,9 @@ from bawue.wahlperiode import CURRENT_WAHLPERIODE
 logger = logging.getLogger(__name__)
 
 DEFAULT_BETEILIGUNG_DELAY = 2.0
+
+# "Verordnung…", "Verordnungsentwurf…", "Entwurf einer Verordnung…" (issue #71).
+_VERORDNUNG_RE = re.compile(r"(?:Entwurf einer )?Verordnung", re.IGNORECASE)
 
 
 class BawueBeteiligungScraper(VorgangsScraper):
@@ -161,10 +165,15 @@ class BawueBeteiligungScraper(VorgangsScraper):
     async def _build_vorgang(self, slug: str, detail: RawBeteiligungDetail) -> Vorgang | None:
         """Convert parsed Beteiligungsportal data into a framework Vorgang model.
 
-        Returns None if the detail page has no PDF links (non-legislative content).
+        Returns None if the detail page has no PDF links (non-legislative content)
+        or only Verordnung drafts (DD-007).
         """
         if not detail.pdf_links:
             logger.info("Skipping '%s' — no Entwurf PDFs found", detail.title)
+            self._skipped += 1
+            return None
+        if _is_verordnung_only(detail.pdf_links):
+            logger.info("Skipping '%s' — Verordnung, not a Gesetzentwurf", detail.title)
             self._skipped += 1
             return None
 
@@ -284,6 +293,17 @@ class BawueBeteiligungScraper(VorgangsScraper):
             links=[beteiligung_url],
             ressort=ressort,
         )
+
+
+def _is_verordnung_only(pdf_links: list[dict]) -> bool:
+    """A Rechtsverordnung never reaches the Landtag (issue #71, DD-007).
+
+    True when a PDF title names a Verordnung and none names a Gesetz. Without a
+    Verordnung title the process is kept, so an unclear title never drops a Gesetz.
+    """
+    verordnung = [bool(_VERORDNUNG_RE.match(p["title"])) for p in pdf_links]
+    gesetz = any("gesetz" in p["title"].lower() for p, v in zip(pdf_links, verordnung, strict=True) if not v)
+    return any(verordnung) and not gesetz
 
 
 def _print_beteiligung_summary(

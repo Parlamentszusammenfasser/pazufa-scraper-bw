@@ -353,6 +353,68 @@ class TestIssue45LinkListMarkup:
         assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
 
+class TestIssue71Verordnungen:
+    """Issue #71: a Rechtsverordnung never reaches the Landtag, so it is no gg-land-parl Vorgang."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("slug", ["mietpreisbegrenzung", "rettungsdienstplanverordnung"])
+    async def test_verordnung_page_is_skipped(self, slug, caplog):
+        scraper = _make_scraper()
+        scraper._raw_cache[slug] = _make_process(slug=slug)
+        page = (FIXTURES / f"{slug}_detail.html").read_text()
+
+        with (
+            patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", return_value=page),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_beteiligung_scraper"),
+        ):
+            vorgang = await scraper.item_extractor(slug)
+
+        assert vorgang is None
+        assert scraper._skipped == 1
+        assert any("Verordnung" in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("slug", ["effizienzgesetz", "entbuerokratisierung"])
+    async def test_gesetz_page_is_built(self, slug):
+        scraper = _make_scraper()
+        scraper._raw_cache[slug] = _make_process(slug=slug)
+        page = (FIXTURES / f"{slug}_detail.html").read_text()
+
+        with patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", return_value=page):
+            vorgang = await scraper.item_extractor(slug)
+
+        assert vorgang is not None
+        assert vorgang.typ == Vorgangstyp.GG_LAND_PARL
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("titles", "skipped"),
+        [
+            # A Verordnung citing its parent Gesetz is still a Verordnung.
+            (["Verordnung des Sozialministeriums zum Landeskrebsregistergesetz (PDF)"], True),
+            (["Entwurf einer Verordnung über Kappungsgrenzen (PDF)"], True),
+            # A Gesetz with its Durchführungsverordnung stays a Gesetz.
+            (
+                ["Gesetz zur Änderung des Rettungsdienstgesetzes (PDF)", "Verordnungsentwurf zur Durchführung (PDF)"],
+                False,
+            ),
+            # No positive Verordnung evidence: keep (DD-007), never drop a Gesetz silently.
+            (["Anhörungsentwurf mit Begründung (PDF)"], False),
+        ],
+    )
+    async def test_pdf_titles_decide(self, titles, skipped):
+        scraper = _make_scraper()
+        pdf_links = [
+            {"title": t, "url": f"https://beteiligungsportal.baden-wuerttemberg.de/{i}.pdf"}
+            for i, t in enumerate(titles)
+        ]
+
+        vorgang = await scraper._build_vorgang("x", _make_detail(pdf_links=pdf_links))
+
+        assert (vorgang is None) is skipped
+        assert scraper._skipped == int(skipped)
+
+
 class TestListingPageExtractor:
     @pytest.mark.asyncio
     async def test_returns_slugs(self):
