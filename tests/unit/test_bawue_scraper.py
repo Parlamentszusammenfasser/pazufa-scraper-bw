@@ -219,14 +219,7 @@ class TestBuildVorgang:
 
         monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
 
-        # item_extractor sets the vorgangs-id context before building (log_context).
-        from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
-
-        token = set_vorgangs_id("V-246637")
-        try:
-            await scraper._build_vorgang(_make_raw_vorgang("V-246637"))
-        finally:
-            reset_vorgangs_id(token)
+        await scraper._build_vorgang(_make_raw_vorgang("V-246637"))
 
         assert "V-246637" in scraper._pending_pdf_downloads
 
@@ -932,8 +925,8 @@ class TestBuildVorgang:
 
         dok = vorgang.stationen[0].dokumente[0]
         assert dok.volltext == "TODO"
-        # hash_ is link-derived, not a shared marker (DD-048) — see TestPlaceholderHash.
-        assert dok.hash_ == placeholder_hash("https://example.com/doc.pdf")
+        # hash_ is a per-Fundstelle placeholder, not a shared marker (DD-048) — see TestPlaceholderHash.
+        assert re.fullmatch(r"[0-9a-f]{64}", dok.hash_)
 
     @pytest.mark.asyncio
     async def test_empty_drucksnr_becomes_none(self, scraper_build_vorgang):
@@ -5331,16 +5324,15 @@ class TestPlaceholderHash:
         assert placeholder_hash(f"{base}#page=36") != placeholder_hash(f"{base}#page=37")
 
     @pytest.mark.asyncio
-    async def test_unenriched_document_hash_is_valid_and_link_derived(self, scraper_build_vorgang):
+    async def test_unenriched_document_hash_is_valid(self, scraper_build_vorgang):
         """The fixture runs with _llm_enabled=False — the default configuration."""
         raw = _make_raw_vorgang("V-001")
         vorgang = await scraper_build_vorgang(raw)
 
-        dokumente = [d for st in vorgang.stationen for d in st.dokumente]
-        assert dokumente, "expected at least one document to assert on"
-        for dok in dokumente:
-            assert dok.hash_ == placeholder_hash(dok.link)
-            assert re.fullmatch(r"[0-9a-f]{64}", dok.hash_)
+        hashes = [d.hash_ for st in vorgang.stationen for d in st.dokumente]
+        assert hashes, "expected at least one document to assert on"
+        for hash_ in hashes:
+            assert re.fullmatch(r"[0-9a-f]{64}", hash_)
 
     @pytest.mark.asyncio
     async def test_documents_do_not_share_a_hash_across_vorgaenge(self, scraper_build_vorgang):
@@ -5366,6 +5358,38 @@ class TestPlaceholderHash:
         hashes_second = {d.hash_ for st in second.stationen for d in st.dokumente}
         assert hashes_first and hashes_second
         assert hashes_first.isdisjoint(hashes_second)
+
+    @pytest.mark.asyncio
+    async def test_issue70_shared_unanchored_protocol_gets_one_hash_per_fundstelle(self, scraper_build_vorgang):
+        """Issue #70: V-247603 and V-247045 cite the unpublished Plenarprotokoll 18/11
+        without a #page anchor. A link-only placeholder merged both into one backend
+        Dokument and the last upload overwrote its titel."""
+        link = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Plp/18%5F0011%5F30092026.pdf"
+
+        def protocol(reading: str) -> dict:
+            return {
+                "raw": f"{reading} Plenarprotokoll 18/11 30.09.2026",
+                "datum": "30.09.2026",
+                "plenarprotokoll": "18/11",
+                "station_typ": reading,
+                "pdf_url": link,
+            }
+
+        async def protocol_hashes(vid: str, *readings: str) -> list[str]:
+            vorgang = await scraper_build_vorgang(_make_raw_vorgang(vid, fundstellen=[protocol(r) for r in readings]))
+            return [d.hash_ for st in vorgang.stationen for d in st.dokumente if d.link == link]
+
+        [erste] = await protocol_hashes("V-247603", "Erste Beratung")
+        [zweite] = await protocol_hashes("V-247045", "Zweite Beratung")
+        assert erste != zweite
+        # Several bills read in one session share raw and link; the Vorgang id keeps them apart.
+        assert await protocol_hashes("V-248237", "Erste Beratung") != [erste]
+        assert await protocol_hashes("V-247603", "Erste Beratung") == [erste]  # stable across runs
+        assert re.fullmatch(r"[0-9a-f]{64}", erste)
+
+        # Also unique within one Vorgang when two of its Fundstellen share the link.
+        both = await protocol_hashes("V-247045", "Erste Beratung", "Zweite Beratung")
+        assert len(set(both)) == 2
 
 
 class TestIssue39Ressort:
