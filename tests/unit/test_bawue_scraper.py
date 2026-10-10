@@ -1473,6 +1473,25 @@ class TestVorgangRefreshIssue46:
         assert await self._run_cycle(scraper, updated) == (1, 0, 0)
 
     @pytest.mark.asyncio
+    async def test_issue73_final_print_replacing_vorabzug_triggers_reupload(self):
+        """Issue #73: the final 18/523 replaced its Vorabzug at the same URL. PARLIS
+        added the page count "(1 S.)" at the same time, so the raw text changes."""
+        scraper = self._scraper()
+        vorabzug = (
+            "Beschlussempfehlung und Bericht    Ausschuss des Inneren und für Digitalisierung"
+            "  23.09.2026 Drucksache 18/523"
+        )
+        url = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Drucksachen/0000/18%5F0523.pdf"
+
+        def cycle_raw(fundstelle: str) -> dict:
+            raw = _make_raw_vorgang("V-247045")
+            raw["fundstellen_parsed"].append({**parse_fundstelle_text(fundstelle), "pdf_url": url})
+            return raw
+
+        await self._run_cycle(scraper, cycle_raw(vorabzug))
+        assert await self._run_cycle(scraper, cycle_raw(f"{vorabzug}   (1 S.)")) == (1, 0, 0)
+
+    @pytest.mark.asyncio
     async def test_changed_aktueller_stand_triggers_reupload(self):
         scraper = self._scraper()
         await self._run_cycle(scraper, _make_raw_vorgang("V-247603"))
