@@ -1014,7 +1014,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         federf = (
             station_typ == Stationstyp.PARL_AUSSCHBER
             and station_typ_str.startswith("Beschlussempfehlung")
-            and bool(fund.get("ausschuss"))
+            and fund.get("ausschuss")
         )
         return Station(
             typ=station_typ,

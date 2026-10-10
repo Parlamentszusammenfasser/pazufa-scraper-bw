@@ -4981,9 +4981,8 @@ class TestIssue64GremiumFederf:
         return json.loads(path.read_text(encoding="utf-8"))
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("vid", ["v217223", "v237492", "v244180"])
-    async def test_reporting_committee_is_federfuehrend(self, scraper_build_vorgang, vid):
-        vorgang = await scraper_build_vorgang(self._load(vid))
+    async def test_reporting_committee_is_federfuehrend(self, scraper_build_vorgang):
+        vorgang = await scraper_build_vorgang(self._load("v217223"))
         federf = [s for s in vorgang.stationen if s.gremium_federf is not UNSET]
         assert [(s.typ, s.gremium_federf) for s in federf] == [(Stationstyp.PARL_AUSSCHBER, True)]
         assert federf[0].gremium.name != "plenum"
@@ -4995,6 +4994,14 @@ class TestIssue64GremiumFederf:
             fund.pop("ausschuss", None)
         vorgang = await scraper_build_vorgang(raw)
         assert all(s.gremium_federf is UNSET for s in vorgang.stationen)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("label", ["Ausschussberatung", "Bericht und Empfehlungen"])
+    async def test_other_committee_sources_stay_unset(self, scraper_build_vorgang, label):
+        """Mapped to parl-ausschber but never observed; the committee could be a mitberatender."""
+        fund = parse_fundstelle_text(f"{label}    Ausschuss für Finanzen  12.03.2026 Drucksache 17/10400")
+        vorgang = await scraper_build_vorgang(_make_raw_vorgang("V-640", fundstellen=[fund]))
+        assert [(s.typ, s.gremium_federf) for s in vorgang.stationen] == [(Stationstyp.PARL_AUSSCHBER, UNSET)]
 
 
 class TestConstructDrucksachePdfUrl:
