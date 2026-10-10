@@ -21,7 +21,7 @@ from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
-from bawue.run_report import FailedItem, format_duration, format_failed_section
+from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
 from bawue.types import (
     TODO_MARKER,
     UNSET,
@@ -154,12 +154,18 @@ class BawueBeteiligungScraper(VorgangsScraper):
         process = self._raw_cache.pop(slug, None)
         if process is None:
             logger.error("No cached process data for slug %s", slug)
+            self._skipped += 1
             return None
 
-        html = await asyncio.to_thread(self._client.fetch_process_detail, process.url)
-        detail = parse_process_detail(html, BASE_URL)
-
-        return await self._build_vorgang(slug, detail)
+        try:
+            html = await asyncio.to_thread(self._client.fetch_process_detail, process.url)
+            return await self._build_vorgang(slug, parse_process_detail(html, BASE_URL))
+        except Exception as exc:
+            # Counted so the summary adds up (issue #83); not cached, so retried next cycle.
+            logger.exception("Building Beteiligung process %s failed", slug)
+            self._failed += 1
+            self._failed_items.append(FailedItem(slug, process.title, api_exception_reason(exc)))
+            return None
 
     async def _build_vorgang(self, slug: str, detail: RawBeteiligungDetail) -> Vorgang | None:
         """Convert parsed Beteiligungsportal data into a framework Vorgang model.

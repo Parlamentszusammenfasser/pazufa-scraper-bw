@@ -457,6 +457,7 @@ class TestItemExtractor:
         result = await scraper.item_extractor("missing-slug")
 
         assert result is None
+        assert scraper._skipped == 1  # Found counts it, so the summary must too (issue #83)
 
 
 class TestIssue52RunReport:
@@ -480,6 +481,50 @@ class TestIssue52RunReport:
         title, lines = scraper.summary
         assert title == "Beteiligung"
         assert "Found:       4  (new or retried 1, cached 3)" in lines
+
+
+class TestIssue83SummaryAddsUp:
+    """Issue #83: Found = cached + Published + Skipped + Failed, also when a detail fetch crashes."""
+
+    @pytest.mark.asyncio
+    async def test_crashed_detail_fetch_counts_as_failed(self):
+        from bawue.upload_throttle import UploadOutcome
+
+        scraper = _make_scraper()
+        scraper.listing_urls = ["lp-18"]
+        scraper.config.linearize = True
+        scraper.config.max_concurrency = 1
+        scraper.config.api_obj_log = None
+        scraper.config.cache.get_raw.return_value = None
+        scraper.items_done = 0
+        scraper._client.fetch_process_list.return_value = [
+            _make_process(slug="effizienzgesetz"),
+            _make_process(slug="timeout", title="Timeout-Gesetz"),
+        ]
+        page = (FIXTURES / "effizienzgesetz_detail.html").read_text()
+
+        def _detail(url):
+            if url.endswith("/timeout"):
+                raise TimeoutError("portal timeout")
+            return page
+
+        scraper._client.fetch_process_detail.side_effect = _detail
+
+        async def _to_thread(fn, *args):
+            return fn(*args)
+
+        with (
+            patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", side_effect=_to_thread),
+            patch("bawue.bawue_beteiligung_scraper.upload_vorgang", side_effect=lambda *a, **_: UploadOutcome(a[3])),
+            patch("bawue.notifications.load_toml_section", return_value={}),
+        ):
+            await scraper.run()
+
+        lines = scraper.summary[1]
+        assert "Found:       2  (new or retried 2, cached 0)" in lines
+        assert "Published:   1" in lines
+        assert "Failed:      1" in lines
+        assert "  - timeout | Timeout-Gesetz | TimeoutError: portal timeout" in lines
 
 
 class TestRunSummary:
