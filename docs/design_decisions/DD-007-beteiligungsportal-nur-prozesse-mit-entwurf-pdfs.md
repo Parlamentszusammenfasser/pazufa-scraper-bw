@@ -22,14 +22,15 @@ Extern verlinkte PDFs (z. B. EU-Verordnungsvorschläge auf `esf-bw.de` bei
 
 **Nachtrag (GitHub Issue #71, 10.10.2026):** Ein PDF allein belegt keinen
 Gesetzentwurf. Rechtsverordnungen der Landesregierung gehen nie durch den Landtag,
-wurden aber als `gg-land-parl` hochgeladen („Mietpreisbegrenzung" auf PROD und Staging). Übersprungen (Summary: „Skipped") wird ein
-Prozess, dessen Phasen-Timeline „Beschluss der geltenden Verordnung(en)" enthält;
-Gesetz-Seiten enden auf „Beratung und Beschluss" / „Geltendes Gesetz". Auf 136
-Portalseiten (LP 17 + 18) traf das alle 15 Verordnungen und keinen Gesetzentwurf.
-PDF-Titel taugen nicht: 5 der 15 beginnen nicht mit „Verordnung…", und ein
-Gesetz-PDF ohne „Gesetz" im Titel wäre verloren gegangen. Ohne Timeline bleibt der
-Prozess erhalten.
+wurden aber als `gg-land-parl` hochgeladen („Mietpreisbegrenzung", PROD und Staging).
+Übersprungen (Summary: „Skipped") wird ein Prozess, dessen Phasen-Timeline
+„Beschluss der geltenden Verordnung(en)" enthält; Gesetz-Seiten tragen diese Phase
+nie. Auf 135 Portalseiten (LP 17 + 18) traf das alle 17 Verordnungen und keinen
+Gesetzentwurf. PDF-Titel taugen nicht: 5 der 17 beginnen nicht mit „Verordnung…",
+und ein Gesetz-PDF ohne „Gesetz" im Titel wäre verloren gegangen. Ohne Timeline
+bleibt der Prozess erhalten.
 
 **Implementierung:** `beteiligung_parser.py`, Funktion `parse_process_detail()` —
 Link-Extraktion und Host-Filter; `bawue_beteiligung_scraper.py`, Methode
-`_build_vorgang()` — Prüfung auf `detail.pdf_links` und `detail.phases` (Issue #71).
+`_build_vorgang()` — Prüfung auf `detail.pdf_links` und `detail.is_verordnung` (Issue #71,
+auch im Dry-Run).

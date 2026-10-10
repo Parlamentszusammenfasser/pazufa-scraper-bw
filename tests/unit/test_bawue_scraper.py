@@ -5402,7 +5402,8 @@ class TestPlaceholderHash:
         [zweite] = await protocol_hashes("V-247045", "Zweite Beratung")
         assert erste != zweite
         # Several bills read in one session share raw and link; the Vorgang id keeps them apart.
-        assert await protocol_hashes("V-248237", "Erste Beratung") != [erste]
+        [other_bill] = await protocol_hashes("V-248237", "Erste Beratung")
+        assert other_bill != erste
         assert await protocol_hashes("V-247603", "Erste Beratung") == [erste]  # stable across runs
         assert re.fullmatch(r"[0-9a-f]{64}", erste)
 
