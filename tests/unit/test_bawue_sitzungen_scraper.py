@@ -158,7 +158,7 @@ class TestItemExtractor:
 
 
 class TestIssue65SessionNumber:
-    """Issue #65: no source carries a committee's session number, so it stays 0 — loudly (DD-064)."""
+    """Issue #65: a Sitzung without a session number stays 0 and is logged (DD-064)."""
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -180,7 +180,7 @@ class TestIssue65SessionNumber:
         with caplog.at_level(logging.WARNING, logger="bawue.bawue_sitzungen_scraper"):
             await ics_scraper_with_events.item_extractor("2026-02-25")
 
-        assert "No session number" not in caplog.text
+        assert not caplog.records
 
 
 class TestInit:

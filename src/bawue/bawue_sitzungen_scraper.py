@@ -107,8 +107,13 @@ class BawueSitzungenScraper(SitzungsScraper):
             api_id = uuid5(NAMESPACE_URL, event.uid)
 
             if not event.nummer:
-                # No source carries committee numbers; the ICS currently drops Plenum ones too (DD-064).
-                logger.warning("No session number for %s on %s, sending nummer=0", event.gremium_name, date_key)
+                # Fail-loud: no source carries the number (DD-064).
+                logger.warning(
+                    "No session number for %s on %s in %r, sending nummer=0",
+                    event.gremium_name,
+                    date_key,
+                    event.summary,
+                )
 
             gremium = Gremium(
                 parlament=Parlament.BW,

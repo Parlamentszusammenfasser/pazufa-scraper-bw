@@ -10,7 +10,8 @@ immer `0`. Geprüft am 10.10.2026, ob eine Quelle die Nummer liefert:
 
 - **ICS-Feed:** Ein Event hat nur `UID`, `DTSTAMP`, `DTSTART`, `DTEND` und `SUMMARY`, kein
   `DESCRIPTION`, kein `URL`. Auch Plenarsitzungen heißen inzwischen nur `Plenarsitzung: `,
-  der Regex trifft also derzeit nirgends.
+  der Regex trifft also derzeit nirgends: alle 47 übernommenen Termine (35 Plenum, 12 FinA)
+  haben `nummer=0`.
 - **Tagesordnungen** (`/de/aktuelles/tagesordnungen`): Ausschüsse „Zur Zeit liegen keine
   Tagesordnungen vor“. Fürs Plenum steht nur die nächste Sitzung da, die Nummer im
   Dateinamen (`2026-10-21_14_Plenarsitzung.pdf`).
@@ -20,10 +21,11 @@ immer `0`. Geprüft am 10.10.2026, ob eine Quelle die Nummer liefert:
 
 1. Ohne Nummer bleibt `nummer=0` (Pflichtfeld, kein Weglassen möglich). Geraten wird nicht,
    auch nicht durch Abzählen der Plenartage.
-2. Fail-loud: `item_extractor` loggt je Sitzung ohne Nummer eine Warnung mit Gremium und
-   Datum. Weil Termine nach dem Upload gecacht sind, erscheint sie nur für neue Termine.
+2. Fail-loud: `item_extractor` loggt je Sitzung ohne Nummer eine Warnung mit Gremium, Datum
+   und SUMMARY. Weil Termine nach dem Upload gecacht sind, erscheint sie nur für neue Termine.
 3. Der Regex bleibt. Liefert der Feed die Nummer wieder, wird sie ohne Codeänderung
-   übernommen.
+   übernommen, aber nur für noch nicht gecachte Termine: Der Cache-Schlüssel ist allein das
+   Datum (`sz:`), ohne TTL. Für bereits hochgeladene Termine die `sz:`-Einträge löschen.
 
 **Nicht umgesetzt:** Die Plenarnummer aus dem Dateinamen der Tagesordnung. Sie deckt nur die
 nächste Sitzung ab und gehört zum TOP-Scraping (GitHub Issue #66).

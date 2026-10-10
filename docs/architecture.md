@@ -354,7 +354,7 @@ Overrides `send_result()` to use `Parlament.BW`. Uses `_events_by_date` to bridg
 |---------------|---------|------------------------------------------------------|
 | `termin`      | DTSTART | Naive → Europe/Berlin → UTC                          |
 | `gremium`     | SUMMARY | Parsed via `extract_gremium_name()`                  |
-| `nummer`      | SUMMARY | `extract_session_number()` regex; `0` for committees |
+| `nummer`      | SUMMARY | Regex; currently no match → `0` + warning (DD-064)   |
 | `tops`        | —       | `[]` (not available in ICS feed)                     |
 | `public`      | —       | `True`                                               |
 | `api_id`      | UID     | `uuid5(NAMESPACE_URL, uid)` for determinism          |
