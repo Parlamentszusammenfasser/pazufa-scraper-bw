@@ -388,28 +388,22 @@ class TestIssue71Verordnungen:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("titles", "skipped"),
+        ("last_phase", "skipped"),
         [
-            # A Verordnung citing its parent Gesetz is still a Verordnung.
-            (["Verordnung des Sozialministeriums zum Landeskrebsregistergesetz (PDF)"], True),
-            (["Entwurf einer Verordnung über Kappungsgrenzen (PDF)"], True),
-            # A Gesetz with its Durchführungsverordnung stays a Gesetz.
-            (
-                ["Gesetz zur Änderung des Rettungsdienstgesetzes (PDF)", "Verordnungsentwurf zur Durchführung (PDF)"],
-                False,
-            ),
-            # No positive Verordnung evidence: keep (DD-007), never drop a Gesetz silently.
-            (["Anhörungsentwurf mit Begründung (PDF)"], False),
+            ("Beschluss der geltenden Verordnungen", True),
+            ("Beschluss der geltenden Verordnung", True),
+            ("Geltendes Gesetz", False),
         ],
     )
-    async def test_pdf_titles_decide(self, titles, skipped):
+    async def test_phase_timeline_decides_not_pdf_titles(self, last_phase, skipped):
+        """The PDF title is no signal: only the portal's phases tell Verordnung from Gesetz."""
         scraper = _make_scraper()
         pdf_links = [
-            {"title": t, "url": f"https://beteiligungsportal.baden-wuerttemberg.de/{i}.pdf"}
-            for i, t in enumerate(titles)
+            {"title": "Verordnungsentwurf (PDF)", "url": "https://beteiligungsportal.baden-wuerttemberg.de/a.pdf"}
         ]
+        detail = _make_detail(pdf_links=pdf_links, phases=["Online-Kommentierung", last_phase])
 
-        vorgang = await scraper._build_vorgang("x", _make_detail(pdf_links=pdf_links))
+        vorgang = await scraper._build_vorgang("x", detail)
 
         assert (vorgang is None) is skipped
         assert scraper._skipped == int(skipped)
