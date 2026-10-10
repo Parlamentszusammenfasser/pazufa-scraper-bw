@@ -23,6 +23,7 @@ def _make_scraper() -> BawueSitzungenScraper:
     scraper = object.__new__(BawueSitzungenScraper)
     scraper._wahlperiode = 17
     scraper._events_by_date = {}
+    scraper._fingerprints = {}
     scraper.listing_urls = [ICS_URL]
     scraper.session = MagicMock()
     scraper.scraper_id = "00000000-0000-0000-0000-000000000001"
@@ -181,6 +182,75 @@ class TestIssue65SessionNumber:
             await ics_scraper_with_events.item_extractor("2026-02-25")
 
         assert not caplog.records
+
+
+_ADDED_EVENT = (
+    b"BEGIN:VEVENT\nDTSTART:20260226T140000\nDTEND:20260226T160000\nUID:evt-fina-002@landtag-bw.de\n"
+    b"SUMMARY:Fraktions- und Ausschusssitzungen: FinA\nEND:VEVENT\nEND:VCALENDAR"
+)
+
+
+class TestSitzungenRefresh:
+    """DD-066: a cached date is re-uploaded once its events change, and skipped otherwise.
+
+    Runs the real listing → cache check → extract → store pipeline; only the ICS
+    download and the upload are stubbed.
+    """
+
+    @staticmethod
+    def _scraper() -> BawueSitzungenScraper:
+        from tests.unit.test_bawue_scraper import _InMemoryCache
+
+        scraper = _make_scraper()
+        scraper.config = MagicMock(linearize=True, max_concurrency=1, api_obj_log=None, cache=_InMemoryCache())
+        scraper.items_done = 0
+        scraper.uploaded = []
+
+        async def _send(item):
+            scraper.uploaded.append(item[0].date().isoformat())
+            return item
+
+        scraper.send_result = _send
+        return scraper
+
+    @staticmethod
+    async def _run_cycle(scraper, ics: bytes) -> list[str]:
+        response = AsyncMock(read=AsyncMock(return_value=ics))
+        response.__aenter__ = AsyncMock(return_value=response)
+        scraper.session.get = MagicMock(return_value=response)
+        scraper.uploaded = []
+        await scraper.process_items(await scraper.process_lpurls(scraper.listing_urls))
+        return scraper.uploaded
+
+    @pytest.mark.asyncio
+    async def test_unchanged_feed_is_skipped(self):
+        scraper = self._scraper()
+        assert len(await self._run_cycle(scraper, ICS_BYTES)) == 5
+        assert await self._run_cycle(scraper, ICS_BYTES) == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("old", "new"),
+        [
+            (b"143. Sitzung", b"144. Sitzung"),  # SUMMARY
+            (b"DTSTART:20260226T090000", b"DTSTART:20260226T100000"),  # moved
+            (b"END:VCALENDAR", _ADDED_EVENT),  # added on the same date
+        ],
+    )
+    async def test_changed_date_is_reuploaded(self, old, new):
+        scraper = self._scraper()
+        await self._run_cycle(scraper, ICS_BYTES)
+        assert await self._run_cycle(scraper, ICS_BYTES.replace(old, new)) == ["2026-02-26"]
+
+    @pytest.mark.asyncio
+    async def test_legacy_entry_is_reuploaded_once(self):
+        """Entries written before DD-066 hold the uploaded item, not a fingerprint."""
+        scraper = self._scraper()
+        key = await scraper.make_cache_key("2026-02-26")
+        scraper.config.cache.store_raw(key, "(datetime.datetime(2026, 2, 26, 0, 0), [Sitzung(...)])")
+
+        assert "2026-02-26" in await self._run_cycle(scraper, ICS_BYTES)
+        assert await self._run_cycle(scraper, ICS_BYTES) == []
 
 
 class TestInit:
