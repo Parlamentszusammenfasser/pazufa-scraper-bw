@@ -67,14 +67,15 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 
 ### Station
 
-| Feld          | Typ                         | Pflicht | BaWue-Hinweise                                                               |
-|---------------|-----------------------------|---------|------------------------------------------------------------------------------|
-| `typ`         | Stationstyp                 | Ja      |                                                                              |
-| `dokumente`   | list[StationDokumenteInner] | Ja      | `StationDokumenteInner`-Wrapper (Union-Typ aus OpenAPI-Spec)                 |
-| `zp_start`    | datetime                    | Ja      |                                                                              |
-| `gremium`     | Gremium                     | Ja      | Aus PARLIS-Fundstellen abgeleitet — siehe [architecture.md](architecture.md) |
-| `titel`       | string                      | Nein    |                                                                              |
-| `schlagworte` | list[string]                | Nein    | Seit Spec 0.2.7 veraltet, nicht befüllt (→ `Vorgang.schlagworte`, DD-060)    |
+| Feld             | Typ                         | Pflicht | BaWue-Hinweise                                                               |
+|------------------|-----------------------------|---------|------------------------------------------------------------------------------|
+| `typ`            | Stationstyp                 | Ja      |                                                                              |
+| `dokumente`      | list[StationDokumenteInner] | Ja      | `StationDokumenteInner`-Wrapper (Union-Typ aus OpenAPI-Spec)                 |
+| `zp_start`       | datetime                    | Ja      |                                                                              |
+| `gremium`        | Gremium                     | Ja      | Aus PARLIS-Fundstellen abgeleitet — siehe [architecture.md](architecture.md) |
+| `gremium_federf` | boolean                     | Nein    | `True` an der Station des Ausschusses mit Beschlussempfehlung (DD-065)       |
+| `titel`          | string                      | Nein    |                                                                              |
+| `schlagworte`    | list[string]                | Nein    | Seit Spec 0.2.7 veraltet, nicht befüllt (→ `Vorgang.schlagworte`, DD-060)    |
 
 ### Dokument
 

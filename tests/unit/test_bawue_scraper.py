@@ -5,6 +5,7 @@ import json
 import logging
 import re
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -4968,6 +4969,39 @@ class TestIssue33SchlagworteFromParlis:
         vorgang = await scraper_build_vorgang(raw)
         assert vorgang.schlagworte is UNSET
         assert "schlagworte" not in vorgang.to_dict()
+
+
+class TestIssue64GremiumFederf:
+    """GitHub issue #64 (DD-065): only the federführende committee reports with a Beschlussempfehlung."""
+
+    @staticmethod
+    def _load(vid: str) -> dict:
+        """Real PARLIS records with a committee's Beschlussempfehlung (shared with issue #26)."""
+        path = Path(__file__).parent.parent / "fixtures" / "parlis" / "issue26" / f"{vid}.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    @pytest.mark.asyncio
+    async def test_reporting_committee_is_federfuehrend(self, scraper_build_vorgang):
+        vorgang = await scraper_build_vorgang(self._load("v217223"))
+        federf = [s for s in vorgang.stationen if s.gremium_federf is not UNSET]
+        assert [(s.typ, s.gremium_federf) for s in federf] == [(Stationstyp.PARL_AUSSCHBER, True)]
+        assert federf[0].gremium.name != "plenum"
+
+    @pytest.mark.asyncio
+    async def test_unnamed_committee_stays_unset(self, scraper_build_vorgang):
+        raw = self._load("v237492")
+        for fund in raw["fundstellen_parsed"]:
+            fund.pop("ausschuss", None)
+        vorgang = await scraper_build_vorgang(raw)
+        assert all(s.gremium_federf is UNSET for s in vorgang.stationen)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("label", ["Ausschussberatung", "Bericht und Empfehlungen"])
+    async def test_other_committee_sources_stay_unset(self, scraper_build_vorgang, label):
+        """Mapped to parl-ausschber but never observed; the committee could be a mitberatender."""
+        fund = parse_fundstelle_text(f"{label}    Ausschuss für Finanzen  12.03.2026 Drucksache 17/10400")
+        vorgang = await scraper_build_vorgang(_make_raw_vorgang("V-640", fundstellen=[fund]))
+        assert [(s.typ, s.gremium_federf) for s in vorgang.stationen] == [(Stationstyp.PARL_AUSSCHBER, UNSET)]
 
 
 class TestConstructDrucksachePdfUrl:
