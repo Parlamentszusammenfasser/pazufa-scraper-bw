@@ -45,7 +45,7 @@ hochgeladen. Kein manuelles Aufräumen nötig.
 
 **Nicht abgedeckt:** Ein unter derselben URL ausgetauschtes PDF ohne Änderung am
 PARLIS-Record. Beteiligung (Schlüssel nur Slug) und Sitzungen (nur Datum) haben dasselbe
-Muster und werden separat behandelt.
+Muster und werden separat behandelt (Sitzungen: DD-066).
 
 **Code:** `bawue_vorgaenge_scraper._vorgang_fingerprint`, `listing_page_extractor`
 (`_fingerprints`), `get_cached_result`, `store_extracted_result`

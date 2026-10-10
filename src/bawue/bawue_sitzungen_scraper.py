@@ -1,10 +1,12 @@
 """BaWue Sitzungen scraper: SitzungsScraper subclass for Baden-Württemberg ICS calendar."""
 
 import datetime
+import json
 import logging
 import ssl
 import time
 import uuid
+from hashlib import sha256
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
@@ -15,7 +17,7 @@ import certifi
 from bawue.api import BawueApiError, build_client, put_kalender
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
-from bawue.ics_parser import group_events_by_date, parse_ics_feed
+from bawue.ics_parser import ParsedEvent, group_events_by_date, parse_ics_feed
 from bawue.pipeline import SitzungsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
@@ -46,6 +48,7 @@ class BawueSitzungenScraper(SitzungsScraper):
         self._client = build_client(config.database_url, config.api_key)
 
         self._events_by_date: dict[str, list] = {}
+        self._fingerprints: dict[str, str] = {}
         self._total_events: int = 0
         self._total_dates: int = 0
         self._published_dates: int = 0
@@ -85,12 +88,22 @@ class BawueSitzungenScraper(SitzungsScraper):
         for dt, evts in sorted(grouped.items()):
             key = dt.isoformat()
             self._events_by_date[key] = evts
+            self._fingerprints[await self.make_cache_key(key)] = _events_fingerprint(evts, self._wahlperiode)
             date_keys.append(key)
 
         self._total_events = len(events)
         self._total_dates = len(date_keys)
         logger.info("Parsed %d events across %d dates from ICS feed", len(events), len(date_keys))
         return date_keys
+
+    async def get_cached_result(self, item_key: str) -> str | None:
+        """A cache hit only while the date's events are unchanged (DD-066)."""
+        cached = await super().get_cached_result(item_key)
+        return cached if cached == self._fingerprints.get(item_key) else None
+
+    async def store_extracted_result(self, item_key: str, result: Any) -> None:
+        """Store the fingerprint, not the item: nothing reads it back (DD-066)."""
+        await super().store_extracted_result(item_key, self._fingerprints[item_key])
 
     async def item_extractor(self, date_key: str) -> Any:
         """Convert stored events for a date into (datetime, List[Sitzung])."""
@@ -179,6 +192,12 @@ class BawueSitzungenScraper(SitzungsScraper):
                 FailedItem(item_id=item[0].date().isoformat(), titel=None, reason=api_exception_reason(e))
             )
             return None
+
+
+def _events_fingerprint(events: list[ParsedEvent], wahlperiode: int) -> str:
+    """Fingerprint of what a date uploads, parsed values included, order ignored (DD-066)."""
+    rows = sorted([e.uid, e.dtstart.isoformat(), e.summary, e.gremium_name, e.nummer] for e in events)
+    return sha256(json.dumps([wahlperiode, rows], ensure_ascii=False).encode()).hexdigest()
 
 
 def _print_sitzungen_summary(
