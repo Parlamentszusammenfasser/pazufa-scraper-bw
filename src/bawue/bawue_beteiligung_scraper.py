@@ -47,9 +47,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BETEILIGUNG_DELAY = 2.0
 
-# Only Verordnung pages have this phase; Gesetz pages end in "Geltendes Gesetz" (issue #71).
-_VERORDNUNG_PHASE = "Beschluss der geltenden Verordnung"
-
 
 class BawueBeteiligungScraper(VorgangsScraper):
     """Scrapes pre-parliamentary draft laws from the Beteiligungsportal Baden-Württemberg.
@@ -171,7 +168,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             logger.info("Skipping '%s' — no Entwurf PDFs found", detail.title)
             self._skipped += 1
             return None
-        if any(phase.startswith(_VERORDNUNG_PHASE) for phase in detail.phases):
+        if detail.is_verordnung:
             logger.info("Skipping '%s' — Verordnung, not a Gesetzentwurf", detail.title)
             self._skipped += 1
             return None
