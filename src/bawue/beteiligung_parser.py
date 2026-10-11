@@ -27,6 +27,11 @@ class RawBeteiligungDetail:
     comment_deadline: str | None = None
     phases: list[str] = field(default_factory=list)
 
+    @property
+    def is_verordnung(self) -> bool:
+        """Only Verordnung pages carry this phase; Gesetz pages never do (issue #71, DD-007)."""
+        return any(phase.startswith("Beschluss der geltenden Verordnung") for phase in self.phases)
+
 
 def parse_process_list(html_content: str) -> list[RawBeteiligungProcess]:
     """Extract processes from the LP index page."""

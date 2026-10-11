@@ -43,12 +43,15 @@ Beratung", V-247045 „Zweite Beratung"). Gleicher Link → gleicher Platzhalter
 Backend merged beide zu einem Dokument, der letzte Upload überschreibt `titel`.
 PARLIS hasht deshalb `sha256(vorgangs_id | Fundstelle-raw | link)`: ein Dokument je
 Fundstelle, stabil zwischen Läufen. Der Beteiligungsportal-Scraper behält
-`sha256(link)` (seine PDFs gehören zu genau einem Prozess). Bereits hochgeladene
-Platzhalter-Dokumente erhalten beim nächsten Neubau des Vorgangs einen neuen Hash.
-Bekannte Lücke: Ist das Protokoll lesbar, aber noch ohne Anker, gilt der reine
-Datei-Hash ([DD-049](DD-049-ein-dokument-row-je-fundstelle-der-page-n-anker-gilt-auch.md)), und die Vorgänge teilen wieder einen Row. Das heilt, sobald
-PARLIS `S. x–y` nachträgt: der Fingerprint (DD-052) ändert sich, der Neubau setzt
-den Anker.
+`sha256(link)` (seine PDFs gehören zu genau einem Prozess).
+
+Das Backend (v0.3.3) ersetzt dabei keine Rows: ein Stations-Merge fügt Dokumente nur
+hinzu (`execute_merge_station`), und ein Protokoll ohne `drucksnr` matcht nur über den
+Hash. Ändert sich der Hash, hängt der alte Row weiter an der Station und muss manuell
+gelöscht werden (`DELETE /api/v2/dokument/{api_id}`). Das gilt für den Umstieg auf
+diesen Platzhalter ebenso wie für die bekannte Lücke: Ist das Protokoll lesbar, aber
+noch ohne Anker, gilt der reine Datei-Hash ([DD-049](DD-049-ein-dokument-row-je-fundstelle-der-page-n-anker-gilt-auch.md)), und die Vorgänge teilen
+wieder einen Row; trägt PARLIS `S. x–y` nach, kommt je Station ein Anker-Row dazu.
 
 **Bewusst nicht geändert:** `volltext` trägt weiterhin `TODO_MARKER`. Das Feld ist
 ein Pflicht-String, den das Backend nur auf „nicht leer" prüft; es ist keine

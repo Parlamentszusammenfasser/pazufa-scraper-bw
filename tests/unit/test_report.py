@@ -148,7 +148,7 @@ class TestAnalyzeVorgang:
 
 class TestAnalyzeBeteiligung:
     def test_basic_report(self):
-        from bawue.beteiligung_parser import RawBeteiligungProcess
+        from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
 
         process = RawBeteiligungProcess(
             title="Klimaschutzgesetz",
@@ -156,15 +156,11 @@ class TestAnalyzeBeteiligung:
             slug="klimaschutzgesetz",
             status="closed",
         )
-        detail = type(
-            "Detail",
-            (),
-            {
-                "title": "Klimaschutzgesetz",
-                "ministry": "Umweltministerium",
-                "pdf_links": [{"title": "Entwurf", "url": "https://example.com/entwurf.pdf"}],
-            },
-        )()
+        detail = RawBeteiligungDetail(
+            title="Klimaschutzgesetz",
+            ministry="Umweltministerium",
+            pdf_links=[{"title": "Entwurf", "url": "https://example.com/entwurf.pdf"}],
+        )
 
         report = analyze_beteiligung(process, detail)
 
@@ -176,18 +172,10 @@ class TestAnalyzeBeteiligung:
         assert report.skipped is False
 
     def test_skipped_when_no_pdfs(self):
-        from bawue.beteiligung_parser import RawBeteiligungProcess
+        from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
 
         process = RawBeteiligungProcess(title="Info Only", url="/de/info", slug="info-only", status="open")
-        detail = type(
-            "Detail",
-            (),
-            {
-                "title": "Info Only",
-                "ministry": "Staatsministerium",
-                "pdf_links": [],
-            },
-        )()
+        detail = RawBeteiligungDetail(title="Info Only", ministry="Staatsministerium")
 
         report = analyze_beteiligung(process, detail)
 
