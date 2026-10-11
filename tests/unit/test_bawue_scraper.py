@@ -88,6 +88,30 @@ def scraper_build_vorgang():
     return scraper._build_vorgang
 
 
+@pytest.fixture()
+def scraper_failed_downloads(monkeypatch):
+    """LLM-enabled scraper whose every PDF download fails (issue #66, DD-067)."""
+    from bawue.bawue_dok import EnrichmentResult
+
+    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper._wahlperiode = 18
+    scraper._filter_sonstig = True
+    scraper.session = MagicMock()
+    scraper._client = MagicMock()
+    scraper.config = MagicMock()
+    scraper._llm_enabled = True
+    scraper._llm = MagicMock()
+    scraper._llm_model = "gpt-5-nano"
+    scraper._llm_metrics = LLMMetrics()
+    scraper._pending_pdf_downloads = set()
+
+    async def _fake_enrich(session, llm, dok, **kwargs):
+        return EnrichmentResult(dokument=dok, download_failed=True)
+
+    monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
+    return scraper
+
+
 class TestBuildVorgang:
     @pytest.mark.asyncio
     async def test_builds_framework_vorgang(self, scraper_build_vorgang):
@@ -196,32 +220,13 @@ class TestBuildVorgang:
         assert prompt.endswith("Zusammenfassung: Soforthilfen werden nicht zurückgefordert.")
 
     @pytest.mark.asyncio
-    async def test_build_vorgang_marks_vorgang_with_failed_pdf_download(self, monkeypatch):
+    async def test_build_vorgang_marks_vorgang_with_failed_pdf_download(self, scraper_failed_downloads):
         """Issue #66 follow-up: when enrichment reports a failed PDF download
         (document not yet published), the Vorgang's vorgnr is remembered so
         the run does not cache it and the next cycle retries the download."""
-        from bawue.bawue_dok import EnrichmentResult
+        await scraper_failed_downloads._build_vorgang(_make_raw_vorgang("V-246637"))
 
-        scraper = object.__new__(BawueVorgaengeScraper)
-        scraper._wahlperiode = 18
-        scraper._filter_sonstig = True
-        scraper.session = MagicMock()
-        scraper._client = MagicMock()
-        scraper.config = MagicMock()
-        scraper._llm_enabled = True
-        scraper._llm = MagicMock()
-        scraper._llm_model = "gpt-5-nano"
-        scraper._llm_metrics = LLMMetrics()
-        scraper._pending_pdf_downloads = set()
-
-        async def _fake_enrich(session, llm, dok, **kwargs):
-            return EnrichmentResult(dokument=dok, download_failed=True)
-
-        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
-
-        await scraper._build_vorgang(_make_raw_vorgang("V-246637"))
-
-        assert "V-246637" in scraper._pending_pdf_downloads
+        assert "V-246637" in scraper_failed_downloads._pending_pdf_downloads
 
     @pytest.mark.asyncio
     async def test_store_extracted_result_skips_caching_on_pending_pdf_download(self):
@@ -245,31 +250,12 @@ class TestBuildVorgang:
         scraper.config.cache.store_raw.assert_called_once_with("vg2:V-247045", "fp-clean", "Vorgang")
 
     @pytest.mark.asyncio
-    async def test_unpublished_protocol_is_not_uploaded(self, monkeypatch):
+    async def test_unpublished_protocol_is_not_uploaded(self, scraper_failed_downloads):
         """DD-067: on staging, V-247045 kept placeholder rows for Plenarprotokoll 18/10
         next to the real one. The backend matches a Dokument without drucksnr by hash
         only, so the published protocol became a new row, and a station merge never
         unlinks the old one. A Drucksache keeps its placeholder: the backend matches
         it by drucksnr and updates that row in place."""
-        from bawue.bawue_dok import EnrichmentResult
-
-        scraper = object.__new__(BawueVorgaengeScraper)
-        scraper._wahlperiode = 18
-        scraper._filter_sonstig = True
-        scraper.session = MagicMock()
-        scraper._client = MagicMock()
-        scraper.config = MagicMock()
-        scraper._llm_enabled = True
-        scraper._llm = MagicMock()
-        scraper._llm_model = "gpt-5-nano"
-        scraper._llm_metrics = LLMMetrics()
-        scraper._pending_pdf_downloads = set()
-
-        async def _fake_enrich(session, llm, dok, **kwargs):
-            return EnrichmentResult(dokument=dok, download_failed=True)
-
-        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
-
         fundstellen = [
             {
                 "raw": "Gesetzentwurf Fraktion GRÜNE 07.07.2026 Drucksache 18/1234 (20 S.)",
@@ -286,6 +272,7 @@ class TestBuildVorgang:
                 "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Plp/18%5F0010%5F23072026.pdf",
             },
         ]
+        scraper = scraper_failed_downloads
         vorgang = await scraper._build_vorgang(_make_raw_vorgang("V-247045", fundstellen=fundstellen))
 
         by_typ = {st.typ: st for st in vorgang.stationen}
