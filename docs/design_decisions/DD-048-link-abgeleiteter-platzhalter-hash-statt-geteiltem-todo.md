@@ -53,6 +53,9 @@ diesen Platzhalter ebenso wie für die bekannte Lücke: Ist das Protokoll lesbar
 noch ohne Anker, gilt der reine Datei-Hash ([DD-049](DD-049-ein-dokument-row-je-fundstelle-der-page-n-anker-gilt-auch.md)), und die Vorgänge teilen
 wieder einen Row; trägt PARLIS `S. x–y` nach, kommt je Station ein Anker-Row dazu.
 
+**Nachtrag ([DD-067](DD-067-kein-platzhalter-dokument-ohne-drucksnr-nach-download-fehler.md), 11.10.2026):** Ein Dokument ohne `drucksnr` geht nach einem Download-Fehler
+nicht mehr mit Platzhalter hoch; das Backend ließe den Platzhalter neben dem echten Dokument stehen.
+
 **Bewusst nicht geändert:** `volltext` trägt weiterhin `TODO_MARKER`. Das Feld ist
 ein Pflicht-String, den das Backend nur auf „nicht leer" prüft; es ist keine
 Identität und löst keine Merges aus.
