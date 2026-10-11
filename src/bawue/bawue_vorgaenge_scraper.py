@@ -1156,6 +1156,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 dok = result.dokument
                 if result.download_failed:
                     self._pending_pdf_downloads.add(vorgang_id)
+                    # Without a drucksnr the backend matches by hash only: the real PDF
+                    # would become a second row next to the placeholder (DD-067).
+                    if dok.drucksnr is None:
+                        return []
             except Exception:
                 logger.warning("Document enrichment failed for %s", pdf_url)
 

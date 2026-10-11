@@ -245,6 +245,56 @@ class TestBuildVorgang:
         scraper.config.cache.store_raw.assert_called_once_with("vg2:V-247045", "fp-clean", "Vorgang")
 
     @pytest.mark.asyncio
+    async def test_unpublished_protocol_is_not_uploaded(self, monkeypatch):
+        """DD-067: on staging, V-247045 kept placeholder rows for Plenarprotokoll 18/10
+        next to the real one. The backend matches a Dokument without drucksnr by hash
+        only, so the published protocol became a new row, and a station merge never
+        unlinks the old one. A Drucksache keeps its placeholder: the backend matches
+        it by drucksnr and updates that row in place."""
+        from bawue.bawue_dok import EnrichmentResult
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 18
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper.config = MagicMock()
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._llm_metrics = LLMMetrics()
+        scraper._pending_pdf_downloads = set()
+
+        async def _fake_enrich(session, llm, dok, **kwargs):
+            return EnrichmentResult(dokument=dok, download_failed=True)
+
+        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
+
+        fundstellen = [
+            {
+                "raw": "Gesetzentwurf Fraktion GRÜNE 07.07.2026 Drucksache 18/1234 (20 S.)",
+                "datum": "07.07.2026",
+                "drucksache": "18/1234",
+                "station_typ": "Gesetzentwurf",
+                "pdf_url": "https://www.landtag-bw.de/resource/blob/1234/doc.pdf",
+            },
+            {
+                "raw": "Erste Beratung Plenarprotokoll 18/10 23.07.2026",
+                "datum": "23.07.2026",
+                "plenarprotokoll": "18/10",
+                "station_typ": "Erste Beratung",
+                "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Plp/18%5F0010%5F23072026.pdf",
+            },
+        ]
+        vorgang = await scraper._build_vorgang(_make_raw_vorgang("V-247045", fundstellen=fundstellen))
+
+        by_typ = {st.typ: st for st in vorgang.stationen}
+        assert by_typ[Stationstyp.PARL_VOLLVLSGN].dokumente == []
+        [drucksache] = by_typ[Stationstyp.PARL_INITIATIV].dokumente
+        assert drucksache.drucksnr == "18/1234"
+        assert "V-247045" in scraper._pending_pdf_downloads
+
+    @pytest.mark.asyncio
     async def test_documentless_station_gets_stable_api_id(self, scraper_build_vorgang):
         """DD-028: a document-less station (e.g. Gesetzentwurf without PDF) gets a
         deterministic api_id so the backend links it across re-runs instead of
