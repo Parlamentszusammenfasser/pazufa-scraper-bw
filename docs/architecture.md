@@ -358,7 +358,7 @@ Overrides `send_result()` to use `Parlament.BW`. Uses `_events_by_date` to bridg
 | `nummer`      | SUMMARY | Regex; currently no match → `0` + warning (DD-064)   |
 | `tops`        | —       | `[]` (not available in ICS feed)                     |
 | `public`      | —       | `True`                                               |
-| `api_id`      | UID     | `uuid5(NAMESPACE_URL, "{uid}\|{date}")` (DD-069)    |
+| `api_id`      | UID, date | `uuid5(NAMESPACE_URL, "{uid}\|{date}")` (DD-069)  |
 
 ### BawueBeteiligungScraper
 

@@ -122,7 +122,7 @@ class TestItemExtractor:
 
     @pytest.mark.asyncio
     async def test_deterministic_api_id(self, ics_scraper_with_events):
-        """Same UID should produce the same api_id across runs."""
+        """Same UID on the same date should produce the same api_id across runs."""
         result1 = await ics_scraper_with_events.item_extractor("2026-02-25")
 
         # Re-populate for second extraction
