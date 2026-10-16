@@ -96,7 +96,7 @@ class TestListingPageExtractor:
 
         # events_by_date should have entries for all included dates
         assert "2026-02-24" in scraper._events_by_date
-        # Only FinA — the generic "Ausschuesse" umbrella is filtered (DD-006).
+        # Only FinA — the unnamed committee block is filtered (DD-006).
         assert len(scraper._events_by_date["2026-02-24"]) == 1
 
 
@@ -140,14 +140,14 @@ class TestItemExtractor:
 
     @pytest.mark.asyncio
     async def test_multiple_sitzungen_per_date(self, ics_scraper_with_events):
-        """On 2026-02-24 the sample feed has FinA + the generic Ausschuesse
-        umbrella. The umbrella is filtered out (DD-006 name-specificity), so
+        """On 2026-02-24 the sample feed has FinA + an unnamed committee
+        block. The block is filtered out (DD-006 name-specificity), so
         only FinA remains."""
         result = await ics_scraper_with_events.item_extractor("2026-02-24")
 
         _termin, sitzungen = result
         assert len(sitzungen) == 1
-        assert sitzungen[0].gremium.name == "Finanzausschuss"
+        assert sitzungen[0].gremium.name == "Ausschuss für Finanzen"
 
     @pytest.mark.asyncio
     async def test_datetimes_are_utc(self, ics_scraper_with_events):
@@ -165,7 +165,7 @@ class TestIssue65SessionNumber:
     @pytest.mark.parametrize(
         ("date_key", "gremium"),
         [
-            ("2026-02-24", "Finanzausschuss"),
+            ("2026-02-24", "Ausschuss für Finanzen"),
             ("2026-02-27", "plenum"),  # bare "Plenarsitzung:", as in the live feed
         ],
     )
@@ -315,6 +315,32 @@ class TestIssue116MovedSession:
         retimed = ICS_BYTES.replace(b"DTSTART:20260226T090000", b"DTSTART:20260226T100000")
 
         assert await self._api_id(retimed, "2026-02-26") == await self._api_id(ICS_BYTES, "2026-02-26")
+
+
+class TestIssue117NamedCommittees:
+    """Issue #117: an ICS entry naming several committees yields one Sitzung per committee (DD-006)."""
+
+    @pytest.mark.asyncio
+    async def test_combined_entry_yields_one_sitzung_per_committee(self):
+        combined = ICS_BYTES.replace(
+            b"SUMMARY:Fraktions- und Ausschusssitzungen: FinA\n",
+            b"SUMMARY:Fraktions- und Ausschusssitzungen: FinA, BildungsA, VerkA\n",
+        )
+        scraper = _make_scraper()
+        response = AsyncMock(read=AsyncMock(return_value=combined))
+        response.__aenter__ = AsyncMock(return_value=response)
+        scraper.session.get = MagicMock(return_value=response)
+        await scraper.listing_page_extractor(ICS_URL)
+
+        _termin, sitzungen = await scraper.item_extractor("2026-02-24")
+
+        assert [s.gremium.name for s in sitzungen] == [
+            "Ausschuss für Finanzen",
+            "Ausschuss für Kultus",
+            "Ausschuss für Verkehr",
+        ]
+        # One ICS UID, three Sitzungen: the backend's api_id is UNIQUE.
+        assert len({s.api_id for s in sitzungen}) == 3
 
 
 class TestInit:

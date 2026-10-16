@@ -1,5 +1,6 @@
 """Stateless ICS calendar parsing and event filtering for BaWue Sitzungen."""
 
+import logging
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -9,10 +10,30 @@ from icalendar import Calendar
 
 from bawue.types import ReservedGremium
 
+logger = logging.getLogger(__name__)
+
+# ICS committee abbreviation → name as on the committee's landtag-bw.de page, which PARLIS
+# uses too: Kalender and Vorgang Stationen then share one Gremium (DD-006, issue #117).
+COMMITTEE_NAMES = {
+    "BildungsA": "Ausschuss für Kultus",
+    "EuA": "Ausschuss für Europa und Internationales",
+    "FinA": "Ausschuss für Finanzen",
+    "InnenA": "Ausschuss des Inneren und für Digitalisierung",
+    "LandwA": "Ausschuss für Ländlichen Raum, Landwirtschaft und Heimat",
+    "LaWoA": "Ausschuss für Landesentwicklung und Wohnen",
+    "PetA": "Petitionsausschuss",
+    "SozA": "Ausschuss für Soziales, Arbeit und Gesundheit",
+    "StändA": "Ständiger Ausschuss",
+    "UmEnA": "Ausschuss für Umwelt, Klima und Energiewirtschaft",
+    "VerkA": "Ausschuss für Verkehr",
+    "WirtA": "Ausschuss für Wirtschaft, Handwerk und Tourismus",
+    "WissA": "Ausschuss für Wissenschaft, Forschung und Kunst",
+}
+
 
 @dataclass
 class ParsedEvent:
-    """A parsed and filtered ICS calendar event."""
+    """A parsed and filtered ICS calendar event, one per Gremium it names."""
 
     uid: str
     summary: str
@@ -37,29 +58,27 @@ def extract_session_number(summary: str) -> int:
     return int(match.group(1)) if match else 0
 
 
-def extract_gremium_name(summary: str) -> str | None:
-    """Extract gremium name from an ICS SUMMARY string.
-
-    Returns the gremium name if the event should be included, or None to filter it out.
-    """
+def extract_gremium_names(summary: str) -> list[str]:
+    """Gremium names of an ICS SUMMARY, one per committee; empty if the event is filtered out (DD-006)."""
     if summary.startswith("Plenarsitzung:"):
-        return ReservedGremium.PLENUM
+        return [ReservedGremium.PLENUM]
 
-    if summary.startswith("Fraktions- und Ausschusssitzungen:"):
-        suffix = summary.split(": ", 1)[1] if ": " in summary else ""
-        if suffix == "FinA":
-            return "Finanzausschuss"
-        # "Ausschuesse" is an umbrella entry covering an unknown set of committees
-        # on a given day — the DoD forbids generic names like "Ausschuss" /
-        # "Ausschusssitzungen" (DD-006 / DoD name-specificity). Filter out
-        # instead. Fraktionen and any other faction-only entries are also excluded.
-        return None
+    # Präsidium, Wahl, Gedenktag and unknown prefixes are excluded
+    if not summary.startswith(("Fraktions- und Ausschusssitzungen:", "Haushaltsberatungen:")):
+        return []
 
-    if summary.startswith("Haushaltsberatungen:"):
-        return summary.split(": ", 1)[1] if ": " in summary else None
-
-    # Prasidium, Wahl, and unknown prefixes are excluded
-    return None
+    names = []
+    for abbr in summary.split(":", 1)[1].split(","):
+        abbr = abbr.strip()
+        # Faction meetings, or a block that names no committee
+        if abbr in ("", "Fraktionen"):
+            continue
+        if abbr not in COMMITTEE_NAMES:
+            # Fail loud: a new committee needs its name added, not a guess.
+            logger.warning("Unknown committee %r in ICS summary %r, skipping it", abbr, summary)
+            continue
+        names.append(COMMITTEE_NAMES[abbr])
+    return names
 
 
 def parse_ics_feed(ics_data: bytes) -> list[ParsedEvent]:
@@ -72,8 +91,8 @@ def parse_ics_feed(ics_data: bytes) -> list[ParsedEvent]:
             continue
 
         summary = str(component.get("SUMMARY", ""))
-        gremium_name = extract_gremium_name(summary)
-        if gremium_name is None:
+        gremium_names = extract_gremium_names(summary)
+        if not gremium_names:
             continue
 
         dtstart = component.get("DTSTART").dt
@@ -85,7 +104,7 @@ def parse_ics_feed(ics_data: bytes) -> list[ParsedEvent]:
         if isinstance(dtend, date) and not isinstance(dtend, datetime):
             dtend = datetime(dtend.year, dtend.month, dtend.day)
 
-        events.append(
+        events.extend(
             ParsedEvent(
                 uid=str(component.get("UID", "")),
                 summary=clean_title(summary),
@@ -94,6 +113,7 @@ def parse_ics_feed(ics_data: bytes) -> list[ParsedEvent]:
                 gremium_name=gremium_name,
                 nummer=extract_session_number(summary),
             )
+            for gremium_name in gremium_names
         )
 
     return events

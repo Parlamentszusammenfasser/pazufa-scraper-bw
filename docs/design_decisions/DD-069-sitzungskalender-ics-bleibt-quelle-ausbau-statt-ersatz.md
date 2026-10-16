@@ -73,8 +73,8 @@ UTC am Vortag. Ein erneuter Upload seines Tages löscht ihn dann nicht und kolli
 eigenen `api_id`; ein Upload des Vortags löscht ihn. Der Feed vom 16.10.2026 hat keinen solchen
 Termin.
 
-**Code:** Entscheidung 4: `BawueSitzungenScraper.item_extractor` (`api_id` aus UID und Datum,
-#116). Sonst kein Code. Korrigiert: das Zeitfenster von `PUT kalender` in `anforderungen.md`, die
-Verlegung in DD-066.
+**Code:** Entscheidung 3: `ics_parser.extract_gremium_names` (#117, DD-006). Entscheidung 4:
+`BawueSitzungenScraper.item_extractor` (`api_id` aus UID und Datum, #116). Sonst kein Code.
+Korrigiert: das Zeitfenster von `PUT kalender` in `anforderungen.md`, die Verlegung in DD-066.
 
 **Tests:** `tests/unit/test_bawue_sitzungen_scraper.py::TestIssue116MovedSession`

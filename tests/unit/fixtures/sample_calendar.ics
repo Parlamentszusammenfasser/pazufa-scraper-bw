@@ -17,7 +17,7 @@ BEGIN:VEVENT
 DTSTART:20260224T090000
 DTEND:20260224T170000
 UID:evt-ausschuss-001@landtag-bw.de
-SUMMARY:Fraktions- und Ausschusssitzungen: Ausschuesse
+SUMMARY:Fraktions- und Ausschusssitzungen: 
 END:VEVENT
 BEGIN:VEVENT
 DTSTART:20260224T090000
@@ -29,7 +29,7 @@ BEGIN:VEVENT
 DTSTART:20260303T090000
 DTEND:20260303T180000
 UID:evt-haushalt-001@landtag-bw.de
-SUMMARY:Haushaltsberatungen: Finanzausschuss
+SUMMARY:Haushaltsberatungen: FinA
 END:VEVENT
 BEGIN:VEVENT
 DTSTART:20260227T090000

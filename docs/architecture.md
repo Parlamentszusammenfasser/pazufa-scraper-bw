@@ -221,7 +221,7 @@ classDiagram
 
     class IcsParser {
         +parse_ics_feed(ics_data) list[ParsedEvent]
-        +extract_gremium_name(summary) str
+        +extract_gremium_names(summary) list[str]
         +extract_session_number(summary) int
         +group_events_by_date(events) dict
     }
@@ -354,11 +354,11 @@ Overrides `send_result()` to use `Parlament.BW`. Uses `_events_by_date` to bridg
 | Sitzung field | Source  | Notes                                                |
 |---------------|---------|------------------------------------------------------|
 | `termin`      | DTSTART | Naive → Europe/Berlin → UTC                          |
-| `gremium`     | SUMMARY | Parsed via `extract_gremium_name()`                  |
+| `gremium`     | SUMMARY | `extract_gremium_names()`, one Sitzung each (DD-006) |
 | `nummer`      | SUMMARY | Regex; currently no match → `0` + warning (DD-064)   |
 | `tops`        | —       | `[]` (not available in ICS feed)                     |
 | `public`      | —       | `True`                                               |
-| `api_id`      | UID, date | `uuid5(NAMESPACE_URL, "{uid}\|{date}")` (DD-069)  |
+| `api_id`      | UID, date, gremium | `uuid5(NAMESPACE_URL, "{uid}\|{date}\|{gremium}")` (DD-069, DD-006) |
 
 ### BawueBeteiligungScraper
 
@@ -393,15 +393,15 @@ PDF links/deadline from detail pages. Data classes: `RawBeteiligungProcess`, `Ra
 
 Stateless ICS parsing via the `icalendar` library. Filters events by SUMMARY prefix:
 
-| SUMMARY prefix                                   | Included? | Gremium name              |
-|--------------------------------------------------|-----------|---------------------------|
-| `Plenarsitzung:`                                 | Yes       | `"plenum"` (reserved)     |
-| `Fraktions- und Ausschusssitzungen: FinA`        | Yes       | `"Finanzausschuss"`       |
-| `Haushaltsberatungen: ...`                       | Yes       | extract after `: `        |
-| `Fraktions- und Ausschusssitzungen: Ausschuesse` | No        | name-specificity (DD-006) |
-| `Fraktions- und Ausschusssitzungen: Fraktionen`  | No        | faction-only              |
-| `Prasidium:`                                     | No        | internal                  |
-| `Wahl:`                                          | No        | election event            |
+| SUMMARY prefix                                          | Included? | Gremium name                                        |
+|---------------------------------------------------------|-----------|-----------------------------------------------------|
+| `Plenarsitzung:`                                        | Yes       | `"plenum"` (reserved)                               |
+| `Fraktions- und Ausschusssitzungen: FinA, BildungsA, …` | Yes       | one per abbreviation, via `COMMITTEE_NAMES` (DD-006) |
+| `Haushaltsberatungen: …`                                | Yes       | same as above                                       |
+| unknown abbreviation                                    | No        | warning, the others in the entry stay               |
+| `Fraktions- und Ausschusssitzungen: ` (no name)         | No        | name-specificity (DD-006)                           |
+| `Fraktions- und Ausschusssitzungen: Fraktionen`         | No        | faction-only                                        |
+| `Präsidium:`, `Gedenktag:`, `Wahl:`                     | No        | not a parliamentary session                         |
 
 ### ParlisClient / ParlisParser
 
