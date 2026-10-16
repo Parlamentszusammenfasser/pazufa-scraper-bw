@@ -117,9 +117,9 @@ class BawueSitzungenScraper(SitzungsScraper):
                 dtstart = dtstart.replace(tzinfo=BERLIN_TZ)
             termin_utc = dtstart.astimezone(datetime.UTC)
 
-            # Date-scoped: a session moved to another date may keep its UID, and its old row would
-            # collide with the backend's UNIQUE api_id (DD-069, issue #116).
-            api_id = uuid5(NAMESPACE_URL, f"{event.uid}|{date_key}")
+            # The backend's api_id is UNIQUE: a session moved to another date may keep its UID
+            # (DD-069, issue #116), and one UID can name several committees (DD-006, issue #117).
+            api_id = uuid5(NAMESPACE_URL, f"{event.uid}|{date_key}|{event.gremium_name}")
 
             if not event.nummer:
                 # Fail-loud: no source carries the number (DD-064).
