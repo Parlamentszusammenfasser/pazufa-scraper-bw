@@ -329,6 +329,23 @@ class TestRunSitzungen:
         assert total_filtered == 1
 
     @patch("bawue.dry_run.requests.get")
+    def test_split_event_is_not_counted_as_filtered(self, mock_get):
+        """Issue #117: one VEVENT naming two committees yields two Sitzungen, not -1 filtered."""
+        mock_resp = MagicMock()
+        mock_resp.content = (
+            b"BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:ev1\r\n"
+            b"SUMMARY:Fraktions- und Ausschusssitzungen: FinA, VerkA\r\n"
+            b"DTSTART:20270121T140000\r\nDTEND:20270121T170000\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        )
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+
+        reports, total_all, total_filtered = run_sitzungen()
+
+        assert reports[0].event_count == 2
+        assert (total_all, total_filtered) == (1, 0)
+
+    @patch("bawue.dry_run.requests.get")
     def test_empty_ics(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.content = b"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"

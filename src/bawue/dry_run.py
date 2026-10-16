@@ -551,7 +551,8 @@ def run_sitzungen(
     total_all = sum(1 for c in cal.walk() if c.name == "VEVENT")
 
     events = parse_ics_feed(resp.content)
-    total_filtered = total_all - len(events)
+    # By UID: one VEVENT can yield one event per committee (DD-006)
+    total_filtered = total_all - len({e.uid for e in events})
 
     grouped = group_events_by_date(events)
 
