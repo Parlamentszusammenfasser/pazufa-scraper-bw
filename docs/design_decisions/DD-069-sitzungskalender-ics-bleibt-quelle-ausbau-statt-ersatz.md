@@ -65,5 +65,8 @@
 - *Vergangene Sitzungen nachträglich vervollständigen:* Collector-Keys dürfen das nicht (Befund 1).
 - *Einzelne Sitzungen per `PUT /sitzung/{api_id}` setzen:* Der Endpunkt verlangt Admin-Scope.
 
-**Code:** keiner. Korrigiert: das Zeitfenster von `PUT kalender` in `anforderungen.md`, die
+**Code:** Entscheidung 4: `BawueSitzungenScraper.item_extractor` (`api_id` aus UID und Datum,
+#116). Sonst kein Code. Korrigiert: das Zeitfenster von `PUT kalender` in `anforderungen.md`, die
 Verlegung in DD-066.
+
+**Tests:** `tests/unit/test_bawue_sitzungen_scraper.py::TestIssue116MovedSession`

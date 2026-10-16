@@ -287,6 +287,36 @@ class TestSitzungenRefreshIssue85:
         assert await self._run_cycle(scraper, ICS_BYTES) == []
 
 
+class TestIssue116MovedSession:
+    """Issue #116 / DD-069: a session moved to another date keeps its UID but must not keep its api_id.
+
+    The backend's `sitzung.api_id` is UNIQUE and `PUT kalender` only clears the target date,
+    so the old date's row would make the new date's upload fail.
+    """
+
+    @staticmethod
+    async def _api_id(ics: bytes, date_key: str):
+        scraper = _make_scraper()
+        response = AsyncMock(read=AsyncMock(return_value=ics))
+        response.__aenter__ = AsyncMock(return_value=response)
+        scraper.session.get = MagicMock(return_value=response)
+        await scraper.listing_page_extractor(ICS_URL)
+        _termin, sitzungen = await scraper.item_extractor(date_key)
+        return sitzungen[0].api_id
+
+    @pytest.mark.asyncio
+    async def test_moved_session_gets_new_api_id(self):
+        moved = ICS_BYTES.replace(b"DTSTART:20260226T090000", b"DTSTART:20260305T090000")
+
+        assert await self._api_id(moved, "2026-03-05") != await self._api_id(ICS_BYTES, "2026-02-26")
+
+    @pytest.mark.asyncio
+    async def test_retimed_session_keeps_api_id(self):
+        retimed = ICS_BYTES.replace(b"DTSTART:20260226T090000", b"DTSTART:20260226T100000")
+
+        assert await self._api_id(retimed, "2026-02-26") == await self._api_id(ICS_BYTES, "2026-02-26")
+
+
 class TestInit:
     def test_init_reads_ics_url_from_config(self, tmp_path):
         config_file = tmp_path / "config.toml"
