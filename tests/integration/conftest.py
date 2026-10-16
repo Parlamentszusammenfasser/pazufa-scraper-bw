@@ -165,7 +165,7 @@ def scraper(bawue_config):
         s._parlis = ParlisClient(wahlperiode=17, request_delay_s=0.0)
         s._raw_cache = {}
         s._fingerprints = {}
-        s._pending_pdf_downloads = set()
+        s._retry_next_cycle = set()
         s._upload_limiter = create_upload_limiter()
         s._client = build_client(bawue_config.database_url, bawue_config.api_key)
 

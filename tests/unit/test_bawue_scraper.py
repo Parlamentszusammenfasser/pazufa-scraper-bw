@@ -103,7 +103,7 @@ def scraper_failed_downloads(monkeypatch):
     scraper._llm = MagicMock()
     scraper._llm_model = "gpt-5-nano"
     scraper._llm_metrics = LLMMetrics()
-    scraper._pending_pdf_downloads = set()
+    scraper._retry_next_cycle = set()
 
     async def _fake_enrich(session, llm, dok, **kwargs):
         return EnrichmentResult(dokument=dok, download_failed=True)
@@ -226,7 +226,7 @@ class TestBuildVorgang:
         the run does not cache it and the next cycle retries the download."""
         await scraper_failed_downloads._build_vorgang(_make_raw_vorgang("V-246637"))
 
-        assert "V-246637" in scraper_failed_downloads._pending_pdf_downloads
+        assert "V-246637" in scraper_failed_downloads._retry_next_cycle
 
     @pytest.mark.asyncio
     async def test_store_extracted_result_skips_caching_on_pending_pdf_download(self):
@@ -237,13 +237,13 @@ class TestBuildVorgang:
 
         scraper = object.__new__(BawueVorgaengeScraper)
         scraper.config = MagicMock()
-        scraper._pending_pdf_downloads = {"V-246637"}
+        scraper._retry_next_cycle = {"V-246637"}
         scraper._fingerprints = {"V-246637": "fp-pending", "V-247045": "fp-clean"}
 
         pending = MagicMock(ids=[VgIdent(id="V-246637", typ="vorgnr")])
         await scraper.store_extracted_result("V-246637", pending)
         scraper.config.cache.store_raw.assert_not_called()
-        assert "V-246637" not in scraper._pending_pdf_downloads  # consumed
+        assert "V-246637" not in scraper._retry_next_cycle  # consumed
 
         clean = MagicMock(ids=[VgIdent(id="V-247045", typ="vorgnr")])
         await scraper.store_extracted_result("V-247045", clean)
@@ -279,7 +279,7 @@ class TestBuildVorgang:
         assert by_typ[Stationstyp.PARL_VOLLVLSGN].dokumente == []
         [drucksache] = by_typ[Stationstyp.PARL_INITIATIV].dokumente
         assert drucksache.drucksnr == "18/1234"
-        assert "V-247045" in scraper._pending_pdf_downloads
+        assert "V-247045" in scraper._retry_next_cycle
 
     @pytest.mark.asyncio
     async def test_documentless_station_gets_stable_api_id(self, scraper_build_vorgang):
@@ -1479,7 +1479,7 @@ class TestVorgangRefreshIssue46:
         scraper.config.max_concurrency = 1
         scraper.config.api_obj_log = None
         scraper.config.cache = _InMemoryCache()
-        scraper._pending_pdf_downloads = set()
+        scraper._retry_next_cycle = set()
         scraper.items_done = 0
         scraper.uploaded = []
 

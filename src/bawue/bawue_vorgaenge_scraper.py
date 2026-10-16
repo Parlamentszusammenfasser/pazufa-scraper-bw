@@ -217,7 +217,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         # vorgnrs whose enrichment hit a not-yet-published PDF this cycle
         # (issue #66) — excluded from caching so the next cycle retries.
-        self._pending_pdf_downloads: set[str] = set()
+        self._retry_next_cycle: set[str] = set()
 
         self._published: int = 0
         self._failed: int = 0
@@ -389,8 +389,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         Skipping the cache makes the next cycle retry the download.
         """
         vorgnr = next((i.id for i in result.ids or [] if i.typ == "vorgnr"), None)
-        if vorgnr is not None and vorgnr in self._pending_pdf_downloads:
-            self._pending_pdf_downloads.discard(vorgnr)
+        if vorgnr is not None and vorgnr in self._retry_next_cycle:
+            self._retry_next_cycle.discard(vorgnr)
             logger.info(
                 "Not caching Vorgang %s: a document PDF is not published yet; retrying next cycle",
                 vorgnr,
@@ -1155,7 +1155,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 )
                 dok = result.dokument
                 if result.download_failed:
-                    self._pending_pdf_downloads.add(vorgang_id)
+                    self._retry_next_cycle.add(vorgang_id)
                     # Without a drucksnr the backend matches by hash only: the real PDF
                     # would become a second row next to the placeholder (DD-067).
                     if dok.drucksnr is None:
