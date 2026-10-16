@@ -1162,7 +1162,7 @@ class TestIssue75FutureFundstellen:
     """DD-068: a Fundstelle becomes a Station only from its date on (Berlin day)."""
 
     @staticmethod
-    async def _build(today: date):
+    async def _build(today: date, vid: str = "V-248237", fundstellen: list[dict] = _ISSUE_75_FUNDSTELLEN):
         scraper = object.__new__(BawueVorgaengeScraper)
         scraper._wahlperiode = 18
         scraper._llm_enabled = False
@@ -1171,9 +1171,103 @@ class TestIssue75FutureFundstellen:
         scraper.session = MagicMock()
         scraper._client = MagicMock()
         scraper._retry_next_cycle = set()
+        scraper._dropped_fundstellen = {}
         scraper._today = lambda: today
-        raw = _make_raw_vorgang("V-248237", initiative="Landesregierung", fundstellen=_ISSUE_75_FUNDSTELLEN)
+        raw = _make_raw_vorgang(vid, initiative="Landesregierung", fundstellen=fundstellen)
         return scraper, await scraper._build_vorgang(raw)
+
+    def test_today_is_the_berlin_day(self, monkeypatch):
+        """Cloud Run runs in UTC: at 00:30 in Berlin, UTC still has the previous day."""
+
+        class _Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2026, 10, 7, 22, 30, tzinfo=UTC).astimezone(tz)
+
+        monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.datetime", _Clock)
+        assert BawueVorgaengeScraper._today() == date(2026, 10, 8)
+
+    @pytest.mark.parametrize(("today", "track"), [(date(2021, 12, 1), "SI"), (date(2021, 12, 17), "SILA")])
+    @pytest.mark.asyncio
+    async def test_beschlussempfehlung_waits_for_the_first_reading(self, today, track):
+        """V-216013 (issue #48): the Beschlussempfehlung (19.11.) is dated before the
+        first reading (17.12.). Without that reading it can't be retimed, and `SIA`
+        fails track validation (HTTP 400)."""
+        fundstellen = [
+            {
+                "raw": "Gesetzentwurf Landesregierung 26.10.2021 Drucksache 17/1000",
+                "datum": "26.10.2021",
+                "drucksache": "17/1000",
+                "station_typ": "Gesetzentwurf",
+                "pdf_url": "https://example.com/gesetz.pdf",
+            },
+            {
+                "raw": "Beschlussempfehlung und Bericht 19.11.2021 Drucksache 17/1117",
+                "datum": "19.11.2021",
+                "drucksache": "17/1117",
+                "station_typ": "Beschlussempfehlung und Bericht",
+                "ausschuss": "Ausschuss für Finanzen",
+                "pdf_url": "https://example.com/beschluss.pdf",
+            },
+            {
+                "raw": "Zweite Beratung Plenarprotokoll 17/98 17.12.2021",
+                "datum": "17.12.2021",
+                "plenarprotokoll": "17/98",
+                "station_typ": "Zweite Beratung",
+                "pdf_url": "",
+            },
+            {
+                "raw": "Dritte Beratung Plenarprotokoll 17/99 22.12.2021",
+                "datum": "22.12.2021",
+                "plenarprotokoll": "17/99",
+                "station_typ": "Dritte Beratung",
+                "pdf_url": "",
+            },
+        ]
+        scraper, vorgang = await self._build(today, "V-216013", fundstellen)
+
+        TestIssue48OrderByZpStartNotListPosition._assert_valid_track(vorgang.stationen, track)
+        assert scraper._dropped_fundstellen == {}
+
+    @pytest.mark.asyncio
+    async def test_aenderungsantrag_waits_for_its_reading(self):
+        """An Änderungsantrag belongs to the next reading. While that one is held back,
+        attaching it to the previous reading would stick: a station merge only adds
+        Dokumente (DD-067)."""
+        fundstellen = [
+            {
+                "raw": "Gesetzentwurf Landesregierung 01.02.2027 Drucksache 18/200",
+                "datum": "01.02.2027",
+                "drucksache": "18/200",
+                "station_typ": "Gesetzentwurf",
+                "pdf_url": "https://example.com/gesetz.pdf",
+            },
+            {
+                "raw": "Erste Beratung Plenarprotokoll 18/30 05.02.2027",
+                "datum": "05.02.2027",
+                "plenarprotokoll": "18/30",
+                "station_typ": "Erste Beratung",
+                "pdf_url": "",
+            },
+            {
+                "raw": "Änderungsantrag Fraktion SPD 10.03.2027 Drucksache 18/300",
+                "datum": "10.03.2027",
+                "drucksache": "18/300",
+                "station_typ": "Änderungsantrag",
+                "pdf_url": "https://example.com/18_300.pdf",
+            },
+            {
+                "raw": "Zweite Beratung Plenarprotokoll 18/35 12.03.2027",
+                "datum": "12.03.2027",
+                "plenarprotokoll": "18/35",
+                "station_typ": "Zweite Beratung",
+                "pdf_url": "",
+            },
+        ]
+        scraper, vorgang = await self._build(date(2027, 3, 11), "V-249000", fundstellen)
+
+        assert not [d for s in vorgang.stationen for d in s.dokumente if d.drucksnr == "18/300"]
+        assert scraper._dropped_fundstellen == {}
 
     @pytest.mark.asyncio
     async def test_scheduled_reading_is_held_back(self):

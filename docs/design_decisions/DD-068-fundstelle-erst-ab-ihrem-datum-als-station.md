@@ -16,8 +16,9 @@ Lesungen gehören als TOP in die Sitzung (GitHub Issue #66).
 
 1. `_collect_stationen` überspringt eine Fundstelle, deren Datum nach dem heutigen Tag liegt.
    „Heute“ ist der Kalendertag in Europe/Berlin (`_today`); PARLIS-Daten sind Landtagstage.
-   Eine Sitzung am heutigen Tag gilt als geschehen. Fehlt ihr Protokoll noch, greift der
-   bestehende Retry für unveröffentlichte PDFs (DD-067).
+   Eine Sitzung am heutigen Tag gilt als geschehen. Fehlt ihr Protokoll noch, greift bei
+   aktivierter LLM-Anreicherung der bestehende Retry für unveröffentlichte PDFs (DD-067); ohne
+   sie lädt der Scraper keine PDFs.
 2. Der Vorgang wird nicht gecacht (`_retry_next_cycle`, wie bei fehlenden PDFs). Die Station
    erscheint im ersten Lauf ab ihrem Datum.
 3. Nur ein INFO-Log, kein Eintrag unter „dropped Fundstellen“ im Run-Report: Das Zurückhalten
@@ -25,7 +26,14 @@ Lesungen gehören als TOP in die Sitzung (GitHub Issue #66).
 4. Der synthetische `parl-initiativ` braucht keine eigene Regel. Ohne die Lesung fällt er auf
    das Datum des Gesetzentwurfs zurück; seine `api_id` hängt nicht vom Datum ab (DD-046).
    Der Track `preparl-regbsl → parl-initiativ` ist gültig (jeder frische Gesetzentwurf).
-5. Das Datum wird jetzt einmal in `_collect_stationen` geparst und an `_build_station`
+5. Was von der zurückgehaltenen Lesung abhängt, wartet mit ihr:
+   - Übrig gebliebene Änderungs- und Entschließungsanträge gehören zur nächsten Lesung. An die
+     vorige gehängt, blieben sie dort für immer, weil ein Station-Merge nur Dokumente hinzufügt
+     (DD-067).
+   - Ein `parl-ausschber` ohne veröffentlichte Lesung fällt weg. Haushalt-Einzelpläne datieren
+     die Beschlussempfehlung vor die erste Lesung (DD-025, Issue #48); ohne Lesung als Anker
+     ergäbe das `SIA`, HTTP 400.
+6. Das Datum wird jetzt einmal in `_collect_stationen` geparst und an `_build_station`
    übergeben, statt dort ein zweites Mal (sonst doppelte Logs bei kaputten Daten).
 
 **Verworfen:**
@@ -43,6 +51,8 @@ Lesungen gehören als TOP in die Sitzung (GitHub Issue #66).
 - Ein Vorgang mit geplanter Sitzung wird bis zu ihrem Datum in jedem Lauf neu hochgeladen.
 - Eine Platzhalter-Jahresangabe (`00.00.YYYY` → 01.01.) in einem künftigen Jahr wird ebenfalls
   zurückgehalten.
+- Ein Vorgang, dessen Fundstellen alle in der Zukunft liegen, meldet „no parseable dates“ und
+  zählt als übersprungen. Praktisch kommt das nicht vor: Die Drucksache liegt vor der Sitzung.
 - Bereits hochgeladene künftige Stationen bleiben im Backend. Sie werden mit ihrem Datum
   richtig, solange die Sitzung nicht verlegt wurde.
 

@@ -587,6 +587,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         seen_vollvlsgn = False
         last_station_typ_str = ""
         today = self._today()
+        held_back = False
         for fund in fundstellen:
             zp_start = _parse_fundstelle_date(fund)
             if zp_start is None:
@@ -595,6 +596,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             # PARLIS lists scheduled sessions; a Station records what has happened (DD-068).
             if zp_start.date() > today:
                 logger.info("Holding back Fundstelle '%s' in %s until its date", fund.get("raw", "?"), vorgang_id)
+                held_back = True
                 if self._retry_next_cycle is not None:
                     self._retry_next_cycle.add(vorgang_id)
                 continue
@@ -675,6 +677,18 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 for _, docs in pending_aenderungsantraege:
                     station.dokumente.extend(docs)
                 pending_aenderungsantraege.clear()
+
+        # What depends on a held-back reading waits for it too (DD-068): left-over Anträge
+        # belong to it, and an ausschber before any reading fails track validation.
+        if held_back and pending_aenderungsantraege:
+            logger.info(
+                "Holding back %d Antrag Fundstellen in %s until their reading",
+                len(pending_aenderungsantraege),
+                vorgang_id,
+            )
+            pending_aenderungsantraege.clear()
+        if held_back and not any(s.typ == Stationstyp.PARL_VOLLVLSGN for s in stationen):
+            stationen = [s for s in stationen if s.typ != Stationstyp.PARL_AUSSCHBER]
 
         # Remaining Anträge: attach to the last vollvlsgn or drop
         if pending_aenderungsantraege:
