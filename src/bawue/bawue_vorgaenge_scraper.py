@@ -13,6 +13,7 @@ from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
 from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
+from zoneinfo import ZoneInfo
 
 import aiohttp
 import certifi
@@ -126,6 +127,7 @@ DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [
 _HAUSHALT_VORGANGSTYP = "Haushaltsgesetzgebung"
 DEFAULT_PARLIS_DELAY = 1.0
 DEFAULT_GSBLT_DELAY = 1.0
+BERLIN_TZ = ZoneInfo("Europe/Berlin")
 
 # Same-committee `parl-ausschber` fundstellen belonging to one deliberation round
 # (e.g. a Beschlussempfehlung plus its Bericht) fall days apart and are merged into
@@ -175,6 +177,15 @@ class BawueVorgaengeScraper(VorgangsScraper):
     # manual-construction paths (dry_run, unit tests): drops are only logged there.
     _dropped_fundstellen: dict[str, list[str]] | None = None
 
+    # vorgnrs not to cache this cycle, so the next cycle retries them (see
+    # store_extracted_result). None on manual-construction paths (dry_run, unit tests).
+    _retry_next_cycle: set[str] | None = None
+
+    @staticmethod
+    def _today() -> date:
+        """Today in Berlin: PARLIS dates are Landtag calendar days (DD-068)."""
+        return datetime.now(BERLIN_TZ).date()
+
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         # Load BaWue-specific config from TOML
         bawue_config = load_toml_section(config, "bawue")
@@ -215,9 +226,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             GesetzblattClient(request_delay_s=gsblt_config.get("request-delay-s", DEFAULT_GSBLT_DELAY))
         )
 
-        # vorgnrs whose enrichment hit a not-yet-published PDF this cycle
-        # (issue #66) — excluded from caching so the next cycle retries.
-        self._pending_pdf_downloads: set[str] = set()
+        self._retry_next_cycle = set()
 
         self._published: int = 0
         self._failed: int = 0
@@ -381,18 +390,19 @@ class BawueVorgaengeScraper(VorgangsScraper):
         return None
 
     async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
-        """Cache the uploaded Vorgang's fingerprint — unless a PDF download failed (issue #66).
+        """Cache the uploaded Vorgang's fingerprint — unless it is incomplete this cycle.
 
         Plenarprotokolle are published weeks after the session; a Vorgang cached
         with a still-missing PDF would keep its TODO volltext until the PARLIS
         record changes — for a closed (e.g. abgelehnt) Vorgang that is never.
-        Skipping the cache makes the next cycle retry the download.
+        Skipping the cache makes the next cycle retry the download. Likewise a
+        Fundstelle dated in the future becomes a Station once its day has come (DD-068).
         """
         vorgnr = next((i.id for i in result.ids or [] if i.typ == "vorgnr"), None)
-        if vorgnr is not None and vorgnr in self._pending_pdf_downloads:
-            self._pending_pdf_downloads.discard(vorgnr)
+        if vorgnr is not None and vorgnr in self._retry_next_cycle:
+            self._retry_next_cycle.discard(vorgnr)
             logger.info(
-                "Not caching Vorgang %s: a document PDF is not published yet; retrying next cycle",
+                "Not caching Vorgang %s: a document PDF or a Fundstelle is not due yet; retrying next cycle",
                 vorgnr,
             )
             return
@@ -576,11 +586,21 @@ class BawueVorgaengeScraper(VorgangsScraper):
         seen_ausschber = False
         seen_vollvlsgn = False
         last_station_typ_str = ""
+        today = self._today()
+        held_back = False
         for fund in fundstellen:
-            station = await self._build_station(fund, initiative, vorgang_id, vorgang_titel, vorgang_vnr)
-            if station is None:
+            zp_start = _parse_fundstelle_date(fund)
+            if zp_start is None:
                 self._drop(vorgang_id, fund, "no parseable date", logging.ERROR)
                 continue
+            # PARLIS lists scheduled sessions; a Station records what has happened (DD-068).
+            if zp_start.date() > today:
+                logger.info("Holding back Fundstelle '%s' in %s until its date", fund.get("raw", "?"), vorgang_id)
+                held_back = True
+                if self._retry_next_cycle is not None:
+                    self._retry_next_cycle.add(vorgang_id)
+                continue
+            station = await self._build_station(fund, zp_start, initiative, vorgang_id, vorgang_titel, vorgang_vnr)
             station_typ_str = fund.get("station_typ", "")
             typ_lower = station_typ_str.lower()
 
@@ -657,6 +677,18 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 for _, docs in pending_aenderungsantraege:
                     station.dokumente.extend(docs)
                 pending_aenderungsantraege.clear()
+
+        # What depends on a held-back reading waits for it too (DD-068): left-over Anträge
+        # belong to it, and an ausschber before any reading fails track validation.
+        if held_back and pending_aenderungsantraege:
+            logger.info(
+                "Holding back %d Antrag Fundstellen in %s until their reading",
+                len(pending_aenderungsantraege),
+                vorgang_id,
+            )
+            pending_aenderungsantraege.clear()
+        if held_back and not any(s.typ == Stationstyp.PARL_VOLLVLSGN for s in stationen):
+            stationen = [s for s in stationen if s.typ != Stationstyp.PARL_AUSSCHBER]
 
         # Remaining Anträge: attach to the last vollvlsgn or drop
         if pending_aenderungsantraege:
@@ -990,11 +1022,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
     async def _build_station(
         self,
         fund: RawFundstelle,
+        zp_start: datetime,
         initiative: str,
         vorgang_id: str,
         vorgang_titel: str = "",
         vorgang_vnr: str | None = None,
-    ) -> Station | None:
+    ) -> Station:
         """Convert a parsed Fundstelle dict into a framework Station.
 
         A Fundstelle is a reference line from the PARLIS search results, e.g.:
@@ -1007,10 +1040,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         mapping_text = station_typ_str or raw_text
         station_typ = _map_fundstelle_stationstyp(station_typ_str, raw_text, initiative)
-
-        zp_start = _parse_fundstelle_date(fund)
-        if zp_start is None:
-            return None
 
         # The document keeps the PARLIS date as its `zp_referenz` (for a Gesetzblatt: the Ausfertigung),
         # so `_build_dokumente` is deliberately still given the unmodified zp_start.
@@ -1155,7 +1184,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 )
                 dok = result.dokument
                 if result.download_failed:
-                    self._pending_pdf_downloads.add(vorgang_id)
+                    self._retry_next_cycle.add(vorgang_id)
                     # Without a drucksnr the backend matches by hash only: the real PDF
                     # would become a second row next to the placeholder (DD-067).
                     if dok.drucksnr is None:

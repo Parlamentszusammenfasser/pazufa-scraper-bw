@@ -103,7 +103,7 @@ def scraper_failed_downloads(monkeypatch):
     scraper._llm = MagicMock()
     scraper._llm_model = "gpt-5-nano"
     scraper._llm_metrics = LLMMetrics()
-    scraper._pending_pdf_downloads = set()
+    scraper._retry_next_cycle = set()
 
     async def _fake_enrich(session, llm, dok, **kwargs):
         return EnrichmentResult(dokument=dok, download_failed=True)
@@ -226,7 +226,7 @@ class TestBuildVorgang:
         the run does not cache it and the next cycle retries the download."""
         await scraper_failed_downloads._build_vorgang(_make_raw_vorgang("V-246637"))
 
-        assert "V-246637" in scraper_failed_downloads._pending_pdf_downloads
+        assert "V-246637" in scraper_failed_downloads._retry_next_cycle
 
     @pytest.mark.asyncio
     async def test_store_extracted_result_skips_caching_on_pending_pdf_download(self):
@@ -237,13 +237,13 @@ class TestBuildVorgang:
 
         scraper = object.__new__(BawueVorgaengeScraper)
         scraper.config = MagicMock()
-        scraper._pending_pdf_downloads = {"V-246637"}
+        scraper._retry_next_cycle = {"V-246637"}
         scraper._fingerprints = {"V-246637": "fp-pending", "V-247045": "fp-clean"}
 
         pending = MagicMock(ids=[VgIdent(id="V-246637", typ="vorgnr")])
         await scraper.store_extracted_result("V-246637", pending)
         scraper.config.cache.store_raw.assert_not_called()
-        assert "V-246637" not in scraper._pending_pdf_downloads  # consumed
+        assert "V-246637" not in scraper._retry_next_cycle  # consumed
 
         clean = MagicMock(ids=[VgIdent(id="V-247045", typ="vorgnr")])
         await scraper.store_extracted_result("V-247045", clean)
@@ -279,7 +279,7 @@ class TestBuildVorgang:
         assert by_typ[Stationstyp.PARL_VOLLVLSGN].dokumente == []
         [drucksache] = by_typ[Stationstyp.PARL_INITIATIV].dokumente
         assert drucksache.drucksnr == "18/1234"
-        assert "V-247045" in scraper._pending_pdf_downloads
+        assert "V-247045" in scraper._retry_next_cycle
 
     @pytest.mark.asyncio
     async def test_documentless_station_gets_stable_api_id(self, scraper_build_vorgang):
@@ -1137,6 +1137,157 @@ class TestBuildVorgang:
         assert station.dokumente[0].typ == Doktyp.MITTEILUNG
 
 
+# V-248237 as PARLIS listed it on staging on 30.09.2026 (issue #75): the first
+# reading on 08.10. was already scheduled.
+_ISSUE_75_FUNDSTELLEN = [
+    {
+        "raw": "Gesetzentwurf    Landesregierung  29.09.2026 Drucksache 18/623",
+        "datum": "29.09.2026",
+        "drucksache": "18/623",
+        "station_typ": "Gesetzentwurf",
+        "autor_text": "Landesregierung",
+        "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Drucksachen/0000/18%5F0623.pdf",
+    },
+    {
+        "raw": "Erste Beratung   Plenarprotokoll 18/13 08.10.2026",
+        "datum": "08.10.2026",
+        "plenarprotokoll": "18/13",
+        "station_typ": "Erste Beratung",
+        "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Plp/18%5F0013%5F08102026.pdf",
+    },
+]
+
+
+class TestIssue75FutureFundstellen:
+    """DD-068: a Fundstelle becomes a Station only from its date on (Berlin day)."""
+
+    @staticmethod
+    async def _build(today: date, vid: str = "V-248237", fundstellen: list[dict] = _ISSUE_75_FUNDSTELLEN):
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 18
+        scraper._llm_enabled = False
+        scraper._llm = None
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper._retry_next_cycle = set()
+        scraper._dropped_fundstellen = {}
+        scraper._today = lambda: today
+        raw = _make_raw_vorgang(vid, initiative="Landesregierung", fundstellen=fundstellen)
+        return scraper, await scraper._build_vorgang(raw)
+
+    def test_today_is_the_berlin_day(self, monkeypatch):
+        """Cloud Run runs in UTC: at 00:30 in Berlin, UTC still has the previous day."""
+
+        class _Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2026, 10, 7, 22, 30, tzinfo=UTC).astimezone(tz)
+
+        monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.datetime", _Clock)
+        assert BawueVorgaengeScraper._today() == date(2026, 10, 8)
+
+    @pytest.mark.parametrize(("today", "track"), [(date(2021, 12, 1), "SI"), (date(2021, 12, 17), "SILA")])
+    @pytest.mark.asyncio
+    async def test_beschlussempfehlung_waits_for_the_first_reading(self, today, track):
+        """V-216013 (issue #48): the Beschlussempfehlung (19.11.) is dated before the
+        first reading (17.12.). Without that reading it can't be retimed, and `SIA`
+        fails track validation (HTTP 400)."""
+        fundstellen = [
+            {
+                "raw": "Gesetzentwurf Landesregierung 26.10.2021 Drucksache 17/1000",
+                "datum": "26.10.2021",
+                "drucksache": "17/1000",
+                "station_typ": "Gesetzentwurf",
+                "pdf_url": "https://example.com/gesetz.pdf",
+            },
+            {
+                "raw": "Beschlussempfehlung und Bericht 19.11.2021 Drucksache 17/1117",
+                "datum": "19.11.2021",
+                "drucksache": "17/1117",
+                "station_typ": "Beschlussempfehlung und Bericht",
+                "ausschuss": "Ausschuss für Finanzen",
+                "pdf_url": "https://example.com/beschluss.pdf",
+            },
+            {
+                "raw": "Zweite Beratung Plenarprotokoll 17/98 17.12.2021",
+                "datum": "17.12.2021",
+                "plenarprotokoll": "17/98",
+                "station_typ": "Zweite Beratung",
+                "pdf_url": "",
+            },
+            {
+                "raw": "Dritte Beratung Plenarprotokoll 17/99 22.12.2021",
+                "datum": "22.12.2021",
+                "plenarprotokoll": "17/99",
+                "station_typ": "Dritte Beratung",
+                "pdf_url": "",
+            },
+        ]
+        scraper, vorgang = await self._build(today, "V-216013", fundstellen)
+
+        TestIssue48OrderByZpStartNotListPosition._assert_valid_track(vorgang.stationen, track)
+        assert scraper._dropped_fundstellen == {}
+
+    @pytest.mark.asyncio
+    async def test_aenderungsantrag_waits_for_its_reading(self):
+        """An Änderungsantrag belongs to the next reading. While that one is held back,
+        attaching it to the previous reading would stick: a station merge only adds
+        Dokumente (DD-067)."""
+        fundstellen = [
+            {
+                "raw": "Gesetzentwurf Landesregierung 01.02.2027 Drucksache 18/200",
+                "datum": "01.02.2027",
+                "drucksache": "18/200",
+                "station_typ": "Gesetzentwurf",
+                "pdf_url": "https://example.com/gesetz.pdf",
+            },
+            {
+                "raw": "Erste Beratung Plenarprotokoll 18/30 05.02.2027",
+                "datum": "05.02.2027",
+                "plenarprotokoll": "18/30",
+                "station_typ": "Erste Beratung",
+                "pdf_url": "",
+            },
+            {
+                "raw": "Änderungsantrag Fraktion SPD 10.03.2027 Drucksache 18/300",
+                "datum": "10.03.2027",
+                "drucksache": "18/300",
+                "station_typ": "Änderungsantrag",
+                "pdf_url": "https://example.com/18_300.pdf",
+            },
+            {
+                "raw": "Zweite Beratung Plenarprotokoll 18/35 12.03.2027",
+                "datum": "12.03.2027",
+                "plenarprotokoll": "18/35",
+                "station_typ": "Zweite Beratung",
+                "pdf_url": "",
+            },
+        ]
+        scraper, vorgang = await self._build(date(2027, 3, 11), "V-249000", fundstellen)
+
+        assert not [d for s in vorgang.stationen for d in s.dokumente if d.drucksnr == "18/300"]
+        assert scraper._dropped_fundstellen == {}
+
+    @pytest.mark.asyncio
+    async def test_scheduled_reading_is_held_back(self):
+        scraper, vorgang = await self._build(date(2026, 9, 30))
+
+        assert [s.typ for s in vorgang.stationen] == [Stationstyp.PREPARL_REGBSL, Stationstyp.PARL_INITIATIV]
+        # The synthetic parl-initiativ (DD-012) falls back to the Gesetzentwurf date.
+        assert all(s.zp_start.date() <= date(2026, 9, 30) for s in vorgang.stationen)
+        TestIssue48OrderByZpStartNotListPosition._assert_valid_track(vorgang.stationen, "SI")
+        # Not cached, so the reading appears in the first cycle on its date.
+        assert "V-248237" in scraper._retry_next_cycle
+
+    @pytest.mark.asyncio
+    async def test_reading_on_its_day_is_published(self):
+        scraper, vorgang = await self._build(date(2026, 10, 8))
+
+        assert Stationstyp.PARL_VOLLVLSGN in [s.typ for s in vorgang.stationen]
+        assert "V-248237" not in scraper._retry_next_cycle
+
+
 class TestDetermineGremiumRouting:
     """Direct coverage of `_determine_gremium`'s routing table (DD-021, issue #10).
 
@@ -1479,7 +1630,7 @@ class TestVorgangRefreshIssue46:
         scraper.config.max_concurrency = 1
         scraper.config.api_obj_log = None
         scraper.config.cache = _InMemoryCache()
-        scraper._pending_pdf_downloads = set()
+        scraper._retry_next_cycle = set()
         scraper.items_done = 0
         scraper.uploaded = []
 
@@ -1599,6 +1750,7 @@ class TestPlaceholderDate:
                 },
             ],
         )
+        scraper_build_vorgang.__self__._today = lambda: date(2028, 1, 1)  # not held back (DD-068)
         vorgang = await scraper_build_vorgang(raw)
 
         station = vorgang.stationen[0]
@@ -1693,6 +1845,7 @@ class TestDatetimesAreTimezoneAware:
                 },
             ],
         )
+        scraper_build_vorgang.__self__._today = lambda: date(2028, 1, 1)  # not held back (DD-068)
         vorgang = await scraper_build_vorgang(raw)
         station = vorgang.stationen[0]
 
