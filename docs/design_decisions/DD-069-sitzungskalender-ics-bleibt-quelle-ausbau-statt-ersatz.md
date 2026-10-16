@@ -29,11 +29,12 @@
 5. **Kalender und Vorgänge benennen denselben Ausschuss verschieden:** `Finanzausschuss` im
    Kalender, `Ausschuss für Finanzen` (PARLIS) in den Stationen. Das Backend sucht Gremien über den
    exakten Namen (`insert_or_retrieve_gremium`) und legt deshalb zwei an.
-6. **Eine auf einen anderen Tag verlegte Sitzung scheitert.** Die `api_id` ist `uuid5(UID)`, im
-   Backend ist `sitzung.api_id` `UNIQUE`. `PUT` löscht nur die Sitzungen des Zieltags. Behält der
-   Landtag die UID beim Verlegen, kollidiert der Insert mit der Zeile am alten Tag. Der Tag bleibt
-   ungecacht und scheitert in jedem Lauf, bis der alte Tag neu hochgeladen wird. Fällt der alte Tag
-   ganz weg, wird er nie neu hochgeladen. DD-066 hatte angenommen, der neue Tag werde hochgeladen.
+6. **Eine auf einen anderen Tag verlegte Sitzung scheiterte** (behoben, #116). Die `api_id` war
+   `uuid5(UID)`, im Backend ist `sitzung.api_id` `UNIQUE`. `PUT` löscht nur die Sitzungen des
+   Zieltags. Behielt der Landtag die UID beim Verlegen, kollidierte der Insert mit der Zeile am
+   alten Tag. Der Tag blieb ungecacht und scheiterte in jedem Lauf, bis der alte Tag neu hochgeladen
+   wurde. Fiel der alte Tag ganz weg, wurde er nie neu hochgeladen. DD-066 hatte angenommen, der
+   neue Tag werde hochgeladen.
    Ob das CMS die UID beim Verlegen behält, ist nicht geprüft.
 7. **Ein ganz entfallener Tag lässt sich nicht leeren.** Bei leerem Body bricht `kal_date_put` vor
    dem `DELETE` ab. Der Scraper kann die letzte Sitzung eines Tages also nicht entfernen
@@ -55,7 +56,8 @@
    (#117). DD-006 wird dabei überarbeitet. Weiter ausgeschlossen bleiben `Fraktionen`, das leere
    Suffix, `Präsidium` und `Gedenktag`.
 4. **Die `api_id` enthält das Datum**, damit eine verlegte Sitzung nicht mit ihrer alten Zeile
-   kollidiert (#116).
+   kollidiert (#116). Die alte Zeile bleibt am alten Tag, bis er neu hochgeladen oder geleert wird
+   (Entscheidung 5).
 5. **Entfallene Tage leeren** braucht eine Backend-Änderung: Ein leerer Body soll den Tag leeren.
    Bis dahin bleibt die Lücke aus DD-066.
 
@@ -65,5 +67,14 @@
 - *Vergangene Sitzungen nachträglich vervollständigen:* Collector-Keys dürfen das nicht (Befund 1).
 - *Einzelne Sitzungen per `PUT /sitzung/{api_id}` setzen:* Der Endpunkt verlangt Admin-Scope.
 
-**Code:** keiner. Korrigiert: das Zeitfenster von `PUT kalender` in `anforderungen.md`, die
+**Nicht abgedeckt:** Das Backend leert einen Tag nach UTC (`kal_date_put`), der Scraper gruppiert
+nach dem Berliner Tag. Ein ganztägiger Termin oder einer vor 01:00 (MEZ) bzw. 02:00 (MESZ) liegt in
+UTC am Vortag. Ein erneuter Upload seines Tages löscht ihn dann nicht und kollidiert mit der
+eigenen `api_id`; ein Upload des Vortags löscht ihn. Der Feed vom 16.10.2026 hat keinen solchen
+Termin.
+
+**Code:** Entscheidung 4: `BawueSitzungenScraper.item_extractor` (`api_id` aus UID und Datum,
+#116). Sonst kein Code. Korrigiert: das Zeitfenster von `PUT kalender` in `anforderungen.md`, die
 Verlegung in DD-066.
+
+**Tests:** `tests/unit/test_bawue_sitzungen_scraper.py::TestIssue116MovedSession`

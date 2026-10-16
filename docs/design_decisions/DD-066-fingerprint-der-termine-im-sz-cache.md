@@ -37,9 +37,10 @@ gegen das echte Backend (Issue #85, Verifikation von 2.1.1).
   hochgeladen; die Sitzung bleibt im Backend. Vom normalen Herausfallen vergangener Tage ist
   das nicht zu unterscheiden (Issue #85). Derzeit hat jeder Tag genau einen Termin, das gilt
   also für jeden entfallenen Termin.
-- Eine auf einen anderen Tag verlegte Sitzung: Der Upload des neuen Tags scheitert, solange der
-  alte Tag die Zeile mit derselben `api_id` aus der UID noch hat (`api_id` ist im Backend
-  `UNIQUE`). Korrigiert in DD-069, Befund 6; Fix in GitHub Issue #116.
+- Eine auf einen anderen Tag verlegte Sitzung: Seit GitHub Issue #116 enthält die `api_id` das
+  Datum, der neue Tag wird also hochgeladen. Der alte Tag behält die Sitzung, bis er neu
+  hochgeladen wird. Hat er keine andere Sitzung, fällt er aus dem Feed: dieselbe Lücke wie beim
+  ganz entfallenen Tag (DD-069, Befund 6 und Entscheidung 5).
 - Der Run-Report zählt geänderte Tage unter „new or retried“.
 
 **Code:** `bawue_sitzungen_scraper._events_fingerprint`, `BawueSitzungenScraper.listing_page_extractor`
