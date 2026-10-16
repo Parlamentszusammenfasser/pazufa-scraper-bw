@@ -33,7 +33,7 @@ Der Scraper erzeugt `Vorgang`- und `Sitzung`-Objekte und liefert sie selbst übe
 | Endpunkt                               | Methode | Beschreibung                                               |
 |----------------------------------------|---------|------------------------------------------------------------|
 | `/api/v2/vorgang`                      | PUT     | Vorgang einliefern (idempotent, Backend übernimmt Merging) |
-| `/api/v2/kalender/{parlament}/{datum}` | PUT     | Sitzungen für ein Datum setzen (max. 1 Tag in der Zukunft) |
+| `/api/v2/kalender/{parlament}/{datum}` | PUT     | Sitzungen für ein Datum setzen (Collector: nur ab gestern, DD-069) |
 
 **Authentifizierung:** Header `X-API-Key`, 64-Zeichen-Key mit Präfix `ltzf_`.
 Konfiguration via `config.toml` (`[backend] ltzf-api-key`) oder `LTZF_API_KEY`.
