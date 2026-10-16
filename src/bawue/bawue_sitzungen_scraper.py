@@ -117,7 +117,7 @@ class BawueSitzungenScraper(SitzungsScraper):
                 dtstart = dtstart.replace(tzinfo=BERLIN_TZ)
             termin_utc = dtstart.astimezone(datetime.UTC)
 
-            # Date-scoped: a session moved to another date keeps its UID, and its old row would
+            # Date-scoped: a session moved to another date may keep its UID, and its old row would
             # collide with the backend's UNIQUE api_id (DD-069, issue #116).
             api_id = uuid5(NAMESPACE_URL, f"{event.uid}|{date_key}")
 
