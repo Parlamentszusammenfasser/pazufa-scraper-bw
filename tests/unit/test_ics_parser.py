@@ -67,9 +67,12 @@ class TestExtractGremiumNames:
     def test_plenarsitzung(self):
         assert extract_gremium_names("Plenarsitzung: 142. Sitzung") == ["plenum"]
 
-    def test_unnamed_committee_block_excluded(self):
+    def test_unnamed_committee_block_excluded(self, caplog):
         """The live feed's umbrella entry names no committee (DD-006 name-specificity)."""
-        assert extract_gremium_names("Fraktions- und Ausschusssitzungen: ") == []
+        with caplog.at_level(logging.WARNING, logger="bawue.ics_parser"):
+            assert extract_gremium_names("Fraktions- und Ausschusssitzungen: ") == []
+
+        assert not caplog.records  # 28 such entries in the feed: silent, not "Unknown committee"
 
     def test_finanzausschuss(self):
         assert extract_gremium_names("Fraktions- und Ausschusssitzungen: FinA") == ["Ausschuss für Finanzen"]
@@ -77,8 +80,11 @@ class TestExtractGremiumNames:
     def test_haushaltsberatungen(self):
         assert extract_gremium_names("Haushaltsberatungen: FinA") == ["Ausschuss für Finanzen"]
 
-    def test_fraktionen_excluded(self):
-        assert extract_gremium_names("Fraktions- und Ausschusssitzungen: Fraktionen") == []
+    def test_fraktionen_excluded(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="bawue.ics_parser"):
+            assert extract_gremium_names("Fraktions- und Ausschusssitzungen: Fraktionen") == []
+
+        assert not caplog.records  # 49 such entries in the feed: silent, not "Unknown committee"
 
     def test_praesidium_excluded(self):
         assert extract_gremium_names("Präsidium: ") == []
@@ -125,6 +131,10 @@ class TestIssue117NamedCommittees:
             assert extract_gremium_names(summary) == expected
 
         assert "Unknown committee" in caplog.text
+
+    def test_repeated_abbreviation_yields_one_gremium(self):
+        """Two Sitzungen with one UID, date and Gremium would share an api_id (UNIQUE in the backend)."""
+        assert extract_gremium_names("Fraktions- und Ausschusssitzungen: FinA, FinA") == ["Ausschuss für Finanzen"]
 
     def test_parse_splits_combined_event(self):
         ics = (

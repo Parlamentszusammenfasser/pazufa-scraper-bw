@@ -379,7 +379,7 @@ class TestFormatSummary:
         text = format_summary(self._make_summary(), verbosity=0)
 
         assert "Dates: 12" in text
-        assert "Events: 34" in text
+        assert "Sitzungen: 34 | ICS events filtered: 18, kept: 16" in text
 
     def test_format_returns_string(self):
         text = format_summary(self._make_summary(), verbosity=0)

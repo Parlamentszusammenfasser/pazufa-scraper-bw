@@ -38,8 +38,12 @@ wie möglich sein“, s. DD-022), **Präsidium** (Verwaltung), **Gedenktag**, **
 
 **Folgen:** Der Fingerprint (DD-066) enthält das Gremium, nach dem Deploy wird daher jeder Tag mit
 Ausschüssen einmal neu hochgeladen (Feed vom 16.10.2026: 151 statt 47 Sitzungen, 71 statt 47
-Tage). Das alte Gremium `Finanzausschuss` bleibt im Backend an vergangenen Sitzungen. Je Sitzung
-ohne Nummer warnt `item_extractor` weiter einzeln (DD-064).
+Tage). Je Sitzung ohne Nummer warnt `item_extractor` weiter einzeln (DD-064).
+
+**Altes Gremium `Finanzausschuss`:** Alle seine Sitzungen liegen in der Zukunft (je 12 auf Staging
+und Prod, 12.11.2026 bis 26.11.2027, geprüft am 16.10.2026). Der erste Lauf ersetzt sie alle. Das
+Gremium bleibt danach ohne Sitzungen im Backend stehen (`GET /api/v2/gremien`) und wird per Admin
+gelöscht: `DELETE /api/v2/gremien?p=BW&wp=18&gr=Finanzausschuss` (`gr` ist ein Teilstring).
 
 **Bis 16.10.2026:** nur `…: FinA` (als `Finanzausschuss`) und `Haushaltsberatungen:` mit
 durchgereichtem Suffix; der Feed nannte damals keine anderen Ausschüsse.

@@ -341,9 +341,8 @@ def format_summary(summary: DryRunSummary, verbosity: int = 0, *, as_json: bool 
     lines.append("--- Sitzungen (ICS) ---")
     lines.append(
         f"Dates: {summary.total_sitzung_dates} | "
-        f"Events: {summary.total_sitzung_events} | "
-        f"Filtered: {summary.sitzung_filtered} | "
-        f"Kept: {summary.sitzung_kept}"
+        f"Sitzungen: {summary.total_sitzung_events} | "
+        f"ICS events filtered: {summary.sitzung_filtered}, kept: {summary.sitzung_kept}"
     )
 
     # Verbosity 2: per-item details
@@ -551,7 +550,7 @@ def run_sitzungen(
     total_all = sum(1 for c in cal.walk() if c.name == "VEVENT")
 
     events = parse_ics_feed(resp.content)
-    # By UID: one VEVENT can yield one event per committee (DD-006)
+    # By UID (mandatory in iCalendar): one VEVENT can yield one event per committee (DD-006)
     total_filtered = total_all - len({e.uid for e in events})
 
     grouped = group_events_by_date(events)
@@ -593,6 +592,7 @@ def main(argv: list[str] | None = None) -> None:
     raw_vorgaenge: list[dict] = []
     beteiligung_reports: list = []
     sitzung_reports: list = []
+    sitzung_total_all = 0
     sitzung_total_filtered = 0
 
     # Determine which scrapers to run
@@ -617,7 +617,7 @@ def main(argv: list[str] | None = None) -> None:
         )
 
     if run_s:
-        sitzung_reports, _sitzung_total_all, sitzung_total_filtered = run_sitzungen(
+        sitzung_reports, sitzung_total_all, sitzung_total_filtered = run_sitzungen(
             ics_url=args.ics_url,
         )
 
@@ -632,9 +632,9 @@ def main(argv: list[str] | None = None) -> None:
         wahlperiode=args.wahlperiode,
     )
 
-    # Fill in sitzung filtered/kept from direct counts
+    # Filtered/kept count ICS events; one event can yield several Sitzungen (DD-006)
     summary.sitzung_filtered = sitzung_total_filtered
-    summary.sitzung_kept = summary.total_sitzung_events
+    summary.sitzung_kept = sitzung_total_all - sitzung_total_filtered
 
     output = format_summary(summary, verbosity=args.verbosity, as_json=args.json)
     print(output)

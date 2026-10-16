@@ -385,6 +385,16 @@ class TestMain:
         mock_rb.assert_called_once()
         mock_rs.assert_called_once()
 
+    def test_issue117_sitzung_counts_are_ics_events(self, capsys):
+        """One ICS event can yield several Sitzungen: filtered + kept add up to the feed's events."""
+        with (
+            patch("bawue.dry_run.run_sitzungen", return_value=([], 176, 89)),
+            patch("bawue.dry_run.check_for_newer_wahlperiode"),
+        ):
+            main(["--scraper", "sitzungen"])
+
+        assert "ICS events filtered: 89, kept: 87" in capsys.readouterr().out
+
     @pytest.mark.parametrize(
         ("argv", "start"),
         [

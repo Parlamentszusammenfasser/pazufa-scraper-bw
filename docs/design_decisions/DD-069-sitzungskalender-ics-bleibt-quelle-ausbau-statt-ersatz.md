@@ -24,11 +24,11 @@
    und Prod ohne Fehler (47 von 47 Tagen).
 4. **Der Feed nennt die Ausschüsse jetzt.** Statt des Sammel-Eintrags `Ausschuesse` stehen Kürzel
    im SUMMARY, oft mehrere je Termin (`FinA, BildungsA, VerkA`). DD-006 schloss Ausschüsse nur
-   wegen des fehlenden Namens aus. `extract_gremium_name` vergleicht das ganze Suffix mit `FinA` und
-   verwirft so 104 Ausschusssitzungen, darunter 8 des Finanzausschusses.
-5. **Kalender und Vorgänge benennen denselben Ausschuss verschieden:** `Finanzausschuss` im
-   Kalender, `Ausschuss für Finanzen` (PARLIS) in den Stationen. Das Backend sucht Gremien über den
-   exakten Namen (`insert_or_retrieve_gremium`) und legt deshalb zwei an.
+   wegen des fehlenden Namens aus. `extract_gremium_name` verglich das ganze Suffix mit `FinA` und
+   verwarf so 104 Ausschusssitzungen, darunter 8 des Finanzausschusses (behoben, #117).
+5. **Kalender und Vorgänge benannten denselben Ausschuss verschieden** (behoben, #117):
+   `Finanzausschuss` im Kalender, `Ausschuss für Finanzen` (PARLIS) in den Stationen. Das Backend
+   sucht Gremien über den exakten Namen (`insert_or_retrieve_gremium`) und legte deshalb zwei an.
 6. **Eine auf einen anderen Tag verlegte Sitzung scheiterte** (behoben, #116). Die `api_id` war
    `uuid5(UID)`, im Backend ist `sitzung.api_id` `UNIQUE`. `PUT` löscht nur die Sitzungen des
    Zieltags. Behielt der Landtag die UID beim Verlegen, kollidierte der Insert mit der Zeile am
@@ -74,7 +74,9 @@ eigenen `api_id`; ein Upload des Vortags löscht ihn. Der Feed vom 16.10.2026 ha
 Termin.
 
 **Code:** Entscheidung 3: `ics_parser.extract_gremium_names` (#117, DD-006). Entscheidung 4:
-`BawueSitzungenScraper.item_extractor` (`api_id` aus UID und Datum, #116). Sonst kein Code.
+`BawueSitzungenScraper.item_extractor` (`api_id` aus UID und Datum, #116, seit #117 auch Gremium).
+Sonst kein Code.
 Korrigiert: das Zeitfenster von `PUT kalender` in `anforderungen.md`, die Verlegung in DD-066.
 
-**Tests:** `tests/unit/test_bawue_sitzungen_scraper.py::TestIssue116MovedSession`
+**Tests:** `tests/unit/test_bawue_sitzungen_scraper.py::TestIssue116MovedSession`,
+`TestIssue117NamedCommittees` dort und in `tests/unit/test_ics_parser.py`

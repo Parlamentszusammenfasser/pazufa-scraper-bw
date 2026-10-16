@@ -99,7 +99,7 @@ Verwendung:
   `_ensure_initiativ_after_regbsl` — synthetische Stationen nutzen
   `ReservedGremium.PLENUM` (vorher hartcodiert `"Landtag"`).
 - `bawue_beteiligung_scraper.py` (Station-Erstellung) — `ReservedGremium.REGIERUNG`.
-- `ics_parser.py::extract_gremium_name` — `ReservedGremium.PLENUM` für
+- `ics_parser.py::extract_gremium_names` — `ReservedGremium.PLENUM` für
   Plenarsitzungen.
 
 `tests/unit/test_enum_mapper.py::TestReservedGremiumNames` lockt die literalen
