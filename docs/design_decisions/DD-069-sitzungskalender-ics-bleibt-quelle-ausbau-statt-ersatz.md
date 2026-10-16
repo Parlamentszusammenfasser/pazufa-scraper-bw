@@ -67,6 +67,12 @@
 - *Vergangene Sitzungen nachträglich vervollständigen:* Collector-Keys dürfen das nicht (Befund 1).
 - *Einzelne Sitzungen per `PUT /sitzung/{api_id}` setzen:* Der Endpunkt verlangt Admin-Scope.
 
+**Nicht abgedeckt:** Das Backend leert einen Tag nach UTC (`kal_date_put`), der Scraper gruppiert
+nach dem Berliner Tag. Ein ganztägiger Termin oder einer vor 01:00 (MEZ) bzw. 02:00 (MESZ) liegt in
+UTC am Vortag. Ein erneuter Upload seines Tages löscht ihn dann nicht und kollidiert mit der
+eigenen `api_id`; ein Upload des Vortags löscht ihn. Der Feed vom 16.10.2026 hat keinen solchen
+Termin.
+
 **Code:** Entscheidung 4: `BawueSitzungenScraper.item_extractor` (`api_id` aus UID und Datum,
 #116). Sonst kein Code. Korrigiert: das Zeitfenster von `PUT kalender` in `anforderungen.md`, die
 Verlegung in DD-066.
