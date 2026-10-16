@@ -35,8 +35,8 @@ gegen das echte Backend (Issue #85, Verifikation von 2.1.1).
 
 - Ein Tag, dessen Termine alle entfallen, verschwindet aus dem Feed und wird nicht mehr
   hochgeladen; die Sitzung bleibt im Backend. Vom normalen Herausfallen vergangener Tage ist
-  das nicht zu unterscheiden (Issue #85). Derzeit hat jeder Tag genau einen Termin, das gilt
-  also für jeden entfallenen Termin.
+  das nicht zu unterscheiden (Issue #85). Das trifft jeden entfallenen Termin an einem Tag mit nur
+  einer Sitzung, wie den meisten Plenartagen. Ausschusstage haben seit GitHub Issue #117 oft mehrere.
 - Eine auf einen anderen Tag verlegte Sitzung: Seit GitHub Issue #116 enthält die `api_id` das
   Datum, der neue Tag wird also hochgeladen. Der alte Tag behält die Sitzung, bis er neu
   hochgeladen wird. Hat er keine andere Sitzung, fällt er aus dem Feed: dieselbe Lücke wie beim
