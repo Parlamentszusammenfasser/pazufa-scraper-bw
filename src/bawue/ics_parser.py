@@ -78,7 +78,8 @@ def extract_gremium_names(summary: str) -> list[str]:
             logger.warning("Unknown committee %r in ICS summary %r, skipping it", abbr, summary)
             continue
         names.append(COMMITTEE_NAMES[abbr])
-    return names
+    # A repeated abbreviation would give two Sitzungen the same api_id (UNIQUE in the backend)
+    return list(dict.fromkeys(names))
 
 
 def parse_ics_feed(ics_data: bytes) -> list[ParsedEvent]:

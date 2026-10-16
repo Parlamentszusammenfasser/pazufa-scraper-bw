@@ -126,6 +126,10 @@ class TestIssue117NamedCommittees:
 
         assert "Unknown committee" in caplog.text
 
+    def test_repeated_abbreviation_yields_one_gremium(self):
+        """Two Sitzungen with one UID, date and Gremium would share an api_id (UNIQUE in the backend)."""
+        assert extract_gremium_names("Fraktions- und Ausschusssitzungen: FinA, FinA") == ["Ausschuss für Finanzen"]
+
     def test_parse_splits_combined_event(self):
         ics = (
             b"BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nUID:evt-1\nDTSTART:20270121T140000\n"
