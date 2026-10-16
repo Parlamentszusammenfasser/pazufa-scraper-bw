@@ -1137,6 +1137,63 @@ class TestBuildVorgang:
         assert station.dokumente[0].typ == Doktyp.MITTEILUNG
 
 
+# V-248237 as PARLIS listed it on staging on 30.09.2026 (issue #75): the first
+# reading on 08.10. was already scheduled.
+_ISSUE_75_FUNDSTELLEN = [
+    {
+        "raw": "Gesetzentwurf    Landesregierung  29.09.2026 Drucksache 18/623",
+        "datum": "29.09.2026",
+        "drucksache": "18/623",
+        "station_typ": "Gesetzentwurf",
+        "autor_text": "Landesregierung",
+        "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Drucksachen/0000/18%5F0623.pdf",
+    },
+    {
+        "raw": "Erste Beratung   Plenarprotokoll 18/13 08.10.2026",
+        "datum": "08.10.2026",
+        "plenarprotokoll": "18/13",
+        "station_typ": "Erste Beratung",
+        "pdf_url": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Plp/18%5F0013%5F08102026.pdf",
+    },
+]
+
+
+class TestIssue75FutureFundstellen:
+    """DD-068: a Fundstelle becomes a Station only from its date on (Berlin day)."""
+
+    @staticmethod
+    async def _build(today: date):
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 18
+        scraper._llm_enabled = False
+        scraper._llm = None
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper._retry_next_cycle = set()
+        scraper._today = lambda: today
+        raw = _make_raw_vorgang("V-248237", initiative="Landesregierung", fundstellen=_ISSUE_75_FUNDSTELLEN)
+        return scraper, await scraper._build_vorgang(raw)
+
+    @pytest.mark.asyncio
+    async def test_scheduled_reading_is_held_back(self):
+        scraper, vorgang = await self._build(date(2026, 9, 30))
+
+        assert [s.typ for s in vorgang.stationen] == [Stationstyp.PREPARL_REGBSL, Stationstyp.PARL_INITIATIV]
+        # The synthetic parl-initiativ (DD-012) falls back to the Gesetzentwurf date.
+        assert all(s.zp_start.date() <= date(2026, 9, 30) for s in vorgang.stationen)
+        TestIssue48OrderByZpStartNotListPosition._assert_valid_track(vorgang.stationen, "SI")
+        # Not cached, so the reading appears in the first cycle on its date.
+        assert "V-248237" in scraper._retry_next_cycle
+
+    @pytest.mark.asyncio
+    async def test_reading_on_its_day_is_published(self):
+        scraper, vorgang = await self._build(date(2026, 10, 8))
+
+        assert Stationstyp.PARL_VOLLVLSGN in [s.typ for s in vorgang.stationen]
+        assert "V-248237" not in scraper._retry_next_cycle
+
+
 class TestDetermineGremiumRouting:
     """Direct coverage of `_determine_gremium`'s routing table (DD-021, issue #10).
 
@@ -1599,6 +1656,7 @@ class TestPlaceholderDate:
                 },
             ],
         )
+        scraper_build_vorgang.__self__._today = lambda: date(2028, 1, 1)  # not held back (DD-068)
         vorgang = await scraper_build_vorgang(raw)
 
         station = vorgang.stationen[0]
@@ -1693,6 +1751,7 @@ class TestDatetimesAreTimezoneAware:
                 },
             ],
         )
+        scraper_build_vorgang.__self__._today = lambda: date(2028, 1, 1)  # not held back (DD-068)
         vorgang = await scraper_build_vorgang(raw)
         station = vorgang.stationen[0]
 
