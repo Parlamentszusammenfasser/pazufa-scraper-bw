@@ -14,6 +14,7 @@ import logging
 import re
 import ssl
 import tempfile
+import weakref
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import NamedTuple
@@ -89,7 +90,27 @@ class LLMMetrics:
 
 MAX_JSON_RETRIES = 3
 MIN_TEXT_LENGTH = 64
-_LLM_SEMAPHORE = asyncio.Semaphore(3)
+_LLM_LIMIT = 3
+
+
+def _loop_semaphore(registry: weakref.WeakKeyDictionary, limit: int) -> asyncio.Semaphore:
+    """One semaphore per event loop, shared by all scrapers of a cycle.
+
+    A semaphore binds to the first loop that waits on it, and without --once
+    __main__ starts a new loop per cycle (issue #101).
+    """
+    loop = asyncio.get_running_loop()
+    if loop not in registry:
+        registry[loop] = asyncio.Semaphore(limit)
+    return registry[loop]
+
+
+_LLM_SEMAPHORES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _llm_semaphore() -> asyncio.Semaphore:
+    return _loop_semaphore(_LLM_SEMAPHORES, _LLM_LIMIT)
+
 
 # Two-tier LLM semantics cache, keyed by (doc_hash, prompt_hash):
 # 1. _hash_cache (in-memory dict): fast intra-cycle deduplication, cleared each cycle
@@ -601,16 +622,23 @@ async def download_pdf(session, url: str) -> Path:
 #
 #   * max_threads=1 forces sequential page rendering *within* one document,
 #     capping it at ~1.3 GB (measured) instead of cores x ~0.7 GB.
-#   * _OCR_SEMAPHORE caps how many documents OCR *at the same time*.
+#   * _ocr_semaphore() caps how many documents OCR *at the same time*.
 #
-# Peak OCR memory ≈ 0.65 GB base + (_OCR_SEMAPHORE limit x max_threads) x ~0.66 GB.
+# Peak OCR memory ≈ 0.65 GB base + (_OCR_LIMIT x max_threads) x ~0.66 GB.
 # The default (2 x 1) targets ~2 GB, comfortably inside a 4 GB container while
 # leaving the fast native-text path (no OCR) free to run at main.max-concurrency.
 #
 # NB: lowering OCR DPI via ImagePreprocessingConfig would shrink each bitmap, but
 # that code path SIGABRTs in kreuzberg 4.9.9, so max_threads is the usable lever.
 _OCR_MAX_THREADS = 1
-_OCR_SEMAPHORE = asyncio.Semaphore(2)
+_OCR_LIMIT = 2
+_OCR_SEMAPHORES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _ocr_semaphore() -> asyncio.Semaphore:
+    return _loop_semaphore(_OCR_SEMAPHORES, _OCR_LIMIT)
+
+
 _OCR_CONFIG = ExtractionConfig(
     force_ocr=True,
     ocr=OcrConfig(backend="tesseract", language="deu"),
@@ -658,13 +686,13 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tupl
 
     if len(text) < MIN_TEXT_LENGTH:
         logger.warning("Normal text extraction yielded <%d chars, retrying with OCR", MIN_TEXT_LENGTH)
-        async with _OCR_SEMAPHORE:
+        async with _ocr_semaphore():
             ocr_result = await extract_file(pdf_path, config=ocr_config)
         text = ocr_result.content or ""
     elif _is_garbled(text):
         logger.warning("Garbled text detected (broken font encoding), retrying with OCR")
         try:
-            async with _OCR_SEMAPHORE:
+            async with _ocr_semaphore():
                 ocr_result = await extract_file(pdf_path, config=ocr_config)
             ocr_text = ocr_result.content or ""
             if ocr_text and not _is_garbled(ocr_text) and _usable_length(ocr_text) > _usable_length(text):
@@ -744,7 +772,7 @@ def _parse_llm_response(content: str) -> dict:
 
 async def _llm_json(llm: LLMConnector, model: str, messages: list[dict]) -> dict:
     """Run one JSON-mode chat completion and return the parsed object."""
-    async with _LLM_SEMAPHORE:
+    async with _llm_semaphore():
         response = await litellm.acompletion(
             model=model,
             api_key=llm.api_key,

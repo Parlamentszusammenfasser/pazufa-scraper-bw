@@ -229,7 +229,7 @@ classDiagram
         +extract_pdf_text(pdf_path) tuple
         +extract_semantics(llm, text, doktyp, model, dok_titel, drucksnr) dict
         -_hash_cache: dict
-        -_LLM_SEMAPHORE: Semaphore
+        -_llm_semaphore() Semaphore
     }
 
     class UploadThrottle {
