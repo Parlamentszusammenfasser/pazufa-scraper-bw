@@ -14,7 +14,9 @@ TAGESORDNUNGEN_URL = "https://www.landtag-bw.de/de/aktuelles/tagesordnungen"
 _SITE = "https://www.landtag-bw.de"
 
 _AGENDA_LINK_RE = re.compile(r"/resource/blob/[^\"'\s]+/(\d{4}-\d{2}-\d{2})_(\d+)_Plenarsitzung\.pdf")
-_ITEM_START_RE = re.compile(r"^\s*(\d{1,3})\.(?:\s+(.*))?$")
+_MONATE = "Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember"
+# "2. Mai 2020" in a wrapped title is a date, not item 2.
+_ITEM_START_RE = re.compile(rf"^\s*(\d{{1,3}})\.(?!\s*(?:{_MONATE})\b)(?:\s+(.*))?$")
 # "18/........" (not printed yet) has no number and is skipped.
 _DRUCKSACHE_RE = re.compile(r"Drucksache\s+(\d+/\d+)")
 # A reading of a Gesetzentwurf: only these have a Vorgang (DD-070).
@@ -42,8 +44,8 @@ def agenda_links(html: str) -> list[tuple[date, int, str]]:
 def parse_tops(text: str) -> list[ParsedTop]:
     """Split the agenda text into numbered items.
 
-    An item starts at a line "N." or "N. <text>" with N the next expected number, so a
-    date like "3. Oktober" inside an item never starts one. The title runs from the item
+    An item starts at a line "N." or "N. <text>" with N the next expected number and no
+    month name after it, so a wrapped date like "2. Mai 2020" never starts one. The title runs from the item
     start to its first "Drucksache" line, else it is the first line: what follows are
     notes and the speaking-time column, and only macOS extraction separates them by a
     blank line.

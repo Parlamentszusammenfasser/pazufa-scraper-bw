@@ -89,3 +89,12 @@ class TestReviewPr124:
             "– Drucksache 18/300\n"  # noqa: RUF001
         )
         assert parse_tops(text)[0].drucksachen == ()
+
+    def test_wrapped_date_does_not_start_the_next_item(self):
+        text = (
+            "1. Zweite Beratung des Gesetzentwurfs zur Änderung des Landesgesetzes vom\n"
+            "2. Mai 2020\n– Drucksache 18/100\n2. Antrag\n"  # noqa: RUF001
+        )
+        tops = parse_tops(text)
+        assert [t.nummer for t in tops] == [1, 2]
+        assert tops[0].drucksachen == ("18/100",)
