@@ -49,7 +49,7 @@ Erweiterung unten, Issue #26*):
   den Initiator. „Landtag" bzw. das herausgebende Organ wären neue frei erfundene
   Autor-Strings; DD-021 hält reservierte Namen (`plenum`) ausdrücklich für
   `Gremium.name` und **nicht** für `Autor.organisation` vor, und die kanonische
-  Normalisierung der Autor-Strings ist als Roadmap #10 G2 offen.
+  Normalisierung der Autor-Strings regelt DD-022.
 
 Leitlinie: Der Initiator-Fallback bleibt überall dort, wo die Quelldaten nichts
 Besseres hergeben. Geändert wird nur, was PARLIS tatsächlich benennt.

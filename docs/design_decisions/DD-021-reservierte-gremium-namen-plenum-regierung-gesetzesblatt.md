@@ -63,8 +63,7 @@ denselben Bug erneut auslöst.
 - **Initiator-Strings** (`Autor.organisation = "Landesregierung"` etc.). Die
   reservierten Namen gelten ausschließlich für `Gremium.name`, nicht für
   `Autor.organisation`. Der Autor-String wird unverändert aus PARLIS
-  übernommen (Roadmap #10 G2: kanonische Normalisierung der Autor-Strings
-  steht noch aus).
+  übernommen (kanonische Normalisierung der Autor-Strings: DD-022).
 - **`volk`** ist im `ReservedGremium`-Enum definiert, aber nicht eingesetzt —
   BW kennt derzeit keine `postparl-vesja`/`postparl-vesne`-Stationen im aktiven
   Vorgangstyp-Filter. Der Wert bleibt für zukünftige Volksantrag-Pfade

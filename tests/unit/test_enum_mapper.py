@@ -305,7 +305,7 @@ OBSERVED_STATION_TYPES: list[str] = [
 
 
 class TestStationstypCoverageAudit:
-    """DoD audit (Roadmap #9): every PARLIS station type observed in production
+    """DoD audit (docs/observed_station_types.md): every PARLIS station type observed in production
     must be exercised by this file.
 
     Each entry in OBSERVED_STATION_TYPES is either:
