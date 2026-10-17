@@ -371,12 +371,12 @@ Configuration from `[beteiligung]` section.
 | `api_id`            | `uuid5(NAMESPACE_URL, "beteiligung-{slug}")`    |
 | `titel`             | Detail page heading (dossier-header h1)         |
 | `kurztitel`         | LLM short title, fallback `titel` (DD-053)      |
-| `typ`               | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`          |
+| `typ`               | `Vorgangstyp.GG_LAND_PARL`                      |
 | `initiatoren`       | `[Autor(organisation=ministry)]`                |
 | `ressort`           | LLM-Klassifikation des Schwerpunkts (DD-055)    |
-| Station `typ`       | `Stationstyp.PREPARL_MINUS_REGENT`              |
+| Station `typ`       | `Stationstyp.PREPARL_REGENT`                    |
 | Station `gremium`   | `Parlament.BW, "regierung"` (reservierter Name) |
-| Station `dokumente` | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF`       |
+| Station `dokumente` | Each PDF → `Doktyp.PREPARL_ENTWURF`             |
 | Station `zp_start`  | Comment deadline date                           |
 
 ### BeteiligungClient / BeteiligungParser
