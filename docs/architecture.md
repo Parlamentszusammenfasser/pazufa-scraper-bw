@@ -448,7 +448,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 - `zusammenfassung` is sent as the typed tuple `[(full-llm, …)]` (DD-054)
 - Entwurf / Beschlussempfehlung additionally carry the partial summaries `intention-llm`, `regelungsinhalt-llm`, `kosten-llm` from the same call, mirrored from the BB scraper (DD-056)
 - `Vorgang.ressort` is an own LLM call per Vorgang, classified by subject matter; prompt mirrored from the BB scraper (DD-055)
-- JSON response with up to 3 retries on parse failures
+- JSON mode; malformed JSON is fixed with json-repair; up to 3 API retries
 - Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
 - Two-level cache skips LLM calls for known PDFs: in-memory per cycle, then Redis (key = content hash + prompt fingerprint, DD-020)
 - Full document text is sent to the LLM (no truncation); a context header names the target bill title + Drucksache so multi-topic protocols are summarized for the correct bill (DD-029)
