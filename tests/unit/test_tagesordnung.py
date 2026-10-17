@@ -79,3 +79,13 @@ class TestParseTopsIssue66:
 
     def test_no_items(self):
         assert parse_tops("Zur Zeit liegen keine Tagesordnungen vor") == []
+
+
+class TestReviewPr124:
+    def test_antrag_mentioning_a_gesetzentwurf_links_nothing(self):
+        """Only a reading of a Gesetzentwurf has a Vorgang; an Antrag's Dokument would be an orphan."""
+        text = (
+            "1. Antrag der Fraktion der SPD\n– Die Landesregierung soll einen Gesetzentwurf vorlegen\n"  # noqa: RUF001
+            "– Drucksache 18/300\n"  # noqa: RUF001
+        )
+        assert parse_tops(text)[0].drucksachen == ()

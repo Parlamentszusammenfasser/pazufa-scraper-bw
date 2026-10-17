@@ -17,6 +17,8 @@ _AGENDA_LINK_RE = re.compile(r"/resource/blob/[^\"'\s]+/(\d{4}-\d{2}-\d{2})_(\d+
 _ITEM_START_RE = re.compile(r"^\s*(\d{1,3})\.(?:\s+(.*))?$")
 # "18/........" (not printed yet) has no number and is skipped.
 _DRUCKSACHE_RE = re.compile(r"Drucksache\s+(\d+/\d+)")
+# A reading of a Gesetzentwurf: only these have a Vorgang (DD-070).
+_GESETZENTWURF_TOP_RE = re.compile(r"(?:Erste|Zweite|Dritte) Beratung (?:des|der) Gesetzentw")
 _DRUCKSACHE_LINE_RE = re.compile(r"[–-]\s*Drucksache\b")  # noqa: RUF001 - the agenda uses an en dash
 
 
@@ -60,6 +62,6 @@ def parse_tops(text: str) -> list[ParsedTop]:
         content = [line.strip() for line in lines if line.strip()]
         end = next((i for i, line in enumerate(content) if _DRUCKSACHE_LINE_RE.match(line)), 0)
         titel = normalize_volltext(" ".join(content[: end + 1]))
-        drucksachen = tuple(dict.fromkeys(_DRUCKSACHE_RE.findall(block))) if "Gesetzentw" in block else ()
+        drucksachen = tuple(dict.fromkeys(_DRUCKSACHE_RE.findall(block))) if _GESETZENTWURF_TOP_RE.match(titel) else ()
         tops.append(ParsedTop(nummer, titel, drucksachen))
     return tops
