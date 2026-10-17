@@ -9,6 +9,8 @@ import asyncio
 import logging
 import os
 import time
+from collections.abc import Coroutine
+from typing import Any
 
 import aiohttp
 from dotenv import load_dotenv
@@ -60,7 +62,9 @@ async def main(config: BawueConfig) -> None:
         results: list = []
         try:
             if not config.linearize:
-                results = await asyncio.gather(*scraper_tasks, return_exceptions=True)
+                results = await asyncio.gather(
+                    *_sitzungen_after_vorgaenge(scrapers, scraper_tasks), return_exceptions=True
+                )
                 for r in results:
                     if isinstance(r, Exception):
                         logger.error("Some Task failed: %s", r)
@@ -70,6 +74,28 @@ async def main(config: BawueConfig) -> None:
         finally:
             # One Mattermost message per cycle, not one per scraper (issue #52).
             send_run_report(config, _report_sections(scrapers, results))
+
+
+def _sitzungen_after_vorgaenge(scrapers: list[Scraper], coros: list[Coroutine]) -> list[asyncio.Future]:
+    """Start all runs, the Sitzungen' only after the Vorgänge' (SCRAPERS order).
+
+    A TOP's Dokument must not reach the backend first: a matched Dokument is linked,
+    never overwritten (DD-070, issue #66).
+    """
+    vorgaenge: asyncio.Future | None = None
+    tasks = []
+    for scraper, coro in zip(scrapers, coros, strict=True):
+        if isinstance(scraper, BawueSitzungenScraper) and vorgaenge is not None:
+            coro = _after(vorgaenge, coro)
+        tasks.append(asyncio.ensure_future(coro))
+        if isinstance(scraper, BawueVorgaengeScraper):
+            vorgaenge = tasks[-1]
+    return tasks
+
+
+async def _after(first: asyncio.Future, coro: Coroutine) -> Any:
+    await asyncio.wait([first])  # does not raise: first's outcome is reported by its own gather slot
+    return await coro
 
 
 def _report_sections(scrapers: list[Scraper], results: list) -> list[tuple[str, list[str]]]:

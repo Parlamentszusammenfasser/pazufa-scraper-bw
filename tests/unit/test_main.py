@@ -1,11 +1,14 @@
 """Tests for the scraping cycle in bawue.__main__."""
 
+import asyncio
 import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from bawue.__main__ import log_startup, main
+from bawue.bawue_sitzungen_scraper import BawueSitzungenScraper
+from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 
 
 class _FakeScraper:
@@ -108,6 +111,66 @@ class TestIssue52OneRunReport:
             await main(_config(False))
 
         assert send.call_args.args[1] == [("Sitzungen", ["Sitzungen line"])]
+
+
+class _Recorder(_FakeScraper):
+    """Logs start and end of run(), yielding in between so concurrent runs interleave."""
+
+    def __init__(self, title: str, log: list[str]):
+        super().__init__(title)
+        self._log = log
+
+    async def run(self) -> None:
+        self._log.append(f"{self._title} start")
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        self._log.append(f"{self._title} end")
+        await super().run()
+
+
+class _Vorgaenge(_Recorder, BawueVorgaengeScraper):
+    pass
+
+
+class _Sitzungen(_Recorder, BawueSitzungenScraper):
+    pass
+
+
+class TestIssue66SitzungenAfterVorgaenge:
+    """Issue #66 / DD-070: a TOP's Dokument must not reach the backend before the Vorgang's.
+
+    The backend links a matched Dokument without overwriting it, so the Sitzungen
+    scraper waits for the Vorgänge scraper; Beteiligung still runs alongside.
+    """
+
+    @pytest.mark.asyncio
+    async def test_sitzungen_start_after_vorgaenge_end(self):
+        log: list[str] = []
+        scrapers = [_Vorgaenge("Vorgänge", log), _Recorder("Beteiligung", log), _Sitzungen("Sitzungen", log)]
+
+        with (
+            patch("bawue.__main__.load_scrapers", return_value=scrapers),
+            patch("bawue.__main__.send_run_report") as send,
+        ):
+            await main(_config(False))
+
+        assert log.index("Sitzungen start") > log.index("Vorgänge end")
+        assert log.index("Beteiligung start") < log.index("Vorgänge end")
+        assert [title for title, _ in send.call_args.args[1]] == ["Vorgänge", "Beteiligung", "Sitzungen"]
+
+    @pytest.mark.asyncio
+    async def test_failed_vorgaenge_still_run_sitzungen(self):
+        log: list[str] = []
+        vorgaenge = _Vorgaenge("Vorgänge", log)
+        vorgaenge._fail = True
+
+        with (
+            patch("bawue.__main__.load_scrapers", return_value=[vorgaenge, _Sitzungen("Sitzungen", log)]),
+            patch("bawue.__main__.send_run_report"),
+        ):
+            await main(_config(False))
+
+        assert log[-1] == "Sitzungen end"
 
 
 class TestIssue84StartupVersion:
