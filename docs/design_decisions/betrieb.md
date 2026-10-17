@@ -36,7 +36,7 @@ Pydantic-Modell der corelib — der attrs-Client serialisiert ungeprüft, Drift 
 als HTTP 422 auf.
 
 <a id="dd-059"></a>
-## DD-059: corelib v0.3.0 / Spec 0.2.7
+## DD-059: corelib v0.3.x / Spec 0.2.7
 
 **Entscheidung:**
 1. `PUT kalender` sendet `X-Scraper-Id` wieder (Spec 0.2.7 verlangt ihn).
@@ -44,6 +44,10 @@ als HTTP 422 auf.
    lässt so schon den Unit-Test scheitern; ohne hätte genau dieser `TypeError` erst im Betrieb
    gegriffen.
 3. `parl-verfgstop` heißt jetzt `postparl-vgstp` (DD-057).
+4. **v0.3.1** (GitHub #129): nur Pin-Wechsel. Spec und API-Modelle bleiben gleich, litellm wird
+   lazy importiert. Den neuen corelib-Cache nutzt BW **nicht**: Er kennt nur ein
+   Dateisystem-Backend, Cloud Run hat kein bleibendes Dateisystem, und Redis ist Pflicht
+   (DD-073). Neu bewerten, wenn corelib ein Redis-Backend bekommt.
 
 **Konsequenz:** corelibs `html_to_text` behandelt einen Text als HTML, sobald ein einzelnes
 Block-Tag vorkommt, und verliert dann alle Absätze — die Garbled-Filter (DD-015) arbeiten
