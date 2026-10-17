@@ -53,11 +53,9 @@ class GesetzblattDateLookup:
         return parse_german_date(detail.publikationsdatum) if detail else None
 
     async def inkrafttreten(self, jahr: int, nummer: int) -> datetime | None:
-        """Return the latest date the law's Inkrafttreten clause names (DD-071).
+        """Latest date of the law's Inkrafttreten clause: the whole law is in force (DD-071).
 
-        The latest date is when the whole law is in force (the BU scraper's rule while
-        upstream models staggered dates). None when the entry, its PDF or the clause
-        cannot be read; an unreadable clause is logged, never guessed.
+        None if the entry, its PDF or the clause cannot be read.
         """
         key = (jahr, nummer)
         if key not in self._kraft:

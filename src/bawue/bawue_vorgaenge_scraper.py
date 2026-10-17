@@ -150,7 +150,7 @@ def _vorgang_fingerprint(raw: RawVorgang) -> str:
     """
     fundstellen = sorted([f.get("raw", ""), f.get("pdf_url") or ""] for f in raw.get("fundstellen_parsed", []))
     payload: list = [raw.get("Aktueller Stand", ""), fundstellen]
-    # One-time rebuild of the cached laws for their postparl-kraft station (DD-071).
+    # Rebuild cached laws once for their postparl-kraft station (DD-071).
     if any(f.get("gesetzblatt_nr") for f in raw.get("fundstellen_parsed", [])):
         payload.append("postparl-kraft")
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
@@ -760,16 +760,14 @@ class BawueVorgaengeScraper(VorgangsScraper):
     async def _ensure_kraft_station(
         self, stationen: list[Station], fundstellen: list[RawFundstelle], vorgang_id: str
     ) -> None:
-        """Append a postparl-kraft station dated by the law's Inkrafttreten clause (DD-071).
+        """Append a postparl-kraft station dated from the cited Gesetzblatt (DD-071).
 
-        PARLIS practically never lists the Inkrafttreten; the Gesetzblatt the
-        postparl-gsblt station cites does. No station when the clause is unreadable,
-        retroactive (K before G fails track validation) or not reached yet (DD-068).
+        None if unreadable, retroactive (K before G fails the track) or in the future (DD-068).
         """
         gsblt = next((s for s in stationen if s.typ == Stationstyp.POSTPARL_GSBLT), None)
         if gsblt is None or self._gsblt_dates is None or any(s.typ == Stationstyp.POSTPARL_KRAFT for s in stationen):
             return
-        # shortcut: the first citation only; a second one (a Berichtigung) is not read.
+        # shortcut: reads the first citation only, not a later Berichtigung.
         fund = next((f for f in fundstellen if f.get("gesetzblatt_nr")), None)
         if fund is None:
             return
@@ -786,7 +784,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return
         stationen.append(
             Station(
-                # Date-free: the track allows one K, a corrected date must update it (like DD-046).
+                # Date-free: the track allows one K, so a new date must update it (like DD-046).
                 api_id=str(uuid5(NAMESPACE_URL, f"bawue-synth-kraft-{vorgang_id}")),
                 typ=Stationstyp.POSTPARL_KRAFT,
                 dokumente=[],

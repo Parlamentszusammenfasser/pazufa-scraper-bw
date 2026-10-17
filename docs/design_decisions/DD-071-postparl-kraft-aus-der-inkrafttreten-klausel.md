@@ -1,44 +1,31 @@
 [← Index](../design_decisions.md)
 
-# DD-071: `postparl-kraft` aus der Inkrafttreten-Klausel im Gesetzblatt (GitHub Issue #98)
+# DD-071: `postparl-kraft` aus der Inkrafttreten-Klausel (GitHub Issue #98)
 
 **Datum:** 17.10.2026
 
-**Kontext:** Ein verkündetes Gesetz endete bei `postparl-gsblt`; PARLIS nennt das Inkrafttreten
-praktisch nie. Es steht im Schlussartikel des Gesetzes, dessen PDF die Gesetzblatt-Detailseite
-verlinkt (DD-047). Upstream ist offen, wie gestuftes Inkrafttreten modelliert wird
-([parlamentszusammenfasser#66](https://codeberg.org/PaZuFa/parlamentszusammenfasser/issues/66));
-der BU-Scraper nimmt bis dahin das späteste Datum.
+**Kontext:** PARLIS nennt das Inkrafttreten fast nie. Es steht im Schlussartikel des Gesetzes im
+Gesetzblatt-PDF (DD-047). Wie gestuftes Inkrafttreten modelliert wird, ist upstream offen
+([parlamentszusammenfasser#66](https://codeberg.org/PaZuFa/parlamentszusammenfasser/issues/66)).
 
 **Entscheidung:**
 
-1. **Klausel:** der letzte Artikel/§ vor der ersten Unterschrift („Stuttgart, den“). So zählen
-   zitierte Fremdtexte und ein nachgestellter Staatsvertrag nie. Erkannt werden „am Tag (nach)
-   seiner Verkündung“, „am/mit Wirkung vom <Datum>“, „am ersten Tag des (übernächsten | N-ten)
-   auf die Verkündung folgenden Monats“ und „N Monate nach seiner Verkündung“.
-2. **Kein Raten:** Hat ein „in Kraft“ kein auflösbares Datum (Bedingung, Datum eines
-   Staatsvertrags), gibt es keine Station, nur eine WARNING.
-3. **Datum:** das späteste der Klausel (BU-Konvention), also wann das ganze Gesetz gilt.
-4. **Station:** nach der G-Station, Gremium `gesetzesblatt`, ohne Dokumente. Die `api_id` ist
-   datumsfrei (wie DD-046): Der Track erlaubt nur ein K, ein korrigiertes Datum muss die Zeile
-   ändern statt eine zweite anzulegen.
-5. **Rückwirkend** (Datum vor der G-Station): keine Station, nur INFO; sonst HTTP 400 beim Track.
-6. **Zukünftig:** zurückgehalten und nicht gecacht wie DD-068.
-7. **Cache (DD-052):** Vorgänge mit Gesetzblatt-Fundstelle bekommen einmalig einen neuen
-   Fingerprint und werden neu gebaut.
+1. Gelesen wird der letzte Artikel/§ vor der Unterschrift („Stuttgart, den“), nicht zitierte
+   Fremdtexte oder ein nachgestellter Staatsvertrag.
+2. Das Datum ist das **späteste** der Klausel, wie beim BU-Scraper.
+3. Hat ein „in Kraft“ kein Datum (z. B. eine Bedingung): keine Station, WARNING.
+4. Rückwirkend (vor der G-Station): keine Station, sonst scheitert der Track.
+5. In der Zukunft: zurückgehalten wie DD-068.
+6. Die `api_id` ist datumsfrei (wie DD-046), weil der Track nur ein K erlaubt.
+7. Gecachte Gesetze werden einmal neu gebaut (Fingerprint, DD-052).
 
-Stichprobe Gesetzblatt 2024–2026: 80 von 82 Gesetzen aufgelöst, die zwei übrigen sind bedingt.
-6 rückwirkend, 3 mit künftigem Datum.
+Stichprobe 2024–2026: 80 von 82 Gesetzen gelesen, die zwei übrigen sind bedingt.
 
-**Nicht abgedeckt:**
+**Nicht abgedeckt:** Ein künftiges Datum lässt das Gesetz bis dahin täglich neu bauen. Zitate vor
+2024 und eine zweite Gesetzblatt-Fundstelle (Berichtigung) werden nicht gelesen.
 
-- Ein Gesetz mit künftigem Datum wird bis dahin täglich neu gebaut (bis zu Jahren bei Staffelung).
-- Zitate vor 2024 (kein elektronisches Gesetzblatt) und eine zweite Gesetzblatt-Fundstelle
-  (Berichtigung) werden nicht gelesen.
-- Ein nicht ladbares PDF wird erst beim nächsten Neubau des Vorgangs erneut versucht.
+**Code:** `parse_inkrafttreten`, `GesetzblattDateLookup.inkrafttreten`, `_ensure_kraft_station`,
+`_vorgang_fingerprint`
 
-**Code:** `gesetzblatt_parser.parse_inkrafttreten`, `GesetzblattDateLookup.inkrafttreten`,
-`BawueVorgaengeScraper._ensure_kraft_station`, `_vorgang_fingerprint`
-
-**Tests:** `test_gesetzblatt_parser.py::TestParseInkrafttretenIssue98` (echte WP17-Gesetze),
-`test_gesetzblatt_lookup.py::TestInkrafttretenIssue98`, `test_bawue_scraper.py::TestIssue98KraftStation`
+**Tests:** `TestParseInkrafttretenIssue98` (echte WP17-Gesetze), `TestInkrafttretenIssue98`,
+`TestIssue98KraftStation`

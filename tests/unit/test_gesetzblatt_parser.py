@@ -147,11 +147,7 @@ def _kraft(gbl: str, verkuendung: date) -> list[date]:
 
 
 class TestParseInkrafttretenIssue98:
-    """GitHub issue #98 / DD-071: the dates the law's own Inkrafttreten clause names.
-
-    Fixtures: the text before and at the signature of real WP17 laws, as extracted
-    by ``bawue_dok.extract_pdf_text`` from the electronic Gesetzblatt.
-    """
+    """Issue #98 / DD-071. Fixtures: text of real WP17 laws up to their signature."""
 
     def test_tag_nach_verkuendung(self):
         """GBl 2026 Nr. 18: "Artikel 3" without an "Inkrafttreten" heading."""

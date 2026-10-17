@@ -97,50 +97,16 @@ def parse_detail(html_content: str, base_url: str) -> RawGesetzblattDetail:
     )
 
 
-_MONATE = (
-    "Januar",
-    "Februar",
-    "März",
-    "April",
-    "Mai",
-    "Juni",
-    "Juli",
-    "August",
-    "September",
-    "Oktober",
-    "November",
-    "Dezember",
-)
-_ORDINALE = (
-    "",
-    "zweiten",
-    "dritten",
-    "vierten",
-    "fünften",
-    "sechsten",
-    "siebten",
-    "achten",
-    "neunten",
-    "zehnten",
-    "elften",
-    "zwölften",
-)
-_ZAHLEN = {
-    "einen": 1,
-    "zwei": 2,
-    "drei": 3,
-    "vier": 4,
-    "fünf": 5,
-    "sechs": 6,
-    "sieben": 7,
-    "acht": 8,
-    "neun": 9,
-    "zehn": 10,
-    "elf": 11,
-    "zwölf": 12,
-}
+# fmt: off
+_MONATE = ["Januar", "Februar", "März", "April", "Mai", "Juni",
+           "Juli", "August", "September", "Oktober", "November", "Dezember"]
+_ORDINALE = ["", "zweiten", "dritten", "vierten", "fünften", "sechsten",
+             "siebten", "achten", "neunten", "zehnten", "elften", "zwölften"]
+_ZAHLEN = {"einen": 1, "zwei": 2, "drei": 3, "vier": 4, "fünf": 5, "sechs": 6,
+           "sieben": 7, "acht": 8, "neun": 9, "zehn": 10, "elf": 11, "zwölf": 12}
+# fmt: on
 _HEADING_RE = re.compile(r"^(?:Artikel|§)\s*\d+[a-z]?\s*$", re.MULTILINE)
-# The law's own text ends at its signature; a Staatsvertrag is published after it.
+# End of the law's own text; a Staatsvertrag follows it.
 _SIGNATURE = "Stuttgart, den"
 _WHEN_RE = re.compile(
     r"(?:(?P<tag>am Tag (?P<nach>nach )?(?:seiner|der) Verkündung)"
@@ -150,7 +116,7 @@ _WHEN_RE = re.compile(
     r"|(?P<n>\w+) Monate? nach (?:seiner|der) Verkündung)"
     r"(?=(?:(?!Kraft).){0,300}?\b(?P<kind>in|außer) Kraft)"
 )
-# "in Kraft" without a date of its own: a treaty's date announced later, or "Gleichzeitig" repeating one.
+# "in Kraft" without a new date: a treaty's (announced later) or "Gleichzeitig".
 _NO_OWN_DATE_RE = re.compile(r"an dem (?:(?!Kraft).)*\bin Kraft tr|Gleichzeitig (?:(?!Kraft).)*\bin Kraft")
 
 
@@ -161,11 +127,9 @@ def _add_months(d: date, months: int, first_of_month: bool) -> date:
 
 
 def parse_inkrafttreten(text: str, verkuendung: date) -> list[date]:
-    """Every date on which (part of) the law enters into force, in clause order (DD-071).
+    """Dates on which (parts of) the law enter into force, from its last Artikel/§ (DD-071).
 
-    Reads the law's final Artikel/§ before its signature; amended texts quoted earlier
-    in an Artikelgesetz never count. Empty when any "in Kraft" of that article has no
-    resolvable date (a condition, another law's date): no guessing.
+    Empty if any "in Kraft" there has no date (e.g. a condition): no guessing.
     """
     end = text.find(_SIGNATURE)
     body = text if end < 0 else text[:end]

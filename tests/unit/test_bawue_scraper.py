@@ -5549,11 +5549,7 @@ _GBL_GESETZESBESCHLUSS = {
 
 
 class TestIssue98KraftStation:
-    """GitHub issue #98 / DD-071: a postparl-kraft station from the law's Inkrafttreten clause.
-
-    Real case V-244420 (LNRSchG, GBl 2026 Nr. 14 of 27.02.2026): "Dieses Gesetz tritt am
-    ersten Tag des auf die Verkündung folgenden vierten Monats in Kraft" → 01.06.2026.
-    """
+    """Issue #98 / DD-071. Real case V-244420 (LNRSchG, GBl 2026 Nr. 14): in force 01.06.2026."""
 
     _KRAFT = datetime(2026, 6, 1, tzinfo=UTC)
 
@@ -5657,7 +5653,7 @@ class TestIssue98KraftStation:
 
 
 class TestIssue98OneTimeRebuild:
-    """DD-071: cached laws must be rebuilt once to gain their K station (DD-052 cache)."""
+    """DD-071: cached laws are rebuilt once to gain their K station."""
 
     @staticmethod
     def _dd052_fingerprint(raw):
