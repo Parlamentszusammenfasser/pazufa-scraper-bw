@@ -28,7 +28,7 @@ immer `0`. Geprüft am 10.10.2026, ob eine Quelle die Nummer liefert:
    Datum (`sz:`), ohne TTL. Für bereits hochgeladene Termine die `sz:`-Einträge löschen.
 
 **Nicht umgesetzt:** Die Plenarnummer aus dem Dateinamen der Tagesordnung. Sie deckt nur die
-nächste Sitzung ab und gehört zum TOP-Scraping (GitHub Issue #66).
+nächste Sitzung ab und gehört zum TOP-Scraping (GitHub Issue #66). Seit DD-070 umgesetzt.
 
 **Code:** `BawueSitzungenScraper.item_extractor`, `ics_parser.extract_session_number`
 
