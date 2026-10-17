@@ -44,8 +44,9 @@ als HTTP 422 auf.
    lässt so schon den Unit-Test scheitern; ohne hätte genau dieser `TypeError` erst im Betrieb
    gegriffen.
 3. `parl-verfgstop` heißt jetzt `postparl-vgstp` (DD-057).
-4. **v0.3.1** (GitHub #129): nur Pin-Wechsel. Spec und API-Modelle bleiben gleich, litellm wird
-   lazy importiert. Den neuen corelib-Cache nutzt BW **nicht**: Er kennt nur ein
+4. **v0.3.1** (GitHub #129): nur Pin-Wechsel. Spec und Felder bleiben gleich (der Client ist
+   neu generiert: `StrEnum`, `fromisoformat`; BW nutzt `.value`, ohne Wirkung auf Payloads und
+   Cache-Keys), litellm wird lazy importiert. Den neuen corelib-Cache nutzt BW **nicht**: Er kennt nur ein
    Dateisystem-Backend, Cloud Run hat kein bleibendes Dateisystem, und Redis ist Pflicht
    (DD-073). Ein eigenes Redis-Backend über `cache.backends.Backend` wäre möglich, aber
    corelib-Keys verbieten `:` — alle BW-Keys (`vg2:`, `sz:`, `llm-semantics:` …) müssten
