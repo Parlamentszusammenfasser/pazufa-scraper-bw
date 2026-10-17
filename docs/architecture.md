@@ -449,7 +449,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 - Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
 - Two-level cache skips LLM calls for known PDFs: in-memory per cycle, then Redis (key = content hash + prompt fingerprint, DD-020)
 - Full document text is sent to the LLM (no truncation); a context header names the target bill title + Drucksache so multi-topic protocols are summarized for the correct bill (DD-029)
-- For plenary protocols (`redeprotokoll`), the summary input is first narrowed to the relevant agenda item via corelib's `LLMConnector.extract_relevant_section` (`narrow_to_relevant_section`, DD-029)
+- Plenary protocols (`redeprotokoll`) get one neutral summary per session, without Vorgang context, shared by every Vorgang that cites them (DD-037); `narrow_to_relevant_section` therefore never narrows
 
 **Graceful degradation (3 tiers):**
 
