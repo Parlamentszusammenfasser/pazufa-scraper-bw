@@ -178,5 +178,19 @@ class TestParseInkrafttretenIssue98:
         """GBl 2025 Nr. 81: "sobald alle Länder … geändert haben"."""
         assert _kraft("2025-81", date(2025, 7, 1)) == []
 
+    @pytest.mark.parametrize(
+        "clause",
+        [
+            # GBl 2025 Nr. 81 without its paragraph (2): the date belongs to a "Fassung"
+            "Artikel 7\nDie Artikel 1 und 3 treten in Kraft, sobald alle Länder die Verträge in der am "
+            "1. Januar 2025 geltenden Fassung geändert haben. Artikel 2 tritt am 1. Januar 2027 in Kraft.\n",
+            "Artikel 5\n(2) Artikel 3 ist erstmals am 1. Januar 2027 anzuwenden. (3) Artikel 4 tritt in Kraft, "
+            "sobald der Bund zustimmt.\n",
+        ],
+    )
+    def test_date_of_another_sentence_does_not_count(self, clause):
+        """Review of PR #125: an unrelated date hid a condition and dated the station."""
+        assert parse_inkrafttreten(clause, date(2025, 7, 1)) == []
+
     def test_no_clause(self):
         assert parse_inkrafttreten("Artikel 1\nÄnderung\nStuttgart, den 1. März 2026", date(2026, 3, 1)) == []

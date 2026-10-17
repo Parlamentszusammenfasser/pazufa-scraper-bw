@@ -114,7 +114,8 @@ _WHEN_RE = re.compile(
     r"|am ersten Tag des (?P<uebern>übernächsten )?auf (?:die|seine) Verkündung folgenden"
     r" (?:(?P<ord>\w+) )?(?:Kalender)?[mM]onats"
     r"|(?P<n>\w+) Monate? nach (?:seiner|der) Verkündung)"
-    r"(?=(?:(?!Kraft).){0,300}?\b(?P<kind>in|außer) Kraft)"
+    # "in Kraft" of the same sentence: a sentence ends at ". " not after a digit ("1. Januar").
+    r"(?=(?:(?!Kraft|(?<!\d)\. ).){0,300}?\b(?P<kind>in|außer) Kraft)"
 )
 # "in Kraft" without a new date: a treaty's (announced later) or "Gleichzeitig".
 _NO_OWN_DATE_RE = re.compile(r"an dem (?:(?!Kraft).)*\bin Kraft tr|Gleichzeitig (?:(?!Kraft).)*\bin Kraft")
