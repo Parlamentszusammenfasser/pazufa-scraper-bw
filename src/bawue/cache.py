@@ -6,7 +6,6 @@ they build themselves, Sitzungen and LLM-semantics caching use raw keys too).
 """
 
 import logging
-import sys
 from urllib.parse import urlsplit
 
 import redis
@@ -28,6 +27,10 @@ def _redact(redis_url: str) -> str:
     except ValueError:
         return "<redis-url>"
     return netloc.rsplit("@", 1)[-1] or "<redis-url>"
+
+
+class RedisUnavailableError(RuntimeError):
+    """Redis is required: without it every run rebuilds everything (issue #105)."""
 
 
 class BawueCache:
@@ -60,10 +63,10 @@ class BawueCache:
             logger.info("Connected to Redis at %s", target)
         except redis.ConnectionError as e:
             logger.error("Failed to connect to Redis at %s: %s", target, e)
-            sys.exit(1)
+            raise RedisUnavailableError(f"Redis at {target} unreachable") from e
         except Exception as e:
             logger.error("Unexpected error connecting to Redis: %s", e)
-            sys.exit(1)
+            raise RedisUnavailableError(f"Redis at {target} failed: {type(e).__name__}") from e
 
     def store_raw(self, key: str, value: str, typehint: str = "Raw Value") -> bool:
         if self.disabled:

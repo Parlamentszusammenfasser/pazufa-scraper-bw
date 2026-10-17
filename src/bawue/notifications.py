@@ -36,18 +36,23 @@ def send_run_report(config: BawueConfig, sections: list[tuple[str, list[str]]]) 
     """
     if not sections:
         return
+    text = f"**[{_extract_environment(config)}] BaWue Run Summary**" + "".join(
+        f"\n**{title}**\n```\n" + "\n".join(lines) + "\n```" for title, lines in sections
+    )
+    _post(config, text)
+
+
+def send_alert(config: BawueConfig, message: str) -> None:
+    """Post a run-aborting error to Mattermost. Silently skips without a hook."""
+    _post(config, f"**[{_extract_environment(config)}] BaWue run aborted**\n{message}")
+
+
+def _post(config: BawueConfig, text: str) -> None:
     notif = load_toml_section(config, "notifications")
     hook = notif.get("mattermost-hook", "").strip()
     if not hook:
         return
-
     username = notif.get("mattermost-username", "bawue-scraper")
-    environment = _extract_environment(config)
-
-    text = f"**[{environment}] BaWue Run Summary**" + "".join(
-        f"\n**{title}**\n```\n" + "\n".join(lines) + "\n```" for title, lines in sections
-    )
-
     try:
         resp = requests.post(hook, json={"username": username, "text": text}, timeout=10)
         resp.raise_for_status()

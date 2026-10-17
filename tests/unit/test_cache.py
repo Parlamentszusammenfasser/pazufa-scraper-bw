@@ -6,7 +6,7 @@ from unittest.mock import ANY, patch
 import pytest
 import redis
 
-from bawue.cache import BawueCache
+from bawue.cache import BawueCache, RedisUnavailableError
 from bawue.config import BawueConfig
 
 UPSTASH_URL = "rediss://default:secret-token@example-12345.upstash.io:6379"
@@ -64,15 +64,15 @@ def test_credentials_are_never_logged(url, credential, caplog):
     assert UPSTASH_TARGET in caplog.text
 
 
-def test_connection_failure_exits_naming_the_target(caplog):
+def test_connection_failure_raises_naming_the_target(caplog):
     with patch("bawue.cache.redis.Redis") as mock_redis:
         mock_redis.from_url.return_value.ping.side_effect = redis.ConnectionError("refused")
-        with pytest.raises(SystemExit) as exc, caplog.at_level(logging.ERROR, logger="bawue.cache"):
+        with pytest.raises(RedisUnavailableError) as exc, caplog.at_level(logging.ERROR, logger="bawue.cache"):
             BawueCache(None, None, redis_url=UPSTASH_URL)
-    assert exc.value.code == 1
     # The operator has to be able to tell *which* Redis refused, without the token.
+    assert UPSTASH_TARGET in str(exc.value)
     assert UPSTASH_TARGET in caplog.text
-    assert "secret-token" not in caplog.text
+    assert "secret-token" not in str(exc.value) + caplog.text
 
 
 def test_config_forwards_redis_url_to_cache(monkeypatch, tmp_path):

@@ -15,6 +15,19 @@ Versionskonstante gibt es bewusst nicht.
 | `drucks-hash:` | Hash hochgeladener Drucksachen für TOPs | DD-070 |
 | `wochenbericht` | letzte begonnene Station je Vorgang, Stand der Vorwoche | DD-072 |
 
+<a id="dd-073"></a>
+## DD-073: Redis ist Pflicht — ohne Redis startet kein Lauf
+
+**Kontext:** Ohne Cache baut ein Lauf jeden Vorgang neu, lädt alle PDFs und zahlt alle
+LLM-Calls erneut. Der Dry-Run, der ohne Redis lief, ist entfernt (GitHub #122).
+
+**Entscheidung:** Ist Redis beim Start nicht erreichbar (nach drei Versuchen), bricht der Lauf
+ab: `RedisUnavailableError`, eine Alarm-Nachricht an Mattermost, Exit-Code 1. Fehlt `[cache]`,
+gilt `localhost:6379`; ein stiller Lauf ohne Cache ist nicht vorgesehen.
+
+**Konsequenz:** Cloud Run wiederholt einen gescheiterten Lauf einmal, das gibt bis zu zwei
+Alarme. Ein Ausfall *während* des Laufs ist eigene Arbeit (GitHub #105).
+
 <a id="dd-052"></a>
 ## DD-052: Fingerprint des PARLIS-Records im `vg2:`-Cache
 

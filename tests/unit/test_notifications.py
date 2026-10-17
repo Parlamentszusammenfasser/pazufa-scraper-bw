@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import responses as responses_lib
 
-from bawue.notifications import _extract_environment, send_run_report
+from bawue.notifications import _extract_environment, send_alert, send_run_report
 
 HOOK_URL = "https://chat.pazufa.de/hooks/testhook"
 
@@ -146,4 +146,23 @@ class TestSendRunReport:
         """No scraper enabled or none reported: nothing to say."""
         with _patch_notif():
             send_run_report(mock_config, [])
+        assert len(responses_lib.calls) == 0
+
+
+class TestSendAlert:
+    @responses_lib.activate
+    def test_posts_alert_with_environment(self, mock_config):
+        import json
+
+        responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
+        with _patch_notif():
+            send_alert(mock_config, "Redis unreachable")
+        payload = json.loads(responses_lib.calls[0].request.body)
+        assert "[staging]" in payload["text"]
+        assert "Redis unreachable" in payload["text"]
+
+    @responses_lib.activate
+    def test_skips_post_when_hook_empty(self, mock_config):
+        with _patch_notif(hook=""):
+            send_alert(mock_config, "Redis unreachable")
         assert len(responses_lib.calls) == 0

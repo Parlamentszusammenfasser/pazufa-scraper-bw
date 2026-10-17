@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bawue.__main__ import log_startup, main
+from bawue.__main__ import load_config, log_startup, main
 
 
 class _FakeScraper:
@@ -149,3 +149,17 @@ class TestIssue84StartupVersion:
         with caplog.at_level(logging.INFO, logger="bawue"):
             log_startup()
         assert caplog.messages == [f"Starting BaWue scraper manager (version {version})."]
+
+
+class TestRedisUnavailableAtStartup:
+    def test_alerts_and_exits(self):
+        from bawue.cache import RedisUnavailableError
+
+        with (
+            patch("bawue.__main__.BawueConfig.load", side_effect=RedisUnavailableError("redis.example:6379")),
+            patch("bawue.__main__.send_alert") as alert,
+            pytest.raises(SystemExit) as exc,
+        ):
+            load_config()
+        assert exc.value.code == 1
+        assert "redis.example:6379" in alert.call_args.args[1]

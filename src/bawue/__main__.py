@@ -8,6 +8,7 @@ and avoids importlib plugin-loading machinery.
 import asyncio
 import logging
 import os
+import sys
 import time
 
 import aiohttp
@@ -16,8 +17,9 @@ from dotenv import load_dotenv
 from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
 from bawue.bawue_sitzungen_scraper import BawueSitzungenScraper
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
+from bawue.cache import RedisUnavailableError
 from bawue.config import BawueConfig
-from bawue.notifications import send_run_report
+from bawue.notifications import send_alert, send_run_report
 from bawue.pipeline import Scraper
 from bawue.wochenbericht import weekly_section
 
@@ -96,6 +98,17 @@ def log_startup() -> None:
     logger.info("Starting BaWue scraper manager (version %s).", version)
 
 
+def load_config() -> BawueConfig:
+    """Load the config; without Redis the run must not start, so fail fast and alert."""
+    config = BawueConfig()
+    try:
+        config.load()
+    except RedisUnavailableError as e:
+        send_alert(config, f"{e}. No data was scraped.")
+        sys.exit(1)
+    return config
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
@@ -104,8 +117,7 @@ if __name__ == "__main__":
     # Before config.load(): a broken config must still say which image ran.
     log_startup()
 
-    config = BawueConfig()
-    config.load()
+    config = load_config()
 
     logger.info("Configuration Complete")
 
