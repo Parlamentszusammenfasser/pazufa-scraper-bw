@@ -1,6 +1,7 @@
 """Tests for the BawueSitzungenScraper."""
 
 import datetime
+import hashlib
 import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -24,6 +25,9 @@ def _make_scraper() -> BawueSitzungenScraper:
     scraper._wahlperiode = 17
     scraper._events_by_date = {}
     scraper._fingerprints = {}
+    scraper._agendas = {}
+    scraper._retry_next_cycle = set()
+    scraper._link_drucksachen = False
     scraper.listing_urls = [ICS_URL]
     scraper.session = MagicMock()
     scraper.scraper_id = "00000000-0000-0000-0000-000000000001"
@@ -636,3 +640,154 @@ class TestRunDurationLog:
             await scraper.run()
 
         assert any("Completed in" in msg for msg in caplog.messages)
+
+
+_AGENDA_PDF = (
+    Path(__file__).parent.parent / "fixtures" / "tagesordnung" / "2026-10-21_14_Plenarsitzung.pdf"
+).read_bytes()
+# The real agenda of 21.10.2026, linked for the sample feed's bare Plenarsitzung on 27.02.2026.
+_AGENDA_HTML = b'<a href="/resource/blob/656162/f6ca/2026-02-27_14_Plenarsitzung.pdf">Tagesordnung</a>'
+_DRUCKSACHEN = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Drucksachen/0000/"
+
+
+def _route(pages: dict[str, bytes]) -> MagicMock:
+    """session.get stub: the first URL prefix in *pages* answers, anything else is HTTP 404."""
+
+    def get(url, **_kwargs):
+        body = next((b for prefix, b in pages.items() if url.startswith(prefix)), None)
+        response = AsyncMock(status=200 if body is not None else 404, read=AsyncMock(return_value=body))
+        response.__aenter__ = AsyncMock(return_value=response)
+        response.__aexit__ = AsyncMock(return_value=False)
+        return response
+
+    return MagicMock(side_effect=get)
+
+
+def _site(agenda_html: bytes = _AGENDA_HTML, **overrides: bytes) -> dict[str, bytes]:
+    pages = {
+        ICS_URL: ICS_BYTES,
+        "https://www.landtag-bw.de/de/aktuelles/tagesordnungen": agenda_html,
+        "https://www.landtag-bw.de/resource/blob/656162/f6ca/2026-02-27_14_Plenarsitzung.pdf": _AGENDA_PDF,
+        _DRUCKSACHEN + "18_0700.pdf": b"%PDF 18/700",
+        _DRUCKSACHEN + "18_0369.pdf": b"%PDF 18/369",
+        _DRUCKSACHEN + "18_0659.pdf": b"%PDF 18/659",
+        _DRUCKSACHEN + "18_0692.pdf": b"%PDF 18/692",
+    }
+    pages.update(overrides)
+    return {url: body for url, body in pages.items() if body is not None}
+
+
+class TestIssue66Tops:
+    """Issue #66 / DD-070: the Plenarsitzung carries the TOPs of its published agenda.
+
+    A Gesetzentwurf TOP references its Drucksachen by the PDF hash the Vorgänge scraper
+    uploaded, so the backend links the TOP to the Vorgang.
+    """
+
+    @staticmethod
+    async def _extract(pages: dict[str, bytes], date_key: str = "2026-02-27", link: bool = True):
+        scraper = _make_scraper()
+        scraper._link_drucksachen = link
+        scraper.session.get = _route(pages)
+        await scraper.listing_page_extractor(ICS_URL)
+        _termin, sitzungen = await scraper.item_extractor(date_key)
+        return scraper, sitzungen
+
+    @pytest.mark.asyncio
+    async def test_plenarsitzung_carries_the_agenda(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_sitzungen_scraper"):
+            _scraper, sitzungen = await self._extract(_site())
+
+        tops = sitzungen[0].tops
+        assert [t.nummer for t in tops] == [1, 2, 3, 4, 5, 6, 7, 8]
+        assert tops[1].titel == "Aktuelle Debatte/ vorgezogene Initiative"
+        # The feed's bare "Plenarsitzung:" has no number; the agenda's file name has (DD-064).
+        assert sitzungen[0].nummer == 14
+        assert "No session number" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_gesetzentwurf_top_references_drucksachen_by_pdf_hash(self):
+        _scraper, sitzungen = await self._extract(_site())
+        tops = sitzungen[0].tops
+
+        assert [d.drucksnr for d in tops[4].dokumente] == ["18/369", "18/659"]
+        dok = tops[3].dokumente[0]
+        assert dok.hash_ == hashlib.sha256(b"%PDF 18/700").hexdigest()
+        assert dok.link == _DRUCKSACHEN + "18_0700.pdf"
+        # Anträge have no Vorgang to link to; their Dokument would be an orphan.
+        assert tops[0].dokumente == []
+
+    @pytest.mark.asyncio
+    async def test_without_llm_no_dokumente(self):
+        """The Vorgänge' Dokumente carry placeholder hashes then: nothing to match (DD-070)."""
+        _scraper, sitzungen = await self._extract(_site(), link=False)
+
+        assert all(t.dokumente == [] for t in sitzungen[0].tops)
+
+    @pytest.mark.asyncio
+    async def test_unreadable_drucksache_is_retried_next_cycle(self):
+        scraper, sitzungen = await self._extract(_site(**{_DRUCKSACHEN + "18_0369.pdf": None}))
+        scraper.config = MagicMock()
+
+        assert [d.drucksnr for d in sitzungen[0].tops[4].dokumente] == ["18/659"]
+        await scraper.store_extracted_result(await scraper.make_cache_key("2026-02-27"), None)
+        scraper.config.cache.store_raw.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "pages",
+        [
+            _site(agenda_html=None),
+            _site(**{"https://www.landtag-bw.de/resource/blob/656162/f6ca/2026-02-27_14_Plenarsitzung.pdf": None}),
+        ],
+        ids=["page", "pdf"],
+    )
+    async def test_unavailable_agenda_leaves_the_kalender_intact(self, pages, caplog):
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_sitzungen_scraper"):
+            _scraper, sitzungen = await self._extract(pages)
+
+        assert sitzungen[0].tops == []
+        assert "Tagesordnung" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_agenda_for_a_date_without_plenum_is_ignored(self):
+        html = b'<a href="/resource/blob/656162/f6ca/2026-02-24_14_Plenarsitzung.pdf">x</a>'
+        _scraper, sitzungen = await self._extract(_site(agenda_html=html), date_key="2026-02-24")
+
+        assert sitzungen[0].tops == []
+
+    @pytest.mark.asyncio
+    async def test_new_agenda_reuploads_only_its_date(self):
+        """DD-066: the TOPs are part of the fingerprint; dates without an agenda keep theirs."""
+        scraper = TestSitzungenRefreshIssue85._scraper()
+        scraper._link_drucksachen = True
+
+        async def cycle(pages):
+            scraper.session.get = _route(pages)
+            scraper.uploaded = []
+            await scraper.process_items(await scraper.process_lpurls(scraper.listing_urls))
+            return scraper.uploaded
+
+        assert len(await cycle(_site(agenda_html=b""))) == 5
+        assert await cycle(_site()) == ["2026-02-27"]
+        assert await cycle(_site()) == []
+        with patch("bawue.bawue_sitzungen_scraper.parse_tops", return_value=[]):
+            assert await cycle(_site()) == ["2026-02-27"]
+
+    @pytest.mark.asyncio
+    async def test_agenda_taken_off_the_page_keeps_the_uploaded_tops(self):
+        """The page shows the next session only: once the following one is up, a re-upload
+        without the agenda would strip the TOPs from the backend (DD-070)."""
+        scraper = TestSitzungenRefreshIssue85._scraper()
+
+        async def cycle(pages):
+            scraper.session.get = _route(pages)
+            scraper.uploaded = []
+            await scraper.process_items(await scraper.process_lpurls(scraper.listing_urls))
+            return scraper.uploaded
+
+        assert len(await cycle(_site())) == 5
+        assert await cycle(_site(agenda_html=b"")) == []
+        # A change to the date's events still re-uploads it.
+        moved = ICS_BYTES.replace(b"DTSTART:20260227T090000", b"DTSTART:20260227T100000")
+        assert await cycle(_site(agenda_html=b"", **{ICS_URL: moved})) == ["2026-02-27"]

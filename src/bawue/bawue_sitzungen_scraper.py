@@ -1,6 +1,8 @@
 """BaWue Sitzungen scraper: SitzungsScraper subclass for Baden-Württemberg ICS calendar."""
 
+import dataclasses
 import datetime
+import hashlib
 import json
 import logging
 import ssl
@@ -15,13 +17,16 @@ import aiohttp
 import certifi
 
 from bawue.api import BawueApiError, build_client, put_kalender
+from bawue.bawue_dok import download_pdf, extract_pdf_text
+from bawue.bawue_vorgaenge_scraper import _construct_drucksache_pdf_url
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.ics_parser import ParsedEvent, group_events_by_date, parse_ics_feed
 from bawue.pipeline import SitzungsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
-from bawue.types import Gremium, Parlament, Sitzung, none_if_blank
+from bawue.tagesordnung import TAGESORDNUNGEN_URL, ParsedTop, agenda_links, parse_tops
+from bawue.types import TODO_MARKER, Doktyp, Dokument, Gremium, Parlament, ReservedGremium, Sitzung, Top, none_if_blank
 from bawue.upload_throttle import with_upload_retry
 from bawue.wahlperiode import CURRENT_WAHLPERIODE
 
@@ -49,6 +54,10 @@ class BawueSitzungenScraper(SitzungsScraper):
 
         self._events_by_date: dict[str, list] = {}
         self._fingerprints: dict[str, str] = {}
+        self._agendas: dict[str, tuple[int, list[ParsedTop]]] = {}
+        self._retry_next_cycle: set[str] = set()
+        # Only with LLM enrichment do the Vorgänge' Dokumente carry the PDF hash a TOP matches (DD-070).
+        self._link_drucksachen = bool(getattr(config, "llm_provider_key", None))
         self._total_events: int = 0
         self._total_dates: int = 0
         self._published_dates: int = 0
@@ -83,12 +92,16 @@ class BawueSitzungenScraper(SitzungsScraper):
 
         events = parse_ics_feed(ics_data)
         grouped = group_events_by_date(events)
+        self._agendas = await self._fetch_agendas(grouped)
 
         date_keys = []
         for dt, evts in sorted(grouped.items()):
             key = dt.isoformat()
             self._events_by_date[key] = evts
-            self._fingerprints[await self.make_cache_key(key)] = _events_fingerprint(evts, self._wahlperiode)
+            fingerprint = _events_fingerprint(evts, self._wahlperiode)
+            if key in self._agendas:
+                fingerprint += f":{_agenda_fingerprint(self._agendas[key])}"
+            self._fingerprints[await self.make_cache_key(key)] = fingerprint
             date_keys.append(key)
 
         self._total_events = len(events)
@@ -97,17 +110,107 @@ class BawueSitzungenScraper(SitzungsScraper):
         return date_keys
 
     async def get_cached_result(self, item_key: str) -> str | None:
-        """A cache hit only while the date's events are unchanged (DD-066)."""
+        """A cache hit only while the date's events and agenda are unchanged (DD-066).
+
+        An agenda no longer on the page (the next session's is up) keeps the hit: a
+        re-upload without it would strip the uploaded TOPs (DD-070).
+        """
         cached = await super().get_cached_result(item_key)
-        return cached if cached == self._fingerprints.get(item_key) else None
+        current = self._fingerprints.get(item_key)
+        if cached is not None and (cached == current or cached.partition(":")[0] == current):
+            return cached
+        return None
 
     async def store_extracted_result(self, item_key: str, result: Any) -> None:
-        """Store the fingerprint, not the item: nothing reads it back (DD-066)."""
+        """Store the fingerprint, not the item: nothing reads it back (DD-066).
+
+        Not when a TOP's Drucksache was unreadable: the next cycle retries it (DD-070).
+        """
+        if item_key in self._retry_next_cycle:
+            self._retry_next_cycle.discard(item_key)
+            logger.info("Not caching %s: a TOP Drucksache was unreadable; retrying next cycle", item_key)
+            return
         await super().store_extracted_result(item_key, self._fingerprints[item_key])
+
+    async def _fetch_agendas(self, grouped: dict[datetime.date, list]) -> dict[str, tuple[int, list[ParsedTop]]]:
+        """Session number and TOPs of each published Plenum agenda whose date has a Plenarsitzung.
+
+        Fail-soft: without the agenda the Kalender is still uploaded, and its fingerprint
+        changes once the agenda can be read (DD-070).
+        """
+        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        try:
+            async with self.session.get(TAGESORDNUNGEN_URL, ssl=ssl_ctx) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"HTTP {response.status}")
+                html = (await response.read()).decode("utf-8", errors="replace")
+        except Exception as e:
+            logger.warning("Tagesordnungen page unavailable, no TOPs this run: %s", e)
+            return {}
+
+        agendas = {}
+        for datum, nummer, url in agenda_links(html):
+            if not any(e.gremium_name == ReservedGremium.PLENUM for e in grouped.get(datum, [])):
+                logger.info("Tagesordnung %s has no Plenarsitzung in the ICS feed, skipped", url)
+                continue
+            try:
+                pdf_path = await download_pdf(self.session, url)
+                try:
+                    text, _hash = await extract_pdf_text(pdf_path)
+                finally:
+                    pdf_path.unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning("Tagesordnung %s unreadable, no TOPs for %s: %s", url, datum, e)
+                continue
+            agendas[datum.isoformat()] = (nummer, parse_tops(text))
+        return agendas
+
+    async def _build_tops(self, date_key: str, parsed: list[ParsedTop], termin: datetime.datetime) -> list[Top]:
+        tops = []
+        for top in parsed:
+            dokumente = []
+            for drucksnr in top.drucksachen if self._link_drucksachen else ():
+                dok = await self._drucksache_dokument(drucksnr, termin)
+                if dok is None:
+                    self._retry_next_cycle.add(await self.make_cache_key(date_key))
+                else:
+                    dokumente.append(dok)
+            tops.append(Top(nummer=top.nummer, titel=top.titel, dokumente=dokumente))
+        return tops
+
+    async def _drucksache_dokument(self, drucksnr: str, termin: datetime.datetime) -> Dokument | None:
+        """The Drucksache as the backend knows it from the Vorgänge scraper: same PDF, same hash.
+
+        The backend links a matched Dokument without overwriting it (DD-069), so the
+        other fields only matter if no Vorgang has the Drucksache yet (DD-070).
+        """
+        url = _construct_drucksache_pdf_url(drucksnr)
+        try:
+            pdf_path = await download_pdf(self.session, url)
+        except Exception as e:
+            logger.warning("Drucksache %s for a TOP unreadable: %s", drucksnr, e)
+            return None
+        try:
+            with pdf_path.open("rb") as f:
+                pdf_hash = hashlib.file_digest(f, "sha256").hexdigest()
+        finally:
+            pdf_path.unlink(missing_ok=True)
+        return Dokument(
+            titel=f"Drucksache {drucksnr}",
+            volltext=TODO_MARKER,
+            hash_=pdf_hash,
+            typ=Doktyp.SONSTIG,
+            zp_modifiziert=termin,
+            zp_referenz=termin,
+            link=url,
+            autoren=[],
+            drucksnr=drucksnr,
+        )
 
     async def item_extractor(self, date_key: str) -> Any:
         """Convert stored events for a date into (datetime, List[Sitzung])."""
         events = self._events_by_date.pop(date_key, [])
+        agenda = self._agendas.pop(date_key, None)
 
         sitzungen = []
         for event in events:
@@ -121,7 +224,14 @@ class BawueSitzungenScraper(SitzungsScraper):
             # (DD-069, issue #116), and one UID can name several committees (DD-006, issue #117).
             api_id = uuid5(NAMESPACE_URL, f"{event.uid}|{date_key}|{event.gremium_name}")
 
-            if not event.nummer:
+            nummer, tops = event.nummer, []
+            # shortcut: the feed has one Plenarsitzung per day (16.10.2026); a split day would get the TOPs once.
+            if agenda is not None and event.gremium_name == ReservedGremium.PLENUM:
+                nummer = nummer or agenda[0]
+                tops = await self._build_tops(date_key, agenda[1], termin_utc)
+                agenda = None
+
+            if not nummer:
                 # Fail-loud: no source carries the number (DD-064).
                 logger.warning(
                     "No session number for %s on %s in %r, sending nummer=0",
@@ -141,9 +251,9 @@ class BawueSitzungenScraper(SitzungsScraper):
                 titel=none_if_blank(event.summary),
                 termin=termin_utc,
                 gremium=gremium,
-                nummer=event.nummer,
+                nummer=nummer,
                 public=True,
-                tops=[],
+                tops=tops,
             )
             sitzungen.append(sitzung)
 
@@ -200,6 +310,12 @@ def _events_fingerprint(events: list[ParsedEvent], wahlperiode: int) -> str:
     """Fingerprint of what a date uploads, parsed values included, order ignored (DD-066)."""
     rows = sorted([e.uid, e.dtstart.isoformat(), e.summary, e.gremium_name, e.nummer] for e in events)
     return sha256(json.dumps([wahlperiode, rows], ensure_ascii=False).encode()).hexdigest()
+
+
+def _agenda_fingerprint(agenda: tuple[int, list[ParsedTop]]) -> str:
+    """Session number and TOPs of a date's agenda (DD-070)."""
+    nummer, tops = agenda
+    return sha256(json.dumps([nummer, [dataclasses.astuple(t) for t in tops]], ensure_ascii=False).encode()).hexdigest()
 
 
 def _print_sitzungen_summary(

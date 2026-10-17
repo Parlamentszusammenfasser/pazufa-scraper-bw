@@ -32,6 +32,7 @@ from pazufa_corelib.api_client.models.sachgebiet import Sachgebiet
 from pazufa_corelib.api_client.models.sitzung import Sitzung
 from pazufa_corelib.api_client.models.station import Station
 from pazufa_corelib.api_client.models.stationstyp import Stationstyp
+from pazufa_corelib.api_client.models.top import Top
 from pazufa_corelib.api_client.models.vg_ident import VgIdent
 from pazufa_corelib.api_client.models.vorgang import Vorgang
 from pazufa_corelib.api_client.models.vorgangstyp import Vorgangstyp
@@ -55,6 +56,7 @@ __all__ = [
     "Sitzung",
     "Station",
     "Stationstyp",
+    "Top",
     "Unset",
     "VgIdent",
     "Vorgang",
