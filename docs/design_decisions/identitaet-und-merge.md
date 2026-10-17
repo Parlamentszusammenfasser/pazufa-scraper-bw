@@ -108,5 +108,7 @@ Werte des zuletzt hochgeladenen Vorgangs: falsche Lesung, Link in eine fremde De
   Sitzung (DD-037), ein LLM-Call.
 
 **Konsequenz:** `volltext` eines Rows ist sein Seitenfenster, `zusammenfassung` die der
-Sitzung. Fundstellen ohne Anker behalten den Datei-Hash und teilen einen Row; ihr Titel ist
-ohnehin gleich.
+Sitzung. „Beschluss des Landtags in … Beratung"-Drucksachen ohne Anker behalten den
+Datei-Hash und teilen einen Row; ihr Titel ist gleich. Bekannte Lücke: Ein lesbares
+Protokoll, das noch ohne Anker in mehreren Vorgängen steht, teilt ebenfalls einen Row
+(letzter `titel` gewinnt); kommt der Anker nach, entsteht je Station ein weiterer Row.
