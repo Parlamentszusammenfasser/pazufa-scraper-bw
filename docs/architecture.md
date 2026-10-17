@@ -475,7 +475,7 @@ TypedDict definitions for internal data exchange:
 
 PARLIS requires an active session (cookies) before API calls succeed:
 1. `GET https://parlis.landtag-bw.de/parlis/` — obtain session cookies
-2. Store cookies in `requests.Session`; set `Referer` header on all requests
+2. Store cookies in `requests.Session`; set `Referer` on the search POST
 3. Sessions expire — re-establish before each search cycle
 
 ### Search Query
