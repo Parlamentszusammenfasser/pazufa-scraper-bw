@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.13.*"
 
 [[package]]
@@ -741,7 +741,7 @@ requires-dist = [
     { name = "kreuzberg", specifier = ">=4.7" },
     { name = "litellm", specifier = ">=1.83.0" },
     { name = "lxml", specifier = ">=6.0" },
-    { name = "pazufa-corelib", git = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git?rev=v0.3.0" },
+    { name = "pazufa-corelib", git = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git?rev=v0.3.1" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "python-json-logger", specifier = ">=3.2,<4.0" },
     { name = "redis", specifier = ">=7.4" },
@@ -751,8 +751,8 @@ requires-dist = [
 
 [[package]]
 name = "pazufa-corelib"
-version = "0.3.0"
-source = { git = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git?rev=v0.3.0#ec00b5e5cf334428f752f94099d2d87121bc5e1f" }
+version = "0.3.1"
+source = { git = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git?rev=v0.3.1#34be855557633064b876fc453cb9f44c010c28d2" }
 dependencies = [
     { name = "instructor", extra = ["litellm"] },
     { name = "litellm" },
