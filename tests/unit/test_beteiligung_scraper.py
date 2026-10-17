@@ -259,12 +259,18 @@ class TestBuildVorgang:
         assert station.zp_start == datetime(2025, 11, 13, tzinfo=UTC)
 
     @pytest.mark.asyncio
-    async def test_no_deadline_returns_none(self):
-        """Missing comment_deadline means station can't be built — skip entire Vorgang."""
+    async def test_no_deadline_returns_none(self, caplog):
+        """Missing comment_deadline means station can't be built — skip entire Vorgang.
+
+        Expected, not an error: haushaltsbegleitgesetz-2027 publishes a draft without a
+        comment phase (phases "Gesetzentwurf", "Beratung und Beschluss")."""
         scraper = _make_scraper()
         detail = _make_detail(comment_deadline=None)
-        result = await scraper._build_vorgang("test-slug", detail)
+        with caplog.at_level(logging.INFO, logger="bawue.bawue_beteiligung_scraper"):
+            result = await scraper._build_vorgang("test-slug", detail)
         assert result is None
+        assert scraper._skipped == 1
+        assert [r.levelno for r in caplog.records] == [logging.INFO]
 
     @pytest.mark.asyncio
     async def test_unparseable_deadline_returns_none(self):
