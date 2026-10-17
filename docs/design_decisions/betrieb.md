@@ -47,7 +47,9 @@ als HTTP 422 auf.
 4. **v0.3.1** (GitHub #129): nur Pin-Wechsel. Spec und API-Modelle bleiben gleich, litellm wird
    lazy importiert. Den neuen corelib-Cache nutzt BW **nicht**: Er kennt nur ein
    Dateisystem-Backend, Cloud Run hat kein bleibendes Dateisystem, und Redis ist Pflicht
-   (DD-073). Neu bewerten, wenn corelib ein Redis-Backend bekommt.
+   (DD-073). Ein eigenes Redis-Backend über `cache.backends.Backend` wäre möglich, aber
+   corelib-Keys verbieten `:` — alle BW-Keys (`vg2:`, `sz:`, `llm-semantics:` …) müssten
+   umbenannt werden, der Cache samt bezahlter LLM-Ergebnisse liefe leer.
 
 **Konsequenz:** corelibs `html_to_text` behandelt einen Text als HTML, sobald ein einzelnes
 Block-Tag vorkommt, und verliert dann alle Absätze — die Garbled-Filter (DD-015) arbeiten
