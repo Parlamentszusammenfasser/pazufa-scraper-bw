@@ -17,11 +17,13 @@ Zeitstempel „geändert“ im Backend reicht nicht: Jeder Neuaufbau (z. B. DD-0
    Verspätete Uploads zählen so in der Woche, in der sie ankommen.
 3. Geplante Stationen (DD-069) zählen erst ab ihrem Datum.
 4. Der Bericht ist ein Abschnitt im Run-Report (#52). Ab 20 Zeilen wird gekürzt.
-5. Fail-soft: Scheitert der Abruf, bleibt der alte Stand, der nächste Lauf versucht es neu.
+5. Fail-soft: Scheitert der Abruf oder Redis, bleibt der alte Stand, der nächste Lauf versucht es
+   neu. Ohne Cache (Dry-Run) gibt es keinen Bericht.
 
 **Nicht abgedeckt:** Der erste Lauf und ein geleertes Redis liefern keinen Bericht, nur einen
 neuen Stand. Scheitert der Mattermost-Post, fehlt der Bericht dieser Woche. Eine zweite Station
-gleichen Typs (z. B. zweite Ausschussberatung) gilt nicht als Änderung.
+gleichen Typs (z. B. zweite Ausschussberatung) gilt nicht als Änderung. Die Zeilen verlinken
+nicht auf die Webseite (URL-Schema offen).
 
 **Code:** `bawue.wochenbericht`, `api.get_vorgaenge`, `__main__.main`
 
