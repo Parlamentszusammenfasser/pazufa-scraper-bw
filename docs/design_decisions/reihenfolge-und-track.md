@@ -129,7 +129,8 @@ nicht (Issue #75).
 3. Was an der zurückgehaltenen Lesung hängt, wartet mit: übrige Anträge (DD-001) und ein
    Ausschussbericht ohne veröffentlichte Lesung (sonst `SIA`).
 4. Die synthetische Initiative fällt auf das Datum des Entwurfs zurück; ihre `api_id` ist
-   datumsfrei (DD-046).
+   datumsfrei (DD-046). Sie zurückzuhalten wurde verworfen: die Einbringung ist mit der
+   Drucksache geschehen.
 
 **Konsequenz:** Ein Vorgang mit geplanter Sitzung wird bis dahin in jedem Lauf hochgeladen.
 Früher hochgeladene künftige Stationen bleiben im Backend. Geplante Lesungen gehören als TOP
