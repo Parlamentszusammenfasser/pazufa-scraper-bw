@@ -27,7 +27,6 @@ def _make_scraper() -> BawueSitzungenScraper:
     scraper._fingerprints = {}
     scraper._agendas = {}
     scraper._retry_next_cycle = set()
-    scraper._link_drucksachen = False
     scraper.listing_urls = [ICS_URL]
     scraper.session = MagicMock()
     scraper.scraper_id = "00000000-0000-0000-0000-000000000001"
@@ -668,13 +667,20 @@ def _site(agenda_html: bytes = _AGENDA_HTML, **overrides: bytes) -> dict[str, by
         ICS_URL: ICS_BYTES,
         "https://www.landtag-bw.de/de/aktuelles/tagesordnungen": agenda_html,
         "https://www.landtag-bw.de/resource/blob/656162/f6ca/2026-02-27_14_Plenarsitzung.pdf": _AGENDA_PDF,
-        _DRUCKSACHEN + "18_0700.pdf": b"%PDF 18/700",
-        _DRUCKSACHEN + "18_0369.pdf": b"%PDF 18/369",
-        _DRUCKSACHEN + "18_0659.pdf": b"%PDF 18/659",
-        _DRUCKSACHEN + "18_0692.pdf": b"%PDF 18/692",
     }
     pages.update(overrides)
     return {url: body for url, body in pages.items() if body is not None}
+
+
+def _hash(drucksnr: str) -> str:
+    return hashlib.sha256(drucksnr.encode()).hexdigest()
+
+
+def _uploaded(cache, drucksachen=("18/700", "18/369", "18/659", "18/692")):
+    """What the Vorgänge scraper registers after uploading these Drucksachen (DD-070)."""
+    for nr in drucksachen:
+        cache.store_raw(f"drucks-hash:{nr}", _hash(nr))
+    return cache
 
 
 class TestIssue66Tops:
@@ -685,9 +691,11 @@ class TestIssue66Tops:
     """
 
     @staticmethod
-    async def _extract(pages: dict[str, bytes], date_key: str = "2026-02-27", link: bool = True):
+    async def _extract(pages: dict[str, bytes], date_key: str = "2026-02-27", uploaded=None):
+        from tests.unit.test_bawue_scraper import _InMemoryCache
+
         scraper = _make_scraper()
-        scraper._link_drucksachen = link
+        scraper.config = MagicMock(cache=_uploaded(_InMemoryCache(), *([uploaded] if uploaded is not None else [])))
         scraper.session.get = _route(pages)
         await scraper.listing_page_extractor(ICS_URL)
         _termin, sitzungen = await scraper.item_extractor(date_key)
@@ -707,32 +715,27 @@ class TestIssue66Tops:
         assert "No session number" not in caplog.text
 
     @pytest.mark.asyncio
-    async def test_gesetzentwurf_top_references_drucksachen_by_pdf_hash(self):
+    async def test_gesetzentwurf_top_references_the_uploaded_hash(self):
         _scraper, sitzungen = await self._extract(_site())
         tops = sitzungen[0].tops
 
         assert [d.drucksnr for d in tops[4].dokumente] == ["18/369", "18/659"]
         dok = tops[3].dokumente[0]
-        assert dok.hash_ == hashlib.sha256(b"%PDF 18/700").hexdigest()
+        assert dok.hash_ == _hash("18/700")
         assert dok.link == _DRUCKSACHEN + "18_0700.pdf"
         # Anträge have no Vorgang to link to; their Dokument would be an orphan.
         assert tops[0].dokumente == []
 
     @pytest.mark.asyncio
-    async def test_without_llm_no_dokumente(self):
-        """The Vorgänge' Dokumente carry placeholder hashes then: nothing to match (DD-070)."""
-        _scraper, sitzungen = await self._extract(_site(), link=False)
-
-        assert all(t.dokumente == [] for t in sitzungen[0].tops)
-
-    @pytest.mark.asyncio
-    async def test_unreadable_drucksache_is_retried_next_cycle(self):
-        scraper, sitzungen = await self._extract(_site(**{_DRUCKSACHEN + "18_0369.pdf": None}))
-        scraper.config = MagicMock()
+    async def test_drucksache_not_uploaded_yet_is_left_out_and_retried(self):
+        """A TOP Dokument the backend cannot match exactly would become its own row; next to a
+        Vorgang's placeholder row it makes the Vorgang's merge ambiguous (review of PR #124)."""
+        scraper, sitzungen = await self._extract(_site(), uploaded=("18/700", "18/659", "18/692"))
+        key = await scraper.make_cache_key("2026-02-27")
 
         assert [d.drucksnr for d in sitzungen[0].tops[4].dokumente] == ["18/659"]
-        await scraper.store_extracted_result(await scraper.make_cache_key("2026-02-27"), None)
-        scraper.config.cache.store_raw.assert_not_called()
+        await scraper.store_extracted_result(key, None)
+        assert scraper.config.cache.get_raw(key) is None
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -761,7 +764,7 @@ class TestIssue66Tops:
     async def test_new_agenda_reuploads_only_its_date(self):
         """DD-066: the TOPs are part of the fingerprint; dates without an agenda keep theirs."""
         scraper = TestSitzungenRefreshIssue85._scraper()
-        scraper._link_drucksachen = True
+        _uploaded(scraper.config.cache)
 
         async def cycle(pages):
             scraper.session.get = _route(pages)
@@ -780,6 +783,7 @@ class TestIssue66Tops:
         """The page shows the next session only: once the following one is up, a re-upload
         without the agenda would strip the TOPs from the backend (DD-070)."""
         scraper = TestSitzungenRefreshIssue85._scraper()
+        _uploaded(scraper.config.cache)
 
         async def cycle(pages):
             scraper.session.get = _route(pages)

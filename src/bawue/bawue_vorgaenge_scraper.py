@@ -20,6 +20,7 @@ import certifi
 
 from bawue.api import build_client
 from bawue.bawue_dok import LLMMetrics, clear_hash_cache, vorgang_kurztitel, vorgang_ressort, zusammenfassung_text
+from bawue.cache import drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_sachgebiete, map_schlagworte, map_stationstyp, map_vorgangstyp
@@ -397,7 +398,14 @@ class BawueVorgaengeScraper(VorgangsScraper):
         record changes — for a closed (e.g. abgelehnt) Vorgang that is never.
         Skipping the cache makes the next cycle retry the download. Likewise a
         Fundstelle dated in the future becomes a Station once its day has come (DD-068).
+
+        The upload itself succeeded, so its read Drucksachen are registered either way:
+        a TOP may only reference a row the backend has (DD-070).
         """
+        for station in result.stationen:
+            for dok in station.dokumente:
+                if isinstance(dok.drucksnr, str) and dok.volltext != TODO_MARKER:
+                    self.config.cache.store_raw(drucksache_hash_key(dok.drucksnr), dok.hash_, "Dokument")
         vorgnr = next((i.id for i in result.ids or [] if i.typ == "vorgnr"), None)
         if vorgnr is not None and vorgnr in self._retry_next_cycle:
             self._retry_next_cycle.discard(vorgnr)

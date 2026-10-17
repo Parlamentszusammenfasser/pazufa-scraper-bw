@@ -27,8 +27,10 @@ from bawue.bawue_vorgaenge_scraper import (
 )
 from bawue.parlis_parser import parse_fundstelle_text
 from bawue.types import (
+    TODO_MARKER,
     UNSET,
     Doktyp,
+    Dokument,
     Ressort,
     Sachgebiet,
     Stationstyp,
@@ -5758,3 +5760,58 @@ class TestIssue63WahlperiodeConfig:
     def test_unknown_wahlperiode_without_start_date_fails_at_startup(self, tmp_path):
         with pytest.raises(ValueError, match="Wahlperiode 19"):
             self._parlis_kwargs(tmp_path, "[bawue]\nwahlperiode = 19\n")
+
+
+class TestIssue66DrucksacheHashRegistry:
+    """DD-070: after an upload the Vorgänge scraper registers each Drucksache's real hash.
+
+    A TOP references only these rows. A TOP Dokument nothing matches would become its
+    own row and make the Vorgang's later merge ambiguous (review of PR #124).
+    """
+
+    @staticmethod
+    def _dok(drucksnr, volltext="Text", hash_="a" * 64):
+        return Dokument(
+            titel="Gesetzentwurf",
+            volltext=volltext,
+            hash_=hash_,
+            typ=Doktyp.ENTWURF,
+            zp_modifiziert=datetime(2026, 10, 9, tzinfo=UTC),
+            zp_referenz=datetime(2026, 10, 9, tzinfo=UTC),
+            link="https://example.org/18_0700.pdf",
+            autoren=[],
+            drucksnr=drucksnr,
+        )
+
+    @staticmethod
+    async def _store(stationen, retry=False):
+        from bawue.types import VgIdent
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper.config = MagicMock(cache=_InMemoryCache())
+        scraper._retry_next_cycle = {"V-1"} if retry else set()
+        scraper._fingerprints = {"V-1": "fp"}
+        await scraper.store_extracted_result(
+            "V-1", MagicMock(ids=[VgIdent(id="V-1", typ="vorgnr")], stationen=stationen)
+        )
+        return scraper.config.cache.data
+
+    @pytest.mark.asyncio
+    async def test_read_drucksache_is_registered(self):
+        data = await self._store([MagicMock(dokumente=[self._dok("18/700")])])
+
+        assert data["drucks-hash:18/700"] == "a" * 64
+
+    @pytest.mark.asyncio
+    async def test_also_when_the_vorgang_is_retried(self):
+        """The upload succeeded; only the cache entry waits."""
+        data = await self._store([MagicMock(dokumente=[self._dok("18/700")])], retry=True)
+
+        assert "drucks-hash:18/700" in data
+
+    @pytest.mark.asyncio
+    async def test_placeholder_and_unnumbered_documents_are_not(self):
+        """An unread PDF carries a placeholder hash (DD-048); a protocol has no drucksnr."""
+        data = await self._store([MagicMock(dokumente=[self._dok("18/700", volltext=TODO_MARKER), self._dok(None)])])
+
+        assert not any(k.startswith("drucks-hash:") for k in data)

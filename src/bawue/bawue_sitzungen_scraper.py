@@ -2,7 +2,6 @@
 
 import dataclasses
 import datetime
-import hashlib
 import json
 import logging
 import ssl
@@ -19,6 +18,7 @@ import certifi
 from bawue.api import BawueApiError, build_client, put_kalender
 from bawue.bawue_dok import download_pdf, extract_pdf_text
 from bawue.bawue_vorgaenge_scraper import _construct_drucksache_pdf_url
+from bawue.cache import drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.ics_parser import ParsedEvent, group_events_by_date, parse_ics_feed
@@ -56,8 +56,6 @@ class BawueSitzungenScraper(SitzungsScraper):
         self._fingerprints: dict[str, str] = {}
         self._agendas: dict[str, tuple[int, list[ParsedTop]]] = {}
         self._retry_next_cycle: set[str] = set()
-        # Only with LLM enrichment do the Vorgänge' Dokumente carry the PDF hash a TOP matches (DD-070).
-        self._link_drucksachen = bool(getattr(config, "llm_provider_key", None))
         self._total_events: int = 0
         self._total_dates: int = 0
         self._published_dates: int = 0
@@ -124,11 +122,11 @@ class BawueSitzungenScraper(SitzungsScraper):
     async def store_extracted_result(self, item_key: str, result: Any) -> None:
         """Store the fingerprint, not the item: nothing reads it back (DD-066).
 
-        Not when a TOP's Drucksache was unreadable: the next cycle retries it (DD-070).
+        Not when a TOP's Drucksache was not uploaded yet: the next cycle retries it (DD-070).
         """
         if item_key in self._retry_next_cycle:
             self._retry_next_cycle.discard(item_key)
-            logger.info("Not caching %s: a TOP Drucksache was unreadable; retrying next cycle", item_key)
+            logger.info("Not caching %s: a TOP Drucksache is not uploaded yet; retrying next cycle", item_key)
             return
         await super().store_extracted_result(item_key, self._fingerprints[item_key])
 
@@ -169,8 +167,8 @@ class BawueSitzungenScraper(SitzungsScraper):
         tops = []
         for top in parsed:
             dokumente = []
-            for drucksnr in top.drucksachen if self._link_drucksachen else ():
-                dok = await self._drucksache_dokument(drucksnr, termin)
+            for drucksnr in top.drucksachen:
+                dok = self._drucksache_dokument(drucksnr, termin)
                 if dok is None:
                     self._retry_next_cycle.add(await self.make_cache_key(date_key))
                 else:
@@ -178,31 +176,25 @@ class BawueSitzungenScraper(SitzungsScraper):
             tops.append(Top(nummer=top.nummer, titel=top.titel, dokumente=dokumente))
         return tops
 
-    async def _drucksache_dokument(self, drucksnr: str, termin: datetime.datetime) -> Dokument | None:
-        """The Drucksache as the backend knows it from the Vorgänge scraper: same PDF, same hash.
+    def _drucksache_dokument(self, drucksnr: str, termin: datetime.datetime) -> Dokument | None:
+        """The Drucksache row the Vorgänge scraper uploaded, referenced by its hash (DD-070).
 
-        The backend links a matched Dokument without overwriting it (DD-069), so the
-        other fields only matter if no Vorgang has the Drucksache yet (DD-070).
+        None until that upload: a Dokument nothing matches becomes its own row, and next
+        to the Vorgang's placeholder row it makes the Vorgang's merge ambiguous. The
+        other fields are a stub: the backend links a match without overwriting it.
         """
-        url = _construct_drucksache_pdf_url(drucksnr)
-        try:
-            pdf_path = await download_pdf(self.session, url)
-        except Exception as e:
-            logger.warning("Drucksache %s for a TOP unreadable: %s", drucksnr, e)
+        uploaded_hash = self.config.cache.get_raw(drucksache_hash_key(drucksnr), "Dokument")
+        if uploaded_hash is None:
+            logger.info("Drucksache %s of a TOP not uploaded by the Vorgänge scraper yet", drucksnr)
             return None
-        try:
-            with pdf_path.open("rb") as f:
-                pdf_hash = hashlib.file_digest(f, "sha256").hexdigest()
-        finally:
-            pdf_path.unlink(missing_ok=True)
         return Dokument(
             titel=f"Drucksache {drucksnr}",
             volltext=TODO_MARKER,
-            hash_=pdf_hash,
+            hash_=uploaded_hash,
             typ=Doktyp.SONSTIG,
             zp_modifiziert=termin,
             zp_referenz=termin,
-            link=url,
+            link=_construct_drucksache_pdf_url(drucksnr),
             autoren=[],
             drucksnr=drucksnr,
         )
