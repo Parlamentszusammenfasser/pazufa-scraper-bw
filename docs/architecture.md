@@ -359,7 +359,7 @@ Overrides `send_result()` to use `Parlament.BW`. Uses `_events_by_date` to bridg
 | `termin`      | DTSTART | Naive → Europe/Berlin → UTC                          |
 | `gremium`     | SUMMARY | `extract_gremium_names()`, one Sitzung each (DD-006) |
 | `nummer`      | SUMMARY | Regex; else agenda file name (DD-070); else `0` + warning (DD-064) |
-| `tops`        | Agenda PDF | Next Plenarsitzung only; Gesetzentwurf TOPs carry their Drucksachen by PDF hash (DD-070) |
+| `tops`        | Agenda PDF | Next Plenarsitzung only; Gesetzentwurf readings reference their Drucksachen by the hash the Vorgänge scraper uploaded (DD-070) |
 | `public`      | —       | `True`                                               |
 | `api_id`      | UID, date, gremium | `uuid5(NAMESPACE_URL, "{uid}\|{date}\|{gremium}")` (DD-069, DD-006) |
 
