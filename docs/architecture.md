@@ -224,7 +224,7 @@ classDiagram
 
     class BawueDok {
         <<module>>
-        +enrich_dokument(session, llm, dok, model, vorgang_titel) Dokument
+        +enrich_dokument(session, llm, dok, model, vorgang_titel, …) EnrichmentResult
         +download_pdf(session, url) Path
         +extract_pdf_text(pdf_path) tuple
         +extract_semantics(llm, text, doktyp, model, dok_titel, drucksnr) dict
