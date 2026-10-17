@@ -79,11 +79,13 @@ consolidation (DD-024/DD-026), out-of-order ausschber retiming (DD-025), and
 
 `docs/design_decisions.md` records **every deliberate deviation** from PaZuFa conventions as
 `DD-001 …` (also mirrored to the project wiki). It is a **scannable index table** (DD
-number + trigger keywords + code symbols); each DD lives in its own file
-`docs/design_decisions/DD-NNN-<slug>.md`, linked from the table. Before changing station mapping, ordering,
+number + trigger keywords + code symbols); the DDs live grouped by topic in
+`docs/design_decisions/<topic>.md`, each under an anchor `#dd-NNN`. Before changing station mapping, ordering,
 enum mapping, or synthetic-station logic: **find the relevant DD**, and when your change alters
-or adds a rule, **add/update a DD** (and its index row) in the same change. Behavior in the code is
-usually intentional and DD-justified — don't "fix" it without checking.
+or adds a rule, **add/update a DD** (and its index row) in the same change. A DD is an
+architecture decision — context, decision, consequence, kept short; implementation details and
+history belong in commits and PRs. A changed rule edits its section instead of appending a note.
+Behavior in the code is usually intentional and DD-justified — don't "fix" it without checking.
 
 Other docs: `docs/architecture.md` (full component/data-flow reference, principles, known gaps),
 `docs/observed_station_types.md` (enum-coverage inventory).
