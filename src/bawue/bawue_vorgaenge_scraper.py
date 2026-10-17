@@ -149,8 +149,11 @@ def _vorgang_fingerprint(raw: RawVorgang) -> str:
     ignored.
     """
     fundstellen = sorted([f.get("raw", ""), f.get("pdf_url") or ""] for f in raw.get("fundstellen_parsed", []))
-    payload = json.dumps([raw.get("Aktueller Stand", ""), fundstellen], ensure_ascii=False)
-    return sha256(payload.encode()).hexdigest()
+    payload: list = [raw.get("Aktueller Stand", ""), fundstellen]
+    # One-time rebuild of the cached laws for their postparl-kraft station (DD-071).
+    if any(f.get("gesetzblatt_nr") for f in raw.get("fundstellen_parsed", [])):
+        payload.append("postparl-kraft")
+    return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 
 class BawueVorgaengeScraper(VorgangsScraper):
@@ -474,6 +477,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if aktueller_stand == "Abgelehnt":
             self._ensure_ablehnung_station(stationen, vorgang_id)
 
+        await self._ensure_kraft_station(stationen, fundstellen_parsed, vorgang_id)
+
         self._enforce_total_ordering(stationen)
 
         # Stable identity for document-less stations so the backend links and
@@ -750,6 +755,46 @@ class BawueVorgaengeScraper(VorgangsScraper):
         logger.info(
             "Synthesized parl-ablehnung station for Vorgang %s (Aktueller Stand: Abgelehnt)",
             vorgang_id,
+        )
+
+    async def _ensure_kraft_station(
+        self, stationen: list[Station], fundstellen: list[RawFundstelle], vorgang_id: str
+    ) -> None:
+        """Append a postparl-kraft station dated by the law's Inkrafttreten clause (DD-071).
+
+        PARLIS practically never lists the Inkrafttreten; the Gesetzblatt the
+        postparl-gsblt station cites does. No station when the clause is unreadable,
+        retroactive (K before G fails track validation) or not reached yet (DD-068).
+        """
+        gsblt = next((s for s in stationen if s.typ == Stationstyp.POSTPARL_GSBLT), None)
+        if gsblt is None or self._gsblt_dates is None or any(s.typ == Stationstyp.POSTPARL_KRAFT for s in stationen):
+            return
+        # shortcut: the first citation only; a second one (a Berichtigung) is not read.
+        fund = next((f for f in fundstellen if f.get("gesetzblatt_nr")), None)
+        if fund is None:
+            return
+        kraft = await self._gsblt_dates.inkrafttreten(fund["gesetzblatt_jahr"], fund["gesetzblatt_nr"])
+        if kraft is None:
+            return
+        if kraft < gsblt.zp_start:
+            logger.info("Vorgang %s in force retroactively (%s), no postparl-kraft station", vorgang_id, kraft.date())
+            return
+        if kraft.date() > self._today():
+            logger.info("Holding back postparl-kraft of %s until %s", vorgang_id, kraft.date())
+            if self._retry_next_cycle is not None:
+                self._retry_next_cycle.add(vorgang_id)
+            return
+        stationen.append(
+            Station(
+                # Date-free: the track allows one K, a corrected date must update it (like DD-046).
+                api_id=str(uuid5(NAMESPACE_URL, f"bawue-synth-kraft-{vorgang_id}")),
+                typ=Stationstyp.POSTPARL_KRAFT,
+                dokumente=[],
+                zp_start=kraft,
+                gremium=Gremium(
+                    parlament=Parlament.BW, wahlperiode=self._wahlperiode, name=ReservedGremium.GESETZESBLATT
+                ),
+            )
         )
 
     def _ensure_initiativ_after_regbsl(self, stationen: list[Station], vorgang_id: str = "unknown") -> None:

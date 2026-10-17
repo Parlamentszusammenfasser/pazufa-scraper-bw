@@ -1,6 +1,7 @@
 """Tests for the BawueVorgaengeScraper item_extractor logic."""
 
 import copy
+import hashlib
 import json
 import logging
 import re
@@ -24,6 +25,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _parse_fundstelle_date,
     _reading_round,
     _same_round_label,
+    _vorgang_fingerprint,
 )
 from bawue.parlis_parser import parse_fundstelle_text
 from bawue.types import (
@@ -31,6 +33,7 @@ from bawue.types import (
     UNSET,
     Doktyp,
     Dokument,
+    ReservedGremium,
     Ressort,
     Sachgebiet,
     Stationstyp,
@@ -5474,6 +5477,7 @@ class TestIssue9GesetzblattAusgabedatum:
     def _lookup(self, result):
         lookup = MagicMock()
         lookup.publikationsdatum = AsyncMock(return_value=result)
+        lookup.inkrafttreten = AsyncMock(return_value=None)
         return lookup
 
     def _raw(self):
@@ -5533,6 +5537,142 @@ class TestIssue9GesetzblattAusgabedatum:
         await self._scraper(lookup)._build_vorgang(raw)
 
         lookup.publikationsdatum.assert_not_awaited()
+
+
+# The Landtag's acceptance (J): without it the track already ends invalidly at G.
+_GBL_GESETZESBESCHLUSS = {
+    "raw": "Gesetzesbeschluss des Landtags  04.02.2026 Drucksache 17/10254",
+    "datum": "04.02.2026",
+    "drucksache": "17/10254",
+    "station_typ": "Gesetzesbeschluss",
+}
+
+
+class TestIssue98KraftStation:
+    """GitHub issue #98 / DD-071: a postparl-kraft station from the law's Inkrafttreten clause.
+
+    Real case V-244420 (LNRSchG, GBl 2026 Nr. 14 of 27.02.2026): "Dieses Gesetz tritt am
+    ersten Tag des auf die Verkündung folgenden vierten Monats in Kraft" → 01.06.2026.
+    """
+
+    _KRAFT = datetime(2026, 6, 1, tzinfo=UTC)
+
+    def _scraper(self, kraft, today=date(2026, 10, 17)):
+        scraper = TestIssue9GesetzblattAusgabedatum()._scraper(self._lookup(kraft))
+        scraper._retry_next_cycle = set()
+        scraper._today = lambda: today
+        return scraper
+
+    @staticmethod
+    def _lookup(kraft):
+        lookup = MagicMock()
+        lookup.publikationsdatum = AsyncMock(return_value=_GBL_AUSGABEDATUM)
+        lookup.inkrafttreten = AsyncMock(return_value=kraft)
+        return lookup
+
+    @staticmethod
+    def _raw(fundstellen=None):
+        if fundstellen is None:
+            fundstellen = [_GBL_GESETZENTWURF, *_GBL_ZWISCHENSTATIONEN, _GBL_GESETZESBESCHLUSS, _GBL_FUNDSTELLE]
+        return _make_raw_vorgang("V-244420", initiative="Landesregierung", fundstellen=fundstellen)
+
+    @staticmethod
+    def _kraft_stationen(vorgang):
+        return [s for s in vorgang.stationen if s.typ == Stationstyp.POSTPARL_KRAFT]
+
+    @pytest.mark.asyncio
+    async def test_kraft_station_after_the_gesetzblatt(self):
+        scraper = self._scraper(self._KRAFT)
+        vorgang = await scraper._build_vorgang(self._raw())
+
+        [kraft] = self._kraft_stationen(vorgang)
+        assert kraft.zp_start == self._KRAFT
+        assert kraft.gremium.name == ReservedGremium.GESETZESBLATT
+        assert kraft.dokumente == []
+        scraper._gsblt_dates.inkrafttreten.assert_awaited_once_with(2026, 14)
+        track = "".join(_GG_LAND_PARL_LETTER[s.typ] for s in sorted(vorgang.stationen, key=lambda s: s.zp_start))
+        assert track.endswith("GK")
+        assert _passes_bw_track_validation(track)
+
+    @pytest.mark.asyncio
+    async def test_api_id_does_not_depend_on_the_date(self):
+        """The track allows one K: a corrected date must update the row, not add one (like DD-046)."""
+        first = await self._scraper(self._KRAFT)._build_vorgang(self._raw())
+        later = await self._scraper(datetime(2026, 7, 1, tzinfo=UTC))._build_vorgang(self._raw())
+
+        assert self._kraft_stationen(first)[0].api_id == self._kraft_stationen(later)[0].api_id
+
+    @pytest.mark.asyncio
+    async def test_same_day_as_the_gesetzblatt_sorts_after_it(self):
+        """ "am Tag seiner Verkündung": the tie-break keeps G before K (DD-034)."""
+        vorgang = await self._scraper(_GBL_AUSGABEDATUM)._build_vorgang(self._raw())
+
+        gsblt = next(s for s in vorgang.stationen if s.typ == Stationstyp.POSTPARL_GSBLT)
+        assert self._kraft_stationen(vorgang)[0].zp_start > gsblt.zp_start
+
+    @pytest.mark.asyncio
+    async def test_retroactive_law_gets_no_station(self, caplog):
+        """ "mit Wirkung vom 1. Januar 2026": K before G fails track validation (decision in #98)."""
+        with caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"):
+            vorgang = await self._scraper(datetime(2026, 1, 1, tzinfo=UTC))._build_vorgang(self._raw())
+
+        assert self._kraft_stationen(vorgang) == []
+        assert "retroactive" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_future_date_is_held_back_and_retried(self):
+        """Like a future Fundstelle (DD-068): the station appears from its date on."""
+        scraper = self._scraper(self._KRAFT, today=date(2026, 5, 31))
+        vorgang = await scraper._build_vorgang(self._raw())
+
+        assert self._kraft_stationen(vorgang) == []
+        assert "V-244420" in scraper._retry_next_cycle
+
+    @pytest.mark.asyncio
+    async def test_kraft_day_counts_as_reached(self):
+        vorgang = await self._scraper(self._KRAFT, today=date(2026, 6, 1))._build_vorgang(self._raw())
+
+        assert len(self._kraft_stationen(vorgang)) == 1
+
+    @pytest.mark.asyncio
+    async def test_unreadable_clause_gets_no_station(self):
+        vorgang = await self._scraper(None)._build_vorgang(self._raw())
+
+        assert self._kraft_stationen(vorgang) == []
+
+    @pytest.mark.asyncio
+    async def test_without_gesetzblatt_station_no_lookup(self):
+        scraper = self._scraper(self._KRAFT)
+        await scraper._build_vorgang(self._raw([_GBL_GESETZENTWURF, *_GBL_ZWISCHENSTATIONEN]))
+
+        scraper._gsblt_dates.inkrafttreten.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_parlis_inkrafttreten_is_not_doubled(self):
+        inkrafttreten = {"raw": "Inkrafttreten 01.06.2026", "datum": "01.06.2026", "station_typ": "Inkrafttreten"}
+        raw = self._raw([_GBL_GESETZENTWURF, *_GBL_ZWISCHENSTATIONEN, _GBL_FUNDSTELLE, inkrafttreten])
+        vorgang = await self._scraper(self._KRAFT)._build_vorgang(raw)
+
+        assert len(self._kraft_stationen(vorgang)) == 1
+
+
+class TestIssue98OneTimeRebuild:
+    """DD-071: cached laws must be rebuilt once to gain their K station (DD-052 cache)."""
+
+    @staticmethod
+    def _dd052_fingerprint(raw):
+        fundstellen = sorted([f.get("raw", ""), f.get("pdf_url") or ""] for f in raw["fundstellen_parsed"])
+        return hashlib.sha256(
+            json.dumps([raw.get("Aktueller Stand", ""), fundstellen], ensure_ascii=False).encode()
+        ).hexdigest()
+
+    def test_law_with_gesetzblatt_gets_a_new_fingerprint(self):
+        raw = _make_raw_vorgang("V-244420", fundstellen=[_GBL_GESETZENTWURF, _GBL_FUNDSTELLE])
+        assert _vorgang_fingerprint(raw) != self._dd052_fingerprint(raw)
+
+    def test_other_vorgaenge_keep_theirs(self):
+        raw = _make_raw_vorgang("V-1", fundstellen=[_GBL_GESETZENTWURF])
+        assert _vorgang_fingerprint(raw) == self._dd052_fingerprint(raw)
 
 
 class TestPlaceholderHash:
