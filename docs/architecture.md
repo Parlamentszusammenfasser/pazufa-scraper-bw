@@ -235,7 +235,7 @@ classDiagram
     class UploadThrottle {
         <<module>>
         +with_upload_retry(api_call, rate_limiter, max_retries, exception_type) T
-        +upload_vorgang(client, scraper_id, upload_limiter, item, dry_run, log_item) Vorgang|None
+        +upload_vorgang(client, scraper_id, upload_limiter, item, dry_run, log_item) UploadOutcome
     }
 
     BawueVorgaengeScraper --> ParlisClient
