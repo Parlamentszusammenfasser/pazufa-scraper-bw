@@ -586,8 +586,9 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | Antwort (Stellungnahme der Regierung) | `antwort`         |
 | Beschlussempfehlung                   | `beschlussempf`   |
 | Stellungnahme                         | `stellungnahme`   |
-| Plenarprotokoll                       | `redeprotokoll`   |
-| Mitteilung                            | `mitteilung`      |
+| Plenarprotokoll, Beratung, Beschluss des Landtags in … | `redeprotokoll` |
+| Gesetzblatt, Gesetz                   | `gesetz` (DD-051) |
+| Mitteilung, Bekanntmachung, Gesetzesbeschluss, Beschluss des Landtags, Zustimmung, Annahme | `mitteilung` |
 | *(unrecognized)*                      | `sonstig`         |
 
 ## 8. Error Handling
