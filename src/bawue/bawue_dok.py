@@ -27,7 +27,7 @@ from kreuzberg import ConcurrencyConfig, ExtractionConfig, OcrConfig, PageConfig
 from pazufa_corelib.llm import LLMConnector
 from pazufa_corelib.normalization import normalize_volltext as _core_normalize_volltext
 
-from bawue.cache import BawueCache
+from bawue.cache import BawueCache, RedisUnavailableError
 from bawue.types import TODO_MARKER, Doktyp, Dokument, Ressort, Zusammenfassungstupel
 
 logger = logging.getLogger(__name__)
@@ -952,6 +952,7 @@ async def vorgang_kurztitel(
 
     user_message = f"{KURZTITEL_PROMPT}\n\nOffizieller Titel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
     cache_key = _prompt_cache_key(user_message, model)
+    # A Redis error propagates: a fallback cached with the Vorgang would stick (issue #105).
     cached = _redis_get(cache, cache_key, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
     if cached is not None:
         if metrics is not None:
@@ -1038,6 +1039,7 @@ async def vorgang_ressort(
 
     user_message = f"{RESSORT_PROMPT}\n\nTitel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
     cache_key = _prompt_cache_key(user_message, model)
+    # A Redis error propagates: a fallback cached with the Vorgang would stick (issue #105).
     cached = _redis_get(cache, cache_key, prefix=_RESSORT_CACHE_PREFIX, typehint="Vorgang Ressort")
     if cached is not None:
         raw = _cached_ressort(cached)
@@ -1302,12 +1304,16 @@ async def enrich_dokument(
                     vorwort=_sanitize_llm_text(semantics.get("vorwort")),
                 ),
             )
+        except RedisUnavailableError:
+            raise  # fail the Vorgang so it is retried, not cached text-only (issue #105)
         except Exception:
             logger.warning("LLM extraction failed for %s, using text-only fallback", dok.link, exc_info=True)
             if metrics is not None:
                 metrics.failed += 1
             return EnrichmentResult(dokument=Dokument(**text_fields))
 
+    except RedisUnavailableError:
+        raise
     except Exception:
         logger.warning("PDF download/extraction failed for %s, returning original document", dok.link, exc_info=True)
         return EnrichmentResult(dokument=dok)

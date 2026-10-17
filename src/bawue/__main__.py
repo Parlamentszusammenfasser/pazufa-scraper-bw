@@ -86,6 +86,8 @@ def _report_sections(scrapers: list[Scraper], results: list) -> list[tuple[str, 
         error = results[i] if i < len(results) else None
         if isinstance(error, Exception):
             lines = [*lines, f"FAILED: {type(error).__name__}: {' '.join(str(error).split())[:200]}"]
+        if getattr(scraper, "cache_errors", 0):
+            lines = [*lines, f"Cache errors: {scraper.cache_errors} (skipped, retried next run)"]
         if lines:
             sections.append((title, lines))
     return sections

@@ -17,7 +17,7 @@ Versionskonstante gibt es bewusst nicht; ein gezielter Neubau ändert den Finger
 | `wochenbericht` | letzte begonnene Station je Vorgang, Stand der Vorwoche | DD-072 |
 
 <a id="dd-073"></a>
-## DD-073: Redis ist Pflicht — ohne Redis startet kein Lauf
+## DD-073: Redis ist Pflicht — ohne Redis keine Arbeit
 
 **Kontext:** Ohne Cache baut ein Lauf jeden Vorgang neu, lädt alle PDFs und zahlt alle
 LLM-Calls erneut. Der Dry-Run, der ohne Redis lief, ist entfernt (GitHub #122).
@@ -26,8 +26,20 @@ LLM-Calls erneut. Der Dry-Run, der ohne Redis lief, ist entfernt (GitHub #122).
 ab: `RedisUnavailableError`, eine Alarm-Nachricht an Mattermost, Exit-Code 1. Fehlt `[cache]`,
 gilt `localhost:6379`; ein stiller Lauf ohne Cache ist nicht vorgesehen.
 
-**Konsequenz:** Cloud Run wiederholt einen gescheiterten Lauf einmal, das gibt bis zu zwei
-Alarme. Ein Ausfall *während* des Laufs ist eigene Arbeit (GitHub #105).
+Fällt Redis **während** des Laufs aus, ist ein Lesefehler kein Cache-Fehltreffer (GitHub #105):
+`get_raw` wirft `RedisUnavailableError`.
+- Prüft die Pipeline ein Item gegen `vg2:`/`sz:`, wird es übersprungen (nicht gebaut, nicht
+  hochgeladen) und gezählt; der Laufbericht zeigt „Cache errors: N“. Der Lauf läuft weiter —
+  jeder Zugriff hat schon drei Wiederholungen hinter sich, ein Abbruch nach N Fehlern
+  brächte nichts.
+- Scheitert ein Lesezugriff erst beim Bauen (LLM-Caches), scheitert das Item: kein LLM-Call,
+  kein Upload, kein Cache-Eintrag, im Bericht unter „Failed“; der nächste Lauf baut es neu. Ein
+  Rückfall (ohne LLM-Felder, Kurztitel = `titel`) bliebe sonst gecacht, sobald Redis beim
+  Speichern wieder da ist.
+- TOP-Hash (DD-070): wie „noch nicht hochgeladen“, der Tag wird erneut versucht.
+
+**Konsequenz:** Cloud Run wiederholt einen gescheiterten Start einmal, das gibt bis zu zwei
+Alarme. Die Summe „Found“ im Bericht enthält die Cache-Fehler nicht; die eigene Zeile nennt sie.
 
 <a id="dd-052"></a>
 ## DD-052: Fingerprint des PARLIS-Records im `vg2:`-Cache
