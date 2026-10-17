@@ -120,7 +120,7 @@ wird die Fundstelle wie DD-001 behandelt.
 
 **Kontext:** PARLIS liefert die Erste Beratung manchmal ohne Label, nur „Plenarprotokoll
 18/6 …" (V-246637). Sie wurde `sonstig` und gefiltert. Einer Ablehnung fehlte damit eine
-Lesung (`IAVN` statt `IVAVN`), HTTP 400 (DD-016).
+Lesung (`ILAN` statt `ILALN`), HTTP 400 (DD-016).
 
 **Entscheidung:**
 1. Die **erste** unbeschriftete Fundstelle mit Plenarprotokoll wird `parl-vollvlsgn`,
