@@ -347,7 +347,7 @@ The image includes Tesseract OCR. Redis should be provided as a separate service
 
 Key env vars: `LTZF_API_KEY`, `LTZF_API_URL`, `COLLECTOR_ID`, `REDIS_HOST`, `LLM_PROVIDER_KEY`, `LLM_MODEL`
 
-See [`config.sample.toml`](config.sample.toml) for every key with its default.
+See [`config.sample.toml`](config.sample.toml) for the TOML keys; `--dump-config` prints every resolved value and its source.
 
 ## Documentation
 
