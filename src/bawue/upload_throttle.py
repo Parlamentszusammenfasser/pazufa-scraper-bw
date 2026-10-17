@@ -67,7 +67,6 @@ def upload_vorgang(
     upload_limiter: AdaptiveRateLimiter,
     item: Vorgang,
     *,
-    dry_run: bool = False,
     log_item: Callable | None = None,
 ) -> UploadOutcome:
     """Upload a Vorgang to the PaZuFa API with retry and error handling.
@@ -79,10 +78,6 @@ def upload_vorgang(
     logger.info("Sending Vorgang '%s' (id=%s) to API", item.titel, item.api_id)
     if log_item:
         log_item(item)
-
-    if dry_run:
-        logger.info("[DRY RUN] Would send Vorgang '%s' — skipping API call", item.titel)
-        return UploadOutcome(vorgang=item)
 
     try:
         with_upload_retry(

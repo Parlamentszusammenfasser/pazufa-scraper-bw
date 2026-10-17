@@ -173,16 +173,16 @@ class BawueVorgaengeScraper(VorgangsScraper):
     _emit_initdrucks_ident: bool = True
 
     # Resolves a Gesetzblatt citation to its real Ausgabedatum (DD-047). Class-level
-    # default of None so manual-construction paths (dry_run, unit tests) simply keep
+    # default of None so manual-construction paths (unit tests) simply keep
     # the PARLIS date instead of reaching for the network.
     _gsblt_dates: "GesetzblattDateLookup | None" = None
 
     # Dropped Fundstellen per vorgnr, for the run summary (issue #5). None on
-    # manual-construction paths (dry_run, unit tests): drops are only logged there.
+    # manual-construction paths (unit tests): drops are only logged there.
     _dropped_fundstellen: dict[str, list[str]] | None = None
 
     # vorgnrs not to cache this cycle, so the next cycle retries them (see
-    # store_extracted_result). None on manual-construction paths (dry_run, unit tests).
+    # store_extracted_result). None on manual-construction paths (unit tests).
     _retry_next_cycle: set[str] | None = None
 
     @staticmethod
@@ -287,7 +287,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
             self.scraper_id,
             self._upload_limiter,
             item,
-            dry_run=self.config.dry_run,
             log_item=self.log_item,
         )
         if outcome.vorgang is not None:

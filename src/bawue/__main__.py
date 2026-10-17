@@ -108,8 +108,6 @@ if __name__ == "__main__":
     config.load()
 
     logger.info("Configuration Complete")
-    if config.dry_run:
-        logger.warning("DRY RUN mode enabled — no data will be submitted to the API")
 
     last_run = None
     while True:

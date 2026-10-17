@@ -123,8 +123,7 @@ def bawue_config(mock_backend, httpserver):
     config.max_concurrency = 3
     config.config_file = None
     config.api_obj_log = None
-    config.dry_run = False
-    config.cache = BawueCache(redis_host=None, redis_port=None, disabled=True)
+    config.cache = BawueCache(redis_host=None, redis_port=None)
 
     # Point the API client at the local httpserver mock (bawue.api.build_client).
     config.database_url = httpserver.url_for("").rstrip("/")

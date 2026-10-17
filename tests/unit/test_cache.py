@@ -42,13 +42,6 @@ def test_empty_url_falls_back_to_host_port():
     mock_redis.from_url.assert_not_called()
 
 
-def test_disabled_wins_over_url():
-    with patch("bawue.cache.redis.Redis") as mock_redis:
-        cache = BawueCache(None, None, disabled=True, redis_url=UPSTASH_URL)
-    assert cache.disabled
-    mock_redis.from_url.assert_not_called()
-
-
 def test_disabled_without_url_or_host():
     cache = BawueCache(None, None)
     assert cache.disabled

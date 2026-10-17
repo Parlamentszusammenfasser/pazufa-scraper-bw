@@ -72,27 +72,16 @@ make run
 # or: .venv/bin/python -m bawue --config-file config.toml
 ```
 
-### Dry Run (no API or Redis required)
+### Local diagnosis
 
-Runs the scraper pipeline without posting to the API — useful for local diagnosis:
-
-```bash
-.venv/bin/python -m bawue.dry_run                                            # all scrapers, whole Wahlperiode
-.venv/bin/python -m bawue.dry_run --scraper vorgaenge --limit 3 --verbosity 2  # quick PARLIS check
-.venv/bin/python -m bawue.dry_run --scraper sitzungen                          # ICS calendar only
-.venv/bin/python -m bawue.dry_run --json --limit 5                             # JSON output
-```
-
-| Option            | Default      | Description                                               |
-|-------------------|--------------|-----------------------------------------------------------|
-| `--scraper`       | `all`        | `vorgaenge`, `beteiligung`, `sitzungen`, or `all`         |
-| `--vorgangstyp`   | *(all)*      | Limit to one PARLIS Vorgangstyp (e.g. `"Kleine Anfrage"`) |
-| `--lookback-days` | *(whole WP)* | Days to look back for PARLIS search                       |
-| `--wahlperiode`   | 18           | Wahlperiode number (start date derived, DD-062)           |
-| `--limit`         | *(no limit)* | Max items per scraper                                     |
-| `--verbosity`     | 0            | 0=summary, 1=type breakdown, 2=per-item detail            |
-| `--json`          | off          | Output JSON instead of formatted text                     |
-| `--ics-url`       | *(default)*  | Custom ICS calendar URL                                   |
+- **Redis is required:** without `[cache]` the scraper connects to `localhost:6379` and exits
+  if nothing answers. `docker compose up -d redis` starts one.
+- **Less to scrape:** `--run bawuevorgaenge --once` runs one scraper once (prefix of the class name); `[bawue]
+  enabled-vorgangstypen` limits the PARLIS types.
+- **See what would be sent:** `api-obj-log = "locallogs"` dumps every built object, and the
+  [Mock Backend](#mock-backend) logs every request body.
+- **End to end with backend validation** (track order, merge): see
+  [Running against Local Backend](#running-against-local-backend).
 
 ### Mock Backend
 
