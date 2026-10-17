@@ -18,6 +18,9 @@ bei jedem Lauf neu ein; `II` scheiterte am Track (V-246637).
 `uuid5(NAMESPACE_URL, "bawue-station-<vid>-<typ>-<iso-zp_start>")`, vergeben **nach** dem
 Auflösen der Zeitstempel-Kollisionen. Für alle Stationen gilt das seit DD-034.
 
+**Verworfen:** Zeitstempel versetzen. `II` bleibt ungültig; das Problem ist Identität, nicht
+Sortierung.
+
 <a id="dd-034"></a>
 ## DD-034: Die Stations-`api_id` gilt für alle Stationen und hängt nicht an Dokumenten
 
@@ -57,7 +60,9 @@ korrekte `api_id` hilft nicht, der `vg_ident`-Zweig ist ein ODER.
 
 **Entscheidung:** `initdrucks` wird gesendet, außer bei Haushaltsgesetzgebung — nur dort
 teilen sich Vorgänge die Initiativdrucksache (WP 17: 17/1000, 17/3500, 17/8000). Notschalter
-für alle: `[bawue] emit-initdrucks-ident = false`. `vorgnr` und stabile Stations-IDs genügen
+für alle: `[bawue] emit-initdrucks-ident = false`. Auch Begleitgesetze und Nachträge
+(Haushaltsgesetzgebung) verlieren damit den Querverweis — dafür bleibt die Regel ein
+einfacher Typvergleich. `vorgnr` und stabile Stations-IDs genügen
 für die Wiedererkennung.
 
 **Neu bewerten, wenn:** die Einzelpläne eines Haushalts ein Vorgang werden (GitHub #60) oder
@@ -108,5 +113,7 @@ Werte des zuletzt hochgeladenen Vorgangs: falsche Lesung, Link in eine fremde De
   Sitzung (DD-037), ein LLM-Call.
 
 **Konsequenz:** `volltext` eines Rows ist sein Seitenfenster, `zusammenfassung` die der
-Sitzung. Fundstellen ohne Anker behalten den Datei-Hash und teilen einen Row; ihr Titel ist
-ohnehin gleich.
+Sitzung. „Beschluss des Landtags in … Beratung"-Drucksachen ohne Anker behalten den
+Datei-Hash und teilen einen Row; ihr Titel ist gleich. Bekannte Lücke: Ein lesbares
+Protokoll, das noch ohne Anker in mehreren Vorgängen steht, teilt ebenfalls einen Row
+(letzter `titel` gewinnt); kommt der Anker nach, entsteht je Station ein weiterer Row.

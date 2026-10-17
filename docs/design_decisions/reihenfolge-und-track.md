@@ -38,7 +38,9 @@ Scraper-Bugs. GO-LT BW §42 verlangt zwei Lesungen, §43 Abs. 4 verbietet die Ab
 erster Lesung, also `ILALN`, nie `ILN`. Daraus folgen DD-003, DD-012, DD-025, DD-031.
 
 **Konsequenz:** Kollidierende `zp_start` verschiedener Typen werden vorwärts verschoben
-(`_enforce_total_ordering`), damit die Sortierung eindeutig ist.
+(`_enforce_total_ordering`), damit die Sortierung eindeutig ist. Volksanträge
+(`gg-land-volk`) werden gescrapt, haben aber keinen BW-Track und scheitern am Backend, bis
+upstream einer definiert ist (z. B. V-230205, V-232608).
 
 <a id="dd-004"></a>
 ## DD-004: Verschiedene Lesungen werden nie zusammengeführt
@@ -127,7 +129,8 @@ nicht (Issue #75).
 3. Was an der zurückgehaltenen Lesung hängt, wartet mit: übrige Anträge (DD-001) und ein
    Ausschussbericht ohne veröffentlichte Lesung (sonst `SIA`).
 4. Die synthetische Initiative fällt auf das Datum des Entwurfs zurück; ihre `api_id` ist
-   datumsfrei (DD-046).
+   datumsfrei (DD-046). Sie zurückzuhalten wurde verworfen: die Einbringung ist mit der
+   Drucksache geschehen.
 
 **Konsequenz:** Ein Vorgang mit geplanter Sitzung wird bis dahin in jedem Lauf hochgeladen.
 Früher hochgeladene künftige Stationen bleiben im Backend. Geplante Lesungen gehören als TOP

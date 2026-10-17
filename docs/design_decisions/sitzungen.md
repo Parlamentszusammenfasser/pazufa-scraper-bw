@@ -81,7 +81,10 @@ nächsten Upload des Vorgangs mehrdeutig macht (`AmbiguousMatch`, Issue #66).
    bleibt der Tag gecacht, damit seine TOPs nicht verloren gehen.
 5. Ist die Tagesordnung nicht lesbar, geht der Kalender ohne TOPs hoch.
 
-**Verworfen:** die Drucksache selbst hashen (erzeugt die gefährliche neue Zeile).
+**Verworfen:** die Drucksache selbst hashen (erzeugt die gefährliche neue Zeile); Sitzungen
+erst nach den Vorgängen laufen lassen (mit dem Register unnötig, der Kalender hinge an einem
+langen Lauf).
 
 **Konsequenz:** Ohne LLM bleibt das Hash-Register leer, TOPs haben keine Dokumente.
-Ausschüsse bekommen keine TOPs.
+Ausschüsse bekommen keine TOPs. Ändert sich ein Termin, nachdem die Tagesordnung
+verschwunden ist, gehen seine TOPs verloren.

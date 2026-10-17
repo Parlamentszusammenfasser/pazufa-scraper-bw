@@ -60,8 +60,8 @@ WARNING verworfen (DD-017).
 
 **Kontext:** PARLIS liefert `00.00.2028`, wenn nur das Jahr bekannt ist.
 
-**Entscheidung:** Fallback in drei Stufen: `TT.MM.JJJJ` → erste vierstellige Jahreszahl als
-1. Januar → aktueller Zeitpunkt. Alle Daten sind zeitzonenbewusst (UTC), weil das Backend
+**Entscheidung:** `TT.MM.JJJJ` → erste Jahreszahl `20JJ` als 1. Januar → sonst wird die
+Fundstelle verworfen (ERROR, DD-017). Alle Daten sind zeitzonenbewusst (UTC), weil das Backend
 naive Daten mit HTTP 422 ablehnt.
 
 <a id="dd-011"></a>
@@ -120,7 +120,7 @@ wird die Fundstelle wie DD-001 behandelt.
 
 **Kontext:** PARLIS liefert die Erste Beratung manchmal ohne Label, nur „Plenarprotokoll
 18/6 …" (V-246637). Sie wurde `sonstig` und gefiltert. Einer Ablehnung fehlte damit eine
-Lesung (`IAVN` statt `IVAVN`), HTTP 400 (DD-016).
+Lesung (`ILAN` statt `ILALN`), HTTP 400 (DD-016).
 
 **Entscheidung:**
 1. Die **erste** unbeschriftete Fundstelle mit Plenarprotokoll wird `parl-vollvlsgn`,
