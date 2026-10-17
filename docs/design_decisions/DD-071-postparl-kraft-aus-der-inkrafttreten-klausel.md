@@ -18,10 +18,9 @@ Gesetzblatt-PDF (DD-047). Wie gestuftes Inkrafttreten modelliert wird, ist upstr
 5. In der Zukunft: zurückgehalten wie DD-068.
 6. Die `api_id` ist datumsfrei (wie DD-046), weil der Track nur ein K erlaubt.
 7. Gecachte Gesetze werden einmal neu gebaut (Fingerprint, DD-052).
+8. Ist das Gesetzblatt nicht abrufbar (kein 404), wird der Vorgang im nächsten Lauf neu versucht.
 
 Stichprobe 2024–2026: 80 von 82 Gesetzen gelesen, die zwei übrigen sind bedingt.
-
-Ist das Gesetzblatt nicht abrufbar (kein 404), wird der Vorgang im nächsten Lauf neu versucht.
 
 **Nicht abgedeckt:** Ein künftiges Datum lässt das Gesetz bis dahin täglich neu bauen. Zitate vor
 2024 und eine Berichtigung werden nicht gelesen. Nennt PARLIS später selbst ein Inkrafttreten,
