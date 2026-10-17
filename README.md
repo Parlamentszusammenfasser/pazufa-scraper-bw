@@ -74,9 +74,9 @@ make run
 
 ### Local diagnosis
 
-- **Without Redis:** leave the `[cache]` section out of the config. Caching is then off and
-  every item is rebuilt.
-- **Less to scrape:** `--run vorgaenge --once` runs one scraper once; `[bawue]
+- **Redis is required:** without `[cache]` the scraper connects to `localhost:6379` and exits
+  if nothing answers. `docker compose up -d redis` starts one.
+- **Less to scrape:** `--run bawuevorgaenge --once` runs one scraper once (prefix of the class name); `[bawue]
   enabled-vorgangstypen` limits the PARLIS types.
 - **See what would be sent:** `api-obj-log = "locallogs"` dumps every built object, and the
   [Mock Backend](#mock-backend) logs every request body.
