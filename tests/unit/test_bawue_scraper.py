@@ -27,6 +27,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _same_round_label,
     _vorgang_fingerprint,
 )
+from bawue.gesetzblatt_lookup import GesetzblattUnavailable
 from bawue.parlis_parser import parse_fundstelle_text
 from bawue.types import (
     TODO_MARKER,
@@ -5626,15 +5627,29 @@ class TestIssue98KraftStation:
 
     @pytest.mark.asyncio
     async def test_kraft_day_counts_as_reached(self):
-        vorgang = await self._scraper(self._KRAFT, today=date(2026, 6, 1))._build_vorgang(self._raw())
+        scraper = self._scraper(self._KRAFT, today=date(2026, 6, 1))
+        vorgang = await scraper._build_vorgang(self._raw())
 
         assert len(self._kraft_stationen(vorgang)) == 1
+        assert scraper._retry_next_cycle == set()
 
     @pytest.mark.asyncio
     async def test_unreadable_clause_gets_no_station(self):
-        vorgang = await self._scraper(None)._build_vorgang(self._raw())
+        scraper = self._scraper(None)
+        vorgang = await scraper._build_vorgang(self._raw())
 
         assert self._kraft_stationen(vorgang) == []
+        assert scraper._retry_next_cycle == set()
+
+    @pytest.mark.asyncio
+    async def test_unavailable_gesetzblatt_is_retried(self):
+        """Review of PR #125: a finished law's PARLIS record never changes, so a cached miss stays."""
+        scraper = self._scraper(self._KRAFT)
+        scraper._gsblt_dates.inkrafttreten.side_effect = GesetzblattUnavailable("503")
+        vorgang = await scraper._build_vorgang(self._raw())
+
+        assert self._kraft_stationen(vorgang) == []
+        assert "V-244420" in scraper._retry_next_cycle
 
     @pytest.mark.asyncio
     async def test_without_gesetzblatt_station_no_lookup(self):

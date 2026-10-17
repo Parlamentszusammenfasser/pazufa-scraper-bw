@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from bawue.gesetzblatt_lookup import GesetzblattDateLookup, parse_german_date
+from bawue.gesetzblatt_lookup import GesetzblattDateLookup, GesetzblattUnavailable, parse_german_date
 
 DETAIL_HTML = """<html><body>
 <div class="tx-rsmbwlawsheet"><h1>Gesetz für Teilhabe- und Pflegequalität</h1></div>
@@ -140,15 +140,17 @@ class TestInkrafttretenIssue98:
         assert "Inkrafttreten" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_unreadable_pdf_returns_none(self, caplog):
+    @pytest.mark.parametrize("failing", ["fetch_pdf", "fetch_detail_for"])
+    async def test_fetch_failure_is_reported_for_a_retry(self, failing):
+        """Review of PR #125: a 503 must not leave the law without its station for good."""
         client = _pdf_client()
-        client.fetch_pdf.side_effect = requests.HTTPError("503")
-        assert await GesetzblattDateLookup(client).inkrafttreten(2026, 11) is None
-        assert "503" in caplog.text
+        getattr(client, failing).side_effect = requests.HTTPError("503")
+        with pytest.raises(GesetzblattUnavailable):
+            await GesetzblattDateLookup(client).inkrafttreten(2026, 11)
 
     @pytest.mark.asyncio
     async def test_unresolvable_entry_returns_none(self):
         """Pre-2024: no electronic Gesetzblatt, no K station (like DD-047)."""
-        client = _pdf_client(exc=requests.HTTPError("404"))
+        client = _pdf_client(exc=requests.HTTPError("404", response=MagicMock(status_code=404)))
         assert await GesetzblattDateLookup(client).inkrafttreten(2022, 41) is None
         client.fetch_pdf.assert_not_called()

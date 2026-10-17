@@ -24,6 +24,10 @@ from bawue.gesetzblatt_parser import RawGesetzblattDetail, parse_detail, parse_i
 logger = logging.getLogger(__name__)
 
 
+class GesetzblattUnavailable(Exception):
+    """The Gesetzblatt could not be fetched: worth a retry next cycle (DD-071)."""
+
+
 def parse_german_date(value: str | None) -> datetime | None:
     """Parse ``DD.MM.YYYY`` into a UTC datetime, or None if unparseable."""
     if not value:
@@ -41,6 +45,7 @@ class GesetzblattDateLookup:
         self._client = client
         self._cache: dict[tuple[int, int], RawGesetzblattDetail | None] = {}
         self._kraft: dict[tuple[int, int], datetime | None] = {}
+        self._unavailable: set[tuple[int, int]] = set()
 
     async def publikationsdatum(self, jahr: int, nummer: int) -> datetime | None:
         """Return the Ausgabedatum of Gesetzblatt ``jahr`` Nr. ``nummer``.
@@ -60,6 +65,8 @@ class GesetzblattDateLookup:
         key = (jahr, nummer)
         if key not in self._kraft:
             self._kraft[key] = await self._read_inkrafttreten(jahr, nummer)
+        if key in self._unavailable:
+            raise GesetzblattUnavailable(f"Gesetzblatt {jahr} Nr. {nummer} unavailable")
         return self._kraft[key]
 
     async def _read_inkrafttreten(self, jahr: int, nummer: int) -> datetime | None:
@@ -77,7 +84,8 @@ class GesetzblattDateLookup:
             finally:
                 pdf_path.unlink(missing_ok=True)
         except Exception as exc:
-            logger.warning("Gesetzblatt %d Nr. %d: PDF unreadable, no Inkrafttreten (%s)", jahr, nummer, exc)
+            logger.warning("Gesetzblatt %d Nr. %d: PDF unreadable (%s)", jahr, nummer, exc)
+            self._unavailable.add((jahr, nummer))
             return None
         dates = parse_inkrafttreten(text, verkuendung.date())
         if not dates:
@@ -98,6 +106,8 @@ class GesetzblattDateLookup:
             html = self._client.fetch_detail_for(jahr, nummer)
         except Exception as exc:  # network error, 404 for a pre-2024 citation, …
             logger.info("No Gesetzblatt entry for %d Nr. %d (%s)", jahr, nummer, exc)
+            if getattr(getattr(exc, "response", None), "status_code", None) != 404:
+                self._unavailable.add((jahr, nummer))
             return None
         try:
             detail = parse_detail(html, self._client.base_url)

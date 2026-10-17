@@ -25,7 +25,7 @@ from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_sachgebiete, map_schlagworte, map_stationstyp, map_vorgangstyp
 from bawue.gesetzblatt_client import GesetzblattClient
-from bawue.gesetzblatt_lookup import GesetzblattDateLookup
+from bawue.gesetzblatt_lookup import GesetzblattDateLookup, GesetzblattUnavailable
 from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.parlis_client import ParlisClient
 from bawue.pipeline import VorgangsScraper
@@ -771,7 +771,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
         fund = next((f for f in fundstellen if f.get("gesetzblatt_nr")), None)
         if fund is None:
             return
-        kraft = await self._gsblt_dates.inkrafttreten(fund["gesetzblatt_jahr"], fund["gesetzblatt_nr"])
+        try:
+            kraft = await self._gsblt_dates.inkrafttreten(fund["gesetzblatt_jahr"], fund["gesetzblatt_nr"])
+        except GesetzblattUnavailable as exc:
+            logger.warning("%s for %s, retrying next cycle", exc, vorgang_id)
+            if self._retry_next_cycle is not None:
+                self._retry_next_cycle.add(vorgang_id)
+            return
         if kraft is None:
             return
         if kraft < gsblt.zp_start:
