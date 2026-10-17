@@ -21,7 +21,7 @@ Versionskonstante gibt es bewusst nicht.
 **Kontext:** Ohne Cache baut ein Lauf jeden Vorgang neu, lädt alle PDFs und zahlt alle
 LLM-Calls erneut. Der Dry-Run, der ohne Redis lief, ist entfernt (GitHub #122).
 
-**Entscheidung:** Ist Redis beim Start nicht erreichbar (nach drei Versuchen), bricht der Lauf
+**Entscheidung:** Ist Redis beim Start nicht erreichbar (nach drei Wiederholungen), bricht der Lauf
 ab: `RedisUnavailableError`, eine Alarm-Nachricht an Mattermost, Exit-Code 1. Fehlt `[cache]`,
 gilt `localhost:6379`; ein stiller Lauf ohne Cache ist nicht vorgesehen.
 
