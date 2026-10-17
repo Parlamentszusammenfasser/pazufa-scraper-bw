@@ -42,24 +42,29 @@ def _broken_cache():
 
 
 @pytest.mark.asyncio
-async def test_kurztitel_falls_back_to_titel_without_llm_call():
+async def test_kurztitel_fails_the_build_without_llm_call():
+    """A fallback would be cached with the Vorgang if Redis is back by then; failing retries it."""
     from unittest.mock import patch
 
     from bawue.bawue_dok import vorgang_kurztitel
 
-    with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock) as llm_call:
-        assert await vorgang_kurztitel(MagicMock(), "Langer Titel", "Zusammenfassung", cache=_broken_cache()) == (
-            "Langer Titel"
-        )
+    with (
+        patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock) as llm_call,
+        pytest.raises(RedisUnavailableError),
+    ):
+        await vorgang_kurztitel(MagicMock(), "Langer Titel", "Zusammenfassung", cache=_broken_cache())
     llm_call.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_ressort_stays_unset_without_llm_call():
+async def test_ressort_fails_the_build_without_llm_call():
     from unittest.mock import patch
 
     from bawue.bawue_dok import vorgang_ressort
 
-    with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock) as llm_call:
-        assert await vorgang_ressort(MagicMock(), "Titel", "Zusammenfassung", cache=_broken_cache()) is None
+    with (
+        patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock) as llm_call,
+        pytest.raises(RedisUnavailableError),
+    ):
+        await vorgang_ressort(MagicMock(), "Titel", "Zusammenfassung", cache=_broken_cache())
     llm_call.assert_not_called()

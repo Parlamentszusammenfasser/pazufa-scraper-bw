@@ -32,13 +32,14 @@ Fällt Redis **während** des Laufs aus, ist ein Lesefehler kein Cache-Fehltreff
   hochgeladen) und gezählt; der Laufbericht zeigt „Cache errors: N“. Der Lauf läuft weiter —
   jeder Zugriff hat schon drei Wiederholungen hinter sich, ein Abbruch nach N Fehlern
   brächte nichts.
-- LLM-Caches: kein bezahlter Call, dessen Antwort nicht gespeichert werden kann. Dokumente
-  bleiben ohne LLM-Felder (Stufe 2), Kurztitel fällt auf `titel` zurück, Ressort bleibt leer.
+- Scheitert ein Lesezugriff erst beim Bauen (LLM-Caches), scheitert das Item: kein LLM-Call,
+  kein Upload, kein Cache-Eintrag, im Bericht unter „Failed“; der nächste Lauf baut es neu. Ein
+  Rückfall (ohne LLM-Felder, Kurztitel = `titel`) bliebe sonst gecacht, sobald Redis beim
+  Speichern wieder da ist.
 - TOP-Hash (DD-070): wie „noch nicht hochgeladen“, der Tag wird erneut versucht.
 
 **Konsequenz:** Cloud Run wiederholt einen gescheiterten Start einmal, das gibt bis zu zwei
-Alarme. Fällt Redis erst nach der Cache-Prüfung eines Items aus, geht es ohne LLM-Felder hoch;
-sein Fingerprint wird nicht gespeichert, der nächste Lauf baut es neu.
+Alarme. Die Summe „Found“ im Bericht enthält die Cache-Fehler nicht; die eigene Zeile nennt sie.
 
 <a id="dd-052"></a>
 ## DD-052: Fingerprint des PARLIS-Records im `vg2:`-Cache
