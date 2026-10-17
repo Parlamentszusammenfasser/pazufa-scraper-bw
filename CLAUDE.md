@@ -85,8 +85,7 @@ enum mapping, or synthetic-station logic: **find the relevant DD**, and when you
 or adds a rule, **add/update a DD** (and its index row) in the same change. Behavior in the code is
 usually intentional and DD-justified — don't "fix" it without checking.
 
-Other docs: `docs/architecture.md` (full component/data-flow reference),
-`docs/status.md` (field-completeness matrix, roadmap, known gaps),
+Other docs: `docs/architecture.md` (full component/data-flow reference, principles, known gaps),
 `docs/observed_station_types.md` (enum-coverage inventory).
 
 ## Working on an issue

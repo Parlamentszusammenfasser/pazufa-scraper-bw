@@ -115,7 +115,7 @@ flowchart TD
     style GSBLT stroke-dasharray: 5 5
 ```
 
-Dashed lines mark stages not yet implemented. See [status.md](status.md) for implementation details.
+Dashed lines mark stages not yet implemented.
 
 **Key characteristics:**
 - Parliament code: `BW`, Wahlperiode: 17
@@ -621,3 +621,21 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | **Fundstelle text format changes**    | Station parsing breaks                       | Regex-based parsing with fallback, unit tests with known samples                  |
 | **verfassungsaendernd not available** | Required field cannot be determined          | Title heuristic (`Änderung der (Landes)?Verfassung` / `Verfassungsänderung`); see DD-023 |
 | **Sync/async coexistence**            | PARLIS uses sync requests in an async pipeline | `asyncio.to_thread()` wraps sync calls in both vorgaenge and beteiligung scrapers |
+
+## 10. Principles
+
+The community [Definition of Done](https://wiki.pazufa.de/books/scraper/page/definition-of-done) applies. In short:
+
+- **Idempotent:** a rerun creates no duplicates; one failed Vorgang never stops the run.
+- **Deterministic:** the same input yields the same API object (except LLM output).
+- **Fail loud:** log missing or unparsable required fields; omit a field rather than send an empty default.
+- **Scope:** Gesetzgebung of the Land BW only (`enabled-vorgangstypen` is restrictive by default).
+
+## 11. Known Gaps
+
+- `Sitzung.tops` / `nummer`: only for the next Plenarsitzung (DD-070); else `[]` / `0` (DD-064).
+- `Vorgang.schlagworte` reach the backend only for new Vorgänge; the merge drops them (DD-060).
+- Not sent: `lobbyregister`, `Dokument.subdoc_id`, structured `DokumentHash`.
+- Gesetzblatt before 2024 is paper only; those citations keep the PARLIS date (DD-047). The site's
+  `robots.txt` blocks `/system/pdf/` and the search page; the detail pages are free.
+- No source for Kabinettsbeschlüsse (STM) as a signal for new Regierungsentwürfe.

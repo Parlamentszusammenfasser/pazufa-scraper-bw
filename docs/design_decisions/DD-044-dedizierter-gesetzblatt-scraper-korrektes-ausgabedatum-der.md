@@ -47,8 +47,7 @@ Volumen (~50 Gesetze/Jahr) akzeptabel.
 
 **Bekannte Grenze:** Das elektronische Gesetzblatt ist erst **ab 2024** digital
 verfügbar (`start-year`-Default 2024). Der Issue-#9-Beispielfall von 2022 wird daher
-noch nicht abgedeckt; das Archiv vor 2024 (LEO-BW/Staatsanzeiger) bleibt Roadmap-Phase 4.
-Details und Roadmap: `docs/gesetzblatt_scraping.md`.
+noch nicht abgedeckt; das Archiv vor 2024 (LEO-BW/Staatsanzeiger) bleibt offen (architecture.md §11).
 
 **Implementierung:**
 - `src/bawue/gesetzblatt_client.py`, `src/bawue/gesetzblatt_parser.py`,

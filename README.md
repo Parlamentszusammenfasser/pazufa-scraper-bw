@@ -327,8 +327,7 @@ docker-compose build scraper && docker-compose up -d scraper
 ## Deploy
 
 **GCP Cloud Run Jobs** — a scheduled daily batch job, billed only while it runs.
-Setup and runbook: [`deploy/gcp/README.md`](deploy/gcp/README.md). Why this and not
-a VPS: [`docs/hosting-options.md`](docs/hosting-options.md).
+Setup, runbook and why this and not a VPS: [`deploy/gcp/README.md`](deploy/gcp/README.md).
 
 Everything environment-specific is an env var, so the image published by CI runs
 unmodified in every environment.
@@ -348,15 +347,15 @@ The image includes Tesseract OCR. Redis should be provided as a separate service
 
 Key env vars: `LTZF_API_KEY`, `LTZF_API_URL`, `COLLECTOR_ID`, `REDIS_HOST`, `LLM_PROVIDER_KEY`, `LLM_MODEL`
 
-See [docs/anforderungen.md — Konfiguration](docs/anforderungen.md#konfiguration) for the full reference.
+See [`config.sample.toml`](config.sample.toml) for the TOML keys; `--dump-config` prints every resolved value and its source.
 
 ## Documentation
 
-| Topic                                                      | File                                           |
-|------------------------------------------------------------|------------------------------------------------|
-| Requirements, data models, API, enumerations, data sources | [docs/anforderungen.md](docs/anforderungen.md) |
-| Architecture, components, PARLIS strategy, enum mapping    | [docs/architecture.md](docs/architecture.md)   |
-| Implementation status, field matrix, roadmap               | [docs/status.md](docs/status.md)               |
+| Topic                                                         | File                                                             |
+|---------------------------------------------------------------|------------------------------------------------------------------|
+| Architecture, components, PARLIS strategy, enum mapping, gaps | [docs/architecture.md](docs/architecture.md)                     |
+| Design decisions (DD-001 …)                                   | [docs/design_decisions.md](docs/design_decisions.md)             |
+| Observed PARLIS station types (enum coverage)                 | [docs/observed_station_types.md](docs/observed_station_types.md) |
 
 ## Links
 

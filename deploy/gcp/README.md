@@ -1,8 +1,12 @@
 # Deployment — GCP Cloud Run Jobs
 
 The scraper runs as a **Cloud Run Job** triggered once a day by Cloud Scheduler,
-caching to a per-environment **Upstash Redis** database. See
-`../../docs/hosting-options.md` for why.
+caching to a per-environment **Upstash Redis** database.
+
+**Why not a VPS:** the scraper is a daily batch job (~20 min), and Cloud Run Jobs
+bill only while it runs. Everything on GCP is scripted (`bootstrap.sh` + deploy
+workflow), only the Upstash database is created by hand; the runner-up (netcup VPS) has no provisioning API and pays for idle 24/7. Accepted
+tradeoff: two vendors and a variable bill.
 
 ```
 Cloud Scheduler (0 3 * * *, Europe/Berlin)
@@ -122,6 +126,8 @@ gcloud scheduler jobs resume bawue-scraper-staging --location $REGION
   a Hub outage at task-start time fails that run. If that becomes a problem, put
   an Artifact Registry remote repository in front of it and change only the
   `--image` value.
+- **Watch Upstash egress.** The free tier allows 10 GB/month per database, and
+  the pipeline reads every listed item from Redis on each run, cached ones too.
 - **Production** reuses all of this: run `bootstrap.sh` with `ENVIRONMENT=prod`,
   set up GitHub environment **`prod`** the same way, then Actions → **Deploy prod**
   (`deploy-prod.yml` — job `bawue-scraper-prod`, secrets `bawue-prod-*`). Its image
