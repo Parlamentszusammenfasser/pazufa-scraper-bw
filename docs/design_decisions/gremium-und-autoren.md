@@ -19,7 +19,7 @@ Wiki und BY-Praxis. Vorher stand im Klartext „Landtag".
 | Station | Gremium |
 |---|---|
 | Fundstelle nennt einen Ausschuss | Ausschuss-Name |
-| `postparl-gsblt` | `gesetzesblatt` |
+| `postparl-gsblt`, synthetische `postparl-kraft` (DD-071) | `gesetzesblatt` |
 | jedes `preparl-*` (DD-045), Beteiligungsportal | `regierung` |
 | alle übrigen, auch synthetische; ICS-Plenarsitzung | `plenum` |
 
