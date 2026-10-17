@@ -183,7 +183,8 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
         # Parse comment deadline as station timestamp
         if not detail.comment_deadline:
-            logger.error("No comment_deadline for '%s', skipping Vorgang", slug)
+            # Expected: some drafts have no comment phase (haushaltsbegleitgesetz-2027).
+            logger.info("Skipping '%s' — no comment deadline", slug)
             self._skipped += 1
             return None
         try:

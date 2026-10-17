@@ -154,3 +154,17 @@ class TestInkrafttretenIssue98:
         client = _pdf_client(exc=requests.HTTPError("404", response=MagicMock(status_code=404)))
         assert await GesetzblattDateLookup(client).inkrafttreten(2022, 41) is None
         client.fetch_pdf.assert_not_called()
+
+
+class TestPdfUrl:
+    """The Landtag's copy of the Gesetzblatt is incomplete (2026 Nr. 81: 404); the official PDF is the same file."""
+
+    @pytest.mark.asyncio
+    async def test_official_pdf_of_the_entry(self):
+        url = await GesetzblattDateLookup(_client()).pdf_url(2026, 11)
+        assert url == "https://www.baden-wuerttemberg.de/index.php?eID=dumpFile&f=1&fn=GBl2026011.pdf"
+
+    @pytest.mark.asyncio
+    async def test_none_without_an_entry(self):
+        err = requests.HTTPError("404", response=MagicMock(status_code=404))
+        assert await GesetzblattDateLookup(_client(exc=err)).pdf_url(2023, 21) is None
