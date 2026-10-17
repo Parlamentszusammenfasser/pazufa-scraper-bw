@@ -30,7 +30,7 @@ def _redact(redis_url: str) -> str:
 
 
 class RedisUnavailableError(RuntimeError):
-    """Redis is required: without it every run rebuilds everything (issue #105)."""
+    """Redis is required: without it every run rebuilds everything (DD-073)."""
 
 
 class BawueCache:
