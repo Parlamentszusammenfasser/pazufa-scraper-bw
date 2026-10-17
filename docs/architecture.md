@@ -3,7 +3,7 @@
 ## 1. System Overview
 
 The BaWue Scraper is a **self-contained scraper**. It owns its own entry point (`bawue.__main__`), config
-loader (`bawue.config`), Redis cache (`bawue.cache`), and scraping loop (`bawue.pipeline`). Its four scrapers
+loader (`bawue.config`), Redis cache (`bawue.cache`), and scraping loop (`bawue.pipeline`). Its three scrapers
 subclass the local `VorgangsScraper` / `SitzungsScraper` base classes and are run from a static registry — there
 is no external framework. It depends only on
 [pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core) (the shared library providing the httpx
@@ -46,7 +46,7 @@ graph LR
         BP["BeteiligungParser"]
         GBL["GesetzblattDateLookup<br/>(Ausgabedatum-Lookup)"]
         GBC["GesetzblattClient"]
-        GBP["GesetzblattParser"]
+        GBP["gesetzblatt_parser"]
         BDK["BawueDok<br/>(PDF + LLM enrichment)"]
         RL["AdaptiveRateLimiter"]
         UT["UploadThrottle"]
@@ -97,8 +97,8 @@ flowchart TD
     LESUNG23["parl-vollvlsgn\nWeitere Beratungen\n(PARLIS)"]
     AKZ["parl-akzeptanz\nAnnahme\n(PARLIS)"]
     ABL["parl-ablehnung\nAblehnung\n(PARLIS)"]
-    GSBLT["postparl-gsblt\nGesetzblatt\n(Gesetzblatt BaWue)"]
-    KRAFT["postparl-kraft\nInkrafttreten\n(PARLIS)"]
+    GSBLT["postparl-gsblt\nGesetzblatt\n(PARLIS + Gesetzblatt-Datum)"]
+    KRAFT["postparl-kraft\nInkrafttreten\n(Gesetzblatt-PDF)"]
 
     PREP_REG -.-> INIT
     PREP_BSL -.-> INIT
@@ -109,16 +109,12 @@ flowchart TD
     LESUNG23 --> ABL
     AKZ --> GSBLT
     GSBLT --> KRAFT
-
-    style PREP_REG stroke-dasharray: 5 5
-    style PREP_BSL stroke-dasharray: 5 5
-    style GSBLT stroke-dasharray: 5 5
 ```
 
-Dashed lines mark stages not yet implemented.
+Dashed arrows: the pre-parliamentary stages are optional.
 
 **Key characteristics:**
-- Parliament code: `BW`, Wahlperiode: 17
+- Parliament code: `BW`, Wahlperiode: 18 (one setting for all scrapers, DD-062)
 - Authentication: `X-API-Key` header with `collector` scope (see `bawue.api`)
 - Caching: Redis `BawueCache`, no TTL; a Vorgang is skipped only while its PARLIS fingerprint is unchanged (DD-052),
   a Sitzungen date only while its events and agenda are unchanged (DD-066, DD-070)
@@ -195,7 +191,7 @@ classDiagram
     class BeteiligungClient {
         +fetch_process_list() list[RawBeteiligungProcess]
         +fetch_process_detail(url) str
-        -_wait_for_delay()
+        -_get(url) Response
     }
 
     class BeteiligungParser {
@@ -239,7 +235,7 @@ classDiagram
     class UploadThrottle {
         <<module>>
         +with_upload_retry(api_call, rate_limiter, max_retries, exception_type) T
-        +upload_vorgang(oapiconfig, scraper_id, upload_limiter, item, dry_run, log_item) Vorgang|None
+        +upload_vorgang(client, scraper_id, upload_limiter, item, dry_run, log_item) Vorgang|None
     }
 
     BawueVorgaengeScraper --> ParlisClient
@@ -423,7 +419,7 @@ Maps PARLIS terminology to PaZuFa enum values. Context-aware for Stationstyp (e.
 
 ### AdaptiveRateLimiter
 
-AIMD-inspired adaptive request pacing for `ParlisClient` and `BeteiligungClient`:
+AIMD-inspired adaptive request pacing for `ParlisClient`, `BeteiligungClient` and `GesetzblattClient`:
 - **Success:** delay shrinks 10% toward minimum
 - **HTTP 429:** pause 30× current delay, then resume at 50%
 - `wait()` sleeps only the remaining time since the last request (no double-waiting)
@@ -447,14 +443,14 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 - Computes SHA256 hash for deduplication
 
 **LLM pipeline:**
-- Document-type-specific German prompts (4 variants: ENTWURF, STELLUNGNAHME, BESCHLUSSEMPF, GENERIC)
+- Document-type-specific German prompts (5 variants: ENTWURF, STELLUNGNAHME, BESCHLUSSEMPF, REDEPROTOKOLL, GENERIC)
 - Extracts: `zusammenfassung`, `schlagworte`, `kurztitel`, and optionally `meinung` (1–5 score) and `vorwort`
 - `zusammenfassung` is sent as the typed tuple `[(full-llm, …)]` (DD-054)
 - Entwurf / Beschlussempfehlung additionally carry the partial summaries `intention-llm`, `regelungsinhalt-llm`, `kosten-llm` from the same call, mirrored from the BB scraper (DD-056)
 - `Vorgang.ressort` is an own LLM call per Vorgang, classified by subject matter; prompt mirrored from the BB scraper (DD-055)
 - JSON response with up to 3 retries on parse failures
 - Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
-- In-memory SHA256 hash cache skips LLM calls for duplicate PDFs within a run (cache key includes document identity, DD-029)
+- Two-level cache skips LLM calls for known PDFs: in-memory per cycle, then Redis (key = content hash + prompt fingerprint, DD-020)
 - Full document text is sent to the LLM (no truncation); a context header names the target bill title + Drucksache so multi-topic protocols are summarized for the correct bill (DD-029)
 - For plenary protocols (`redeprotokoll`), the summary input is first narrowed to the relevant agenda item via corelib's `LLMConnector.extract_relevant_section` (`narrow_to_relevant_section`, DD-029)
 
@@ -473,8 +469,8 @@ LLM-derived values now live on the `Dokument` itself.
 ### Types
 
 TypedDict definitions for internal data exchange:
-- `RawVorgang` — titel, vorgangs_id, Vorgangstyp, Initiative, Deskriptoren, fundstellen_parsed
-- `RawFundstelle` — station_typ, datum, drucksache, plenarprotokoll, ausschuss, autor_text, pdf_url
+- `RawVorgang` — titel, vorgangs_id, detail_url, Vorgangstyp, Initiative, Deskriptoren, fundstellen_parsed
+- `RawFundstelle` — raw, station_typ, datum, drucksache, plenarprotokoll, ausschuss, autor_text, seiten, pdf_url
 
 ## 6. PARLIS Scraping Strategy
 
@@ -574,6 +570,7 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | Bericht und Empfehlungen                         | `parl-ausschber`     |
 | Ausschussberatung                                | `parl-ausschber`     |
 | Gesetzesbeschluss, Beschluss des Landtags        | `parl-akzeptanz`     |
+| Beschluss des Landtags in … Beratung             | `parl-vollvlsgn` (DD-026) |
 | Zustimmung, Annahme                              | `parl-akzeptanz`     |
 | Ablehnung                                        | `parl-ablehnung`     |
 | Gesetz, Bekanntmachung                           | `postparl-gsblt`     |
