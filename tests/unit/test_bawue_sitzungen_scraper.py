@@ -754,6 +754,25 @@ class TestIssue66Tops:
         assert "Tagesordnung" in caplog.text
 
     @pytest.mark.asyncio
+    async def test_invalid_date_in_a_file_name_leaves_the_kalender_intact(self, caplog):
+        """The link regex accepts 2026-02-30: only that link is skipped (review of PR #124)."""
+        html = b'<a href="/resource/blob/1/ab/2026-02-30_15_Plenarsitzung.pdf">x</a>' + _AGENDA_HTML
+        with caplog.at_level(logging.WARNING):
+            _scraper, sitzungen = await self._extract(_site(agenda_html=html))
+
+        assert len(sitzungen[0].tops) == 8
+        assert "2026-02-30" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_the_feeds_number_wins(self):
+        pdf = "https://www.landtag-bw.de/resource/blob/656162/f6ca/2026-02-26_14_Plenarsitzung.pdf"
+        pages = _site(agenda_html=_AGENDA_HTML.replace(b"2026-02-27", b"2026-02-26"), **{pdf: _AGENDA_PDF})
+        _scraper, sitzungen = await self._extract(pages, date_key="2026-02-26")
+
+        assert sitzungen[0].nummer == 143
+        assert sitzungen[0].tops
+
+    @pytest.mark.asyncio
     async def test_agenda_for_a_date_without_plenum_is_ignored(self):
         html = b'<a href="/resource/blob/656162/f6ca/2026-02-24_14_Plenarsitzung.pdf">x</a>'
         _scraper, sitzungen = await self._extract(_site(agenda_html=html), date_key="2026-02-24")

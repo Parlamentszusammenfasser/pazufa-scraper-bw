@@ -4,11 +4,14 @@ The page links the agenda PDF of the next Plenarsitzung only; committee agendas 
 published (DD-064). The file name carries the date and the session number.
 """
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import date
 
 from bawue.bawue_dok import normalize_volltext
+
+logger = logging.getLogger(__name__)
 
 TAGESORDNUNGEN_URL = "https://www.landtag-bw.de/de/aktuelles/tagesordnungen"
 _SITE = "https://www.landtag-bw.de"
@@ -35,9 +38,12 @@ class ParsedTop:
 
 def agenda_links(html: str) -> list[tuple[date, int, str]]:
     """(Sitzungsdatum, Sitzungsnummer, PDF URL) of each Plenarsitzung agenda linked on the page."""
-    links = dict.fromkeys(
-        (date.fromisoformat(m.group(1)), int(m.group(2)), _SITE + m.group(0)) for m in _AGENDA_LINK_RE.finditer(html)
-    )
+    links: dict[tuple[date, int, str], None] = {}
+    for m in _AGENDA_LINK_RE.finditer(html):
+        try:
+            links[(date.fromisoformat(m.group(1)), int(m.group(2)), _SITE + m.group(0))] = None
+        except ValueError:
+            logger.warning("Tagesordnung link with an invalid date skipped: %s", m.group(0))
     return list(links)
 
 
