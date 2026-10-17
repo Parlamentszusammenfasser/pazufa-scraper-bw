@@ -82,7 +82,9 @@ consolidation (DD-024/DD-026), out-of-order ausschber retiming (DD-025), and
 number + trigger keywords + code symbols); the DDs live grouped by topic in
 `docs/design_decisions/<topic>.md`, each under an anchor `#dd-NNN`. Before changing station mapping, ordering,
 enum mapping, or synthetic-station logic: **find the relevant DD**, and when your change alters
-or adds a rule, **add/update a DD** (and its index row) in the same change. A DD is an
+or adds a rule, record it in the same change. **Prefer updating an existing DD** (its section and
+index row) when the change extends or adjusts a decision already there — e.g. the same mechanism
+for another scraper. Add a new DD only for a decision that is really new. A DD is an
 architecture decision — context, decision, consequence, kept short; implementation details and
 history belong in commits and PRs. A changed rule edits its section instead of appending a note.
 Behavior in the code is usually intentional and DD-justified — don't "fix" it without checking.
