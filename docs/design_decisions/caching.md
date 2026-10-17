@@ -4,7 +4,8 @@
 
 Wann ein Vorgang oder Sitzungstag neu hochgeladen wird. Die Schlüssel haben kein TTL. Ein
 voller Neubau eines Bestands heißt: die Einträge des Präfixes löschen. Eine eingebaute
-Versionskonstante gibt es bewusst nicht.
+Versionskonstante gibt es bewusst nicht; ein gezielter Neubau ändert den Fingerprint
+(Beispiel: DD-071).
 
 | Präfix | Inhalt | DD |
 |---|---|---|
@@ -26,7 +27,8 @@ vollständig vor.
 1. `vg2:<vorgangs_id>` speichert einen Fingerprint. Weicht er ab, wird der Vorgang mit
    denselben stabilen IDs neu gebaut und hochgeladen.
 2. Gehasht wird, was Fortschritt anzeigt: je Fundstelle Rohtext + `pdf_url` (sortiert) und
-   „Aktueller Stand".
+   „Aktueller Stand". Dazu ein Marker `postparl-kraft`, wenn eine Fundstelle eine
+   Gesetzblatt-Nr. trägt: der einmalige Neubau gecachter Gesetze für DD-071.
 3. Nicht gehasht: vom Parser abgeleitete Felder (sonst invalidiert jede Parser-Verbesserung
    alles), die Reihenfolge, Titel/Initiative/Sachgebiet/Typ/Deskriptoren, Scraper-Output.
 4. Ein Vorgang mit noch fehlendem PDF (Issue #66) oder künftiger Fundstelle (DD-068) wird
