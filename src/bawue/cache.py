@@ -90,6 +90,7 @@ class BawueCache:
                 logger.debug("%s (key=`%s`) not found in cache", typehint, key)
                 return None
             return value
-        except Exception:
+        except Exception as e:
+            # Not a miss: a miss rebuilds the item and pays every LLM call again (issue #105).
             logger.error("Error retrieving raw value with key `%s`", key)
-            return None
+            raise RedisUnavailableError(f"Redis read failed: {type(e).__name__}") from e

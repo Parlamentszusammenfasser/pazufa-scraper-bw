@@ -2335,6 +2335,25 @@ class TestRedisCacheIntegration:
         assert zusammenfassung_text(result.dokument) == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
 
     @pytest.mark.asyncio
+    async def test_issue105_redis_error_fails_without_llm_call(self):
+        """Redis down is no cache miss and no text-only document: the Vorgang build fails and is retried."""
+        from bawue.cache import RedisUnavailableError
+
+        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
+        cache = MagicMock()
+        cache.get_raw.side_effect = RedisUnavailableError("redis down")
+
+        with (
+            _patch_pdf_pipeline(),
+            _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp,
+            pytest.raises(RedisUnavailableError),
+        ):
+            await enrich_dokument(MagicMock(), _make_llm_mock(), dok, cache=cache)
+
+        mock_acomp.assert_not_called()
+        cache.store_raw.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_in_memory_cache_takes_priority_over_redis(self):
         """In-memory cache should be checked before Redis."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)

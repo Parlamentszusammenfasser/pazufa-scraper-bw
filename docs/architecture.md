@@ -229,7 +229,7 @@ classDiagram
         +extract_pdf_text(pdf_path) tuple
         +extract_semantics(llm, text, doktyp, model, dok_titel, drucksnr) dict
         -_hash_cache: dict
-        -_LLM_SEMAPHORE: Semaphore
+        -_llm_semaphore() Semaphore
     }
 
     class UploadThrottle {
@@ -597,7 +597,7 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 |---------------------------------|-------------------|-------------------------------------------------------------|
 | Per-item failures               | `bawue.pipeline`  | Logs error, continues with next Vorgang                     |
 | API submission retries          | `bawue.upload_throttle` | Automatic retry with backoff                          |
-| Cache failures                  | `bawue.cache`     | Connect failure alerts Mattermost and exits (DD-073); get/set errors are logged as a miss |
+| Cache failures                  | `bawue.cache`     | Connect failure alerts Mattermost and exits; a read error mid-run skips the item, counted as a cache error (DD-073) |
 | PARLIS session expiry           | ParlisClient      | Re-establishes session before each search cycle             |
 | Large result sets               | ParlisClient      | Automatic date subdivision into monthly windows             |
 | PARLIS HTTP errors              | ParlisClient      | `raise_for_status()`, propagated to the pipeline error handler |

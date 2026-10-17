@@ -19,6 +19,7 @@ from uuid import UUID
 
 import aiohttp
 
+from bawue.cache import RedisUnavailableError
 from bawue.config import BawueConfig
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,8 @@ class Scraper(ABC):
     item_count: int = 0
     # Items skipped this cycle because their cache entry is current.
     cached_count: int = 0
+    # Items skipped this cycle because Redis failed on their lookup (issue #105).
+    cache_errors: int = 0
     # (title, lines) set by run(); __main__ sends a cycle's summaries as one message (issue #52).
     summary: tuple[str, list[str]] | None = None
 
@@ -111,9 +114,15 @@ class Scraper(ABC):
         logger.info("Processing Items Now")
         semaphore = asyncio.Semaphore(self.config.max_concurrency)
 
+        cache_errors = 0
         for item in sorted(items):
             key = await self.make_cache_key(item)
-            cached = await self.get_cached_result(key)
+            try:
+                cached = await self.get_cached_result(key)
+            except RedisUnavailableError:
+                # Unknown whether it is current: building it may redo a whole upload (DD-073).
+                cache_errors += 1
+                continue
             if cached is not None:
                 logger.debug("%s found in cache, skipping...", key)
                 skipped_count += 1
@@ -124,6 +133,7 @@ class Scraper(ABC):
 
         self.item_count = len(tasks)
         self.cached_count = skipped_count
+        self.cache_errors = cache_errors
         logger.info(
             "%s: Processing %d items, skipping %d cached items",
             self.__class__.__name__,

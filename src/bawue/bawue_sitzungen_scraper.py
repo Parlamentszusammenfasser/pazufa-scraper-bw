@@ -18,7 +18,7 @@ import certifi
 from bawue.api import BawueApiError, build_client, put_kalender
 from bawue.bawue_dok import download_pdf, extract_pdf_text
 from bawue.bawue_vorgaenge_scraper import _construct_drucksache_pdf_url
-from bawue.cache import drucksache_hash_key
+from bawue.cache import RedisUnavailableError, drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.ics_parser import ParsedEvent, group_events_by_date, parse_ics_feed
@@ -183,7 +183,10 @@ class BawueSitzungenScraper(SitzungsScraper):
         to the Vorgang's placeholder row it makes the Vorgang's merge ambiguous. The
         other fields are a stub: the backend links a match without overwriting it.
         """
-        uploaded_hash = self.config.cache.get_raw(drucksache_hash_key(drucksnr), "Dokument")
+        try:
+            uploaded_hash = self.config.cache.get_raw(drucksache_hash_key(drucksnr), "Dokument")
+        except RedisUnavailableError:
+            uploaded_hash = None  # like "not uploaded yet": the day is retried (issue #105)
         if uploaded_hash is None:
             logger.info("Drucksache %s of a TOP not uploaded by the Vorgänge scraper yet", drucksnr)
             return None

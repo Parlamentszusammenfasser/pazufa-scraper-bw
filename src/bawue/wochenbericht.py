@@ -65,7 +65,7 @@ def weekly_section(config: BawueConfig, now: datetime | None = None) -> tuple[st
     if config.cache.disabled:
         return None  # no stand to compare with (cache disabled)
     try:
-        # Not get_raw: it hides a Redis error as None, which would overwrite the stand.
+        # A Redis error lands in the except below, so the stored stand is kept.
         stored = json.loads(config.cache.redis_client.get(_KEY) or "{}")
         if stored.get("woche") == woche:
             return None
