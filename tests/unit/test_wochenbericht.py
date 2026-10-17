@@ -57,7 +57,8 @@ class TestWeeklySection:
     @staticmethod
     def _config(stored: dict | None) -> MagicMock:
         config = MagicMock()
-        config.cache.get_raw.return_value = json.dumps(stored) if stored is not None else None
+        config.cache.disabled = False
+        config.cache.redis_client.get.return_value = json.dumps(stored) if stored is not None else None
         return config
 
     @staticmethod
@@ -95,3 +96,26 @@ class TestWeeklySection:
         with patch("bawue.wochenbericht.get_vorgaenge", side_effect=RuntimeError("503")):
             assert weekly_section(config, NOW) is None
         config.cache.store_raw.assert_not_called()
+
+    def test_redis_read_failure_keeps_the_stored_stand(self):
+        """A failed read must not look like a first run and overwrite the stand (review #126)."""
+        config = self._config(None)
+        config.cache.redis_client.get.side_effect = ConnectionError("redis down")
+        with patch("bawue.wochenbericht.get_vorgaenge") as get:
+            assert weekly_section(config, NOW) is None
+        get.assert_not_called()
+        config.cache.store_raw.assert_not_called()
+
+    def test_no_report_when_the_new_stand_was_not_stored(self):
+        """Otherwise the next run sees last week's marker and posts the report again (review #126)."""
+        config = self._config({"woche": "2026-W42", "stand": {}})
+        config.cache.store_raw.return_value = False
+        with patch("bawue.wochenbericht.get_vorgaenge", return_value=[]):
+            assert weekly_section(config, NOW) is None
+
+    def test_disabled_cache_skips_without_fetching(self):
+        config = self._config(None)
+        config.cache.disabled = True
+        with patch("bawue.wochenbericht.get_vorgaenge") as get:
+            assert weekly_section(config, NOW) is None
+        get.assert_not_called()

@@ -62,8 +62,11 @@ def weekly_section(config: BawueConfig, now: datetime | None = None) -> tuple[st
     now = now or datetime.now(UTC)
     year, week, _ = now.isocalendar()
     woche = f"{year}-W{week:02d}"
+    if config.cache.disabled:
+        return None  # no stand to compare with (dry run, local run)
     try:
-        stored = json.loads(config.cache.get_raw(_KEY, "Wochenbericht") or "{}")
+        # Not get_raw: it hides a Redis error as None, which would overwrite the stand.
+        stored = json.loads(config.cache.redis_client.get(_KEY) or "{}")
         if stored.get("woche") == woche:
             return None
         wahlperiode = load_toml_section(config, "bawue").get("wahlperiode", CURRENT_WAHLPERIODE)
@@ -71,7 +74,8 @@ def weekly_section(config: BawueConfig, now: datetime | None = None) -> tuple[st
     except Exception as e:
         logger.warning("Wochenbericht skipped, retried next run: %s", e)
         return None
-    config.cache.store_raw(_KEY, json.dumps({"woche": woche, "stand": current}), "Wochenbericht")
+    if not config.cache.store_raw(_KEY, json.dumps({"woche": woche, "stand": current}), "Wochenbericht"):
+        return None  # else the next run posts this week's report again
     if "stand" not in stored:
         return None  # first run: nothing to compare with
     return f"Wochenbericht Gesetzgebung {woche}", report_lines(stored["stand"], current) or ["Keine Änderungen."]
