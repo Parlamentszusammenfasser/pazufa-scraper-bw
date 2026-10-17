@@ -630,7 +630,7 @@ The community [Definition of Done](https://wiki.pazufa.de/books/scraper/page/def
 
 - `Sitzung.tops` / `nummer`: only for the next Plenarsitzung (DD-070); else `[]` / `0` (DD-064).
 - `Vorgang.schlagworte` reach the backend only for new Vorgänge; the merge drops them (DD-060).
-- Not sent: `lobbyregister`, `stellungnahmen`, `Dokument.subdoc_id`, `vorwort`, structured `DokumentHash`.
+- Not sent: `lobbyregister`, `Dokument.subdoc_id`, structured `DokumentHash`.
 - Gesetzblatt before 2024 is paper only; those citations keep the PARLIS date (DD-047). The site's
   `robots.txt` blocks `/system/pdf/` and the search page; the detail pages are free.
 - No source for Kabinettsbeschlüsse (STM) as a signal for new Regierungsentwürfe.
