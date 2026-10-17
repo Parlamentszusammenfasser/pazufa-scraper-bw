@@ -27,6 +27,8 @@ Die Entscheidungen stehen nach Thema gebündelt; jede behält ihre Nummer als An
 
 > **Nutzung:** Stichworte des Tasks in der Tabelle suchen, dann über die DD-Nummer
 > den Abschnitt im Themen-Dokument öffnen.
+> **Zuerst eine bestehende DD erweitern** (Abschnitt + Zeile hier), wenn die Änderung eine
+> dortige Entscheidung fortschreibt. Nur eine wirklich neue Entscheidung bekommt eine neue DD:
 > **Neue DD ⇒ im passenden Themen-Dokument einen Abschnitt `<a id="dd-NNN"></a>` +
 > `## DD-NNN: …` anlegen (Kontext / Entscheidung / Konsequenz, kurz, kein Changelog) und
 > hier eine Zeile ergänzen. Eine geänderte Regel ändert ihren Abschnitt, statt einen
