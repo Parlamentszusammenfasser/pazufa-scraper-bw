@@ -44,10 +44,10 @@ Geprüft am 17.10.2026 (Backend `main` `f87fd72`):
    Backend trifft damit genau die Zeile des Vorgangs. Die übrigen Felder sind ein Platzhalter.
    Ohne Eintrag fehlt das Dokument, und der Tag wird nicht gecacht (`_retry_next_cycle`). Ohne
    LLM-Anreicherung ist das Register leer (Platzhalter-Hashes, DD-048): TOPs ohne Dokumente.
-5. **Sitzungen nach Vorgängen:** Im parallelen Lauf startet der Sitzungen-Scraper erst nach dem
-   Ende des Vorgänge-Scrapers (`__main__._sitzungen_after_vorgaenge`), damit Hashes desselben
-   Laufs schon registriert sind. Beteiligung läuft weiter parallel. `linearize` lief schon in
-   dieser Reihenfolge.
+5. **Keine feste Reihenfolge der Scraper:** Sie laufen weiter parallel. Lädt der Vorgänge-Scraper
+   eine Drucksache im selben Lauf erst nach dem TOP hoch, folgt ihr Dokument im nächsten Lauf
+   (Retry, Punkt 4). Eine Wartepflicht ließe den Kalender an einem langen oder hängenden
+   Vorgänge-Lauf hängen (Review von PR #124).
 6. **Cache (DD-066):** Der `sz:`-Wert wird `<Termine>:<Tagesordnung>`; Tage ohne Tagesordnung
    behalten ihren Wert, es gibt keinen Massen-Neu-Upload. Eine geänderte Tagesordnung lädt den
    Tag neu. Eine Tagesordnung, die von der Seite verschwindet (die nächste ist online), lädt den
@@ -83,11 +83,9 @@ Geprüft am 17.10.2026 (Backend `main` `f87fd72`):
 **Code:** `bawue/tagesordnung.py` (`agenda_links`, `parse_tops`),
 `BawueSitzungenScraper._fetch_agendas`, `_build_tops`, `_drucksache_dokument`, `item_extractor`,
 `get_cached_result`, `store_extracted_result`, `_agenda_fingerprint`,
-`BawueVorgaengeScraper.store_extracted_result`, `cache.drucksache_hash_key`,
-`__main__._sitzungen_after_vorgaenge`
+`BawueVorgaengeScraper.store_extracted_result`, `cache.drucksache_hash_key`
 
 **Tests:** `tests/unit/test_tagesordnung.py` (Linux- und macOS-Extraktion),
 `tests/unit/test_bawue_sitzungen_scraper.py::TestIssue66Tops`,
-`tests/unit/test_bawue_scraper.py::TestIssue66DrucksacheHashRegistry`,
-`tests/unit/test_main.py::TestIssue66SitzungenAfterVorgaenge`; Fixtures: Tagesordnung der
+`tests/unit/test_bawue_scraper.py::TestIssue66DrucksacheHashRegistry`; Fixtures: Tagesordnung der
 14. Sitzung vom 21.10.2026 (`tests/fixtures/tagesordnung/`)

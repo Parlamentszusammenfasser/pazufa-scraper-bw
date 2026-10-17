@@ -348,8 +348,7 @@ other type are dropped defensively in `listing_page_extractor`, even if PARLIS r
 
 Subclass of `SitzungsScraper`. Fetches ICS calendar, parses and filters events, builds `Sitzung` models.
 The Plenarsitzung of the next session also gets its TOPs from the agenda PDF on
-`/de/aktuelles/tagesordnungen` (`bawue.tagesordnung`, DD-070). In a parallel cycle it starts only after
-`BawueVorgaengeScraper` has finished (DD-070).
+`/de/aktuelles/tagesordnungen` (`bawue.tagesordnung`, DD-070).
 Overrides `send_result()` to use `Parlament.BW`. Uses `_events_by_date` to bridge listing/item phases.
 
 **Field mapping:**
