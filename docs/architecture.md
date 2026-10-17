@@ -3,7 +3,7 @@
 ## 1. System Overview
 
 The BaWue Scraper is a **self-contained scraper**. It owns its own entry point (`bawue.__main__`), config
-loader (`bawue.config`), Redis cache (`bawue.cache`), and scraping loop (`bawue.pipeline`). Its four scrapers
+loader (`bawue.config`), Redis cache (`bawue.cache`), and scraping loop (`bawue.pipeline`). Its three scrapers
 subclass the local `VorgangsScraper` / `SitzungsScraper` base classes and are run from a static registry — there
 is no external framework. It depends only on
 [pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core) (the shared library providing the httpx
@@ -14,7 +14,7 @@ Four data sources are covered:
 1. **PARLIS** — parliamentary proceedings (Vorgänge) via HTML scraping
 2. **Beteiligungsportal Baden-Württemberg** — pre-parliamentary draft laws (`preparl-regent` station)
 3. **ICS calendar** — parliamentary sessions (Sitzungen)
-4. **Gesetzblatt Baden-Württemberg** — supplies the real Ausgabedatum for the `postparl-gsblt` station of a PARLIS Vorgang; not a Vorgangs-source of its own (DD-047)
+4. **Gesetzblatt Baden-Württemberg** — supplies the real Ausgabedatum for the `postparl-gsblt` station of a PARLIS Vorgang and, from its PDF, the `postparl-kraft` date (DD-071); not a Vorgangs-source of its own (DD-047)
 
 ```mermaid
 graph LR
@@ -46,7 +46,7 @@ graph LR
         BP["BeteiligungParser"]
         GBL["GesetzblattDateLookup<br/>(Ausgabedatum-Lookup)"]
         GBC["GesetzblattClient"]
-        GBP["GesetzblattParser"]
+        GBP["gesetzblatt_parser"]
         BDK["BawueDok<br/>(PDF + LLM enrichment)"]
         RL["AdaptiveRateLimiter"]
         UT["UploadThrottle"]
@@ -71,7 +71,7 @@ graph LR
     BVS -->|" Vorgang "| Cache
     BBS -->|" Vorgang "| Cache
     BSS -->|" Sitzung "| Cache
-    GBL -->|" Ausgabedatum (postparl-gsblt) "| BVS
+    GBL -->|" Ausgabedatum + Inkrafttreten "| BVS
     Cache -->|" dedup "| APIClient
     APIClient -->|" PUT /api/v2/vorgang "| API
     APIClient -->|" PUT /api/v2/kalender "| API
@@ -97,8 +97,8 @@ flowchart TD
     LESUNG23["parl-vollvlsgn\nWeitere Beratungen\n(PARLIS)"]
     AKZ["parl-akzeptanz\nAnnahme\n(PARLIS)"]
     ABL["parl-ablehnung\nAblehnung\n(PARLIS)"]
-    GSBLT["postparl-gsblt\nGesetzblatt\n(Gesetzblatt BaWue)"]
-    KRAFT["postparl-kraft\nInkrafttreten\n(PARLIS)"]
+    GSBLT["postparl-gsblt\nGesetzblatt\n(PARLIS + Gesetzblatt-Datum)"]
+    KRAFT["postparl-kraft\nInkrafttreten\n(Gesetzblatt-PDF)"]
 
     PREP_REG -.-> INIT
     PREP_BSL -.-> INIT
@@ -109,16 +109,12 @@ flowchart TD
     LESUNG23 --> ABL
     AKZ --> GSBLT
     GSBLT --> KRAFT
-
-    style PREP_REG stroke-dasharray: 5 5
-    style PREP_BSL stroke-dasharray: 5 5
-    style GSBLT stroke-dasharray: 5 5
 ```
 
-Dashed lines mark stages not yet implemented.
+Dashed arrows: the pre-parliamentary stages are optional.
 
 **Key characteristics:**
-- Parliament code: `BW`, Wahlperiode: 17
+- Parliament code: `BW`, Wahlperiode: 18 (one setting for all scrapers, DD-062)
 - Authentication: `X-API-Key` header with `collector` scope (see `bawue.api`)
 - Caching: Redis `BawueCache`, no TTL; a Vorgang is skipped only while its PARLIS fingerprint is unchanged (DD-052),
   a Sitzungen date only while its events and agenda are unchanged (DD-066, DD-070)
@@ -166,7 +162,7 @@ classDiagram
         -_enabled_vorgangstypen: frozenset[str]
         -_wahlperiode: int
         +listing_page_extractor(vorgangstyp) list[str]
-        +item_extractor(vorgang_id) Vorgang
+        +item_extractor(vorgang_id) Vorgang|None
         -_build_vorgang(raw) Vorgang
         -_build_station(fund, initiative) Station
     }
@@ -195,7 +191,7 @@ classDiagram
     class BeteiligungClient {
         +fetch_process_list() list[RawBeteiligungProcess]
         +fetch_process_detail(url) str
-        -_wait_for_delay()
+        -_get(url) Response
     }
 
     class BeteiligungParser {
@@ -228,7 +224,7 @@ classDiagram
 
     class BawueDok {
         <<module>>
-        +enrich_dokument(session, llm, dok, model, vorgang_titel) Dokument
+        +enrich_dokument(session, llm, dok, model, vorgang_titel, …) EnrichmentResult
         +download_pdf(session, url) Path
         +extract_pdf_text(pdf_path) tuple
         +extract_semantics(llm, text, doktyp, model, dok_titel, drucksnr) dict
@@ -239,7 +235,7 @@ classDiagram
     class UploadThrottle {
         <<module>>
         +with_upload_retry(api_call, rate_limiter, max_retries, exception_type) T
-        +upload_vorgang(oapiconfig, scraper_id, upload_limiter, item, dry_run, log_item) Vorgang|None
+        +upload_vorgang(client, scraper_id, upload_limiter, item, dry_run, log_item) UploadOutcome
     }
 
     BawueVorgaengeScraper --> ParlisClient
@@ -262,8 +258,8 @@ All three scrapers follow the same two-phase pattern:
 
 | Scraper                   | `listing_urls` values                                    | `listing_page_extractor` returns | `item_extractor` returns    | `send_result` override   |
 |---------------------------|----------------------------------------------------------|----------------------------------|-----------------------------|--------------------------|
-| `BawueVorgaengeScraper`   | enabled Vorgangstyp strings (3 by default, configurable) | vorgang IDs                      | `Vorgang`                   | No                       |
-| `BawueBeteiligungScraper` | LP index keys (`lp-17`)                                  | process slugs                    | `Vorgang\|None`             | No                       |
+| `BawueVorgaengeScraper`   | enabled Vorgangstyp strings (3 by default, configurable) | vorgang IDs                      | `Vorgang\|None`             | Yes — `upload_vorgang`   |
+| `BawueBeteiligungScraper` | LP index key (`lp-{wahlperiode}`)                        | process slugs                    | `Vorgang\|None`             | Yes — `upload_vorgang`   |
 | `BawueSitzungenScraper`   | ICS feed URL                                             | ISO date strings                 | `(datetime, List[Sitzung])` | Yes — use `Parlament.BW` |
 
 **PARLIS listing URL pattern:** PARLIS has no traditional listing URLs. `listing_urls` contains the enabled Vorgangstyp
@@ -277,7 +273,7 @@ IDs. Items whose `Vorgangstyp` field doesn't match the enabled set are dropped d
 | Capability          | Provided by                                              |
 |---------------------|----------------------------------------------------------|
 | Scheduling          | `bawue.__main__` cycle loop at configurable intervals    |
-| Redis caching       | `bawue.cache` — no TTL, `vg2:`/`sz:` keys (DD-052/066)  |
+| Redis caching       | `bawue.cache` — no TTL, `vg2:`/`sz:`/`llm-semantics:`/`drucks-hash:` keys (DD-052/066) |
 | API client          | `pazufa-scraper-core` httpx client + `bawue.upload_throttle` retry |
 | Models              | `pazufa-scraper-core` models generated from OpenAPI spec |
 | Document processing | Kreuzberg/OCR + LLM pipeline (`bawue.bawue_dok`)         |
@@ -308,7 +304,7 @@ sequenceDiagram
     BVS->>BVS: store in _raw_cache
     BVS-->>FW: list[vorgang_ids]
 
-    loop for each vorgang_id
+    loop for each vorgang_id not in cache
         FW->>BVS: item_extractor(vorgang_id)
         BVS->>BVS: lookup _raw_cache[vorgang_id]
         BVS->>EM: map enums (Vorgangstyp, Stationstyp, Doktyp)
@@ -325,11 +321,8 @@ sequenceDiagram
 
         BVS-->>FW: Vorgang
 
-        FW->>Cache: check if already processed
-        alt new
-            FW->>API: PUT /api/v2/vorgang
-            FW->>Cache: mark processed
-        end
+        FW->>API: send_result → PUT /api/v2/vorgang
+        FW->>Cache: store after a successful upload
     end
 ```
 
@@ -375,12 +368,12 @@ Configuration from `[beteiligung]` section.
 | `api_id`            | `uuid5(NAMESPACE_URL, "beteiligung-{slug}")`    |
 | `titel`             | Detail page heading (dossier-header h1)         |
 | `kurztitel`         | LLM short title, fallback `titel` (DD-053)      |
-| `typ`               | `Vorgangstyp.GG_MINUS_LAND_MINUS_PARL`          |
+| `typ`               | `Vorgangstyp.GG_LAND_PARL`                      |
 | `initiatoren`       | `[Autor(organisation=ministry)]`                |
 | `ressort`           | LLM-Klassifikation des Schwerpunkts (DD-055)    |
-| Station `typ`       | `Stationstyp.PREPARL_MINUS_REGENT`              |
+| Station `typ`       | `Stationstyp.PREPARL_REGENT`                    |
 | Station `gremium`   | `Parlament.BW, "regierung"` (reservierter Name) |
-| Station `dokumente` | Each PDF → `Doktyp.PREPARL_MINUS_ENTWURF`       |
+| Station `dokumente` | Each PDF → `Doktyp.PREPARL_ENTWURF`             |
 | Station `zp_start`  | Comment deadline date                           |
 
 ### BeteiligungClient / BeteiligungParser
@@ -423,7 +416,7 @@ Maps PARLIS terminology to PaZuFa enum values. Context-aware for Stationstyp (e.
 
 ### AdaptiveRateLimiter
 
-AIMD-inspired adaptive request pacing for `ParlisClient` and `BeteiligungClient`:
+AIMD-inspired adaptive request pacing for `ParlisClient`, `BeteiligungClient` and `GesetzblattClient`:
 - **Success:** delay shrinks 10% toward minimum
 - **HTTP 429:** pause 30× current delay, then resume at 50%
 - `wait()` sleeps only the remaining time since the last request (no double-waiting)
@@ -443,20 +436,20 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 
 **PDF pipeline:**
 - Downloads PDF via `aiohttp` session to a temporary file
-- Extracts text via `kreuzberg` (normal extraction first; OCR fallback if result < 64 chars)
+- Extracts text via `kreuzberg` (normal extraction first; OCR fallback if result < 64 chars or garbled, DD-015)
 - Computes SHA256 hash for deduplication
 
 **LLM pipeline:**
-- Document-type-specific German prompts (4 variants: ENTWURF, STELLUNGNAHME, BESCHLUSSEMPF, GENERIC)
+- Document-type-specific German prompts (5 variants: ENTWURF, STELLUNGNAHME, BESCHLUSSEMPF, REDEPROTOKOLL, GENERIC)
 - Extracts: `zusammenfassung`, `schlagworte`, `kurztitel`, and optionally `meinung` (1–5 score) and `vorwort`
 - `zusammenfassung` is sent as the typed tuple `[(full-llm, …)]` (DD-054)
 - Entwurf / Beschlussempfehlung additionally carry the partial summaries `intention-llm`, `regelungsinhalt-llm`, `kosten-llm` from the same call, mirrored from the BB scraper (DD-056)
 - `Vorgang.ressort` is an own LLM call per Vorgang, classified by subject matter; prompt mirrored from the BB scraper (DD-055)
-- JSON response with up to 3 retries on parse failures
+- JSON mode; malformed JSON is fixed with json-repair; up to 3 API retries
 - Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
-- In-memory SHA256 hash cache skips LLM calls for duplicate PDFs within a run (cache key includes document identity, DD-029)
+- Two-level cache skips LLM calls for known PDFs: in-memory per cycle, then Redis (key = content hash + prompt fingerprint, DD-020)
 - Full document text is sent to the LLM (no truncation); a context header names the target bill title + Drucksache so multi-topic protocols are summarized for the correct bill (DD-029)
-- For plenary protocols (`redeprotokoll`), the summary input is first narrowed to the relevant agenda item via corelib's `LLMConnector.extract_relevant_section` (`narrow_to_relevant_section`, DD-029)
+- Plenary protocols (`redeprotokoll`) get one neutral summary per session, without Vorgang context, shared by every Vorgang that cites them (DD-037); `narrow_to_relevant_section` therefore never narrows
 
 **Graceful degradation (3 tiers):**
 
@@ -473,8 +466,8 @@ LLM-derived values now live on the `Dokument` itself.
 ### Types
 
 TypedDict definitions for internal data exchange:
-- `RawVorgang` — titel, vorgangs_id, Vorgangstyp, Initiative, Deskriptoren, fundstellen_parsed
-- `RawFundstelle` — station_typ, datum, drucksache, plenarprotokoll, ausschuss, autor_text, pdf_url
+- `RawVorgang` — titel, vorgangs_id, detail_url, Vorgangstyp, Initiative, Deskriptoren, fundstellen_parsed
+- `RawFundstelle` — raw, station_typ, datum, drucksache, plenarprotokoll, ausschuss, autor_text, seiten, pdf_url
 
 ## 6. PARLIS Scraping Strategy
 
@@ -482,7 +475,7 @@ TypedDict definitions for internal data exchange:
 
 PARLIS requires an active session (cookies) before API calls succeed:
 1. `GET https://parlis.landtag-bw.de/parlis/` — obtain session cookies
-2. Store cookies in `requests.Session`; set `Referer` header on all requests
+2. Store cookies in `requests.Session`; set `Referer` on the search POST
 3. Sessions expire — re-establish before each search cycle
 
 ### Search Query
@@ -567,13 +560,14 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 |--------------------------------------------------|----------------------|
 | Gesetzentwurf (from Landesregierung)             | `preparl-regbsl`     |
 | Gesetzentwurf (from Fraktion/Abgeordnete)        | `parl-initiativ`     |
-| Antrag, Anträge                                  | `parl-initiativ`     |
-| Erste Beratung, Zweite Beratung, Dritte Beratung | `parl-vollvlsgn`     |
+| Antrag, Anträge, Anfragen, Volksantrag           | `parl-initiativ`     |
+| Erste/Zweite/Dritte Beratung, Beratung           | `parl-vollvlsgn`     |
 | Überweisung                                      | `parl-vollvlsgn`     |
 | Beschlussempfehlung und Bericht                  | `parl-ausschber`     |
 | Bericht und Empfehlungen                         | `parl-ausschber`     |
 | Ausschussberatung                                | `parl-ausschber`     |
 | Gesetzesbeschluss, Beschluss des Landtags        | `parl-akzeptanz`     |
+| Beschluss des Landtags in … Beratung             | `parl-vollvlsgn` (DD-026) |
 | Zustimmung, Annahme                              | `parl-akzeptanz`     |
 | Ablehnung                                        | `parl-ablehnung`     |
 | Gesetz, Bekanntmachung                           | `postparl-gsblt`     |
@@ -592,8 +586,9 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | Antwort (Stellungnahme der Regierung) | `antwort`         |
 | Beschlussempfehlung                   | `beschlussempf`   |
 | Stellungnahme                         | `stellungnahme`   |
-| Plenarprotokoll                       | `redeprotokoll`   |
-| Mitteilung                            | `mitteilung`      |
+| Plenarprotokoll, Beratung, Beschluss des Landtags in … | `redeprotokoll` |
+| Gesetzblatt, Gesetz                   | `gesetz` (DD-051) |
+| Mitteilung, Bekanntmachung, Gesetzesbeschluss, Beschluss des Landtags, Zustimmung, Annahme | `mitteilung` |
 | *(unrecognized)*                      | `sonstig`         |
 
 ## 8. Error Handling
@@ -602,7 +597,7 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 |---------------------------------|-------------------|-------------------------------------------------------------|
 | Per-item failures               | `bawue.pipeline`  | Logs error, continues with next Vorgang                     |
 | API submission retries          | `bawue.upload_throttle` | Automatic retry with backoff                          |
-| Cache failures                  | `bawue.cache`     | Graceful degradation (continues without caching)            |
+| Cache failures                  | `bawue.cache`     | Connect failure exits; get/set errors are logged as a miss  |
 | PARLIS session expiry           | ParlisClient      | Re-establishes session before each search cycle             |
 | Large result sets               | ParlisClient      | Automatic date subdivision into monthly windows             |
 | PARLIS HTTP errors              | ParlisClient      | `raise_for_status()`, propagated to the pipeline error handler |
