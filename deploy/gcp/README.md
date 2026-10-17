@@ -126,6 +126,8 @@ gcloud scheduler jobs resume bawue-scraper-staging --location $REGION
   a Hub outage at task-start time fails that run. If that becomes a problem, put
   an Artifact Registry remote repository in front of it and change only the
   `--image` value.
+- **Watch Upstash egress.** The free tier allows 10 GB/month per database, and
+  the pipeline reads every listed item from Redis on each run, cached ones too.
 - **Production** reuses all of this: run `bootstrap.sh` with `ENVIRONMENT=prod`,
   set up GitHub environment **`prod`** the same way, then Actions → **Deploy prod**
   (`deploy-prod.yml` — job `bawue-scraper-prod`, secrets `bawue-prod-*`). Its image
