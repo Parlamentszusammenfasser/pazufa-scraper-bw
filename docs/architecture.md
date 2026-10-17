@@ -121,7 +121,7 @@ Dashed lines mark stages not yet implemented. See [status.md](status.md) for imp
 - Parliament code: `BW`, Wahlperiode: 17
 - Authentication: `X-API-Key` header with `collector` scope (see `bawue.api`)
 - Caching: Redis `BawueCache`, no TTL; a Vorgang is skipped only while its PARLIS fingerprint is unchanged (DD-052),
-  a Sitzungen date only while its events are unchanged (DD-066)
+  a Sitzungen date only while its events and agenda are unchanged (DD-066, DD-070)
 - Models: Generated from the OpenAPI spec by `pazufa-scraper-core` — no hand-written models
 - The PaZuFa backend handles deduplication/merging — the scraper does not need to
 
@@ -347,6 +347,8 @@ other type are dropped defensively in `listing_page_extractor`, even if PARLIS r
 ### BawueSitzungenScraper
 
 Subclass of `SitzungsScraper`. Fetches ICS calendar, parses and filters events, builds `Sitzung` models.
+The Plenarsitzung of the next session also gets its TOPs from the agenda PDF on
+`/de/aktuelles/tagesordnungen` (`bawue.tagesordnung`, DD-070).
 Overrides `send_result()` to use `Parlament.BW`. Uses `_events_by_date` to bridge listing/item phases.
 
 **Field mapping:**
@@ -355,8 +357,8 @@ Overrides `send_result()` to use `Parlament.BW`. Uses `_events_by_date` to bridg
 |---------------|---------|------------------------------------------------------|
 | `termin`      | DTSTART | Naive → Europe/Berlin → UTC                          |
 | `gremium`     | SUMMARY | `extract_gremium_names()`, one Sitzung each (DD-006) |
-| `nummer`      | SUMMARY | Regex; currently no match → `0` + warning (DD-064)   |
-| `tops`        | —       | `[]` (not available in ICS feed)                     |
+| `nummer`      | SUMMARY | Regex; else agenda file name (DD-070); else `0` + warning (DD-064) |
+| `tops`        | Agenda PDF | Next Plenarsitzung only; Gesetzentwurf readings reference their Drucksachen by the hash the Vorgänge scraper uploaded (DD-070) |
 | `public`      | —       | `True`                                               |
 | `api_id`      | UID, date, gremium | `uuid5(NAMESPACE_URL, "{uid}\|{date}\|{gremium}")` (DD-069, DD-006) |
 

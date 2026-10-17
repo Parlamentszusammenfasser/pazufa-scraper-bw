@@ -101,8 +101,8 @@ Modelle werden automatisch aus der OpenAPI-Spezifikation generiert (`openapi-cli
 |-----------|-----------|---------|---------------------------------------------------------------------------------------------------------------|
 | `termin`  | datetime  | Ja      |                                                                                                               |
 | `gremium` | Gremium   | Ja      |                                                                                                               |
-| `nummer`  | integer   | Ja      | Aus SUMMARY (`"142. Sitzung"` → `142`), sonst `0` + Warnung. Feed liefert derzeit keine (DD-064, DoD-Gap).    |
-| `tops`    | list[Top] | Ja      | Aktuell `[]` — TOP-Scraping via PDF noch nicht implementiert. DoD-Gap: Phase 3 offen.                         |
+| `nummer`  | integer   | Ja      | Aus SUMMARY, sonst aus der Tagesordnung (nur nächste Plenarsitzung, DD-070), sonst `0` + Warnung (DD-064).   |
+| `tops`    | list[Top] | Ja      | Aus der Tagesordnung der nächsten Plenarsitzung (DD-070); Ausschüsse und spätere Sitzungen `[]`.            |
 | `public`  | boolean   | Ja      |                                                                                                               |
 
 ### Gremium

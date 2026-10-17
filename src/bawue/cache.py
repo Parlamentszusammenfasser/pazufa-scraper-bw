@@ -16,6 +16,11 @@ from redis.retry import Retry
 logger = logging.getLogger(__name__)
 
 
+def drucksache_hash_key(drucksnr: str) -> str:
+    """Key of the hash the Vorgänge scraper uploaded for a Drucksache; TOPs reference it (DD-070)."""
+    return f"drucks-hash:{drucksnr}"
+
+
 def _redact(redis_url: str) -> str:
     """Host and port of a Redis URL — never the credentials it carries."""
     try:
