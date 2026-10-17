@@ -219,15 +219,10 @@ class VorgangsScraper(Scraper):
     async def make_cache_key(self, item: Any) -> str:
         return str(item)
 
-    # Vorgänge are cached as attrs to_dict() JSON under a versioned `vg2:` key
-    # (see bawue.types / Phase 1 cache-format notes) — both Vorgang scrapers
-    # share this exact logic, so it lives here instead of being duplicated.
-    # BawueVorgaengeScraper overrides both to store a PARLIS fingerprint instead (DD-052).
+    # Both Vorgang scrapers store a fingerprint of their source under `vg2:<key>` and
+    # count a hit only while it matches (DD-052); each builds its own fingerprint.
     async def get_cached_result(self, item_key: str) -> str | None:
         return self.config.cache.get_raw(f"vg2:{item_key}", "Vorgang")
-
-    async def store_extracted_result(self, item_key: str, result: Any) -> None:
-        self.config.cache.store_raw(f"vg2:{item_key}", json.dumps(result.to_dict()), "Vorgang")
 
 
 class SitzungsScraper(Scraper):
