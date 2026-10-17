@@ -65,6 +65,9 @@ GBl-PDFs in WP17 sind damit ungefährlich.
 - `_build_station` datiert eine `postparl-gsblt`-Station mit dem gefundenen
   Ausgabedatum. Das Dokument behält bewusst die PARLIS-Datierung als
   `zp_referenz` (das Ausfertigungsdatum) — nur die Station wandert.
+- Das Dokument verlinkt die **offizielle PDF** samt `#page`-Anker: Der Landtag spiegelt
+  das Gesetzblatt nur lückenhaft (2026 Nr. 81: 404, der Vorgang lief täglich neu). Die
+  Datei ist identisch, der Hash bleibt gleich. Vor 2024 bleibt der PARLIS-Link.
 
 Damit wird **Issue #9 an seiner Wurzel** gelöst: Der PARLIS-Scraper baut die
 `postparl-gsblt`-Station ohnehin aus seiner eigenen Fundstelle, er datierte sie nur

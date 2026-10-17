@@ -5479,6 +5479,7 @@ class TestIssue9GesetzblattAusgabedatum:
         lookup = MagicMock()
         lookup.publikationsdatum = AsyncMock(return_value=result)
         lookup.inkrafttreten = AsyncMock(return_value=None)
+        lookup.pdf_url = AsyncMock(return_value=None)
         return lookup
 
     def _raw(self):
@@ -5549,6 +5550,48 @@ _GBL_GESETZESBESCHLUSS = {
 }
 
 
+class TestGesetzblattOfficialPdf:
+    """The Landtag mirrors the Gesetzblatt only partly: V-247045 cites GBl 2026 Nr. 81, whose
+    Landtag link is 404, so the Vorgang was retried every day. The official PDF is the same file."""
+
+    _OFFICIAL = "https://www.baden-wuerttemberg.de/index.php?eID=dumpFile&fn=GBl._2026_Nr._14_signed.pdf"
+
+    @staticmethod
+    def _gsblt_dokument(vorgang):
+        return next(s for s in vorgang.stationen if s.typ == Stationstyp.POSTPARL_GSBLT).dokumente[0]
+
+    def _scraper(self, official):
+        lookup = TestIssue98KraftStation._lookup(None)
+        lookup.pdf_url = AsyncMock(return_value=official)
+        scraper = TestIssue9GesetzblattAusgabedatum()._scraper(lookup)
+        scraper._retry_next_cycle = set()
+        scraper._today = lambda: date(2026, 10, 17)
+        return scraper
+
+    @pytest.mark.asyncio
+    async def test_links_the_official_pdf_with_the_page_anchor(self):
+        """The anchor keeps the enriched hash equal to the Landtag copy's: no second row (DD-043)."""
+        scraper = self._scraper(self._OFFICIAL)
+        vorgang = await scraper._build_vorgang(TestIssue98KraftStation._raw())
+
+        assert self._gsblt_dokument(vorgang).link == f"{self._OFFICIAL}#page=1"
+        scraper._gsblt_dates.pdf_url.assert_awaited_with(2026, 14)
+
+    @pytest.mark.asyncio
+    async def test_placeholder_hash_does_not_change(self):
+        with_official = await self._scraper(self._OFFICIAL)._build_vorgang(TestIssue98KraftStation._raw())
+        without = await self._scraper(None)._build_vorgang(TestIssue98KraftStation._raw())
+
+        assert self._gsblt_dokument(with_official).hash_ == self._gsblt_dokument(without).hash_
+
+    @pytest.mark.asyncio
+    async def test_keeps_the_parlis_link_without_an_official_pdf(self):
+        """Citations before 2024 are not in the electronic Gesetzblatt."""
+        vorgang = await self._scraper(None)._build_vorgang(TestIssue98KraftStation._raw())
+
+        assert self._gsblt_dokument(vorgang).link == _GBL_FUNDSTELLE["pdf_url"]
+
+
 class TestIssue98KraftStation:
     """Issue #98 / DD-071. Real case V-244420 (LNRSchG, GBl 2026 Nr. 14): in force 01.06.2026."""
 
@@ -5565,6 +5608,7 @@ class TestIssue98KraftStation:
         lookup = MagicMock()
         lookup.publikationsdatum = AsyncMock(return_value=_GBL_AUSGABEDATUM)
         lookup.inkrafttreten = AsyncMock(return_value=kraft)
+        lookup.pdf_url = AsyncMock(return_value=None)
         return lookup
 
     @staticmethod

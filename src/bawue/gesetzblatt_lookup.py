@@ -57,6 +57,11 @@ class GesetzblattDateLookup:
         detail = await self._detail(jahr, nummer)
         return parse_german_date(detail.publikationsdatum) if detail else None
 
+    async def pdf_url(self, jahr: int, nummer: int) -> str | None:
+        """Official PDF of the entry: the Landtag's copy is incomplete (2026 Nr. 81: 404). None before 2024."""
+        detail = await self._detail(jahr, nummer)
+        return detail.pdf_url if detail else None
+
     async def inkrafttreten(self, jahr: int, nummer: int) -> datetime | None:
         """Latest date of the law's Inkrafttreten clause: the whole law is in force (DD-071).
 

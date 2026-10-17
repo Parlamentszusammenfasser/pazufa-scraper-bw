@@ -1187,6 +1187,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             pdf_url = await self._fallback_pdf_url(fund.get("drucksache"))
             if not pdf_url:
                 return []
+        link = await self._official_gesetzblatt_pdf(fund) or pdf_url
 
         doc_typ = map_dokumententyp(
             mapping_text,
@@ -1220,7 +1221,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             typ=doc_typ,
             zp_modifiziert=zp_start,
             zp_referenz=zp_start,
-            link=pdf_url,
+            link=link,
             autoren=autoren,
             drucksnr=none_if_blank(fund.get("drucksache")),
         )
@@ -1250,6 +1251,18 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 logger.warning("Document enrichment failed for %s", pdf_url)
 
         return [dok]
+
+    async def _official_gesetzblatt_pdf(self, fund: RawFundstelle) -> str | None:
+        """The Gesetzblatt's own PDF with the Fundstelle's #page anchor, else None.
+
+        The Landtag mirrors the Gesetzblatt only partly; its 404 made a Vorgang retry daily.
+        Same file, same anchor: the enriched hash stays that of the Landtag copy (DD-043).
+        """
+        if self._gsblt_dates is None or fund.get("gesetzblatt_nr") is None:
+            return None
+        official = await self._gsblt_dates.pdf_url(fund["gesetzblatt_jahr"], fund["gesetzblatt_nr"])
+        anchor = (fund.get("pdf_url") or "").partition("#")[2]
+        return f"{official}#{anchor}" if official and anchor else official
 
     async def _fallback_pdf_url(self, drucksache: str | None) -> str | None:
         """Reconstruct and verify a Landtag-BW PDF URL when PARLIS omits it.
