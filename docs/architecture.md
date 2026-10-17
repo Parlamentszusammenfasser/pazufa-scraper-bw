@@ -259,7 +259,7 @@ All three scrapers follow the same two-phase pattern:
 | Scraper                   | `listing_urls` values                                    | `listing_page_extractor` returns | `item_extractor` returns    | `send_result` override   |
 |---------------------------|----------------------------------------------------------|----------------------------------|-----------------------------|--------------------------|
 | `BawueVorgaengeScraper`   | enabled Vorgangstyp strings (3 by default, configurable) | vorgang IDs                      | `Vorgang\|None`             | Yes — `upload_vorgang`   |
-| `BawueBeteiligungScraper` | LP index keys (`lp-17`)                                  | process slugs                    | `Vorgang\|None`             | Yes — `upload_vorgang`   |
+| `BawueBeteiligungScraper` | LP index key (`lp-{wahlperiode}`)                        | process slugs                    | `Vorgang\|None`             | Yes — `upload_vorgang`   |
 | `BawueSitzungenScraper`   | ICS feed URL                                             | ISO date strings                 | `(datetime, List[Sitzung])` | Yes — use `Parlament.BW` |
 
 **PARLIS listing URL pattern:** PARLIS has no traditional listing URLs. `listing_urls` contains the enabled Vorgangstyp
