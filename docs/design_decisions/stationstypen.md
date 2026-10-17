@@ -60,8 +60,8 @@ WARNING verworfen (DD-017).
 
 **Kontext:** PARLIS liefert `00.00.2028`, wenn nur das Jahr bekannt ist.
 
-**Entscheidung:** Fallback in drei Stufen: `TT.MM.JJJJ` → erste vierstellige Jahreszahl als
-1. Januar → aktueller Zeitpunkt. Alle Daten sind zeitzonenbewusst (UTC), weil das Backend
+**Entscheidung:** `TT.MM.JJJJ` → erste Jahreszahl `20JJ` als 1. Januar → sonst wird die
+Fundstelle verworfen (ERROR, DD-017). Alle Daten sind zeitzonenbewusst (UTC), weil das Backend
 naive Daten mit HTTP 422 ablehnt.
 
 <a id="dd-011"></a>
