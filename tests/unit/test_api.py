@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 
-from bawue.api import BawueApiError, put_kalender, put_vorgang
+from bawue.api import BawueApiError, get_vorgaenge, put_kalender, put_vorgang
 from bawue.types import Parlament
 
 
@@ -75,3 +75,30 @@ class TestPutKalender:
         mock_put.assert_called_once_with(
             Parlament.BW, datum, client=client, body=sitzungen, x_scraper_id=str(scraper_id)
         )
+
+
+class TestGetVorgaengeIssue82:
+    @staticmethod
+    def _page(n: int) -> MagicMock:
+        return MagicMock(
+            status_code=200, parsed=[MagicMock(to_dict=MagicMock(return_value={"i": i})) for i in range(n)]
+        )
+
+    def test_reads_pages_from_1_until_a_short_page(self):
+        with patch("bawue.api._vorgang_get.sync_detailed", side_effect=[self._page(100), self._page(3)]) as get:
+            assert len(get_vorgaenge(MagicMock(), 18)) == 103
+        assert [c.kwargs["page"] for c in get.call_args_list] == [1, 2]
+        assert get.call_args.kwargs["p"] == Parlament.BW
+        assert get.call_args.kwargs["wp"] == 18
+
+    def test_204_after_a_full_page_ends(self):
+        with patch("bawue.api._vorgang_get.sync_detailed", side_effect=[self._page(100), _resp(204)]):
+            assert len(get_vorgaenge(MagicMock(), 18)) == 100
+
+    def test_error_raises(self):
+        with (
+            patch("bawue.api._vorgang_get.sync_detailed", return_value=_resp(500)),
+            pytest.raises(BawueApiError) as excinfo,
+        ):
+            get_vorgaenge(MagicMock(), 18)
+        assert excinfo.value.method == "vorgang_get"
