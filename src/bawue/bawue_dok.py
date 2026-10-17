@@ -27,7 +27,7 @@ from kreuzberg import ConcurrencyConfig, ExtractionConfig, OcrConfig, PageConfig
 from pazufa_corelib.llm import LLMConnector
 from pazufa_corelib.normalization import normalize_volltext as _core_normalize_volltext
 
-from bawue.cache import BawueCache
+from bawue.cache import BawueCache, RedisUnavailableError
 from bawue.types import TODO_MARKER, Doktyp, Dokument, Ressort, Zusammenfassungstupel
 
 logger = logging.getLogger(__name__)
@@ -952,7 +952,10 @@ async def vorgang_kurztitel(
 
     user_message = f"{KURZTITEL_PROMPT}\n\nOffizieller Titel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
     cache_key = _prompt_cache_key(user_message, model)
-    cached = _redis_get(cache, cache_key, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
+    try:
+        cached = _redis_get(cache, cache_key, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
+    except RedisUnavailableError:
+        return titel  # no paid call whose answer could not be cached (issue #105)
     if cached is not None:
         if metrics is not None:
             metrics.kurztitel_generated += 1
@@ -1038,7 +1041,10 @@ async def vorgang_ressort(
 
     user_message = f"{RESSORT_PROMPT}\n\nTitel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
     cache_key = _prompt_cache_key(user_message, model)
-    cached = _redis_get(cache, cache_key, prefix=_RESSORT_CACHE_PREFIX, typehint="Vorgang Ressort")
+    try:
+        cached = _redis_get(cache, cache_key, prefix=_RESSORT_CACHE_PREFIX, typehint="Vorgang Ressort")
+    except RedisUnavailableError:
+        return None  # no paid call whose answer could not be cached (issue #105)
     if cached is not None:
         raw = _cached_ressort(cached)
     else:

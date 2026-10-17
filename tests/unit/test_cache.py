@@ -103,3 +103,15 @@ def test_dump_config_redacts_secrets(monkeypatch, tmp_path):
     dumped = str(config)
     assert "secret-token" not in dumped
     assert "test-key" not in dumped
+
+
+def test_issue105_read_error_raises_instead_of_reading_as_a_miss():
+    with patch("bawue.cache.redis.Redis"):
+        cache = BawueCache("localhost", 6379)
+    cache.redis_client.get.side_effect = redis.ConnectionError("gone")
+    with pytest.raises(RedisUnavailableError):
+        cache.get_raw("vg2:V-1")
+
+
+def test_issue105_disabled_cache_still_reads_as_a_miss():
+    assert BawueCache(None, None).get_raw("vg2:V-1") is None
