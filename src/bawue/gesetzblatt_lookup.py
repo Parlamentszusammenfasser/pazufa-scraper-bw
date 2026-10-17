@@ -1,4 +1,4 @@
-"""Gesetzblatt ``(Jahr, Nr.) → Publikationsdatum`` lookup (DD-047).
+"""Gesetzblatt ``(Jahr, Nr.) → Publikationsdatum`` lookup (DD-047), and its Inkrafttreten (DD-071).
 
 PARLIS dates a Gesetzblatt Fundstelle by the *Ausfertigung* ("Gesetz vom …"),
 not by the day the Gesetzblatt was actually issued — the `postparl-gsblt` station
@@ -13,10 +13,13 @@ laws — and each would otherwise re-fetch the same detail page.
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+import tempfile
+from datetime import UTC, datetime, time
+from pathlib import Path
 
+from bawue.bawue_dok import extract_pdf_text
 from bawue.gesetzblatt_client import GesetzblattClient
-from bawue.gesetzblatt_parser import parse_detail
+from bawue.gesetzblatt_parser import RawGesetzblattDetail, parse_detail, parse_inkrafttreten
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,8 @@ class GesetzblattDateLookup:
 
     def __init__(self, client: GesetzblattClient) -> None:
         self._client = client
-        self._cache: dict[tuple[int, int], datetime | None] = {}
+        self._cache: dict[tuple[int, int], RawGesetzblattDetail | None] = {}
+        self._kraft: dict[tuple[int, int], datetime | None] = {}
 
     async def publikationsdatum(self, jahr: int, nummer: int) -> datetime | None:
         """Return the Ausgabedatum of Gesetzblatt ``jahr`` Nr. ``nummer``.
@@ -45,14 +49,53 @@ class GesetzblattDateLookup:
         goes back to 2024, so older citations (and any fetch/parse failure) simply
         leave the caller's PARLIS date in place.
         """
-        key = (jahr, nummer)
-        if key in self._cache:
-            return self._cache[key]
-        result = await asyncio.to_thread(self._fetch, jahr, nummer)
-        self._cache[key] = result
-        return result
+        detail = await self._detail(jahr, nummer)
+        return parse_german_date(detail.publikationsdatum) if detail else None
 
-    def _fetch(self, jahr: int, nummer: int) -> datetime | None:
+    async def inkrafttreten(self, jahr: int, nummer: int) -> datetime | None:
+        """Return the latest date the law's Inkrafttreten clause names (DD-071).
+
+        The latest date is when the whole law is in force (the BU scraper's rule while
+        upstream models staggered dates). None when the entry, its PDF or the clause
+        cannot be read; an unreadable clause is logged, never guessed.
+        """
+        key = (jahr, nummer)
+        if key not in self._kraft:
+            self._kraft[key] = await self._read_inkrafttreten(jahr, nummer)
+        return self._kraft[key]
+
+    async def _read_inkrafttreten(self, jahr: int, nummer: int) -> datetime | None:
+        detail = await self._detail(jahr, nummer)
+        verkuendung = await self.publikationsdatum(jahr, nummer)
+        if detail is None or detail.pdf_url is None or verkuendung is None:
+            return None
+        try:
+            content = await asyncio.to_thread(self._client.fetch_pdf, detail.pdf_url)
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(content)
+            pdf_path = Path(tmp.name)
+            try:
+                text, _hash = await extract_pdf_text(pdf_path)
+            finally:
+                pdf_path.unlink(missing_ok=True)
+        except Exception as exc:
+            logger.warning("Gesetzblatt %d Nr. %d: PDF unreadable, no Inkrafttreten (%s)", jahr, nummer, exc)
+            return None
+        dates = parse_inkrafttreten(text, verkuendung.date())
+        if not dates:
+            logger.warning(
+                "Gesetzblatt %d Nr. %d: Inkrafttreten clause not understood, no postparl-kraft", jahr, nummer
+            )
+            return None
+        return datetime.combine(max(dates), time(), tzinfo=UTC)
+
+    async def _detail(self, jahr: int, nummer: int) -> RawGesetzblattDetail | None:
+        key = (jahr, nummer)
+        if key not in self._cache:
+            self._cache[key] = await asyncio.to_thread(self._fetch, jahr, nummer)
+        return self._cache[key]
+
+    def _fetch(self, jahr: int, nummer: int) -> RawGesetzblattDetail | None:
         try:
             html = self._client.fetch_detail_for(jahr, nummer)
         except Exception as exc:  # network error, 404 for a pre-2024 citation, …
@@ -63,12 +106,11 @@ class GesetzblattDateLookup:
         except Exception as exc:
             logger.warning("Could not parse Gesetzblatt %d Nr. %d: %s", jahr, nummer, exc)
             return None
-        zp = parse_german_date(detail.publikationsdatum)
-        if zp is None:
+        if parse_german_date(detail.publikationsdatum) is None:
             logger.warning(
                 "Gesetzblatt %d Nr. %d has no parseable Publikationsdatum (%r)",
                 jahr,
                 nummer,
                 detail.publikationsdatum,
             )
-        return zp
+        return detail

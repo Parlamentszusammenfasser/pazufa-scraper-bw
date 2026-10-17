@@ -57,6 +57,10 @@ class GesetzblattClient:
         resp = self._get(detail_url, timeout=30)
         return resp.text
 
+    def fetch_pdf(self, pdf_url: str) -> bytes:
+        """Fetch a Gesetzblatt PDF (the ``eID=dumpFile`` link of a detail page)."""
+        return self._get(pdf_url, timeout=60).content
+
     def fetch_detail_for(self, year: int, num: int) -> str:
         """Fetch the detail page for entry ``YYYY-N``. Raises on any error status."""
         return self.fetch_detail(f"{_DETAIL_BASE}/{year}-{num}")

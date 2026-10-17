@@ -1,7 +1,8 @@
 """Tests for the Gesetzblatt (Jahr, Nr.) → Publikationsdatum lookup (DD-047)."""
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -14,6 +15,7 @@ DETAIL_HTML = """<html><body>
 <time class="article-title__date" datetime="2026-02-27">27.02.2026</time>
 <div class="rsmbwlawsheet_show_text">Ausfertigung: 10.02.2026 Gesetzblatt-Typ: Gesetz
 Federführung: Sozialministerium</div>
+<a href="/index.php?eID=dumpFile&amp;f=1&amp;fn=GBl2026011.pdf">PDF</a>
 </body></html>"""
 
 
@@ -84,3 +86,69 @@ class TestPublikationsdatum:
         await lookup.publikationsdatum(2026, 11)
         await lookup.publikationsdatum(2026, 12)
         assert client.fetch_detail_for.call_count == 2
+
+
+_LNRSCHG = (Path(__file__).parent.parent / "fixtures" / "gesetzblatt" / "inkrafttreten" / "GBl-2026-14.txt").read_text()
+
+
+def _pdf_client(**kwargs) -> MagicMock:
+    client = _client(**kwargs)
+    client.fetch_pdf.return_value = b"%PDF"
+    return client
+
+
+def _extracted(text: str):
+    return patch("bawue.gesetzblatt_lookup.extract_pdf_text", return_value=(text, "hash"))
+
+
+class TestInkrafttretenIssue98:
+    """GitHub issue #98 / DD-071: the latest date the law's Inkrafttreten clause names."""
+
+    @pytest.mark.asyncio
+    async def test_reads_the_cited_pdf(self):
+        client = _pdf_client()
+        with _extracted(_LNRSCHG):
+            assert await GesetzblattDateLookup(client).inkrafttreten(2026, 14) == datetime(2026, 6, 1, tzinfo=UTC)
+        client.fetch_pdf.assert_called_once_with(
+            "https://www.baden-wuerttemberg.de/index.php?eID=dumpFile&f=1&fn=GBl2026011.pdf"
+        )
+
+    @pytest.mark.asyncio
+    async def test_staggered_clause_yields_the_latest_date(self):
+        """The date the whole law is in force, as the BU scraper does it (DD-071)."""
+        text = "Artikel 3\nDieses Gesetz tritt am 1. März 2026 in Kraft. Artikel 2 tritt am 1. Januar 2028 in Kraft.\n"
+        with _extracted(text):
+            assert await GesetzblattDateLookup(_pdf_client()).inkrafttreten(2026, 11) == datetime(
+                2028, 1, 1, tzinfo=UTC
+            )
+
+    @pytest.mark.asyncio
+    async def test_caches_the_result(self):
+        client = _pdf_client()
+        lookup = GesetzblattDateLookup(client)
+        with _extracted(_LNRSCHG):
+            await lookup.inkrafttreten(2026, 14)
+            await lookup.inkrafttreten(2026, 14)
+            await lookup.publikationsdatum(2026, 14)
+        assert client.fetch_detail_for.call_count == 1
+        assert client.fetch_pdf.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_unparseable_clause_is_logged_not_guessed(self, caplog):
+        with _extracted("Artikel 2\nDieses Gesetz tritt in Kraft, sobald alle Länder zugestimmt haben.\n"):
+            assert await GesetzblattDateLookup(_pdf_client()).inkrafttreten(2026, 11) is None
+        assert "Inkrafttreten" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_unreadable_pdf_returns_none(self, caplog):
+        client = _pdf_client()
+        client.fetch_pdf.side_effect = requests.HTTPError("503")
+        assert await GesetzblattDateLookup(client).inkrafttreten(2026, 11) is None
+        assert "503" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_unresolvable_entry_returns_none(self):
+        """Pre-2024: no electronic Gesetzblatt, no K station (like DD-047)."""
+        client = _pdf_client(exc=requests.HTTPError("404"))
+        assert await GesetzblattDateLookup(client).inkrafttreten(2022, 41) is None
+        client.fetch_pdf.assert_not_called()
