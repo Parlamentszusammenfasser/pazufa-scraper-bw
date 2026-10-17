@@ -62,18 +62,6 @@ class BawueConfig:
                     action="store_true",
                 ),
             ),
-            ConfigProp(
-                "dry_run",
-                "main.dry-run",
-                "DRY_RUN",
-                "dry_run",
-                False,
-                lambda p: p.add_argument(
-                    "--dry-run",
-                    help="Run scrapers without submitting results to the API",
-                    action="store_true",
-                ),
-            ),
             ConfigProp("collector_id", "main.collector-uuid", "COLLECTOR_ID", required=True),
             ConfigProp("cycle_time_s", "main.cycle-time-s", "CYCLE_TIME_S", None, 10800),
             ConfigProp("max_concurrency", "main.max-concurrency", "MAX_CONCURRENCY", None, 3),
@@ -149,12 +137,7 @@ class BawueConfig:
                 config.value_set_by = "env"
 
     def _init_secondary_objects(self) -> None:
-        self.cache = BawueCache(
-            self.redis_host,
-            self.redis_port,
-            disabled=self.dry_run,
-            redis_url=self.redis_url,
-        )
+        self.cache = BawueCache(self.redis_host, self.redis_port, redis_url=self.redis_url)
 
     def load(self) -> None:
         parser = ArgumentParser(prog="bawue", description="Bundled BaWue Scrapers")

@@ -1384,7 +1384,6 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
         initial_delay=0.2, min_delay=0.05, backoff_multiplier=10.0, recovery_factor=0.5
     )
     mock_config = MagicMock()
-    mock_config.dry_run = False
     scraper.config = mock_config
     scraper.scraper_id = "test-scraper-id"
     scraper._llm_enabled = False
@@ -5527,7 +5526,7 @@ class TestIssue9GesetzblattAusgabedatum:
 
     @pytest.mark.asyncio
     async def test_no_lookup_configured_keeps_parlis_date(self):
-        """dry_run and unit tests construct the scraper without a lookup."""
+        """Unit tests construct the scraper without a lookup."""
         vorgang = await self._scraper()._build_vorgang(self._raw())
 
         assert self._gsblt(vorgang).zp_start == _GBL_AUSFERTIGUNG

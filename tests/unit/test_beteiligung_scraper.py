@@ -551,7 +551,6 @@ class TestRunSummary:
         scraper = _make_scraper()
         mock_vorgang = MagicMock()
         mock_config = MagicMock()
-        mock_config.dry_run = False
         scraper.config = mock_config
         scraper.scraper_id = "test-scraper-id"
 
@@ -591,7 +590,6 @@ class TestRunSummary:
 
         scraper = _make_scraper()
         mock_config = MagicMock()
-        mock_config.dry_run = False
         scraper.config = mock_config
         scraper.scraper_id = "test-scraper-id"
 
@@ -640,7 +638,6 @@ class TestRunSummary:
 
         scraper = _make_scraper()
         mock_config = MagicMock()
-        mock_config.dry_run = False
         scraper.config = mock_config
         scraper.scraper_id = "test-scraper-id"
 

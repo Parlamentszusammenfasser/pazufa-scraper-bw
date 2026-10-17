@@ -235,7 +235,7 @@ classDiagram
     class UploadThrottle {
         <<module>>
         +with_upload_retry(api_call, rate_limiter, max_retries, exception_type) T
-        +upload_vorgang(client, scraper_id, upload_limiter, item, dry_run, log_item) UploadOutcome
+        +upload_vorgang(client, scraper_id, upload_limiter, item, log_item) UploadOutcome
     }
 
     BawueVorgaengeScraper --> ParlisClient
@@ -427,7 +427,7 @@ Retry wrapper for direct API uploads (`upload_throttle.py`). Used by `BawueVorga
 `BawueBeteiligungScraper` for submitting `Vorgang` objects to the PaZuFa API:
 
 - `with_upload_retry()` — generic retry function with 429 detection (max 5 retries, backed by `AdaptiveRateLimiter`)
-- `upload_vorgang()` — uploads a single `Vorgang` with error handling, dry-run support, and per-status-code logging
+- `upload_vorgang()` — uploads a single `Vorgang` with error handling and per-status-code logging
 
 ### BawueDok (Document Enrichment)
 

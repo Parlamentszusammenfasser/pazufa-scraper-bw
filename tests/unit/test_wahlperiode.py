@@ -1,5 +1,5 @@
 """Issues #6/#63: edge cases of the derived search start; the regular cases run
-through the scrapers' config (TestIssue63WahlperiodeConfig, dry_run)."""
+through the scrapers' config (TestIssue63WahlperiodeConfig)."""
 
 from datetime import date, timedelta
 

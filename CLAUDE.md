@@ -114,10 +114,7 @@ make test-all        # unit + integration (integration needs a backend)
 make audit           # dependency vulnerability scan (SCA)
 make lint            # ruff lint (CI gates: trivy audit → ruff-lint + ruff-format → pytest)
 make format          # ruff format (black-compatible)
-make run             # run the scraper (needs config.toml + Redis)
-
-# Dry run — no API/Redis, fast local diagnosis of the pipeline:
-.venv/bin/python -m bawue.dry_run --scraper vorgaenge --limit 3 --verbosity 2
+make run             # run the scraper (needs config.toml; Redis only with a [cache] section)
 ```
 
 Config is 4-tier: defaults → TOML (`config.*.toml`) → env vars → CLI. LLM document

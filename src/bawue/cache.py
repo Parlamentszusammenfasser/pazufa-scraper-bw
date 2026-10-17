@@ -35,12 +35,11 @@ class BawueCache:
         self,
         redis_host: str | None,
         redis_port: int | None,
-        disabled: bool = False,
         redis_url: str | None = None,
     ) -> None:
-        self.disabled = disabled
+        self.disabled = False
         self.redis_client: redis.Redis | None = None
-        if disabled or (not redis_url and (redis_host is None or redis_port is None)):
+        if not redis_url and (redis_host is None or redis_port is None):
             self.disabled = True
             logger.warning("Caching disabled")
             return

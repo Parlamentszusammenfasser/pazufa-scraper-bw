@@ -117,7 +117,6 @@ class BawueBeteiligungScraper(VorgangsScraper):
             self.scraper_id,
             self._upload_limiter,
             item,
-            dry_run=self.config.dry_run,
             log_item=self.log_item,
         )
         if outcome.vorgang is not None:

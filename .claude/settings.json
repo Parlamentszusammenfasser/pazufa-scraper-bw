@@ -18,8 +18,6 @@
       "Bash(.venv/bin/pytest *)",
       "Bash(.venv/bin/ruff check *)",
       "Bash(.venv/bin/ruff format *)",
-      "Bash(.venv/bin/python -m bawue.dry_run)",
-      "Bash(.venv/bin/python -m bawue.dry_run *)",
       "Bash(git status)",
       "Bash(git status *)",
       "Bash(git diff *)",
