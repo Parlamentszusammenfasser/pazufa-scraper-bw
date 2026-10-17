@@ -13,7 +13,7 @@ help: ## Show available targets
 install: ## Install all dependencies (corelib is fetched from its pinned git tag)
 	$(PYTHON) -m venv .venv
 	$(VENV)/pip install --upgrade pip poetry
-	$(VENV)/poetry lock --check 2>/dev/null || $(VENV)/poetry lock --regenerate
+	@$(VENV)/poetry check --lock || { echo "poetry.lock does not match pyproject.toml: run $(VENV)/poetry lock and commit it"; exit 1; }
 	$(VENV)/poetry install
 
 test: ## Run unit tests
