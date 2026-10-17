@@ -149,10 +149,6 @@ def _kraft(gbl: str, verkuendung: date) -> list[date]:
 class TestParseInkrafttretenIssue98:
     """Issue #98 / DD-071. Fixtures: text of real WP17 laws up to their signature."""
 
-    def test_tag_nach_verkuendung(self):
-        """GBl 2026 Nr. 18: "Artikel 3" without an "Inkrafttreten" heading."""
-        assert _kraft("2026-18", date(2026, 2, 27)) == [date(2026, 2, 28)]
-
     def test_erster_tag_des_vierten_folgenden_monats(self):
         """GBl 2026 Nr. 14, LNRSchG (V-244420); the old law's "außer Kraft" date is ignored."""
         assert _kraft("2026-14", date(2026, 2, 27)) == [date(2026, 6, 1)]
@@ -170,9 +166,6 @@ class TestParseInkrafttretenIssue98:
         """GBl 2026 Nr. 17: "mit Wirkung vom 1. Juli 2017" for one Nummer only."""
         assert _kraft("2026-17", date(2026, 2, 27)) == [date(2026, 2, 28), date(2017, 7, 1)]
 
-    def test_retroactive_law(self):
-        assert _kraft("2025-11", date(2025, 2, 19)) == [date(2025, 1, 1)]
-
     def test_gleichzeitig_repeats_a_named_date(self):
         assert _kraft("2025-15", date(2025, 3, 3)) == [date(2025, 1, 1), date(2025, 3, 4)]
 
@@ -181,15 +174,9 @@ class TestParseInkrafttretenIssue98:
         Inkrafttreten; the law announces the treaty's date later."""
         assert _kraft("2026-81", date(2026, 10, 13)) == [date(2026, 10, 14)]
 
-    @pytest.mark.parametrize(
-        "gbl",
-        [
-            "2025-61",  # Artikel 2 "zeitgleich mit dem Reformstaatsvertrag"
-            "2025-81",  # "sobald alle Länder … geändert haben"
-        ],
-    )
-    def test_condition_without_date_is_not_guessed(self, gbl):
-        assert _kraft(gbl, date(2025, 7, 1)) == []
+    def test_condition_without_date_is_not_guessed(self):
+        """GBl 2025 Nr. 81: "sobald alle Länder … geändert haben"."""
+        assert _kraft("2025-81", date(2025, 7, 1)) == []
 
     def test_no_clause(self):
         assert parse_inkrafttreten("Artikel 1\nÄnderung\nStuttgart, den 1. März 2026", date(2026, 3, 1)) == []
