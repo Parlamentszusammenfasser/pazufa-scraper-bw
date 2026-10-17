@@ -9,7 +9,7 @@ Versionskonstante gibt es bewusst nicht; ein gezielter Neubau ändert den Finger
 
 | Präfix | Inhalt | DD |
 |---|---|---|
-| `vg2:` | Fingerprint je PARLIS-Vorgang; Beteiligung: nur Slug | DD-052 |
+| `vg2:` | Fingerprint je PARLIS-Vorgang bzw. Beteiligungsprozess | DD-052 |
 | `sz:` | Fingerprint der Termine (+ Tagesordnung) je Tag | DD-066, DD-070 |
 | `llm-semantics:` | LLM-Ergebnis je Dokument und Prompt | DD-020 |
 | `vorgang-kurztitel:`, `vorgang-ressort:` | LLM-Ergebnis je Vorgang | DD-053, DD-055, DD-063 |
@@ -46,11 +46,16 @@ vollständig vor.
    alles), die Reihenfolge, Titel/Initiative/Sachgebiet/Typ/Deskriptoren, Scraper-Output.
 4. Ein Vorgang mit noch fehlendem PDF (Issue #66) oder künftiger Fundstelle (DD-068) wird
    nicht gecacht.
+5. **Beteiligungsportal** (Issue #104): `vg2:<slug>` hält den Fingerprint aus Status (Liste),
+   Titel, Ministerium, Kommentarfrist und PDF-Links (URL + Titel). Dafür wird die
+   Detailseite schon beim Listen gelesen, ein Request je Prozess und Lauf (derzeit ~6) —
+   nur so fallen ein neues PDF oder eine geänderte Frist auf. Scheitert der Abruf, gibt es
+   keinen Fingerprint: kein Treffer, kein Cache-Eintrag.
 
 **Konsequenz:** Neue abgeleitete Felder erreichen abgeschlossene Vorgänge erst nach Löschen
 der `vg2:`-Einträge. Ein Neubau lädt die PDFs erneut; LLM-Calls fallen nur für neue
-Dokumente an. Ein unter gleicher URL ausgetauschtes PDF bleibt unbemerkt. Der
-Beteiligungs-Scraper hat keine Änderungserkennung.
+Dokumente an. Ein unter gleicher URL ausgetauschtes PDF bleibt unbemerkt (#73). Die alten
+Beteiligungs-Einträge (Vorgang-JSON) treffen nie und werden einmal neu gebaut.
 
 <a id="dd-066"></a>
 ## DD-066: Fingerprint der Termine im `sz:`-Cache

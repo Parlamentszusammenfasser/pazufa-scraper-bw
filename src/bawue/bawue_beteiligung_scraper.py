@@ -1,10 +1,12 @@
 """BaWue Beteiligung scraper: VorgangsScraper subclass for Beteiligungsportal Baden-Württemberg."""
 
 import asyncio
+import json
 import logging
 import time
 import uuid
 from datetime import UTC, datetime
+from hashlib import sha256
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
@@ -68,6 +70,8 @@ class BawueBeteiligungScraper(VorgangsScraper):
         self._client = BeteiligungClient(wahlperiode=self._wahlperiode, request_delay_s=delay)
         self._api_client = build_client(config.database_url, config.api_key)
         self._raw_cache: dict[str, RawBeteiligungProcess] = {}
+        self._details: dict[str, RawBeteiligungDetail] = {}
+        self._fingerprints: dict[str, str] = {}
 
         self._upload_limiter = create_upload_limiter()
 
@@ -142,8 +146,30 @@ class BawueBeteiligungScraper(VorgangsScraper):
         for process in processes:
             self._raw_cache[process.slug] = process
             slugs.append(process.slug)
+            # The detail page decides the cache hit (issue #104), so it is read here.
+            try:
+                html = await asyncio.to_thread(self._client.fetch_process_detail, process.url)
+                detail = parse_process_detail(html, BASE_URL)
+            except Exception as exc:
+                # No fingerprint: a cache miss; item_extractor retries and counts the failure.
+                logger.warning("Detail page of %s not read while listing: %s", process.slug, type(exc).__name__)
+                continue
+            self._details[process.slug] = detail
+            self._fingerprints[process.slug] = _process_fingerprint(process, detail)
 
         return slugs
+
+    async def get_cached_result(self, item_key: str) -> str | None:
+        """A cache hit only while the portal page is unchanged (issue #104, DD-052)."""
+        cached = await super().get_cached_result(item_key)
+        if cached is not None and cached == self._fingerprints.get(item_key):
+            return cached
+        return None
+
+    async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
+        fingerprint = self._fingerprints.get(item_key)
+        if fingerprint is not None:  # without one, the next cycle simply rebuilds
+            self.config.cache.store_raw(f"vg2:{item_key}", fingerprint, "Vorgang")
 
     async def item_extractor(self, slug: str) -> Vorgang | None:
         """Fetch detail page and build a Vorgang with preparl-regent station."""
@@ -154,8 +180,11 @@ class BawueBeteiligungScraper(VorgangsScraper):
             return None
 
         try:
-            html = await asyncio.to_thread(self._client.fetch_process_detail, process.url)
-            return await self._build_vorgang(slug, parse_process_detail(html, BASE_URL))
+            detail = self._details.pop(slug, None)
+            if detail is None:
+                html = await asyncio.to_thread(self._client.fetch_process_detail, process.url)
+                detail = parse_process_detail(html, BASE_URL)
+            return await self._build_vorgang(slug, detail)
         except Exception as exc:
             # Counted so the summary adds up (issue #83); not cached, so retried next cycle.
             logger.exception("Building Beteiligung process %s failed", slug)
@@ -320,3 +349,10 @@ def _print_beteiligung_summary(
         lines.extend(format_failed_section(failed_items, header="Failed Vorgänge"))
     print("=== BaWue Beteiligung Run Summary ===\n" + "\n".join(lines))
     return lines
+
+
+def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungDetail) -> str:
+    """What shows progress on the portal (issue #104): status, title, ministry, deadline, PDFs."""
+    pdfs = sorted([link["url"], link["title"]] for link in detail.pdf_links)
+    payload = [process.status, detail.title, detail.ministry, detail.comment_deadline, pdfs]
+    return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()

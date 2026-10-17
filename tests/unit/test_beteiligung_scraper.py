@@ -32,6 +32,8 @@ def _make_scraper():
     scraper = object.__new__(BawueBeteiligungScraper)
     scraper._wahlperiode = 17
     scraper._raw_cache = {}
+    scraper._details = {}
+    scraper._fingerprints = {}
     scraper._client = MagicMock()
     scraper._api_client = MagicMock()
     scraper._upload_limiter = AdaptiveRateLimiter(
@@ -789,3 +791,97 @@ class TestIssue39Ressort:
 
         assert vorgang.ressort is UNSET
         assert "ressort" not in vorgang.to_dict()
+
+
+class TestIssue104RefreshOnChange:
+    """Issue #104: a cached consultation is rebuilt when the portal shows progress (DD-052)."""
+
+    @staticmethod
+    def _scraper_with_dict_cache():
+        scraper = _make_scraper()
+        store: dict[str, str] = {}
+        scraper.config.cache.get_raw.side_effect = lambda key, *_: store.get(key)
+        scraper.config.cache.store_raw.side_effect = lambda key, value, *_: store.__setitem__(key, value) or True
+        return scraper, store
+
+    @staticmethod
+    async def _list(scraper, process, detail):
+        scraper._client.fetch_process_list.return_value = [process]
+        scraper._client.fetch_process_detail.return_value = "<html></html>"
+
+        async def _to_thread(fn, *args):
+            return fn(*args)
+
+        with (
+            patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", side_effect=_to_thread),
+            patch("bawue.bawue_beteiligung_scraper.parse_process_detail", return_value=detail),
+        ):
+            return await scraper.listing_page_extractor("lp-18")
+
+    async def _cycle(self, scraper, process, detail):
+        """List, check the cache, and cache as the pipeline does after an upload."""
+        [slug] = await self._list(scraper, process, detail)
+        hit = await scraper.get_cached_result(slug) is not None
+        if not hit:
+            await scraper.store_extracted_result(slug, MagicMock())
+        return hit
+
+    @pytest.mark.asyncio
+    async def test_unchanged_page_is_a_hit(self):
+        scraper, store = self._scraper_with_dict_cache()
+        assert not await self._cycle(scraper, _make_process(), _make_detail())
+        assert await self._cycle(scraper, _make_process(), _make_detail())
+        assert list(store) == ["vg2:entbuerokratisierung"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("process", "detail"),
+        [
+            (
+                _make_process(),
+                _make_detail(
+                    pdf_links=[
+                        {"title": "Entwurf (PDF)", "url": "https://beteiligungsportal.baden-wuerttemberg.de/a.pdf"},
+                        {"title": "Begründung (PDF)", "url": "https://beteiligungsportal.baden-wuerttemberg.de/b.pdf"},
+                    ]
+                ),
+            ),
+            (_make_process(), _make_detail(comment_deadline="20.11.2025")),
+            (_make_process(status="open"), _make_detail()),
+            (_make_process(), _make_detail(title="Entbürokratisierung II")),
+            (_make_process(), _make_detail(ministry="Staatsministerium")),
+        ],
+        ids=["added-pdf", "deadline", "status", "title", "ministry"],
+    )
+    async def test_progress_is_a_miss(self, process, detail):
+        scraper, _ = self._scraper_with_dict_cache()
+        await self._cycle(scraper, _make_process(), _make_detail())
+        assert not await self._cycle(scraper, process, detail)
+
+    @pytest.mark.asyncio
+    async def test_item_extractor_reuses_the_listed_detail(self):
+        scraper, _ = self._scraper_with_dict_cache()
+        detail = _make_detail()
+        [slug] = await self._list(scraper, _make_process(), detail)
+        scraper._client.fetch_process_detail.reset_mock()
+
+        with patch.object(scraper, "_build_vorgang", AsyncMock(return_value="built")) as build:
+            assert await scraper.item_extractor(slug) == "built"
+        scraper._client.fetch_process_detail.assert_not_called()
+        build.assert_awaited_once_with(slug, detail)
+
+    @pytest.mark.asyncio
+    async def test_failed_detail_fetch_is_not_cached(self):
+        """No fingerprint, no cache entry: item_extractor retries and counts the failure (#83)."""
+        scraper, store = self._scraper_with_dict_cache()
+        scraper._client.fetch_process_list.return_value = [_make_process()]
+        scraper._client.fetch_process_detail.side_effect = TimeoutError("portal timeout")
+
+        async def _to_thread(fn, *args):
+            return fn(*args)
+
+        with patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", side_effect=_to_thread):
+            [slug] = await scraper.listing_page_extractor("lp-18")
+        assert await scraper.get_cached_result(slug) is None
+        await scraper.store_extracted_result(slug, MagicMock())
+        assert store == {}
