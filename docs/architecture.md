@@ -304,7 +304,7 @@ sequenceDiagram
     BVS->>BVS: store in _raw_cache
     BVS-->>FW: list[vorgang_ids]
 
-    loop for each vorgang_id
+    loop for each vorgang_id not in cache
         FW->>BVS: item_extractor(vorgang_id)
         BVS->>BVS: lookup _raw_cache[vorgang_id]
         BVS->>EM: map enums (Vorgangstyp, Stationstyp, Doktyp)
@@ -321,11 +321,8 @@ sequenceDiagram
 
         BVS-->>FW: Vorgang
 
-        FW->>Cache: check if already processed
-        alt new
-            FW->>API: PUT /api/v2/vorgang
-            FW->>Cache: mark processed
-        end
+        FW->>API: send_result → PUT /api/v2/vorgang
+        FW->>Cache: store after a successful upload
     end
 ```
 
