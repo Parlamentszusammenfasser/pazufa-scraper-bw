@@ -38,7 +38,9 @@ Scraper-Bugs. GO-LT BW §42 verlangt zwei Lesungen, §43 Abs. 4 verbietet die Ab
 erster Lesung, also `ILALN`, nie `ILN`. Daraus folgen DD-003, DD-012, DD-025, DD-031.
 
 **Konsequenz:** Kollidierende `zp_start` verschiedener Typen werden vorwärts verschoben
-(`_enforce_total_ordering`), damit die Sortierung eindeutig ist.
+(`_enforce_total_ordering`), damit die Sortierung eindeutig ist. Volksanträge
+(`gg-land-volk`) werden gescrapt, haben aber keinen BW-Track und scheitern am Backend, bis
+upstream einer definiert ist (z. B. V-230205, V-232608).
 
 <a id="dd-004"></a>
 ## DD-004: Verschiedene Lesungen werden nie zusammengeführt
