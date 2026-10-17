@@ -4,8 +4,10 @@ Source: https://www.baden-wuerttemberg.de/de/service/gesetze-und-verordnungen/ge
 Detail URL pattern: /de/service/gesetze-und-verordnungen/gesetzblatt/detail/<JAHR>-<NUMMER>
 """
 
+import calendar
 import re
 from dataclasses import dataclass
+from datetime import date, timedelta
 from urllib.parse import parse_qs, urljoin, urlparse
 
 from lxml import html
@@ -93,3 +95,68 @@ def parse_detail(html_content: str, base_url: str) -> RawGesetzblattDetail:
         pdf_url=pdf_url,
         pdf_filename=pdf_filename,
     )
+
+
+# fmt: off
+_MONATE = ["Januar", "Februar", "März", "April", "Mai", "Juni",
+           "Juli", "August", "September", "Oktober", "November", "Dezember"]
+_ORDINALE = ["", "zweiten", "dritten", "vierten", "fünften", "sechsten",
+             "siebten", "achten", "neunten", "zehnten", "elften", "zwölften"]
+_ZAHLEN = {"einen": 1, "zwei": 2, "drei": 3, "vier": 4, "fünf": 5, "sechs": 6,
+           "sieben": 7, "acht": 8, "neun": 9, "zehn": 10, "elf": 11, "zwölf": 12}
+# fmt: on
+_HEADING_RE = re.compile(r"^(?:Artikel|§)\s*\d+[a-z]?\s*$", re.MULTILINE)
+# End of the law's own text; a Staatsvertrag follows it.
+_SIGNATURE = "Stuttgart, den"
+_WHEN_RE = re.compile(
+    r"(?:(?P<tag>am Tag (?P<nach>nach )?(?:seiner|der) Verkündung)"
+    r"|(?:am|mit Wirkung vom) (?P<d>\d{1,2})\. ?(?P<m>" + "|".join(_MONATE) + r") (?P<y>\d{4})"
+    r"|am ersten Tag des (?P<uebern>übernächsten )?auf (?:die|seine) Verkündung folgenden"
+    r" (?:(?P<ord>\w+) )?(?:Kalender)?[mM]onats"
+    r"|(?P<n>\w+) Monate? nach (?:seiner|der) Verkündung)"
+    # "in Kraft" of the same sentence: a sentence ends at ". " not after a digit ("1. Januar").
+    r"(?=(?:(?!Kraft|(?<!\d)\. ).){0,300}?\b(?P<kind>in|außer) Kraft)"
+)
+# "in Kraft" without a new date: a treaty's (announced later) or "Gleichzeitig".
+_NO_OWN_DATE_RE = re.compile(r"an dem (?:(?!Kraft).)*\bin Kraft tr|Gleichzeitig (?:(?!Kraft).)*\bin Kraft")
+
+
+def _add_months(d: date, months: int, first_of_month: bool) -> date:
+    m = d.month - 1 + months
+    year, month = d.year + m // 12, m % 12 + 1
+    return date(year, month, 1 if first_of_month else min(d.day, calendar.monthrange(year, month)[1]))
+
+
+def parse_inkrafttreten(text: str, verkuendung: date) -> list[date]:
+    """Dates on which (parts of) the law enter into force, from its last Artikel/§ (DD-071).
+
+    Empty if any "in Kraft" there has no date (e.g. a condition): no guessing.
+    """
+    end = text.find(_SIGNATURE)
+    body = text if end < 0 else text[:end]
+    headings = list(_HEADING_RE.finditer(body))
+    if not headings:
+        return []
+    article = re.sub(r"\s+", " ", body[headings[-1].start() :])
+
+    dates = []
+    for m in _WHEN_RE.finditer(article):
+        if m.group("kind") != "in":
+            continue
+        if m.group("tag"):
+            dates.append(verkuendung + timedelta(days=1 if m.group("nach") else 0))
+        elif m.group("y"):
+            dates.append(date(int(m.group("y")), _MONATE.index(m.group("m")) + 1, int(m.group("d"))))
+        elif m.group("n"):
+            if m.group("n") not in _ZAHLEN:
+                return []
+            dates.append(_add_months(verkuendung, _ZAHLEN[m.group("n")], first_of_month=False))
+        else:
+            ordinal = m.group("ord") or ""
+            if ordinal not in _ORDINALE:
+                return []
+            months = 2 if m.group("uebern") else _ORDINALE.index(ordinal) + 1
+            dates.append(_add_months(verkuendung, months, first_of_month=True))
+
+    in_kraft = len(re.findall(r"\bin Kraft", article)) - len(_NO_OWN_DATE_RE.findall(article))
+    return dates if dates and len(dates) >= in_kraft else []

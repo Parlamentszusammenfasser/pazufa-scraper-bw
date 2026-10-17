@@ -152,6 +152,8 @@ request-delay-s = 1.0
 
 ### Phase 3 — Inkrafttreten / `postparl-kraft`
 
+**Umgesetzt** in [DD-071](design_decisions/DD-071-postparl-kraft-aus-der-inkrafttreten-klausel.md); der Entwurf unten ist überholt.
+
 **Ziel:** Echte K-Stage statt der „Virtual K"-Diskussion aus Issue #40
 abschließen.
 

@@ -1,5 +1,6 @@
 """Tests for the Gesetzblatt Baden-Württemberg HTML parser."""
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from bawue.gesetzblatt_parser import (
     RawGesetzblattDetail,
     parse_detail,
+    parse_inkrafttreten,
 )
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "gesetzblatt"
@@ -137,3 +139,58 @@ class TestParseDetailBekanntmachung:
     def test_federfuehrung_staatsministerium(self, detail_bekanntmachung_html):
         detail = parse_detail(detail_bekanntmachung_html, BASE_URL)
         assert detail.federfuehrung == "Staatsministerium (StM)"
+
+
+def _kraft(gbl: str, verkuendung: date) -> list[date]:
+    text = (FIXTURES / "inkrafttreten" / f"GBl-{gbl}.txt").read_text()
+    return parse_inkrafttreten(text, verkuendung)
+
+
+class TestParseInkrafttretenIssue98:
+    """Issue #98 / DD-071. Fixtures: text of real WP17 laws up to their signature."""
+
+    def test_erster_tag_des_vierten_folgenden_monats(self):
+        """GBl 2026 Nr. 14, LNRSchG (V-244420); the old law's "außer Kraft" date is ignored."""
+        assert _kraft("2026-14", date(2026, 2, 27)) == [date(2026, 6, 1)]
+
+    def test_uebernaechster_monat(self):
+        assert _kraft("2025-71", date(2025, 7, 29)) == [date(2025, 9, 1)]
+
+    def test_monate_nach_verkuendung(self):
+        assert _kraft("2025-25", date(2025, 3, 28)) == [date(2025, 9, 28), date(2025, 6, 28)]
+
+    def test_staggered_lists_every_date(self):
+        assert _kraft("2026-21", date(2026, 2, 27)) == [date(2026, 3, 1), date(2028, 1, 1)]
+
+    def test_retroactive_part(self):
+        """GBl 2026 Nr. 17: "mit Wirkung vom 1. Juli 2017" for one Nummer only."""
+        assert _kraft("2026-17", date(2026, 2, 27)) == [date(2026, 2, 28), date(2017, 7, 1)]
+
+    def test_gleichzeitig_repeats_a_named_date(self):
+        assert _kraft("2025-15", date(2025, 3, 3)) == [date(2025, 1, 1), date(2025, 3, 4)]
+
+    def test_treaty_law_uses_its_own_clause(self):
+        """GBl 2026 Nr. 81: the Staatsvertrag follows the signature and has its own
+        Inkrafttreten; the law announces the treaty's date later."""
+        assert _kraft("2026-81", date(2026, 10, 13)) == [date(2026, 10, 14)]
+
+    def test_condition_without_date_is_not_guessed(self):
+        """GBl 2025 Nr. 81: "sobald alle Länder … geändert haben"."""
+        assert _kraft("2025-81", date(2025, 7, 1)) == []
+
+    @pytest.mark.parametrize(
+        "clause",
+        [
+            # GBl 2025 Nr. 81 without its paragraph (2): the date belongs to a "Fassung"
+            "Artikel 7\nDie Artikel 1 und 3 treten in Kraft, sobald alle Länder die Verträge in der am "
+            "1. Januar 2025 geltenden Fassung geändert haben. Artikel 2 tritt am 1. Januar 2027 in Kraft.\n",
+            "Artikel 5\n(2) Artikel 3 ist erstmals am 1. Januar 2027 anzuwenden. (3) Artikel 4 tritt in Kraft, "
+            "sobald der Bund zustimmt.\n",
+        ],
+    )
+    def test_date_of_another_sentence_does_not_count(self, clause):
+        """Review of PR #125: an unrelated date hid a condition and dated the station."""
+        assert parse_inkrafttreten(clause, date(2025, 7, 1)) == []
+
+    def test_no_clause(self):
+        assert parse_inkrafttreten("Artikel 1\nÄnderung\nStuttgart, den 1. März 2026", date(2026, 3, 1)) == []

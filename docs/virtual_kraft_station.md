@@ -1,6 +1,6 @@
 # Proposal: Virtuelle `postparl-kraft`-Station
 
-**Status:** Offen (Roadmap #12, optional) — **nicht implementiert**
+**Status:** Abgelöst durch [DD-071](design_decisions/DD-071-postparl-kraft-aus-der-inkrafttreten-klausel.md).
 **Zugehöriges Issue:** [parlamentszusammenfasser#40](https://codeberg.org/PaZuFa/parlamentszusammenfasser/issues/40)
 **Verwandte Entscheidungen:** DD-002 (Mitteilungen ≠ `postparl-kraft`), DD-010 (synthetische Ablehnung),
 DD-012 (synthetische `parl-initiativ`), DD-016 (BY-Track), DD-021 (reservierte Gremium-Namen —
