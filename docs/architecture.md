@@ -596,7 +596,7 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 |---------------------------------|-------------------|-------------------------------------------------------------|
 | Per-item failures               | `bawue.pipeline`  | Logs error, continues with next Vorgang                     |
 | API submission retries          | `bawue.upload_throttle` | Automatic retry with backoff                          |
-| Cache failures                  | `bawue.cache`     | Graceful degradation (continues without caching)            |
+| Cache failures                  | `bawue.cache`     | Connect failure exits; get/set errors are logged as a miss  |
 | PARLIS session expiry           | ParlisClient      | Re-establishes session before each search cycle             |
 | Large result sets               | ParlisClient      | Automatic date subdivision into monthly windows             |
 | PARLIS HTTP errors              | ParlisClient      | `raise_for_status()`, propagated to the pipeline error handler |
