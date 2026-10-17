@@ -14,7 +14,6 @@ import logging
 import re
 import ssl
 import tempfile
-import weakref
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import NamedTuple
@@ -93,23 +92,24 @@ MIN_TEXT_LENGTH = 64
 _LLM_LIMIT = 3
 
 
-def _loop_semaphore(registry: weakref.WeakKeyDictionary, limit: int) -> asyncio.Semaphore:
-    """One semaphore per event loop, shared by all scrapers of a cycle.
+def _loop_semaphore(slot: dict, limit: int) -> asyncio.Semaphore:
+    """The current event loop's semaphore, shared by all scrapers of a cycle.
 
     A semaphore binds to the first loop that waits on it, and without --once
-    __main__ starts a new loop per cycle (issue #101).
+    __main__ starts a new loop per cycle (issue #101). Only the current loop's is
+    kept: a waited-on semaphore references its loop, so keeping more would leak.
     """
     loop = asyncio.get_running_loop()
-    if loop not in registry:
-        registry[loop] = asyncio.Semaphore(limit)
-    return registry[loop]
+    if slot.get("loop") is not loop:
+        slot.update(loop=loop, sem=asyncio.Semaphore(limit))
+    return slot["sem"]
 
 
-_LLM_SEMAPHORES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_LLM_SLOT: dict = {}
 
 
 def _llm_semaphore() -> asyncio.Semaphore:
-    return _loop_semaphore(_LLM_SEMAPHORES, _LLM_LIMIT)
+    return _loop_semaphore(_LLM_SLOT, _LLM_LIMIT)
 
 
 # Two-tier LLM semantics cache, keyed by (doc_hash, prompt_hash):
@@ -632,11 +632,11 @@ async def download_pdf(session, url: str) -> Path:
 # that code path SIGABRTs in kreuzberg 4.9.9, so max_threads is the usable lever.
 _OCR_MAX_THREADS = 1
 _OCR_LIMIT = 2
-_OCR_SEMAPHORES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_OCR_SLOT: dict = {}
 
 
 def _ocr_semaphore() -> asyncio.Semaphore:
-    return _loop_semaphore(_OCR_SEMAPHORES, _OCR_LIMIT)
+    return _loop_semaphore(_OCR_SLOT, _OCR_LIMIT)
 
 
 _OCR_CONFIG = ExtractionConfig(
