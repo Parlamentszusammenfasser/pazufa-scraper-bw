@@ -14,7 +14,7 @@ Four data sources are covered:
 1. **PARLIS** — parliamentary proceedings (Vorgänge) via HTML scraping
 2. **Beteiligungsportal Baden-Württemberg** — pre-parliamentary draft laws (`preparl-regent` station)
 3. **ICS calendar** — parliamentary sessions (Sitzungen)
-4. **Gesetzblatt Baden-Württemberg** — supplies the real Ausgabedatum for the `postparl-gsblt` station of a PARLIS Vorgang; not a Vorgangs-source of its own (DD-047)
+4. **Gesetzblatt Baden-Württemberg** — supplies the real Ausgabedatum for the `postparl-gsblt` station of a PARLIS Vorgang and, from its PDF, the `postparl-kraft` date (DD-071); not a Vorgangs-source of its own (DD-047)
 
 ```mermaid
 graph LR
@@ -71,7 +71,7 @@ graph LR
     BVS -->|" Vorgang "| Cache
     BBS -->|" Vorgang "| Cache
     BSS -->|" Sitzung "| Cache
-    GBL -->|" Ausgabedatum (postparl-gsblt) "| BVS
+    GBL -->|" Ausgabedatum + Inkrafttreten "| BVS
     Cache -->|" dedup "| APIClient
     APIClient -->|" PUT /api/v2/vorgang "| API
     APIClient -->|" PUT /api/v2/kalender "| API
