@@ -76,7 +76,7 @@ Termin.
 **Code:** Entscheidung 3: `ics_parser.extract_gremium_names` (#117, DD-006). Entscheidung 4:
 `BawueSitzungenScraper.item_extractor` (`api_id` aus UID und Datum, #116, seit #117 auch Gremium).
 Sonst kein Code.
-Korrigiert: das Zeitfenster von `PUT kalender` in `anforderungen.md`, die Verlegung in DD-066.
+Korrigiert: die Verlegung in DD-066.
 
 **Tests:** `tests/unit/test_bawue_sitzungen_scraper.py::TestIssue116MovedSession`,
 `TestIssue117NamedCommittees` dort und in `tests/unit/test_ics_parser.py`

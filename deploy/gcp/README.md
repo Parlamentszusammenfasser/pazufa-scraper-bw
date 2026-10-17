@@ -1,8 +1,12 @@
 # Deployment — GCP Cloud Run Jobs
 
 The scraper runs as a **Cloud Run Job** triggered once a day by Cloud Scheduler,
-caching to a per-environment **Upstash Redis** database. See
-`../../docs/hosting-options.md` for why.
+caching to a per-environment **Upstash Redis** database.
+
+**Why not a VPS:** the scraper is a daily batch job (~20 min), and Cloud Run Jobs
+bill only while it runs. The whole stack is a re-runnable `gcloud` script; the
+runner-up (netcup VPS) has no provisioning API and pays for idle 24/7. Accepted
+tradeoff: two vendors and a variable bill.
 
 ```
 Cloud Scheduler (0 3 * * *, Europe/Berlin)
