@@ -700,7 +700,8 @@ class TestIssue66Tops:
 
         tops = sitzungen[0].tops
         assert [t.nummer for t in tops] == [1, 2, 3, 4, 5, 6, 7, 8]
-        assert tops[1].titel == "Aktuelle Debatte/ vorgezogene Initiative"
+        # The real extraction runs: macOS keeps a space after the slash, Linux does not.
+        assert tops[1].titel.replace("/ ", "/") == "Aktuelle Debatte/vorgezogene Initiative"
         # The feed's bare "Plenarsitzung:" has no number; the agenda's file name has (DD-064).
         assert sitzungen[0].nummer == 14
         assert "No session number" not in caplog.text

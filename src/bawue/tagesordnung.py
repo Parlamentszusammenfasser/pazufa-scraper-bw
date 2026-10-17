@@ -17,6 +17,7 @@ _AGENDA_LINK_RE = re.compile(r"/resource/blob/[^\"'\s]+/(\d{4}-\d{2}-\d{2})_(\d+
 _ITEM_START_RE = re.compile(r"^\s*(\d{1,3})\.(?:\s+(.*))?$")
 # "18/........" (not printed yet) has no number and is skipped.
 _DRUCKSACHE_RE = re.compile(r"Drucksache\s+(\d+/\d+)")
+_DRUCKSACHE_LINE_RE = re.compile(r"[–-]\s*Drucksache\b")  # noqa: RUF001 - the agenda uses an en dash
 
 
 @dataclass(frozen=True)
@@ -40,9 +41,10 @@ def parse_tops(text: str) -> list[ParsedTop]:
     """Split the agenda text into numbered items.
 
     An item starts at a line "N." or "N. <text>" with N the next expected number, so a
-    date like "3. Oktober" inside an item never starts one. The title is the item's
-    first paragraph; the speaking times sit in a separate column (kreuzberg extracts
-    them after it).
+    date like "3. Oktober" inside an item never starts one. The title runs from the item
+    start to its first "Drucksache" line, else it is the first line: what follows are
+    notes and the speaking-time column, and only macOS extraction separates them by a
+    blank line.
     """
     items: list[list[str]] = []
     for line in text.splitlines():
@@ -55,8 +57,9 @@ def parse_tops(text: str) -> list[ParsedTop]:
     tops = []
     for nummer, lines in enumerate(items, start=1):
         block = "\n".join(lines)
-        paragraph = re.split(r"\n\s*\n", block.strip())[0]
-        titel = normalize_volltext(" ".join(line.strip() for line in paragraph.splitlines()))
+        content = [line.strip() for line in lines if line.strip()]
+        end = next((i for i, line in enumerate(content) if _DRUCKSACHE_LINE_RE.match(line)), 0)
+        titel = normalize_volltext(" ".join(content[: end + 1]))
         drucksachen = tuple(dict.fromkeys(_DRUCKSACHE_RE.findall(block))) if "Gesetzentw" in block else ()
         tops.append(ParsedTop(nummer, titel, drucksachen))
     return tops
