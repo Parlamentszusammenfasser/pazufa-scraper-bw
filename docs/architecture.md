@@ -436,7 +436,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 
 **PDF pipeline:**
 - Downloads PDF via `aiohttp` session to a temporary file
-- Extracts text via `kreuzberg` (normal extraction first; OCR fallback if result < 64 chars)
+- Extracts text via `kreuzberg` (normal extraction first; OCR fallback if result < 64 chars or garbled, DD-015)
 - Computes SHA256 hash for deduplication
 
 **LLM pipeline:**
