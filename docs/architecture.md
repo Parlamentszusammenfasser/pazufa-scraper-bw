@@ -560,8 +560,8 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 |--------------------------------------------------|----------------------|
 | Gesetzentwurf (from Landesregierung)             | `preparl-regbsl`     |
 | Gesetzentwurf (from Fraktion/Abgeordnete)        | `parl-initiativ`     |
-| Antrag, Anträge                                  | `parl-initiativ`     |
-| Erste Beratung, Zweite Beratung, Dritte Beratung | `parl-vollvlsgn`     |
+| Antrag, Anträge, Anfragen, Volksantrag           | `parl-initiativ`     |
+| Erste/Zweite/Dritte Beratung, Beratung           | `parl-vollvlsgn`     |
 | Überweisung                                      | `parl-vollvlsgn`     |
 | Beschlussempfehlung und Bericht                  | `parl-ausschber`     |
 | Bericht und Empfehlungen                         | `parl-ausschber`     |
