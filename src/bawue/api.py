@@ -9,6 +9,7 @@ mirroring the old ``openapi_client.ApiException`` contract that the rest of the
 code (``upload_throttle``, ``run_report``) is built on.
 """
 
+import itertools
 import logging
 from dataclasses import dataclass
 from datetime import date
@@ -16,11 +17,14 @@ from uuid import UUID
 
 from pazufa_corelib.api_client import AuthenticatedClient
 from pazufa_corelib.api_client.api.sitzung import kal_date_put as _kal_date_put
+from pazufa_corelib.api_client.api.vorgang import vorgang_get as _vorgang_get
 from pazufa_corelib.api_client.api.vorgang import vorgang_put as _vorgang_put
 
 from bawue.types import Parlament, Sitzung, Vorgang
 
 logger = logging.getLogger(__name__)
+
+_PER_PAGE = 100
 
 
 @dataclass
@@ -52,6 +56,21 @@ def build_client(database_url: str, api_key: str) -> AuthenticatedClient:
         prefix="",
         auth_header_name="X-API-Key",
     )
+
+
+def get_vorgaenge(client: AuthenticatedClient, wahlperiode: int) -> list[dict]:
+    """All BW Vorgänge of a Wahlperiode as JSON dicts (issue #82). Pages start at 1; 204 = past the end."""
+    vorgaenge: list[dict] = []
+    for page in itertools.count(1):
+        r = _vorgang_get.sync_detailed(client=client, p=Parlament.BW, wp=wahlperiode, page=page, per_page=_PER_PAGE)
+        if r.status_code == 204:
+            return vorgaenge
+        if r.status_code != 200:
+            raise BawueApiError(int(r.status_code), r.content, "vorgang_get")
+        vorgaenge += [v.to_dict() for v in r.parsed]
+        if len(r.parsed) < _PER_PAGE:
+            return vorgaenge
+    raise AssertionError("itertools.count never ends")
 
 
 def put_vorgang(client: AuthenticatedClient, scraper_id: UUID, item: Vorgang) -> None:

@@ -19,6 +19,7 @@ from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.config import BawueConfig
 from bawue.notifications import send_run_report
 from bawue.pipeline import Scraper
+from bawue.wochenbericht import weekly_section
 
 load_dotenv()
 
@@ -69,7 +70,9 @@ async def main(config: BawueConfig) -> None:
                     await t
         finally:
             # One Mattermost message per cycle, not one per scraper (issue #52).
-            send_run_report(config, _report_sections(scrapers, results))
+            sections = _report_sections(scrapers, results)
+            weekly = weekly_section(config)  # after the uploads, so this run's changes count (issue #82)
+            send_run_report(config, [*sections, weekly] if weekly else sections)
 
 
 def _report_sections(scrapers: list[Scraper], results: list) -> list[tuple[str, list[str]]]:

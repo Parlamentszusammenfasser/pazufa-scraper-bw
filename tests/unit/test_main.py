@@ -27,6 +27,12 @@ def _config(linearize: bool) -> MagicMock:
     return config
 
 
+@pytest.fixture(autouse=True)
+def _no_weekly_section():
+    with patch("bawue.__main__.weekly_section", return_value=None) as weekly:
+        yield weekly
+
+
 class TestIssue52OneRunReport:
     """Issue #52: a cycle posts one Mattermost message with every scraper's summary."""
 
@@ -108,6 +114,20 @@ class TestIssue52OneRunReport:
             await main(_config(False))
 
         assert send.call_args.args[1] == [("Sitzungen", ["Sitzungen line"])]
+
+
+class TestIssue82WeeklySection:
+    @pytest.mark.asyncio
+    async def test_weekly_section_ends_the_report(self, _no_weekly_section):
+        _no_weekly_section.return_value = ("Wochenbericht", ["🆕 A: Eingebracht"])
+
+        with (
+            patch("bawue.__main__.load_scrapers", return_value=[_FakeScraper("Vorgänge")]),
+            patch("bawue.__main__.send_run_report") as send,
+        ):
+            await main(_config(False))
+
+        assert send.call_args.args[1] == [("Vorgänge", ["Vorgänge line"]), ("Wochenbericht", ["🆕 A: Eingebracht"])]
 
 
 class TestIssue84StartupVersion:
