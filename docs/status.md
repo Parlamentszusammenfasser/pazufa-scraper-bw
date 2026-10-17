@@ -100,6 +100,7 @@ Both were DoD scope items for a complete legislative-lifecycle capture.
 | Kabinettsbeschlüsse (STM)    | Not implemented      | Signal source for new Regierungsentwürfe                                                                                                                                                                                                                                                                                  |
 | Gesetzblatt publications     | ✅ Working (MVP)      | Post-parliamentary phase (`postparl-gsblt` station) am PARLIS-Vorgang; das Ausgabedatum kommt aus dem Gesetzblatt-Lookup und fixt issue #9 (DD-047). Digital ab 2024, ältere Zitate behalten die PARLIS-Datierung. `postparl-kraft` aus der Inkrafttreten-Klausel (DD-071).                                                                                        |
 | Sitzungskalender Phase 3     | ✅ Working            | TOPs of the next Plenarsitzung from `/de/aktuelles/tagesordnungen` (DD-070); committee agendas are not published |
+| Wochenbericht                | ✅ Working            | Once a week, the run report lists Gesetzgebungsvorgänge that are new or reached another stage (GitHub issue #82, DD-072) |
 
 ## Roadmap
 
