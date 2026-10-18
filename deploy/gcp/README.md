@@ -81,7 +81,10 @@ directly, which is create-or-update on every step.
 
 ## Deploying
 
-Actions → **Deploy staging** → Run workflow → enter an image tag. Prefer an
+Staging deploys itself: every release cut on `main` runs **Deploy staging**
+from CI with the new version and the smoke test on.
+
+To deploy another tag by hand: Actions → **Deploy staging** → Run workflow → enter an image tag. Prefer an
 explicit semver (`1.2.3`) over `latest`, so the job spec records what is running.
 
 The workflow points the job at that Docker Hub tag, syncs the schedule, and — if
