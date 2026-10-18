@@ -329,6 +329,12 @@ class TestParseFundstelleText:
             ("Erste Beratung   Plenarprotokoll 17/138 11.12.2025  S. 8434-8435; 8435-8436", [8434, 8435, 8436]),
             ("Zweite Beratung   Plenarprotokoll 17/140 04.02.2026  S. 8622", [8622]),
             ("Zweite Beratung   Plenarprotokoll 17/128 23.07.2025  S. 7748 (abgesetzt)", [7748]),
+            # Einzelplan numbers in brackets are no pages.
+            (
+                "Zweite Beratung   Plenarprotokoll 17/53 16.12.2022  S. 3168-3170 (Epl 06, 12, 16, StHG)",
+                [3168, 3169, 3170],
+            ),
+            ("Erste Beratung   Plenarprotokoll 17/24 17.12.2021  S. 1261-1262 (Epl 06, StHG 2022)", [1261, 1262]),
         ],
     )
     def test_issue74_extracts_protocol_pages(self, raw, pages):
