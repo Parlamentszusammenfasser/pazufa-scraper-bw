@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+from collections.abc import Sequence
 
 import requests
 
@@ -31,7 +32,7 @@ def _extract_environment(config: BawueConfig) -> str:
 def send_run_report(
     config: BawueConfig,
     sections: list[tuple[str, list[str]]],
-    plain_sections: list[tuple[str, list[str]]] = (),
+    plain_sections: Sequence[tuple[str, list[str]]] = (),
 ) -> None:
     """Post one cycle's scraper summaries as a single Mattermost message (issue #52).
 
