@@ -25,9 +25,12 @@ on:
     tags: ['[0-9]*']
   pull_request:
 
+# On main a running pipeline is never cancelled: it may have cut a release that
+# still has to reach staging. A newer pending main run replaces an older pending
+# one, which is fine, since semantic-release picks up all commits since the last tag.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
