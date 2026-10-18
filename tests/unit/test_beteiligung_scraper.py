@@ -419,8 +419,9 @@ class TestIssue123ReleaseDate:
         ids=["upload-day", "no-header", "re-uploaded"],
     )
     async def test_long_page_full_of_dates(self, last_modified, expected):
-        """The full page names 40+ dates (deadline 29.07.2026, comments, effective dates);
-        only the PDF's own date counts."""
+        """A full, untrimmed page: 40+ dates in its text (deadline 29.07.2026, comments,
+        effective dates) and the whole portal markup. It must yield the one draft PDF,
+        dated by the PDF alone; page text never dates a draft (DD-074)."""
         html = (FIXTURES / "dienst_und_versorgungsbezuege_full.html").read_text()
         scraper = _make_scraper()
         scraper._wahlperiode = 18
