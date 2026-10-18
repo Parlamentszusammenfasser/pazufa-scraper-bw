@@ -58,6 +58,12 @@ jobs:
         run: |
           VERSION=$(git tag --points-at HEAD | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # The approver sees the run page, not this log: name the version there.
+          if [ -n "$VERSION" ]; then
+            echo "### Release \`$VERSION\` → prod (staging passed)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No release on this commit; nothing to deploy." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   deploy:
     needs: release-version
@@ -95,9 +101,10 @@ jobs:
           for var in REGION PROJECT_ID DOCKER_IMAGE IMAGE_TAG COLLECTOR_ID LTZF_API_URL; do
             if [ -z "${!var}" ]; then echo "::error::$var is not set"; exit 1; fi
           done
-          case "$IMAGE_TAG" in
-            *[!A-Za-z0-9._-]*) echo "::error::Invalid image tag: $IMAGE_TAG"; exit 1 ;;
-          esac
+          # Releases only: branch, sha-* and latest images never went through staging.
+          if ! [[ "$IMAGE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Prod takes a release version (x.y.z), got: $IMAGE_TAG"; exit 1
+          fi
 
       - uses: google-github-actions/auth@v3
         with:
