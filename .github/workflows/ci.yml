@@ -14,7 +14,8 @@ name: CI
 #                                             or a manual x.y.z tag push)
 #   any branch push → :<branch> :sha-<sha7>
 #
-# After a release cuts a new image, update-compose opens a PR bumping the
+# After a release cuts a new image, deploy-staging rolls it out to staging
+# (deploy-staging.yml) and update-compose opens a PR bumping the
 # pinned tag in docker-compose.yml (a direct push isn't used since main is
 # protected — see the release job's --no-commit comment below).
 
@@ -257,3 +258,15 @@ jobs:
           body: >-
             Auto-generated after release `${{ needs.release.outputs.version }}`.
             Bumps the pinned scraper image tag in `docker-compose.yml`.
+
+  # After a release image is pushed, deploy it to staging and run the job once.
+  deploy-staging:
+    needs: [release, docker]
+    if: needs.release.outputs.version != ''
+    permissions:
+      contents: read
+      id-token: write  # deploy-staging.yml authenticates to GCP via WIF
+    uses: ./.github/workflows/deploy-staging.yml
+    with:
+      image_tag: ${{ needs.release.outputs.version }}
+      smoke_test: true
