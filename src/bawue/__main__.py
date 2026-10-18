@@ -50,7 +50,8 @@ def load_scrapers(config: BawueConfig, session: aiohttp.ClientSession) -> list[S
     return scrapers
 
 
-async def main(config: BawueConfig) -> None:
+async def main(config: BawueConfig) -> bool:
+    """Run one scraping cycle; True if any scraper failed."""
     logger.info("Starting new Scraping Cycle")
     clear_hash_cache()  # once per cycle: the scrapers run concurrently and share it (issue #101)
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit_per_host=1)) as session:
@@ -76,6 +77,7 @@ async def main(config: BawueConfig) -> None:
             sections = _report_sections(scrapers, results)
             weekly = weekly_section(config)  # after the uploads, so this run's changes count (issue #82)
             send_run_report(config, [*sections, weekly] if weekly else sections)
+    return any(isinstance(r, Exception) for r in results)
 
 
 def _report_sections(scrapers: list[Scraper], results: list) -> list[tuple[str, list[str]]]:
@@ -113,12 +115,16 @@ def load_config() -> BawueConfig:
 
 
 def run(config: BawueConfig) -> None:
-    """One scraping cycle. A cycle that raises alerts Mattermost and exits 1 (Cloud Run: failed)."""
+    """One scraping cycle. A cycle that raises alerts Mattermost and exits 1 (Cloud Run: failed);
+    a failed scraper exits 1 too, its error is already in the run report."""
     try:
-        asyncio.run(main(config))
+        failed = asyncio.run(main(config))
     except Exception as e:
         send_alert(config, f"Scraping cycle failed: {type(e).__name__}: {' '.join(str(e).split())[:200]}")
         raise
+    if failed:
+        logger.error("Scraping cycle finished with failed scrapers.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

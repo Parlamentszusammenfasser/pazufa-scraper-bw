@@ -205,3 +205,27 @@ class TestCycleFailure:
         ):
             run(config)
         alert.assert_called_once_with(config, "Scraping cycle failed: RuntimeError: constructor boom")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("fail", "failed"), [(False, False), (True, True)])
+    async def test_cycle_reports_failed_scrapers(self, fail, failed):
+        scrapers = [_FakeScraper("Vorgänge", fail=fail), _FakeScraper("Sitzungen")]
+        with (
+            patch("bawue.__main__.load_scrapers", return_value=scrapers),
+            patch("bawue.__main__.send_run_report"),
+        ):
+            assert await main(_config(False)) is failed
+
+    @pytest.mark.parametrize(("failed", "code"), [(False, None), (True, 1)])
+    def test_failed_scraper_fails_the_execution(self, failed, code):
+        async def cycle(_config):
+            return failed
+
+        with patch("bawue.__main__.main", new=cycle), patch("bawue.__main__.send_alert") as alert:
+            if code is None:
+                run(_config(False))
+            else:
+                with pytest.raises(SystemExit) as exc:
+                    run(_config(False))
+                assert exc.value.code == code
+        alert.assert_not_called()  # the run report already names the failure
