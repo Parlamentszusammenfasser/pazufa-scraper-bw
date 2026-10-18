@@ -157,6 +157,9 @@ def _vorgang_fingerprint(raw: RawVorgang) -> str:
     # Rebuild cached laws once for their postparl-kraft station (DD-071).
     if any(f.get("gesetzblatt_nr") for f in raw.get("fundstellen_parsed", [])):
         payload.append("postparl-kraft")
+    # Rebuild cached Vorgänge once, so protocols are summarised per agenda item (DD-037).
+    if any(f.get("druckseiten") for f in raw.get("fundstellen_parsed", [])):
+        payload.append("tagesordnungspunkt")
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 

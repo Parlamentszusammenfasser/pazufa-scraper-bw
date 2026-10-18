@@ -6162,3 +6162,43 @@ class TestIssue74ProtocolPagesReachEnrichment:
         await scraper._build_vorgang(raw)
 
         assert seen == {"Gesetzentwurf": None, "Erste Beratung": [287, 288, 289, 290, 291]}
+
+
+_PLP_18_10_FUNDSTELLE = {
+    "raw": "Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287-291",
+    "datum": "23.07.2026",
+    "plenarprotokoll": "18/10",
+    "druckseiten": [287, 288, 289, 290, 291],
+    "station_typ": "Erste Beratung",
+    "pdf_url": "https://www.landtag-bw.de/files/18%5F0010%5F23072026.pdf#page=31",
+}
+
+
+class TestIssue74OneTimeRebuild:
+    """DD-037: cached Vorgänge with protocol pages are rebuilt once, so their summary narrows."""
+
+    @staticmethod
+    def _before(raw):
+        """_vorgang_fingerprint as on main before issue #74."""
+        fundstellen = sorted([f.get("raw", ""), f.get("pdf_url") or ""] for f in raw["fundstellen_parsed"])
+        payload = [raw.get("Aktueller Stand", ""), fundstellen]
+        if any(f.get("gesetzblatt_nr") for f in raw["fundstellen_parsed"]):
+            payload.append("postparl-kraft")
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
+
+    def test_vorgang_with_protocol_pages_gets_a_new_fingerprint(self):
+        raw = _make_raw_vorgang("V-247045", fundstellen=[_GBL_GESETZENTWURF, _PLP_18_10_FUNDSTELLE])
+        assert _vorgang_fingerprint(raw) != self._before(raw)
+
+    @pytest.mark.parametrize(
+        "fundstellen",
+        [
+            [_GBL_GESETZENTWURF],
+            [_GBL_GESETZENTWURF, _GBL_FUNDSTELLE],  # keeps its DD-071 salt
+            [{**_PLP_18_10_FUNDSTELLE, "raw": "Erste Beratung   Plenarprotokoll 18/13 08.10.2026", "druckseiten": []}],
+        ],
+        ids=["drucksache", "law", "unpublished-protocol"],
+    )
+    def test_other_vorgaenge_keep_theirs(self, fundstellen):
+        raw = _make_raw_vorgang("V-1", fundstellen=fundstellen)
+        assert _vorgang_fingerprint(raw) == self._before(raw)

@@ -69,7 +69,8 @@ Fehlen Seiten oder Anker, oder passt eine Seite nicht ins PDF, gilt das Alte: Fe
 neutraler Prompt, Datei-Hash.
 
 **Konsequenz:** Ein LLM-Call je Tagesordnungspunkt statt je Sitzung, bei 44 % der
-Eingabe. Bestehende Protokolle werden einmal neu zusammengefasst; ihre alten Schlagworte
+Eingabe. Bestehende Protokolle werden einmal neu zusammengefasst (Salz im `vg2:`-Fingerprint wie
+DD-071); ihre alten Schlagworte
 bleiben, weil das Backend Schlagworte vereinigt. Bekannte Lücke: Zwei Punkte, die auf
 derselben Seite beginnen, teilen einen Row (DD-049); es gilt die Zusammenfassung des
 zuletzt hochgeladenen (24 von 379 geteilten Ankern in WP17/18).
