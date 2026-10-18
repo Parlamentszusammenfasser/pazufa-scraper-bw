@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bawue.__main__ import load_config, log_startup, main
+from bawue.__main__ import load_config, log_startup, main, run
 from bawue.bawue_dok import _hash_cache
 
 
@@ -188,3 +188,20 @@ class TestRedisUnavailableAtStartup:
             load_config()
         assert exc.value.code == 1
         assert "redis.example:6379" in alert.call_args.args[1]
+
+
+class TestCycleFailure:
+    """A cycle that raises must reach Mattermost and fail the Cloud Run execution (exit 1)."""
+
+    def test_raising_cycle_alerts_and_propagates(self):
+        async def boom(_config):
+            raise RuntimeError("constructor\n  boom")
+
+        config = _config(False)
+        with (
+            patch("bawue.__main__.main", new=boom),
+            patch("bawue.__main__.send_alert") as alert,
+            pytest.raises(RuntimeError),
+        ):
+            run(config)
+        alert.assert_called_once_with(config, "Scraping cycle failed: RuntimeError: constructor boom")

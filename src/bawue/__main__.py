@@ -112,6 +112,15 @@ def load_config() -> BawueConfig:
     return config
 
 
+def run(config: BawueConfig) -> None:
+    """One scraping cycle. A cycle that raises alerts Mattermost and exits 1 (Cloud Run: failed)."""
+    try:
+        asyncio.run(main(config))
+    except Exception as e:
+        send_alert(config, f"Scraping cycle failed: {type(e).__name__}: {' '.join(str(e).split())[:200]}")
+        raise
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
@@ -124,7 +133,6 @@ if __name__ == "__main__":
 
     logger.info("Configuration Complete")
 
-    # One cycle per process; the scheduler starts the next. An uncaught error exits 1,
-    # so Cloud Run marks the execution failed instead of the process lingering.
-    asyncio.run(main(config))
+    # One cycle per process; the scheduler starts the next.
+    run(config)
     logger.info("Scraping cycle completed. Shutting down.")
