@@ -26,6 +26,30 @@ Hintergrund, Issue #45) und seine Phasen-Timeline nicht „Beschluss der geltend
 Verordnung(en)" enthält. Auf 135 Seiten traf das alle 17 Verordnungen und keinen
 Gesetzentwurf; PDF-Titel taugen dafür nicht.
 
+Außerdem muss die Timeline eine Phase „Online-Kommentierung" oder „Gesetzentwurf" haben
+(Issue #123). Bisher filterte die Kommentarfrist stillschweigend: ohne sie fehlten auch
+Entwürfe ohne Kommentarphase (alle Haushaltsbegleitgesetze). Strategien und Bürgerforen
+haben keine dieser Phasen.
+
+<a id="dd-074"></a>
+## DD-074: Beteiligungsportal: Entwurf datiert auf seine Veröffentlichung
+
+**Kontext:** `preparl-regent` trug die Kommentarfrist als `zp_start`: bei offener Kommentierung
+in der Zukunft (Issue #75), ohne Kommentarphase gar kein Datum (Issue #123). Die Seiten selbst
+nennen kein Veröffentlichungsdatum.
+
+**Entscheidung:** Je PDF gilt der Upload-Tag (`Last-Modified`, per `HEAD`) oder, falls früher,
+das Datum aus dem Dateinamen (`YYMMDD_`). Letzteres zählt nur zwischen Beginn der Wahlperiode
+und Upload-Tag (Tippfehler wie `200818_`), und es überdauert einen späteren Austausch. Das
+Dokument erhält sein Datum, die Station das früheste. Ohne Datum wird der Vorgang
+übersprungen. Geprüft an 216 Seiten aus WP 16–18: `Last-Modified` fehlte nie, mit Dateinamen
+lagen alle 183 Seiten mit Frist 7–120 Tage davor. Verworfen: Freigabe-Satz im Text (nur 13
+Seiten, findet fremde Daten), PDF-Metadaten (Entstehung, nicht Veröffentlichung).
+
+**Konsequenz:** Ein `HEAD` je PDF bei jedem Neubau. Das Datum ist der Veröffentlichungstag,
+nicht der Kabinettsbeschluss. Die Kommentarfrist fließt nirgends mehr ein, auch nicht in den
+Fingerprint (DD-052): alle Beteiligungs-Vorgänge werden einmal mit neuem Datum hochgeladen.
+
 <a id="dd-047"></a>
 ## DD-047: Gesetzblatt als Datums-Lookup, nicht als eigene Vorgangsquelle
 

@@ -1,6 +1,7 @@
 """Tests for the Beteiligungsportal HTTP client."""
 
 import time
+from datetime import date
 from unittest.mock import patch
 
 import pytest
@@ -199,3 +200,27 @@ class TestRateLimiting:
 
         assert len(processes) == 1
         assert len(responses.calls) == 2
+
+
+class TestIssue123FetchLastModified:
+    PDF_URL = f"{BASE_URL}/fileadmin/261012_Entwurf.pdf"
+
+    @responses.activate
+    @pytest.mark.parametrize(
+        ("headers", "expected"),
+        [
+            ({"Last-Modified": "Mon, 12 Oct 2026 15:58:10 GMT"}, date(2026, 10, 12)),
+            ({}, None),
+            ({"Last-Modified": "gestern"}, None),
+        ],
+    )
+    def test_upload_day_from_head_request(self, client, headers, expected):
+        responses.add(responses.HEAD, self.PDF_URL, headers=headers, status=200)
+        assert client.fetch_last_modified(self.PDF_URL) == expected
+
+    @responses.activate
+    def test_http_error_raises(self, client):
+        """Not a missing date: the Vorgang fails and is retried next cycle."""
+        responses.add(responses.HEAD, self.PDF_URL, status=503)
+        with pytest.raises(requests.HTTPError):
+            client.fetch_last_modified(self.PDF_URL)

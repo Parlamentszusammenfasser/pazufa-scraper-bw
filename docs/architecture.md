@@ -374,7 +374,7 @@ Configuration from `[beteiligung]` section.
 | Station `typ`       | `Stationstyp.PREPARL_REGENT`                    |
 | Station `gremium`   | `Parlament.BW, "regierung"` (reservierter Name) |
 | Station `dokumente` | Each PDF → `Doktyp.PREPARL_ENTWURF`             |
-| Station `zp_start`  | Comment deadline date                           |
+| Station `zp_start`  | Earliest PDF publication date (DD-074)          |
 
 ### BeteiligungClient / BeteiligungParser
 
@@ -382,7 +382,7 @@ Configuration from `[beteiligung]` section.
 configurable delay, User-Agent `PaZuFa-BaWue-Scraper/0.1`).
 
 `BeteiligungParser` is stateless lxml/XPath parsing: process cards from LP index (`article.teaser`), title/ministry/
-PDF links/deadline from detail pages. Data classes: `RawBeteiligungProcess`, `RawBeteiligungDetail`.
+PDF links/phases from detail pages, PDF publication date (`release_date`). Data classes: `RawBeteiligungProcess`, `RawBeteiligungDetail`.
 
 ### IcsParser
 
