@@ -100,6 +100,9 @@ and waits for a required reviewer of environment `prod` (Actions → the run →
 *Review deployments*). Rejecting it, or letting it wait 30 days, deploys nothing.
 A run waiting for approval holds the prod queue: newer releases wait behind it,
 and only the newest of them is kept. Reject a stale run to let the next one ask.
+No prod run starts when CI failed after staging was deployed (e.g. in
+`update-compose`) or staging was redeployed by hand: run **Deploy prod** by hand
+with that version.
 
 ## Operating
 
