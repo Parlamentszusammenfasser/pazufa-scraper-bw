@@ -28,6 +28,7 @@ from bawue.gesetzblatt_client import GesetzblattClient
 from bawue.gesetzblatt_lookup import GesetzblattDateLookup, GesetzblattUnavailable
 from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.parlis_client import ParlisClient
+from bawue.parlis_parser import vorgang_url
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
@@ -127,6 +128,8 @@ DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [
 # Its Vorgänge share one Initiativdrucksache per budget (DD-041).
 _HAUSHALT_VORGANGSTYP = "Haushaltsgesetzgebung"
 DEFAULT_PARLIS_DELAY = 1.0
+# Plenarprotokolle appear 1-2 weeks after the session (WP18, measured 2026-10); later is a gap (issue #128).
+_MISSING_AFTER = timedelta(weeks=4)
 DEFAULT_GSBLT_DELAY = 1.0
 BERLIN_TZ = ZoneInfo("Europe/Berlin")
 
@@ -231,6 +234,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         )
 
         self._retry_next_cycle = set()
+        # Unpublished PDF link → (label, Fundstelle day, vorgnrs), for the weekly report (issue #128).
+        self._missing: dict[str, tuple[str, date, set[str]]] = {}
 
         self._published: int = 0
         self._failed: int = 0
@@ -1241,6 +1246,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 dok = result.dokument
                 if result.download_failed:
                     self._retry_next_cycle.add(vorgang_id)
+                    if result.http_status == 404:
+                        self._note_missing(fund, zp_start.date(), dok.link, vorgang_id)
                     # Without a drucksnr the backend matches by hash only: the real PDF
                     # would become a second row next to the placeholder (DD-067).
                     if dok.drucksnr is None:
@@ -1249,6 +1256,29 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 logger.warning("Document enrichment failed for %s", pdf_url)
 
         return [dok]
+
+    def _note_missing(self, fund: RawFundstelle, day: date, link: str, vorgang_id: str) -> None:
+        """Remember a PDF still unpublished four weeks after its Fundstelle date (issue #128)."""
+        if self._today() - day <= _MISSING_AFTER:
+            return
+        if pp := fund.get("plenarprotokoll"):
+            label = f"Plenarprotokoll {pp}"
+        elif ds := fund.get("drucksache"):
+            label = f"Drucksache {ds}"
+        else:
+            label = fund.get("station_typ") or "Dokument"
+        # One file for all #page anchors: Vorgänge debated together share a protocol.
+        self._missing.setdefault(link.split("#")[0], (label, day, set()))[2].add(vorgang_id)
+
+    @property
+    def missing_documents(self) -> list[str]:
+        """Markdown lines for the weekly run report, oldest first (issue #128)."""
+        return [
+            f"- {label} ({day:%d.%m.%Y}) - "
+            + ", ".join(f"[{v}]({vorgang_url(v)})" for v in sorted(vorgnrs))
+            + f" - seit {(self._today() - day).days // 7} Wochen [404]({link})"
+            for link, (label, day, vorgnrs) in sorted(self._missing.items(), key=lambda item: item[1][1])
+        ]
 
     async def _official_gesetzblatt_pdf(self, fund: RawFundstelle) -> str | None:
         """The Gesetzblatt's own PDF with the Fundstelle's #page anchor, else None.

@@ -42,6 +42,8 @@ class EnrichmentResult(NamedTuple):
     # Vorgang so the next cycle attempts the download again. Content-level
     # failures (empty/garbled extraction) are permanent and stay False.
     download_failed: bool = False
+    # HTTP status of a failed download; 404 = not published yet (issue #128).
+    http_status: int | None = None
 
 
 class LLMMetrics:
@@ -598,6 +600,10 @@ class PdfNotAvailableError(RuntimeError):
 
     Expected, so callers log it without a traceback (issue #69)."""
 
+    def __init__(self, status: int, url: str) -> None:
+        super().__init__(f"PDF download returned HTTP {status}: {url}")
+        self.status = status
+
 
 async def download_pdf(session, url: str) -> Path:
     """Download a PDF to a temporary file via aiohttp session."""
@@ -605,7 +611,7 @@ async def download_pdf(session, url: str) -> Path:
     ssl_ctx = ssl.create_default_context(cafile=certifi.where())
     async with session.get(clean_url, ssl=ssl_ctx, timeout=aiohttp.ClientTimeout(total=60)) as response:
         if response.status != 200:
-            raise PdfNotAvailableError(f"PDF download returned HTTP {response.status}: {clean_url}")
+            raise PdfNotAvailableError(response.status, clean_url)
         content = await response.read()
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
@@ -1208,7 +1214,7 @@ async def enrich_dokument(
             pdf_path = await download_pdf(session, dok.link)
         except PdfNotAvailableError as exc:
             logger.warning("%s, returning original document", exc)
-            return EnrichmentResult(dokument=dok, download_failed=True)
+            return EnrichmentResult(dokument=dok, download_failed=True, http_status=exc.status)
         except Exception:
             logger.warning("PDF download failed for %s, returning original document", dok.link, exc_info=True)
             return EnrichmentResult(dokument=dok, download_failed=True)

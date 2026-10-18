@@ -76,7 +76,13 @@ async def main(config: BawueConfig) -> bool:
             # One Mattermost message per cycle, not one per scraper (issue #52).
             sections = _report_sections(scrapers, results)
             weekly = weekly_section(config)  # after the uploads, so this run's changes count (issue #82)
-            send_run_report(config, [*sections, weekly] if weekly else sections)
+            missing = [line for s in scrapers for line in getattr(s, "missing_documents", [])]
+            send_run_report(
+                config,
+                [*sections, weekly] if weekly else sections,
+                # Weekly, like the Wochenbericht: Anne asks the Landtag about these (issue #128).
+                plain_sections=[("Fehlende Dokumente", missing)] if weekly and missing else [],
+            )
     return any(isinstance(r, Exception) for r in results)
 
 

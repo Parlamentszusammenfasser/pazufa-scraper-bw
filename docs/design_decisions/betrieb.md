@@ -70,5 +70,12 @@ Redis (`wochenbericht`). Der Vergleich mit der Vorwoche ergibt 🆕 neu und ➡�
 als Abschnitt im Run-Report (ab 20 Zeilen gekürzt). Fail-soft: bei Fehlern bleibt der alte
 Stand.
 
+Mit dem Bericht kommt „Fehlende Dokumente“: PDFs, die mehr als 4 Wochen nach dem
+Fundstellen-Datum noch HTTP 404 liefern (Plenarprotokolle erscheinen nach 1–2 Wochen), eine
+Zeile je Datei mit Vorgängen und Links, als Markdown statt Codeblock (Issue #128). 5xx und
+Timeouts zählen nicht. Die Liste entsteht im Lauf selbst: ungecachte Vorgänge werden jedes Mal
+neu gebaut (DD-067).
+
 **Konsequenz:** Der erste Lauf und ein geleertes Redis liefern keinen Bericht. Eine zweite
-Station gleichen Typs gilt nicht als Änderung.
+Station gleichen Typs gilt nicht als Änderung. Ohne LLM-Anreicherung lädt der Scraper keine
+PDFs, die Liste bleibt dann leer.

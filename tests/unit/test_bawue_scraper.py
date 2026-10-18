@@ -6020,3 +6020,86 @@ class TestIssue66DrucksacheHashRegistry:
         data = await self._store([MagicMock(dokumente=[self._dok("18/700", volltext=TODO_MARKER), self._dok(None)])])
 
         assert not any(k.startswith("drucks-hash:") for k in data)
+
+
+class TestIssue128MissingDocuments:
+    """Issue #128: PDFs still 404 four weeks after their Fundstelle date, for the weekly report."""
+
+    _PLP = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Plp/18%5F0013%5F08102026.pdf"
+
+    @staticmethod
+    def _scraper(monkeypatch, today: date, status: int | None) -> BawueVorgaengeScraper:
+        from bawue.bawue_dok import EnrichmentResult
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 18
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper.config = MagicMock()
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._llm_metrics = LLMMetrics()
+        scraper._retry_next_cycle = set()
+        scraper._missing = {}
+        scraper._today = lambda: today
+
+        async def _fake_enrich(session, llm, dok, **kwargs):
+            if "/Plp/" not in dok.link:
+                return EnrichmentResult(dokument=dok)
+            return EnrichmentResult(dokument=dok, download_failed=True, http_status=status)
+
+        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
+        return scraper
+
+    @classmethod
+    def _raw(cls, vid: str, page: int) -> dict:
+        return _make_raw_vorgang(
+            vid,
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf Landesregierung 01.10.2026 Drucksache 18/1234 (20 S.)",
+                    "datum": "01.10.2026",
+                    "drucksache": "18/1234",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://www.landtag-bw.de/resource/blob/1234/doc.pdf",
+                },
+                {
+                    "raw": "Erste Beratung Plenarprotokoll 18/13 08.10.2026",
+                    "datum": "08.10.2026",
+                    "plenarprotokoll": "18/13",
+                    "station_typ": "Erste Beratung",
+                    "pdf_url": f"{cls._PLP}#page={page}",
+                },
+            ],
+        )
+
+    @pytest.mark.asyncio
+    async def test_protocol_shared_by_two_vorgaenge_is_one_line(self, monkeypatch):
+        scraper = self._scraper(monkeypatch, date(2026, 11, 20), 404)
+        await scraper._build_vorgang(self._raw("V-248237", page=12))
+        await scraper._build_vorgang(self._raw("V-248001", page=30))
+
+        assert scraper.missing_documents == [
+            "- Plenarprotokoll 18/13 (08.10.2026) - "
+            "[V-248001](https://parlis.landtag-bw.de/parlis/vorgang/V-248001), "
+            "[V-248237](https://parlis.landtag-bw.de/parlis/vorgang/V-248237) - "
+            f"seit 6 Wochen [404]({self._PLP})"
+        ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("today", "status"),
+        [
+            (date(2026, 11, 5), 404),  # exactly 4 weeks: Plenarprotokolle take 1-2 weeks
+            (date(2026, 11, 20), None),  # timeout or network error: transient
+            (date(2026, 11, 20), 503),
+        ],
+    )
+    async def test_young_or_transient_failure_is_not_listed(self, monkeypatch, today, status):
+        scraper = self._scraper(monkeypatch, today, status)
+        await scraper._build_vorgang(self._raw("V-248237", page=12))
+
+        assert scraper.missing_documents == []
+        assert "V-248237" in scraper._retry_next_cycle  # retried all the same (DD-067)

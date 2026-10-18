@@ -142,6 +142,20 @@ class TestSendRunReport:
         )
 
     @responses_lib.activate
+    def test_issue128_plain_section_keeps_links_clickable(self, mock_config):
+        """Issue #128: links inside a code block are not clickable, so this section has none."""
+        responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
+        with _patch_notif():
+            send_run_report(
+                mock_config, [("Vorgänge", ["Found: 3"])], plain_sections=[("Fehlende Dokumente", ["- [a](b)"])]
+            )
+        import json
+
+        assert json.loads(responses_lib.calls[0].request.body)["text"] == (
+            "**[staging] BaWue Run Summary**\n**Vorgänge**\n```\nFound: 3\n```\n**Fehlende Dokumente**\n- [a](b)"
+        )
+
+    @responses_lib.activate
     def test_issue52_no_post_without_sections(self, mock_config):
         """No scraper enabled or none reported: nothing to say."""
         with _patch_notif():
