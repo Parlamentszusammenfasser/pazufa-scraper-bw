@@ -210,6 +210,8 @@ class TestIssue123FetchLastModified:
         ("headers", "expected"),
         [
             ({"Last-Modified": "Mon, 12 Oct 2026 15:58:10 GMT"}, date(2026, 10, 12)),
+            # Calendar day in Europe/Berlin, as in DD-068.
+            ({"Last-Modified": "Fri, 16 Oct 2026 23:30:00 GMT"}, date(2026, 10, 17)),
             ({}, None),
             ({"Last-Modified": "gestern"}, None),
         ],

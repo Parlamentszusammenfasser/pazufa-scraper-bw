@@ -6,7 +6,7 @@ from email.utils import parsedate_to_datetime
 
 import requests
 
-from bawue.beteiligung_parser import RawBeteiligungProcess, parse_process_list
+from bawue.beteiligung_parser import BERLIN_TZ, RawBeteiligungProcess, parse_process_list
 from bawue.rate_limiter import AdaptiveRateLimiter
 from bawue.wahlperiode import CURRENT_WAHLPERIODE
 
@@ -99,6 +99,6 @@ class BeteiligungClient:
                 return None  # dead link: the file name may still date it
             raise
         try:
-            return parsedate_to_datetime(resp.headers["Last-Modified"]).date()
+            return parsedate_to_datetime(resp.headers["Last-Modified"]).astimezone(BERLIN_TZ).date()
         except (KeyError, ValueError):  # no or malformed header: the file name may still date it
             return None

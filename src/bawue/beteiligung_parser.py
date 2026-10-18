@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from urllib.parse import urljoin, urlparse
+from zoneinfo import ZoneInfo
 
 from lxml import html
 
@@ -17,6 +18,9 @@ class RawBeteiligungProcess:
     slug: str
     status: str  # "open" | "closed"
 
+
+# Days count in the portal's calendar, as in DD-068.
+BERLIN_TZ = ZoneInfo("Europe/Berlin")
 
 # Phases that only a draft's timeline has (issue #123, DD-007).
 _DRAFT_PHASES = {"Online-Kommentierung", "Gesetzentwurf"}
@@ -132,7 +136,7 @@ def release_date(pdf_url: str, last_modified: date | None, earliest: date) -> da
     counts only from *earliest* up to the upload day."""
     candidates = [last_modified] if last_modified else []
     named = _file_name_date(pdf_url)
-    if named and earliest <= named <= (last_modified or date.today()):
+    if named and earliest <= named <= (last_modified or datetime.now(BERLIN_TZ).date()):
         candidates.append(named)
     return min(candidates, default=None)
 
