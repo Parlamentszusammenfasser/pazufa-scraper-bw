@@ -40,9 +40,12 @@ on:
         type: boolean
         default: true
 
+# queue: max lets deploys wait in order. The default keeps only one pending run,
+# so a manual dispatch would cancel a waiting release deploy (or vice versa).
 concurrency:
   group: deploy-staging
   cancel-in-progress: false
+  queue: max
 
 jobs:
   deploy:
