@@ -128,10 +128,10 @@ DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [
 # Its Vorgänge share one Initiativdrucksache per budget (DD-041).
 _HAUSHALT_VORGANGSTYP = "Haushaltsgesetzgebung"
 DEFAULT_PARLIS_DELAY = 1.0
+DEFAULT_GSBLT_DELAY = 1.0
 # Plenarprotokolle appear 1-2 weeks after the session (WP18, measured 2026-10); later is a gap (issue #128).
 _MISSING_AFTER = timedelta(weeks=4)
 _MAX_MISSING_LINES = 20
-DEFAULT_GSBLT_DELAY = 1.0
 BERLIN_TZ = ZoneInfo("Europe/Berlin")
 
 # Same-committee `parl-ausschber` fundstellen belonging to one deliberation round
