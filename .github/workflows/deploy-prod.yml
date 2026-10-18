@@ -58,6 +58,12 @@ jobs:
         run: |
           VERSION=$(git tag --points-at HEAD | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # The approver sees the run page, not this log: name the version there.
+          if [ -n "$VERSION" ]; then
+            echo "### Release \`$VERSION\` → prod (staging passed)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No release on this commit; nothing to deploy." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   deploy:
     needs: release-version
