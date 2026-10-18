@@ -705,7 +705,7 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None, window:
         pdf_path: Path to the PDF file.
         page_hint: Optional page number (from ``#page=N`` URL fragment).
             When set, page markers are inserted during extraction and only
-            pages *page_hint* through *page_hint + 30* are returned.
+            the 30 pages from *page_hint* on are returned.
         window: False returns the whole text with its page markers; the caller
             cuts the window (issue #74).
 
