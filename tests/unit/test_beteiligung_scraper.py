@@ -1,7 +1,7 @@
 """Tests for the BawueBeteiligungScraper."""
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import NAMESPACE_URL, uuid5
@@ -10,7 +10,8 @@ import pytest
 
 from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
 from bawue.bawue_dok import LLMMetrics, _hash_cache
-from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
+from bawue.beteiligung_client import BASE_URL
+from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess, parse_process_detail
 from bawue.types import (
     UNSET,
     Doktyp,
@@ -35,6 +36,7 @@ def _make_scraper():
     scraper._details = {}
     scraper._fingerprints = {}
     scraper._client = MagicMock()
+    scraper._client.fetch_last_modified.return_value = date(2025, 10, 16)
     scraper._api_client = MagicMock()
     scraper._upload_limiter = AdaptiveRateLimiter(
         initial_delay=0.2, min_delay=0.05, backoff_multiplier=10.0, recovery_factor=0.5
@@ -55,7 +57,6 @@ def _make_detail(
     title: str = "Entbürokratisierung",
     ministry: str = "Ministerium des Inneren, für Digitalisierung und Kommunen",
     pdf_links: list[dict] | None = None,
-    comment_deadline: str = "13.11.2025",
     phases: list[str] | None = None,
 ) -> RawBeteiligungDetail:
     if pdf_links is None:
@@ -71,7 +72,6 @@ def _make_detail(
         title=title,
         ministry=ministry,
         pdf_links=pdf_links,
-        comment_deadline=comment_deadline,
         phases=phases,
     )
 
@@ -253,39 +253,16 @@ class TestBuildVorgang:
     async def test_zp_start_is_timezone_aware(self):
         """Naive datetimes cause API 422 'premature end of input' errors."""
         scraper = _make_scraper()
-        detail = _make_detail(comment_deadline="13.11.2025")
-        vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
+        vorgang = await scraper._build_vorgang("entbuerokratisierung", _make_detail())
 
         station = vorgang.stationen[0]
         assert station.zp_start.tzinfo is not None
-        assert station.zp_start == datetime(2025, 11, 13, tzinfo=UTC)
-
-    @pytest.mark.asyncio
-    async def test_no_deadline_returns_none(self, caplog):
-        """Missing comment_deadline means station can't be built — skip entire Vorgang.
-
-        Expected, not an error: haushaltsbegleitgesetz-2027 publishes a draft without a
-        comment phase (phases "Gesetzentwurf", "Beratung und Beschluss")."""
-        scraper = _make_scraper()
-        detail = _make_detail(comment_deadline=None)
-        with caplog.at_level(logging.INFO, logger="bawue.bawue_beteiligung_scraper"):
-            result = await scraper._build_vorgang("test-slug", detail)
-        assert result is None
-        assert scraper._skipped == 1
-        assert [r.levelno for r in caplog.records] == [logging.INFO]
-
-    @pytest.mark.asyncio
-    async def test_unparseable_deadline_returns_none(self):
-        """Unparseable comment_deadline means station can't be built — skip entire Vorgang."""
-        scraper = _make_scraper()
-        detail = _make_detail(comment_deadline="not-a-date")
-        result = await scraper._build_vorgang("test-slug", detail)
-        assert result is None
+        assert station.zp_start == datetime(2025, 10, 15, tzinfo=UTC)
 
     @pytest.mark.asyncio
     async def test_document_timestamps_are_timezone_aware(self):
         scraper = _make_scraper()
-        detail = _make_detail(comment_deadline="13.11.2025")
+        detail = _make_detail()
         vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
         doc = vorgang.stationen[0].dokumente[0]
@@ -333,10 +310,9 @@ class TestIssue45LinkListMarkup:
     async def test_effizienzgesetz_builds_vorgang(self):
         scraper = _make_scraper()
         scraper._raw_cache["effizienzgesetz"] = _make_process(slug="effizienzgesetz")
-        page = (FIXTURES / "effizienzgesetz_detail.html").read_text()
+        scraper._client.fetch_process_detail.return_value = (FIXTURES / "effizienzgesetz_detail.html").read_text()
 
-        with patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", return_value=page):
-            vorgang = await scraper.item_extractor("effizienzgesetz")
+        vorgang = await scraper.item_extractor("effizienzgesetz")
 
         assert vorgang is not None
         station = vorgang.stationen[0]
@@ -386,10 +362,9 @@ class TestIssue71Verordnungen:
     async def test_gesetz_page_is_built(self, slug):
         scraper = _make_scraper()
         scraper._raw_cache[slug] = _make_process(slug=slug)
-        page = (FIXTURES / f"{slug}_detail.html").read_text()
+        scraper._client.fetch_process_detail.return_value = (FIXTURES / f"{slug}_detail.html").read_text()
 
-        with patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", return_value=page):
-            vorgang = await scraper.item_extractor(slug)
+        vorgang = await scraper.item_extractor(slug)
 
         assert vorgang is not None
         assert vorgang.typ == Vorgangstyp.GG_LAND_PARL
@@ -415,6 +390,88 @@ class TestIssue71Verordnungen:
 
         assert (vorgang is None) is skipped
         assert scraper._skipped == int(skipped)
+
+
+class TestIssue123ReleaseDate:
+    """Issue #123 (DD-007, DD-074): dated by the draft's publication, not the comment deadline."""
+
+    PDF_A = "https://beteiligungsportal.baden-wuerttemberg.de/fileadmin/260922_Entwurf.pdf"
+    PDF_B = "https://beteiligungsportal.baden-wuerttemberg.de/fileadmin/Begruendung.pdf"
+
+    @pytest.mark.asyncio
+    async def test_haushaltsbegleitgesetz_2027_is_published(self):
+        """A draft without a comment phase used to be skipped in every run."""
+        html = (FIXTURES / "haushaltsbegleitgesetz_2027_detail.html").read_text()
+        scraper = _make_scraper()
+        scraper._wahlperiode = 18
+        scraper._client.fetch_last_modified.return_value = date(2026, 10, 12)
+
+        vorgang = await scraper._build_vorgang("haushaltsbegleitgesetz-2027", parse_process_detail(html, BASE_URL))
+
+        [station] = vorgang.stationen
+        assert station.typ == Stationstyp.PREPARL_REGENT
+        assert station.zp_start == datetime(2026, 10, 12, tzinfo=UTC)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("last_modified", "expected"),
+        [(date(2026, 6, 17), date(2026, 6, 17)), (None, date(2026, 6, 17)), (date(2026, 8, 3), date(2026, 6, 17))],
+        ids=["upload-day", "no-header", "re-uploaded"],
+    )
+    async def test_long_page_full_of_dates(self, last_modified, expected):
+        """A full, untrimmed page: 40+ dates in its text (deadline 29.07.2026, comments,
+        effective dates) and the whole portal markup. It must yield the one draft PDF,
+        dated by the PDF alone; page text never dates a draft (DD-074)."""
+        html = (FIXTURES / "dienst_und_versorgungsbezuege_full.html").read_text()
+        scraper = _make_scraper()
+        scraper._wahlperiode = 18
+        scraper._client.fetch_last_modified.return_value = last_modified
+
+        vorgang = await scraper._build_vorgang("dienst-und-versorgungsbezuege", parse_process_detail(html, BASE_URL))
+
+        [station] = vorgang.stationen
+        assert station.zp_start == datetime.combine(expected, datetime.min.time(), UTC)
+        assert [d.link for d in station.dokumente] == [
+            f"{BASE_URL}/fileadmin/redaktion/beteiligungsportal/FM/260617_Anpassung-Dienst--und-Versorgungsbezuege.pdf"
+        ]
+
+    @pytest.mark.asyncio
+    async def test_each_document_keeps_its_own_date(self):
+        scraper = _make_scraper()
+        scraper._client.fetch_last_modified.side_effect = {
+            self.PDF_A: date(2026, 9, 22),
+            self.PDF_B: date(2026, 9, 25),
+        }.get
+        detail = _make_detail(pdf_links=[{"title": "A", "url": self.PDF_A}, {"title": "B", "url": self.PDF_B}])
+
+        vorgang = await scraper._build_vorgang("mietpreisbegrenzung", detail)
+
+        [station] = vorgang.stationen
+        assert station.zp_start == datetime(2026, 9, 22, tzinfo=UTC)
+        assert [d.zp_referenz.date() for d in station.dokumente] == [date(2026, 9, 22), date(2026, 9, 25)]
+        assert [d.zp_modifiziert for d in station.dokumente] == [d.zp_referenz for d in station.dokumente]
+
+    @pytest.mark.asyncio
+    async def test_page_without_draft_phase_is_skipped(self, caplog):
+        """Strategy pages and Bürgerforen carry PDFs too, but no draft phase (DD-007)."""
+        scraper = _make_scraper()
+        with caplog.at_level(logging.INFO, logger="bawue.bawue_beteiligung_scraper"):
+            result = await scraper._build_vorgang("datenstrategie", _make_detail(phases=[]))
+        assert result is None
+        assert scraper._skipped == 1
+        assert [r.levelno for r in caplog.records] == [logging.INFO]
+        scraper._client.fetch_last_modified.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_pdf_without_any_date_skips_the_vorgang(self, caplog):
+        scraper = _make_scraper()
+        scraper._client.fetch_last_modified.return_value = None
+        detail = _make_detail(pdf_links=[{"title": "B", "url": self.PDF_B}])
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_beteiligung_scraper"):
+            result = await scraper._build_vorgang("ohne-datum", detail)
+        assert result is None
+        assert scraper._skipped == 1
+        assert "no publication date" in caplog.text
 
 
 class TestListingPageExtractor:
@@ -461,10 +518,9 @@ class TestItemExtractor:
         scraper._raw_cache["entbuerokratisierung"] = process
         detail = _make_detail()
 
-        with patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", return_value=detail.title):
-            scraper._client.fetch_process_detail.return_value = "<html></html>"
-            with patch("bawue.bawue_beteiligung_scraper.parse_process_detail", return_value=detail):
-                vorgang = await scraper.item_extractor("entbuerokratisierung")
+        scraper._client.fetch_process_detail.return_value = "<html></html>"
+        with patch("bawue.bawue_beteiligung_scraper.parse_process_detail", return_value=detail):
+            vorgang = await scraper.item_extractor("entbuerokratisierung")
 
         assert vorgang is not None
         assert "entbuerokratisierung" not in scraper._raw_cache
@@ -857,12 +913,11 @@ class TestIssue104RefreshOnChange:
                     ]
                 ),
             ),
-            (_make_process(), _make_detail(comment_deadline="20.11.2025")),
             (_make_process(status="open"), _make_detail()),
             (_make_process(), _make_detail(title="Entbürokratisierung II")),
             (_make_process(), _make_detail(ministry="Staatsministerium")),
         ],
-        ids=["added-pdf", "deadline", "status", "title", "ministry"],
+        ids=["added-pdf", "status", "title", "ministry"],
     )
     async def test_progress_is_a_miss(self, process, detail):
         scraper, _ = self._scraper_with_dict_cache()

@@ -2,7 +2,9 @@
 
 import re
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from urllib.parse import urljoin, urlparse
+from zoneinfo import ZoneInfo
 
 from lxml import html
 
@@ -17,6 +19,13 @@ class RawBeteiligungProcess:
     status: str  # "open" | "closed"
 
 
+# Days count in the portal's calendar, as in DD-068.
+BERLIN_TZ = ZoneInfo("Europe/Berlin")
+
+# Phases that only a draft's timeline has (issue #123, DD-007).
+_DRAFT_PHASES = {"Online-Kommentierung", "Gesetzentwurf"}
+
+
 @dataclass
 class RawBeteiligungDetail:
     """Parsed metadata from a process detail page."""
@@ -24,13 +33,18 @@ class RawBeteiligungDetail:
     title: str
     ministry: str
     pdf_links: list[dict] = field(default_factory=list)
-    comment_deadline: str | None = None
     phases: list[str] = field(default_factory=list)
 
     @property
     def is_verordnung(self) -> bool:
         """Only Verordnung pages carry this phase; Gesetz pages never do (issue #71, DD-007)."""
         return any(phase.startswith("Beschluss der geltenden Verordnung") for phase in self.phases)
+
+    @property
+    def is_draft(self) -> bool:
+        """A draft is open for comment or published as such; strategy pages and
+        Bürgerforen are neither, though they carry PDFs too (issue #123, DD-007)."""
+        return any(phase in _DRAFT_PHASES for phase in self.phases)
 
 
 def parse_process_list(html_content: str) -> list[RawBeteiligungProcess]:
@@ -96,20 +110,6 @@ def parse_process_detail(html_content: str, base_url: str) -> RawBeteiligungDeta
         seen_urls.add(pdf_url)
         pdf_links.append({"title": " ".join(link.text_content().split()), "url": pdf_url})
 
-    # Comment deadline from comment-list__closed announcement
-    comment_deadline = None
-    closed_els = tree.xpath('//div[contains(@class, "comment-list__closed")]//p')
-    for el in closed_els:
-        text = el.text_content()
-        date_match = re.search(r"bis zum (\d{1,2})\.\s*(\w+)\s+(\d{4})", text)
-        if date_match:
-            day = int(date_match.group(1))
-            month_name = date_match.group(2)
-            year = date_match.group(3)
-            month_num = _month_name_to_number(month_name)
-            if month_num:
-                comment_deadline = f"{day:02d}.{month_num:02d}.{year}"
-
     # Phases from phase-timeline
     phases = []
     for phase_el in tree.xpath('//li[contains(@class, "phase-timeline__item")]'):
@@ -121,26 +121,31 @@ def parse_process_detail(html_content: str, base_url: str) -> RawBeteiligungDeta
         title=title,
         ministry=ministry,
         pdf_links=pdf_links,
-        comment_deadline=comment_deadline,
         phases=phases,
     )
 
 
-_GERMAN_MONTHS = {
-    "januar": 1,
-    "februar": 2,
-    "märz": 3,
-    "april": 4,
-    "mai": 5,
-    "juni": 6,
-    "juli": 7,
-    "august": 8,
-    "september": 9,
-    "oktober": 10,
-    "november": 11,
-    "dezember": 12,
-}
+# A file name starts with its date, YYMMDD_ (260922_Entwurf.pdf).
+_FILE_NAME_DATE_RE = re.compile(r"/(\d{6})[_-][^/]*$")
 
 
-def _month_name_to_number(name: str) -> int | None:
-    return _GERMAN_MONTHS.get(name.lower())
+def release_date(pdf_url: str, last_modified: date | None, earliest: date) -> date | None:
+    """When the portal published *pdf_url* (issue #123, DD-074): its upload day
+    (``Last-Modified``) or, if earlier, the date in its file name, which survives a
+    re-upload. File names are typed by hand (``200818_`` for 2026-08-18), so that date
+    counts only from *earliest* up to the upload day."""
+    candidates = [last_modified] if last_modified else []
+    named = _file_name_date(pdf_url)
+    if named and earliest <= named <= (last_modified or datetime.now(BERLIN_TZ).date()):
+        candidates.append(named)
+    return min(candidates, default=None)
+
+
+def _file_name_date(pdf_url: str) -> date | None:
+    match = _FILE_NAME_DATE_RE.search(urlparse(pdf_url).path)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%y%m%d").date()
+    except ValueError:  # 261399_
+        return None

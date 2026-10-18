@@ -5,7 +5,7 @@ import json
 import logging
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from hashlib import sha256
 from uuid import NAMESPACE_URL, uuid5
 
@@ -18,6 +18,7 @@ from bawue.beteiligung_parser import (
     RawBeteiligungDetail,
     RawBeteiligungProcess,
     parse_process_detail,
+    release_date,
 )
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
@@ -43,7 +44,7 @@ from bawue.types import (
     todo_if_blank,
 )
 from bawue.upload_throttle import upload_vorgang
-from bawue.wahlperiode import CURRENT_WAHLPERIODE
+from bawue.wahlperiode import CURRENT_WAHLPERIODE, wahlperiode_start
 
 logger = logging.getLogger(__name__)
 
@@ -194,8 +195,8 @@ class BawueBeteiligungScraper(VorgangsScraper):
     async def _build_vorgang(self, slug: str, detail: RawBeteiligungDetail) -> Vorgang | None:
         """Convert parsed Beteiligungsportal data into a framework Vorgang model.
 
-        Returns None if the detail page has no PDF links (non-legislative content)
-        or the process is a Verordnung (DD-007).
+        Returns None if the detail page has no PDF links, is a Verordnung or no
+        draft (DD-007), or a PDF has no publication date (DD-074).
         """
         if not detail.pdf_links:
             logger.info("Skipping '%s' — no Entwurf PDFs found", detail.title)
@@ -205,25 +206,20 @@ class BawueBeteiligungScraper(VorgangsScraper):
             logger.info("Skipping '%s' — Verordnung, not a Gesetzentwurf", detail.title)
             self._skipped += 1
             return None
+        if not detail.is_draft:
+            logger.info("Skipping '%s' — no draft phase", slug)
+            self._skipped += 1
+            return None
+
+        released = [await self._release_date(pdf["url"]) for pdf in detail.pdf_links]
+        if None in released:
+            # Not cached: retried next cycle.
+            logger.warning("Skipping '%s' — a PDF has no publication date", slug)
+            self._skipped += 1
+            return None
+        zp_start = _midnight_utc(min(released))
 
         api_id = uuid5(NAMESPACE_URL, f"beteiligung-{slug}")
-
-        # Parse comment deadline as station timestamp
-        if not detail.comment_deadline:
-            # Expected: some drafts have no comment phase (haushaltsbegleitgesetz-2027).
-            logger.info("Skipping '%s' — no comment deadline", slug)
-            self._skipped += 1
-            return None
-        try:
-            zp_start = datetime.strptime(detail.comment_deadline, "%d.%m.%Y").replace(tzinfo=UTC)
-        except ValueError:
-            logger.error(
-                "Unparseable comment_deadline '%s' for '%s', skipping Vorgang",
-                detail.comment_deadline,
-                slug,
-            )
-            self._skipped += 1
-            return None
 
         # An empty ministry yields no Autor — the new backend rejects
         # empty organisation strings, so the list stays empty rather than
@@ -236,14 +232,14 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
         # Build documents
         dokumente: list[Dokument] = []
-        for pdf in detail.pdf_links:
+        for pdf, pdf_released in zip(detail.pdf_links, released, strict=True):
             dok = Dokument(
                 titel=todo_if_blank(pdf["title"]),
                 volltext=TODO_MARKER,
                 hash_=placeholder_hash(pdf["url"]),
                 typ=Doktyp.PREPARL_ENTWURF,
-                zp_modifiziert=zp_start,
-                zp_referenz=zp_start,
+                zp_modifiziert=_midnight_utc(pdf_released),
+                zp_referenz=_midnight_utc(pdf_released),
                 link=pdf["url"],
                 autoren=ministry_autoren,
             )
@@ -324,6 +320,14 @@ class BawueBeteiligungScraper(VorgangsScraper):
             ressort=ressort,
         )
 
+    async def _release_date(self, pdf_url: str) -> date | None:
+        last_modified = await asyncio.to_thread(self._client.fetch_last_modified, pdf_url)
+        return release_date(pdf_url, last_modified, earliest=wahlperiode_start(self._wahlperiode))
+
+
+def _midnight_utc(day: date) -> datetime:
+    return datetime(day.year, day.month, day.day, tzinfo=UTC)
+
 
 def _print_beteiligung_summary(
     new_or_retried: int,
@@ -351,7 +355,7 @@ def _print_beteiligung_summary(
 
 
 def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungDetail) -> str:
-    """What shows progress on the portal (issue #104): status, title, ministry, deadline, PDFs."""
+    """What shows progress on the portal (issue #104): status, title, ministry, PDFs."""
     pdfs = sorted([link["url"], link["title"]] for link in detail.pdf_links)
-    payload = [process.status, detail.title, detail.ministry, detail.comment_deadline, pdfs]
+    payload = [process.status, detail.title, detail.ministry, pdfs]
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()

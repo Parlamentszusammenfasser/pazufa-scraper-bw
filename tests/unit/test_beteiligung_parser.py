@@ -1,5 +1,6 @@
 """Tests for the Beteiligungsportal HTML parser."""
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from bawue.beteiligung_parser import (
     RawBeteiligungProcess,
     parse_process_detail,
     parse_process_list,
+    release_date,
 )
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
@@ -109,10 +111,6 @@ class TestParseProcessDetail:
         assert pdf["url"].endswith(".pdf")
         assert pdf["url"].startswith("https://")
 
-    def test_extracts_comment_deadline(self, entbuerokratisierung_html):
-        detail = parse_process_detail(entbuerokratisierung_html, BASE_URL)
-        assert detail.comment_deadline == "13.11.2025"
-
     def test_extracts_phases(self, entbuerokratisierung_html):
         detail = parse_process_detail(entbuerokratisierung_html, BASE_URL)
         assert detail.phases == [
@@ -131,10 +129,6 @@ class TestParseProcessDetail:
         assert len(detail.pdf_links) == 1
         assert "Rettungsdienstplanverordnung" in detail.pdf_links[0]["title"]
 
-    def test_rettungsdienstplanverordnung_comment_deadline(self, rettungsdienstplanverordnung_html):
-        detail = parse_process_detail(rettungsdienstplanverordnung_html, BASE_URL)
-        assert detail.comment_deadline == "29.11.2025"
-
     def test_no_pdfs_on_non_legislative_page(self, klima_register_html):
         detail = parse_process_detail(klima_register_html, BASE_URL)
         assert detail.pdf_links == []
@@ -142,10 +136,6 @@ class TestParseProcessDetail:
     def test_ministry_on_non_legislative_page(self, klima_register_html):
         detail = parse_process_detail(klima_register_html, BASE_URL)
         assert detail.ministry == "Ministerium für Umwelt, Klima und Energiewirtschaft"
-
-    def test_no_comment_deadline_when_open(self, klima_register_html):
-        detail = parse_process_detail(klima_register_html, BASE_URL)
-        assert detail.comment_deadline is None
 
     def test_pdf_url_is_absolute(self, entbuerokratisierung_html):
         detail = parse_process_detail(entbuerokratisierung_html, BASE_URL)
@@ -172,10 +162,6 @@ class TestIssue45LinkListMarkup:
             }
         ]
 
-    def test_effizienzgesetz_comment_deadline(self, effizienzgesetz_html):
-        detail = parse_process_detail(effizienzgesetz_html, BASE_URL)
-        assert detail.comment_deadline == "09.09.2026"
-
     def test_esf_external_pdfs_ignored(self, esf_foerderperiode_html):
         detail = parse_process_detail(esf_foerderperiode_html, BASE_URL)
         assert detail.pdf_links == []
@@ -195,3 +181,55 @@ class TestIssue45LinkListMarkup:
         </body></html>"""
         detail = parse_process_detail(page, BASE_URL)
         assert detail.pdf_links == [{"title": "Entwurf (PDF)", "url": url}]
+
+
+class TestIssue123ReleaseDate:
+    """Issue #123 (DD-074): the draft is dated by its publication, not by the comment deadline."""
+
+    WP18 = date(2026, 5, 1)
+    PDF = (
+        f"{BASE_URL}/fileadmin/redaktion/beteiligungsportal/Dokumente/2026/"
+        "261012_Entwurf_Haushaltsbegleitgesetz_2027.pdf"
+    )
+
+    @pytest.fixture()
+    def haushaltsbegleitgesetz_html(self):
+        return (FIXTURES / "haushaltsbegleitgesetz_2027_detail.html").read_text()
+
+    def test_draft_without_comment_phase(self, haushaltsbegleitgesetz_html):
+        detail = parse_process_detail(haushaltsbegleitgesetz_html, BASE_URL)
+        assert detail.is_draft
+        assert [link["url"] for link in detail.pdf_links] == [self.PDF]
+
+    @pytest.mark.parametrize(
+        ("phases", "is_draft"),
+        [
+            (["Online-Kommentierung", "Antwort des Ministeriums"], True),
+            (["Gesetzentwurf", "Beratung und Beschluss"], True),
+            ([], False),  # strategy pages, Bürgerforen
+            (["Kabinettsausschuss", "Ihre Meinung", "Strategie und Umsetzung"], False),
+        ],
+    )
+    def test_is_draft_by_phase(self, phases, is_draft):
+        assert RawBeteiligungDetail(title="T", ministry="M", phases=phases).is_draft is is_draft
+
+    @pytest.mark.parametrize(
+        ("url", "last_modified", "expected"),
+        [
+            (PDF, date(2026, 10, 12), date(2026, 10, 12)),
+            # Re-uploaded later: the file name keeps the earlier date.
+            (PDF, date(2026, 11, 20), date(2026, 10, 12)),
+            # File name after the upload: not the publication date.
+            (PDF, date(2026, 10, 1), date(2026, 10, 1)),
+            # Typo before the Wahlperiode (Gewalthilfe: 200818_ for 2026-08-18).
+            (f"{BASE_URL}/fileadmin/200818_GewHAG.pdf", date(2026, 8, 18), date(2026, 8, 18)),
+            (f"{BASE_URL}/fileadmin/261399_Entwurf.pdf", date(2026, 10, 12), date(2026, 10, 12)),
+            (f"{BASE_URL}/fileadmin/Entwurf.pdf", date(2026, 10, 12), date(2026, 10, 12)),
+            # No Last-Modified header: the file name alone, if not in the future.
+            (PDF, None, date(2026, 10, 12)),
+            (f"{BASE_URL}/fileadmin/991231_Entwurf.pdf", None, None),
+            (f"{BASE_URL}/fileadmin/Entwurf.pdf", None, None),
+        ],
+    )
+    def test_release_date(self, url, last_modified, expected):
+        assert release_date(url, last_modified, earliest=self.WP18) == expected

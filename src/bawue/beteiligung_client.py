@@ -1,10 +1,12 @@
 """HTTP client for the Beteiligungsportal Baden-Württemberg."""
 
 import logging
+from datetime import date
+from email.utils import parsedate_to_datetime
 
 import requests
 
-from bawue.beteiligung_parser import RawBeteiligungProcess, parse_process_list
+from bawue.beteiligung_parser import BERLIN_TZ, RawBeteiligungProcess, parse_process_list
 from bawue.rate_limiter import AdaptiveRateLimiter
 from bawue.wahlperiode import CURRENT_WAHLPERIODE
 
@@ -31,11 +33,11 @@ class BeteiligungClient:
             }
         )
 
-    def _get(self, url: str, **kw) -> requests.Response:
-        """Rate-limited GET with automatic 429 retry."""
+    def _request(self, method: str, url: str, **kw) -> requests.Response:
+        """Rate-limited request with automatic 429 retry."""
         while True:
             self._rate_limiter.wait()
-            resp = self._session.get(url, **kw)
+            resp = self._session.request(method, url, **kw)
             if resp.status_code == 429:
                 self._rate_limiter.on_rate_limit(logger)
                 continue
@@ -55,7 +57,7 @@ class BeteiligungClient:
         url = f"{BASE_URL}/de/mitmachen/lp-{self._wahlperiode}"
         logger.info("Fetching Beteiligungsportal index: %s", url)
         try:
-            resp = self._get(url, timeout=30)
+            resp = self._request("GET", url, timeout=30)
         except requests.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else None
             if status not in (403, 404):
@@ -67,7 +69,7 @@ class BeteiligungClient:
                 status,
                 fallback_url,
             )
-            resp = self._get(fallback_url, timeout=30)
+            resp = self._request("GET", fallback_url, timeout=30)
         all_processes = parse_process_list(resp.text)
 
         lp_prefix = f"/de/mitmachen/lp-{self._wahlperiode}/"
@@ -85,5 +87,18 @@ class BeteiligungClient:
         """Fetch a single process detail page, return HTML."""
         url = f"{BASE_URL}{process_path}"
         logger.info("Fetching Beteiligungsportal detail: %s", url)
-        resp = self._get(url, timeout=30)
+        resp = self._request("GET", url, timeout=30)
         return resp.text
+
+    def fetch_last_modified(self, pdf_url: str) -> date | None:
+        """Upload day of a portal file, from its ``Last-Modified`` header (issue #123)."""
+        try:
+            resp = self._request("HEAD", pdf_url, timeout=30, allow_redirects=True)
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code in (404, 410):
+                return None  # dead link: the file name may still date it
+            raise
+        try:
+            return parsedate_to_datetime(resp.headers["Last-Modified"]).astimezone(BERLIN_TZ).date()
+        except (KeyError, ValueError):  # no or malformed header: the file name may still date it
+            return None
