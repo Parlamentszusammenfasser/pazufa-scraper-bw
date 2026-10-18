@@ -1243,6 +1243,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     vorgang_vnr=vorgang_vnr,
                     metrics=self._llm_metrics,
                     cache=self.config.cache,
+                    druckseiten=fund.get("druckseiten"),
                 )
                 dok = result.dokument
                 if result.download_failed:

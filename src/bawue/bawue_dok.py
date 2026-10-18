@@ -204,6 +204,18 @@ zusammen und nenne alle behandelten Tagesordnungspunkte bzw. Gesetzentwürfe
 gleichrangig, ohne dich auf einen einzelnen davon zu konzentrieren.
 Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
 
+# A protocol narrowed to one agenda item's pages (issue #74). Items debated together
+# share the pages, hence the row (DD-049), so the summary names them all.
+BODY_PROMPT_REDEPROTOKOLL_TOP = """\
+Extrahiere aus dem folgenden Ausschnitt eines Plenarprotokolls die folgenden Informationen als JSON:
+{"schlagworte": ["Liste inhaltlich bedeutsamer Schlagworte"],
+ "zusammenfassung": "Neutrale Zusammenfassung der Beratung in 150-250 Worten",
+ "kurztitel": "Kurzer verständlicher Titel in einfacher Sprache"}
+Der Ausschnitt umfasst die Seiten eines Tagesordnungspunkts. Am Anfang und am Ende können
+Reste anderer Tagesordnungspunkte stehen; lass diese weg. Werden mehrere Gesetzentwürfe
+gemeinsam beraten, nenne sie gleichrangig.
+Antworte ausschließlich mit validem JSON. Halluziniere keine Informationen."""
+
 _DOKTYP_PROMPT_MAP: dict[Doktyp, str] = {
     Doktyp.ENTWURF: BODY_PROMPT_ENTWURF,
     Doktyp.PREPARL_ENTWURF: BODY_PROMPT_ENTWURF,
@@ -247,6 +259,7 @@ def _prompt_fingerprint(
     drucksnr: str | None = None,
     titel: str | None = None,
     vorgang_vnr: str | None = None,
+    body_prompt: str | None = None,
 ) -> str:
     """SHA256 over (system prompt + context header + body prompt) for the given doktyp.
 
@@ -261,7 +274,7 @@ def _prompt_fingerprint(
     so two bills sharing one protocol PDF stay on separate cache entries even if
     their titles happen to coincide (issue #35).
     """
-    body = _prompt_for_doktyp(doktyp)
+    body = body_prompt or _prompt_for_doktyp(doktyp)
     prefix = _context_prefix(titel, drucksnr)
     vnr_part = f"\n\nVORGANG-VNR:{vorgang_vnr}" if vorgang_vnr else ""
     return hashlib.sha256(f"{_SYSTEM_PROMPT}\n\n{prefix}{body}{vnr_part}".encode()).hexdigest()
@@ -546,6 +559,10 @@ def _usable_length(text: str) -> int:
 _PAGE_MARKER_RE = re.compile(r"(?:\A|\n\n)<!-- PAGE (\d+) -->(?:\n\n|\Z)")
 
 
+# Pages of a #page=N window: the volltext of an anchored Fundstelle.
+_WINDOW_PAGES = 30
+
+
 def _parse_page_hint(url: str) -> int | None:
     """Extract page number from a URL's ``#page=N`` fragment."""
     fragment = urlparse(url).fragment
@@ -553,18 +570,37 @@ def _parse_page_hint(url: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _extract_relevant_pages(text: str, start_page: int, max_pages: int = 30) -> str:
+def _page_map(text: str) -> dict[int, str]:
+    """PDF page number → page text, from kreuzberg's page markers (empty without markers)."""
+    parts = _PAGE_MARKER_RE.split(text)
+    # parts alternates: [text_before_first_marker, page_num, text, page_num, text, ...]
+    return {int(parts[i]): parts[i + 1] for i in range(1, len(parts) - 1, 2)}
+
+
+def _agenda_text(text: str, page_hint: int, druckseiten: list[int]) -> tuple[str, list[int]] | None:
+    """The agenda item's pages of a marked protocol text, with their PDF numbers (issue #74).
+
+    The anchor is the item's first printed page (verified on 489 WP17/18 Fundstellen), so
+    printed page p is PDF page ``page_hint + p - druckseiten[0]``. Capped at the volltext
+    window: the LLM never reads more than before. None if a page is missing or the pages
+    are near-empty: then the offset is wrong and the caller keeps the whole window.
+    """
+    window = range(page_hint, page_hint + _WINDOW_PAGES)
+    pages = [page_hint + p - druckseiten[0] for p in druckseiten if page_hint + p - druckseiten[0] in window]
+    page_map = _page_map(text)
+    if not pages or any(p not in page_map for p in pages):
+        return None
+    agenda = "\n\n".join(page_map[p] for p in pages)
+    return (agenda, pages) if len(agenda.strip()) >= MIN_TEXT_LENGTH else None
+
+
+def _extract_relevant_pages(text: str, start_page: int, max_pages: int = _WINDOW_PAGES) -> str:
     """Extract text from *start_page* through *start_page + max_pages* using page markers.
 
     Falls back to the full text when no markers are found or when the
     requested page range lies beyond the document.
     """
-    parts = _PAGE_MARKER_RE.split(text)
-    # parts alternates: [text_before_first_marker, page_num, text, page_num, text, ...]
-    page_map: dict[int, str] = {}
-    for i in range(1, len(parts) - 1, 2):
-        page_map[int(parts[i])] = parts[i + 1]
-
+    page_map = _page_map(text)
     if not page_map:
         return text
 
@@ -662,7 +698,7 @@ _OCR_CONFIG_PAGE_MARKERS = ExtractionConfig(
 )
 
 
-async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tuple[str, str]:
+async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None, window: bool = True) -> tuple[str, str]:
     """Extract text and compute SHA256 hash from a PDF file.
 
     Args:
@@ -670,6 +706,8 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tupl
         page_hint: Optional page number (from ``#page=N`` URL fragment).
             When set, page markers are inserted during extraction and only
             pages *page_hint* through *page_hint + 30* are returned.
+        window: False returns the whole text with its page markers; the caller
+            cuts the window (issue #74).
 
     Returns (full_text, hash).  Falls back to OCR when:
     1. Normal extraction yields fewer than 64 characters, or
@@ -708,7 +746,7 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None) -> tupl
         except Exception as exc:
             logger.warning("OCR retry failed (%s), keeping original garbled text", type(exc).__name__)
 
-    if page_hint is not None:
+    if page_hint is not None and window:
         text = _extract_relevant_pages(text, page_hint)
 
     return text, doc_hash
@@ -798,6 +836,7 @@ async def extract_semantics(
     model: str = "gpt-5-nano",
     dok_titel: str | None = None,
     drucksnr: str | None = None,
+    body_prompt: str | None = None,
 ) -> dict:
     """Call LLM to extract structured metadata from document text.
 
@@ -813,7 +852,7 @@ async def extract_semantics(
     that occasionally emit malformed JSON, and validates score ranges
     post-extraction.
     """
-    prompt = _prompt_for_doktyp(doktyp)
+    prompt = body_prompt or _prompt_for_doktyp(doktyp)
     context = _context_prefix(dok_titel, drucksnr)
     user_message = f"{context}{prompt}\n\n{full_text}"
 
@@ -1170,6 +1209,7 @@ async def enrich_dokument(
     vorgang_vnr: str | None = None,
     metrics: LLMMetrics | None = None,
     cache: BawueCache | None = None,
+    druckseiten: list[int] | None = None,
 ) -> EnrichmentResult:
     """Enrich a plain Dokument with PDF text extraction and LLM semantics.
 
@@ -1188,10 +1228,10 @@ async def enrich_dokument(
     Vorgang-specific (issue #35).
 
     Exception: for ``REDEPROTOKOLL``, *vorgang_titel*/*vorgang_vnr* are deliberately
-    withheld, so the summary describes the sitting rather than one bill (issue #49).
-    Its cache key therefore keys on the plain file digest instead of the anchored
-    ``hash_``: every Fundstelle of that protocol reuses the one session-level summary,
-    even though each Fundstelle gets its own Dokument row (issue #25).
+    withheld: bills debated together share the row (issue #49). With the Fundstelle's
+    printed pages (*druckseiten*) and its anchor, the LLM reads only that agenda item
+    and caches per file and pages (issue #74, DD-037). Without them it reads the window
+    and caches on the plain file digest, one summary per sitting (issue #25).
 
     ``hash_`` is the document's row identity in the backend and always carries the
     ``#page=N`` anchor when the Fundstelle has one — one row per Fundstelle, so
@@ -1219,9 +1259,12 @@ async def enrich_dokument(
             logger.warning("PDF download failed for %s, returning original document", dok.link, exc_info=True)
             return EnrichmentResult(dokument=dok, download_failed=True)
 
-        # Extract text + hash, then normalize
-        full_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint)
-        full_text = normalize_volltext(full_text)
+        # Extract text + hash, then normalize. The page markers stay until the
+        # window is cut, so a protocol can still pick its agenda pages (issue #74).
+        marked_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint, window=False)
+        full_text = normalize_volltext(
+            marked_text if page_hint is None else _extract_relevant_pages(marked_text, page_hint)
+        )
 
         # A #page=N anchor marks one Fundstelle's window into a PDF that several
         # references share: separate logical documents packed into one
@@ -1251,17 +1294,19 @@ async def enrich_dokument(
         # Document-identity context for the prompt: the Vorgang title (bill name)
         # or, as a fallback, the document's own title, plus the Drucksache.
         # REDEPROTOKOLL is withheld from this context (issue #49) — see the
-        # docstring's "Exception" paragraph. Its summary is therefore a
-        # session-level one, computed from the whole sitting rather than per bill,
-        # so it is cached against the plain file digest: every Fundstelle of that
-        # protocol reuses the one summary even though each now owns its own row
-        # (issue #25). Every other doktyp caches against the anchored hash, where
-        # a differing anchor means a genuinely different document.
+        # docstring's "Exception" paragraph. It caches on the file digest, plus the
+        # agenda pages it read (DD-037). Every other doktyp caches against the
+        # anchored hash, where a differing anchor means a genuinely different document.
+        summary_text, body_prompt = full_text, None
         if dok.typ == Doktyp.REDEPROTOKOLL:
             context_titel = None
             context_vorgang_vnr = None
             context_drucksnr = None
             cache_hash = file_hash
+            agenda = _agenda_text(marked_text, page_hint, druckseiten) if page_hint and druckseiten else None
+            if agenda is not None:
+                summary_text, body_prompt = normalize_volltext(agenda[0]), BODY_PROMPT_REDEPROTOKOLL_TOP
+                cache_hash = hashlib.sha256(f"{file_hash}#pages={agenda[1]}".encode()).hexdigest()
         else:
             context_titel = vorgang_titel or dok.titel
             context_vorgang_vnr = vorgang_vnr
@@ -1273,7 +1318,11 @@ async def enrich_dokument(
         # so two bills sharing one protocol PDF don't collide (issue #32) — except
         # REDEPROTOKOLL, where it is deliberately omitted (issue #49).
         prompt_hash = _prompt_fingerprint(
-            dok.typ, drucksnr=context_drucksnr, titel=context_titel, vorgang_vnr=context_vorgang_vnr
+            dok.typ,
+            drucksnr=context_drucksnr,
+            titel=context_titel,
+            vorgang_vnr=context_vorgang_vnr,
+            body_prompt=body_prompt,
         )
         cache_key = _cache_key(cache_hash, prompt_hash)
         # zp_referenz stays the PARLIS date; zp_modifiziert = the printed issue date (issue #23).
@@ -1318,10 +1367,16 @@ async def enrich_dokument(
                 # None for REDEPROTOKOLL, so narrow_to_relevant_section() no-ops
                 # (issue #49) — see the docstring's "Exception" paragraph.
                 summary_input = await narrow_to_relevant_section(
-                    llm, full_text, dok.typ, context_titel, context_vorgang_vnr or context_drucksnr
+                    llm, summary_text, dok.typ, context_titel, context_vorgang_vnr or context_drucksnr
                 )
                 semantics = await extract_semantics(
-                    llm, summary_input, dok.typ, model=model, dok_titel=context_titel, drucksnr=context_drucksnr
+                    llm,
+                    summary_input,
+                    dok.typ,
+                    model=model,
+                    dok_titel=context_titel,
+                    drucksnr=context_drucksnr,
+                    body_prompt=body_prompt,
                 )
                 _hash_cache[cache_key] = semantics
                 _redis_set(cache, cache_key, json.dumps(semantics))

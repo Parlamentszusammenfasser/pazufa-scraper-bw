@@ -50,20 +50,29 @@ und reicht sie bis `enrich_dokument` durch (`vorgang_vnr`); sie geht in
 `_prompt_fingerprint` ein. Für Protokolle gilt das seit DD-037 nicht mehr.
 
 <a id="dd-037"></a>
-## DD-037: Eine neutrale Zusammenfassung je Plenarprotokoll
+## DD-037: Plenarprotokoll: Zusammenfassung je Tagesordnungspunkt
 
 **Kontext:** DD-029/DD-033 fassten ein Protokoll je Vorgang verschieden zusammen. Das
 Backend speicherte damals einen Row je PDF; der zuletzt hochgeladene Vorgang überschrieb die
-anderen (Issue #49: fünf Gesetze, eine Kita-Zusammenfassung).
+anderen (Issue #49: fünf Gesetze, eine Kita-Zusammenfassung). Danach bekam jedes Protokoll
+eine neutrale Zusammenfassung der Sitzung, aus dem 30-Seiten-Fenster ab dem Anker. Sie
+nannte Palantir und die Fragestunde neben dem Gesetz (Issue #74).
 
-**Entscheidung:** Für `redeprotokoll` keine Vorgangsidentität im Prompt, kein Kontext-Header,
-ein eigener neutraler Prompt (`BODY_PROMPT_REDEPROTOKOLL`), der alle Tagesordnungspunkte
-gleichrangig nennt. Der Cache-Schlüssel ist damit Datei-Hash + Prompt: Alle Vorgänge einer
-Sitzung bekommen dieselbe Zusammenfassung, unabhängig von der Reihenfolge.
+**Entscheidung:** Seit DD-049 hat jede Fundstelle ihren Row. Das LLM liest nur die Seiten
+des Tagesordnungspunkts: PARLIS nennt sie gedruckt („S. 168-172; 179“), der Anker ist die
+erste davon, also PDF-Seite = Anker + (Seite − erste Seite). Geprüft an 489 Fundstellen
+(WP17/18) und 284 Seiten echter PDFs. Höchstens das Fenster, nie mehr als vorher. Eigener
+Prompt (`BODY_PROMPT_REDEPROTOKOLL_TOP`), weiterhin ohne Vorgangsidentität: Gemeinsam
+beratene Gesetze teilen Seiten und Row. Cache-Schlüssel: Datei-Hash + Seiten.
 
-**Konsequenz:** Seit DD-049 hat jeder Vorgang wieder einen eigenen Row. Eine Zusammenfassung
-je Gesetz wäre damit möglich, kostet aber einen Call je Gesetz statt je Sitzung; bleibt
-neutral.
+Fehlen Seiten oder Anker, oder passt eine Seite nicht ins PDF, gilt das Alte: Fenster,
+neutraler Prompt, Datei-Hash.
+
+**Konsequenz:** Ein LLM-Call je Tagesordnungspunkt statt je Sitzung, bei 44 % der
+Eingabe. Bestehende Protokolle werden einmal neu zusammengefasst; ihre alten Schlagworte
+bleiben, weil das Backend Schlagworte vereinigt. Bekannte Lücke: Zwei Punkte, die auf
+derselben Seite beginnen, teilen einen Row (DD-049); es gilt die Zusammenfassung des
+zuletzt hochgeladenen (24 von 379 geteilten Ankern in WP17/18).
 
 <a id="dd-020"></a>
 ## DD-020: Cache-Schlüssel aus Inhalt und Prompt

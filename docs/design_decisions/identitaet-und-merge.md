@@ -109,11 +109,11 @@ Werte des zuletzt hochgeladenen Vorgangs: falsche Lesung, Link in eine fremde De
 
 **Entscheidung:** Row-Identität und Cache-Schlüssel sind getrennt.
 - `hash_` faltet den Anker immer ein. Gleiche Seite bleibt ein Row.
-- Der LLM-Cache-Schlüssel für Protokolle bleibt der Datei-Hash: eine Zusammenfassung je
-  Sitzung (DD-037), ein LLM-Call.
+- Der LLM-Cache-Schlüssel für Protokolle ist der Datei-Hash, mit den Seiten des
+  Tagesordnungspunkts, wenn PARLIS sie nennt (DD-037).
 
-**Konsequenz:** `volltext` eines Rows ist sein Seitenfenster, `zusammenfassung` die der
-Sitzung. „Beschluss des Landtags in … Beratung"-Drucksachen ohne Anker behalten den
+**Konsequenz:** `volltext` eines Rows ist sein Seitenfenster, `zusammenfassung` die seines
+Tagesordnungspunkts (DD-037). „Beschluss des Landtags in … Beratung"-Drucksachen ohne Anker behalten den
 Datei-Hash und teilen einen Row; ihr Titel ist gleich. Bekannte Lücke: Ein lesbares
 Protokoll, das noch ohne Anker in mehreren Vorgängen steht, teilt ebenfalls einen Row
 (letzter `titel` gewinnt); kommt der Anker nach, entsteht je Station ein weiterer Row.
