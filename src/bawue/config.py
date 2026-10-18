@@ -11,7 +11,7 @@ bawue.api.build_client) are dropped.
 import logging
 import os
 import sys
-from argparse import ArgumentParser
+from argparse import SUPPRESS, ArgumentParser
 from pathlib import Path
 
 import toml
@@ -63,20 +63,7 @@ class BawueConfig:
                 ),
             ),
             ConfigProp("collector_id", "main.collector-uuid", "COLLECTOR_ID", required=True),
-            ConfigProp("cycle_time_s", "main.cycle-time-s", "CYCLE_TIME_S", None, 10800),
             ConfigProp("max_concurrency", "main.max-concurrency", "MAX_CONCURRENCY", None, 3),
-            ConfigProp(
-                "once",
-                "main.once",
-                "ONCE",
-                "once",
-                False,
-                lambda p: p.add_argument(
-                    "--once",
-                    help="Run a single scraping cycle and exit (for cron/serverless deployments)",
-                    action="store_true",
-                ),
-            ),
             # cache
             ConfigProp("redis_host", "cache.redis-host", "REDIS_HOST", None, "localhost"),
             ConfigProp("redis_port", "cache.redis-port", "REDIS_PORT", None, 6379),
@@ -147,6 +134,8 @@ class BawueConfig:
             help="Print the resolved configuration and exit",
             action="store_true",
         )
+        # No-op: the scraper always runs one cycle and exits. Kept so old commands still work.
+        parser.add_argument("--once", action="store_true", help=SUPPRESS)
 
         for config in self.configurations:
             if config.arg:

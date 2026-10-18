@@ -1,4 +1,4 @@
-"""Issue #101: without --once, __main__ starts a new event loop each cycle (asyncio.run).
+"""Issue #101: __main__ used to start a new event loop each cycle (asyncio.run).
 
 A semaphore created at import binds to the first loop that waits on it; in the next
 cycle every contended acquire raised "bound to a different event loop", and

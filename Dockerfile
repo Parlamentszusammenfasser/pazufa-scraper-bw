@@ -63,4 +63,4 @@ USER app
 ARG SCRAPER_VERSION=dev
 ENV SCRAPER_VERSION=$SCRAPER_VERSION
 
-ENTRYPOINT ["python", "-m", "bawue", "--config-file", "config.toml", "--once"]
+ENTRYPOINT ["python", "-m", "bawue", "--config-file", "config.toml"]

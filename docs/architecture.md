@@ -28,7 +28,7 @@ graph LR
     end
 
     subgraph "BaWue Runtime (bawue.*)"
-        Runner["__main__ Loop / Registry"]
+        Runner["__main__ Runner / Registry"]
         Cache["Redis BawueCache"]
         APIClient["httpx API Client<br/>(pazufa-scraper-core)"]
         DocPipeline["Document Pipeline<br/>(kreuzberg + OCR + LLM)"]
@@ -272,7 +272,7 @@ IDs. Items whose `Vorgangstyp` field doesn't match the enabled set are dropped d
 
 | Capability          | Provided by                                              |
 |---------------------|----------------------------------------------------------|
-| Scheduling          | `bawue.__main__` cycle loop at configurable intervals    |
+| Scheduling          | Cloud Scheduler → Cloud Run Job; `bawue.__main__` runs one cycle and exits |
 | Redis caching       | `bawue.cache` — no TTL, `vg2:`/`sz:`/`llm-semantics:`/`drucks-hash:` keys (DD-052/066) |
 | API client          | `pazufa-scraper-core` httpx client + `bawue.upload_throttle` retry |
 | Models              | `pazufa-scraper-core` models generated from OpenAPI spec |

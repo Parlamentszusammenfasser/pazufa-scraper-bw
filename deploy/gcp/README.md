@@ -10,7 +10,7 @@ tradeoff: two vendors and a variable bill.
 
 ```
 Cloud Scheduler (0 3 * * *, Europe/Berlin)
-    → Cloud Run Job  bawue-scraper-staging   2 vCPU / 4 GiB, --once
+    → Cloud Run Job  bawue-scraper-staging   2 vCPU / 4 GiB
         → Upstash Redis  (REDIS_URL, rediss://)
         → PaZuFa backend (staging.api.pazufa.de)
         → OpenAI

@@ -48,7 +48,7 @@ class BawueCache:
             return
 
         target = _redact(redis_url) if redis_url else f"{redis_host}:{redis_port}"
-        # The connection is made once per `--once` execution and a failure exits the
+        # The connection is made once per execution and a failure exits the
         # process, so a single blip would cost a whole scheduled run. Upstash is a
         # cross-internet TLS endpoint, not the same-network hop Compose provides.
         retry = Retry(ExponentialBackoff(), 3)

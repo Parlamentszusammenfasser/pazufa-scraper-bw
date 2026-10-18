@@ -9,7 +9,6 @@ import asyncio
 import logging
 import os
 import sys
-import time
 
 import aiohttp
 from dotenv import load_dotenv
@@ -51,7 +50,8 @@ def load_scrapers(config: BawueConfig, session: aiohttp.ClientSession) -> list[S
     return scrapers
 
 
-async def main(config: BawueConfig) -> None:
+async def main(config: BawueConfig) -> bool:
+    """Run one scraping cycle; True if any scraper failed."""
     logger.info("Starting new Scraping Cycle")
     clear_hash_cache()  # once per cycle: the scrapers run concurrently and share it (issue #101)
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit_per_host=1)) as session:
@@ -77,6 +77,7 @@ async def main(config: BawueConfig) -> None:
             sections = _report_sections(scrapers, results)
             weekly = weekly_section(config)  # after the uploads, so this run's changes count (issue #82)
             send_run_report(config, [*sections, weekly] if weekly else sections)
+    return any(isinstance(r, Exception) for r in results)
 
 
 def _report_sections(scrapers: list[Scraper], results: list) -> list[tuple[str, list[str]]]:
@@ -113,6 +114,19 @@ def load_config() -> BawueConfig:
     return config
 
 
+def run(config: BawueConfig) -> None:
+    """One scraping cycle. A cycle that raises alerts Mattermost and exits 1 (Cloud Run: failed);
+    a failed scraper exits 1 too, its error is already in the run report."""
+    try:
+        failed = asyncio.run(main(config))
+    except Exception as e:
+        send_alert(config, f"Scraping cycle failed: {type(e).__name__}: {' '.join(str(e).split())[:200]}")
+        raise
+    if failed:
+        logger.error("Scraping cycle finished with failed scrapers.")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
@@ -125,21 +139,6 @@ if __name__ == "__main__":
 
     logger.info("Configuration Complete")
 
-    last_run = None
-    while True:
-        if last_run is not None and time.time() - last_run < config.cycle_time_s:
-            logger.info("Last scraping cycle finished, sleeping until next cycle. Bye!")
-            time.sleep(config.cycle_time_s - (time.time() - last_run))
-            continue
-        try:
-            last_run = time.time()
-            asyncio.run(main(config))
-        except KeyboardInterrupt:
-            logger.info("Shutting down.")
-            break
-        except Exception as e:
-            logger.error("Error: %s", e)
-            continue
-        if config.once:
-            logger.info("Single cycle completed (--once mode). Shutting down.")
-            break
+    # One cycle per process; the scheduler starts the next.
+    run(config)
+    logger.info("Scraping cycle completed. Shutting down.")

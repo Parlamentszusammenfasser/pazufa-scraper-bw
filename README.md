@@ -76,7 +76,7 @@ make run
 
 - **Redis is required:** without `[cache]` the scraper connects to `localhost:6379` and exits
   if nothing answers. `docker compose up -d redis` starts one.
-- **Less to scrape:** `--run bawuevorgaenge --once` runs one scraper once (prefix of the class name); `[bawue]
+- **Less to scrape:** `--run bawuevorgaenge` runs one scraper (prefix of the class name); `[bawue]
   enabled-vorgangstypen` limits the PARLIS types.
 - **See what would be sent:** `api-obj-log = "locallogs"` dumps every built object, and the
   [Mock Backend](#mock-backend) logs every request body.
@@ -168,7 +168,7 @@ Update `config.dev.toml` with your collector key:
 **5. Run the scraper against the local backend:**
 
 ```bash
-.venv/bin/python -m bawue --config-file config.dev.toml --once
+.venv/bin/python -m bawue --config-file config.dev.toml
 ```
 
 **6. Inspect submitted data via the backend API:**
@@ -301,7 +301,7 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-This mounts `config.staging.toml` as the config file and injects secrets from `.env` into the container. The scraper re-runs every 5 minutes (`CYCLE_TIME_S=300`). Logs are persisted to `./locallogs/`.
+This mounts `config.staging.toml` as the config file and injects secrets from `.env` into the container. The scraper runs one cycle and exits; `docker-compose up scraper` starts the next. Logs are persisted to `./locallogs/`.
 
 **3. Watch logs:**
 ```bash
