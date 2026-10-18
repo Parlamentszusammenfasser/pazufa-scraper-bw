@@ -824,7 +824,7 @@ class TestEnrichDokument:
         session = MagicMock()
         llm = AsyncMock()
 
-        failure = PdfNotAvailableError("PDF download returned HTTP 404: https://example.com/plp.pdf")
+        failure = PdfNotAvailableError(404, "https://example.com/plp.pdf")
         with patch("bawue.bawue_dok.download_pdf", new_callable=AsyncMock, side_effect=failure):
             result = await enrich_dokument(session, llm, dok)
 
@@ -841,6 +841,7 @@ class TestEnrichDokument:
             result = await enrich_dokument(_mock_session(404), AsyncMock(), dok)
 
         assert result.download_failed is True
+        assert result.http_status == 404  # not published: the weekly report lists it (issue #128)
         assert len(caplog.records) == 1
         record = caplog.records[0]
         assert record.levelno == logging.WARNING
@@ -859,6 +860,7 @@ class TestEnrichDokument:
             result = await enrich_dokument(MagicMock(), AsyncMock(), dok)
 
         assert result.download_failed is True
+        assert result.http_status is None  # transient: not reported as missing (issue #128)
         assert len(caplog.records) == 1
         assert caplog.records[0].exc_info is not None
 

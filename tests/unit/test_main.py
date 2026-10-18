@@ -56,6 +56,7 @@ class TestIssue52OneRunReport:
                 ("Beteiligung", ["Beteiligung line"]),
                 ("Sitzungen", ["Sitzungen line"]),
             ],
+            plain_sections=[],
         )
 
     @pytest.mark.asyncio
@@ -229,3 +230,29 @@ class TestCycleFailure:
                     run(_config(False))
                 assert exc.value.code == code
         alert.assert_not_called()  # the run report already names the failure
+
+
+class TestIssue128MissingDocuments:
+    """Issue #128: the weekly run lists unpublished documents as plain, clickable text."""
+
+    class _Vorgaenge(_FakeScraper):
+        missing_documents = ("- Plenarprotokoll 18/13 …",)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("weekly", "plain"),
+        [
+            (("Wochenbericht", ["Keine Änderungen."]), [("Fehlende Dokumente", ["- Plenarprotokoll 18/13 …"])]),
+            (None, []),  # not the week's first run
+        ],
+    )
+    async def test_listed_with_the_weekly_report_only(self, _no_weekly_section, weekly, plain):
+        _no_weekly_section.return_value = weekly
+
+        with (
+            patch("bawue.__main__.load_scrapers", return_value=[self._Vorgaenge("Vorgänge"), _FakeScraper("S")]),
+            patch("bawue.__main__.send_run_report") as send,
+        ):
+            await main(_config(False))
+
+        assert send.call_args.kwargs["plain_sections"] == plain

@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+from collections.abc import Sequence
 
 import requests
 
@@ -28,16 +29,23 @@ def _extract_environment(config: BawueConfig) -> str:
     return "local"
 
 
-def send_run_report(config: BawueConfig, sections: list[tuple[str, list[str]]]) -> None:
+def send_run_report(
+    config: BawueConfig,
+    sections: list[tuple[str, list[str]]],
+    plain_sections: Sequence[tuple[str, list[str]]] = (),
+) -> None:
     """Post one cycle's scraper summaries as a single Mattermost message (issue #52).
 
-    *sections* are ``(title, lines)`` pairs, one per scraper. Silently skips if
-    mattermost-hook is empty or missing, or there is nothing to report.
+    *sections* are ``(title, lines)`` pairs, one per scraper, each in a code block.
+    *plain_sections* follow as Markdown, so their links stay clickable (issue #128).
+    Silently skips if mattermost-hook is empty or missing, or there is nothing to report.
     """
-    if not sections:
+    if not sections and not plain_sections:
         return
-    text = f"**[{_extract_environment(config)}] BaWue Run Summary**" + "".join(
-        f"\n**{title}**\n```\n" + "\n".join(lines) + "\n```" for title, lines in sections
+    text = (
+        f"**[{_extract_environment(config)}] BaWue Run Summary**"
+        + "".join(f"\n**{title}**\n```\n" + "\n".join(lines) + "\n```" for title, lines in sections)
+        + "".join(f"\n**{title}**\n" + "\n".join(lines) for title, lines in plain_sections)
     )
     _post(config, text)
 

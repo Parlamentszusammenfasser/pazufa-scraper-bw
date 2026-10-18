@@ -43,6 +43,11 @@ _FIELD_FUNDSTELLEN = "WMV35"
 _BASE_URL = "https://parlis.landtag-bw.de/parlis/"
 
 
+def vorgang_url(vorgangs_id: str) -> str:
+    """The Vorgang's PARLIS detail page."""
+    return f"{_BASE_URL}vorgang/{vorgangs_id}"
+
+
 def _safe_main(data: dict, key: str) -> str | None:
     """Safely extract data[key][0]["main"], returning None if any level is missing."""
     entries = data.get(key)
@@ -112,7 +117,7 @@ def _json_comment_to_raw_vorgang(data: dict) -> RawVorgang | None:
     result: RawVorgang = {
         "titel": titel,
         "vorgangs_id": vorgangs_id,
-        "detail_url": f"{_BASE_URL}vorgang/{vorgangs_id}",
+        "detail_url": vorgang_url(vorgangs_id),
     }
 
     vorgangstyp = _safe_main(data, _FIELD_VORGANGSTYP)
@@ -301,7 +306,7 @@ def _extract_from_scripts(record) -> tuple[str | None, str | None]:
         if detail_url is None:
             url_match = re.search(r'"/parlis/vorgang/(V-\d+)"', script_text)
             if url_match:
-                detail_url = f"https://parlis.landtag-bw.de/parlis/vorgang/{url_match.group(1)}"
+                detail_url = vorgang_url(url_match.group(1))
 
         if vorgangs_id and detail_url:
             break
