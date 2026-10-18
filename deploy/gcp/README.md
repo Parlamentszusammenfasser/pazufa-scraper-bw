@@ -95,6 +95,10 @@ Turn *smoke test* **off** for the very first deploy: with an empty cache that ru
 is a full-Wahlperiode backfill and will outlast the 45-minute step budget. Deploy,
 then `gcloud run jobs execute` it yourself and follow the logs.
 
+Prod follows: after a release reached staging, **Deploy prod** starts on its own
+and waits for a required reviewer of environment `prod` (Actions → the run →
+*Review deployments*). Rejecting it, or letting it wait 30 days, deploys nothing.
+
 ## Operating
 
 ```bash
@@ -134,4 +138,5 @@ gcloud scheduler jobs resume bawue-scraper-staging --location $REGION
 - **Production** reuses all of this: run `bootstrap.sh` with `ENVIRONMENT=prod`,
   set up GitHub environment **`prod`** the same way, then Actions → **Deploy prod**
   (`deploy-prod.yml` — job `bawue-scraper-prod`, secrets `bawue-prod-*`). Its image
-  tag has no default: deploy a semver already verified on staging.
+  tag has no default: deploy a semver already verified on staging. In environment
+  `prod`, add the repo admins as *Required reviewers* — that is the approval gate.
