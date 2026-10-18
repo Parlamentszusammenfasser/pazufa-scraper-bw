@@ -6113,3 +6113,13 @@ class TestIssue128MissingDocuments:
             "- Drucksache 18/1234 (01.10.2026)",
             "- Gesetzesbeschluss (08.10.2026)",
         ]
+
+    def test_long_list_is_cut_like_the_wochenbericht(self, monkeypatch):
+        """A gap like Gesetzblatt Nr. 69-82 (#127) must not push the post past Mattermost's limit."""
+        scraper = self._scraper(monkeypatch, date(2026, 11, 20), 404)
+        for i in range(22):
+            scraper._note_missing({"drucksache": f"18/{i}"}, date(2026, 10, 1), f"https://x/{i}.pdf", "V-1")
+
+        lines = scraper.missing_documents
+        assert len(lines) == 21
+        assert lines[-1] == "… 2 weitere"

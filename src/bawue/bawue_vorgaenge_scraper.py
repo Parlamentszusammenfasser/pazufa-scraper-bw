@@ -130,6 +130,7 @@ _HAUSHALT_VORGANGSTYP = "Haushaltsgesetzgebung"
 DEFAULT_PARLIS_DELAY = 1.0
 # Plenarprotokolle appear 1-2 weeks after the session (WP18, measured 2026-10); later is a gap (issue #128).
 _MISSING_AFTER = timedelta(weeks=4)
+_MAX_MISSING_LINES = 20
 DEFAULT_GSBLT_DELAY = 1.0
 BERLIN_TZ = ZoneInfo("Europe/Berlin")
 
@@ -1273,12 +1274,15 @@ class BawueVorgaengeScraper(VorgangsScraper):
     @property
     def missing_documents(self) -> list[str]:
         """Markdown lines for the weekly run report, oldest first (issue #128)."""
-        return [
+        lines = [
             f"- {label} ({day:%d.%m.%Y}) - "
             + ", ".join(f"[{v}]({vorgang_url(v)})" for v in sorted(vorgnrs))
             + f" - seit {(self._today() - day).days // 7} Wochen [404]({link})"
             for link, (label, day, vorgnrs) in sorted(self._missing.items(), key=lambda item: item[1][1])
         ]
+        if len(lines) > _MAX_MISSING_LINES:  # keeps the post under Mattermost's size limit
+            lines = [*lines[:_MAX_MISSING_LINES], f"… {len(lines) - _MAX_MISSING_LINES} weitere"]
+        return lines
 
     async def _official_gesetzblatt_pdf(self, fund: RawFundstelle) -> str | None:
         """The Gesetzblatt's own PDF with the Fundstelle's #page anchor, else None.
