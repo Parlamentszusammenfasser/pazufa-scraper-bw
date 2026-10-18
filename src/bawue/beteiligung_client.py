@@ -92,7 +92,12 @@ class BeteiligungClient:
 
     def fetch_last_modified(self, pdf_url: str) -> date | None:
         """Upload day of a portal file, from its ``Last-Modified`` header (issue #123)."""
-        resp = self._request("HEAD", pdf_url, timeout=30, allow_redirects=True)
+        try:
+            resp = self._request("HEAD", pdf_url, timeout=30, allow_redirects=True)
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code in (404, 410):
+                return None  # dead link: the file name may still date it
+            raise
         try:
             return parsedate_to_datetime(resp.headers["Last-Modified"]).date()
         except (KeyError, ValueError):  # no or malformed header: the file name may still date it

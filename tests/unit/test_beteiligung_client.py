@@ -219,6 +219,13 @@ class TestIssue123FetchLastModified:
         assert client.fetch_last_modified(self.PDF_URL) == expected
 
     @responses.activate
+    @pytest.mark.parametrize("status", [404, 410])
+    def test_missing_pdf_has_no_upload_day(self, client, status):
+        """A dead link must not block the Vorgang; its file name may still date it."""
+        responses.add(responses.HEAD, self.PDF_URL, status=status)
+        assert client.fetch_last_modified(self.PDF_URL) is None
+
+    @responses.activate
     def test_http_error_raises(self, client):
         """Not a missing date: the Vorgang fails and is retried next cycle."""
         responses.add(responses.HEAD, self.PDF_URL, status=503)
