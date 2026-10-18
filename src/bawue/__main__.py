@@ -9,7 +9,6 @@ import asyncio
 import logging
 import os
 import sys
-import time
 
 import aiohttp
 from dotenv import load_dotenv
@@ -125,21 +124,7 @@ if __name__ == "__main__":
 
     logger.info("Configuration Complete")
 
-    last_run = None
-    while True:
-        if last_run is not None and time.time() - last_run < config.cycle_time_s:
-            logger.info("Last scraping cycle finished, sleeping until next cycle. Bye!")
-            time.sleep(config.cycle_time_s - (time.time() - last_run))
-            continue
-        try:
-            last_run = time.time()
-            asyncio.run(main(config))
-        except KeyboardInterrupt:
-            logger.info("Shutting down.")
-            break
-        except Exception as e:
-            logger.error("Error: %s", e)
-            continue
-        if config.once:
-            logger.info("Single cycle completed (--once mode). Shutting down.")
-            break
+    # One cycle per process; the scheduler starts the next. An uncaught error exits 1,
+    # so Cloud Run marks the execution failed instead of the process lingering.
+    asyncio.run(main(config))
+    logger.info("Scraping cycle completed. Shutting down.")

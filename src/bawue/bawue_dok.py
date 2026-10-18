@@ -95,8 +95,8 @@ _LLM_LIMIT = 3
 def _loop_semaphore(slot: dict, limit: int) -> asyncio.Semaphore:
     """The current event loop's semaphore, shared by all scrapers of a cycle.
 
-    A semaphore binds to the first loop that waits on it, and without --once
-    __main__ starts a new loop per cycle (issue #101). Only the current loop's is
+    A semaphore binds to the first loop that waits on it, and one process can run
+    several loops (the tests do; __main__ once did, one per cycle, issue #101). Only the current loop's is
     kept: a waited-on semaphore references its loop, so keeping more would leak.
     """
     loop = asyncio.get_running_loop()
