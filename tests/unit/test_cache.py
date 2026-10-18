@@ -115,3 +115,15 @@ def test_issue105_read_error_raises_instead_of_reading_as_a_miss():
 
 def test_issue105_disabled_cache_still_reads_as_a_miss():
     assert BawueCache(None, None).get_raw("vg2:V-1") is None
+
+
+def test_once_flag_is_still_accepted(monkeypatch, tmp_path):
+    """--once is a no-op since every run is one cycle, but old commands still pass it."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["bawue", "--once"])
+    monkeypatch.setenv("REDIS_URL", UPSTASH_URL)
+    monkeypatch.setenv("COLLECTOR_ID", "00000000-0000-0000-0000-000000000001")
+    monkeypatch.setenv("LTZF_API_KEY", "test-key")
+
+    with patch("bawue.cache.redis.Redis"):
+        BawueConfig().load()  # an unknown flag would exit 2 here
