@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from bawue.__main__ import load_config, log_startup, main
+from bawue.bawue_dok import _hash_cache
 
 
 class _FakeScraper:
@@ -114,6 +115,27 @@ class TestIssue52OneRunReport:
             await main(_config(False))
 
         assert send.call_args.args[1] == [("Sitzungen", ["Sitzungen line"])]
+
+
+class TestIssue101HashCachePerCycle:
+    """Issue #101: the cycle, not each scraper, clears the shared semantics cache."""
+
+    @pytest.mark.asyncio
+    async def test_cycle_starts_with_empty_hash_cache(self):
+        _hash_cache["last-cycle"] = {}
+        seen = []
+
+        class _Probe(_FakeScraper):
+            async def run(self) -> None:
+                seen.append(dict(_hash_cache))
+
+        with (
+            patch("bawue.__main__.load_scrapers", return_value=[_Probe(None)]),
+            patch("bawue.__main__.send_run_report"),
+        ):
+            await main(_config(False))
+
+        assert seen == [{}]
 
 
 class TestIssue82WeeklySection:

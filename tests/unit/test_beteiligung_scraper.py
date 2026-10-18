@@ -9,7 +9,7 @@ from uuid import NAMESPACE_URL, uuid5
 import pytest
 
 from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
-from bawue.bawue_dok import LLMMetrics
+from bawue.bawue_dok import LLMMetrics, _hash_cache
 from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
 from bawue.types import (
     UNSET,
@@ -440,6 +440,17 @@ class TestListingPageExtractor:
             await scraper.listing_page_extractor("lp-17")
 
         assert "test-slug" in scraper._raw_cache
+
+    @pytest.mark.asyncio
+    async def test_issue101_keeps_shared_hash_cache(self):
+        """The PARLIS scraper may already have cached semantics this cycle; main() clears it."""
+        _hash_cache["parlis-doc"] = {}
+        try:
+            with patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", return_value=[]):
+                await _make_scraper().listing_page_extractor("lp-18")
+            assert "parlis-doc" in _hash_cache
+        finally:
+            _hash_cache.clear()
 
 
 class TestItemExtractor:

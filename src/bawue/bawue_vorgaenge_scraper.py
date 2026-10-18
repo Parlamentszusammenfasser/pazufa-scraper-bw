@@ -19,7 +19,7 @@ import aiohttp
 import certifi
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, clear_hash_cache, vorgang_kurztitel, vorgang_ressort, zusammenfassung_text
+from bawue.bawue_dok import LLMMetrics, vorgang_kurztitel, vorgang_ressort, zusammenfassung_text
 from bawue.cache import drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
@@ -308,7 +308,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
         The framework calls this for each entry in self.listing_urls.
         We use the Vorgangstyp string as the "listing URL".
         """
-        clear_hash_cache()
         date_from = self._wahlperiode_start_date
         date_to = date.today()
 

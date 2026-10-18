@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bawue.bawue_dok import LLMMetrics
+from bawue.bawue_dok import LLMMetrics, _hash_cache
 from bawue.bawue_vorgaenge_scraper import (
     DEFAULT_ENABLED_VORGANGSTYPEN,
     BawueVorgaengeScraper,
@@ -1435,6 +1435,17 @@ class TestListingPageExtractor:
         assert ids == ["V-200", "V-201"]
         assert "V-200" in scraper._raw_cache
         assert "V-201" in scraper._raw_cache
+
+    @pytest.mark.asyncio
+    async def test_issue101_keeps_shared_hash_cache(self):
+        """The Beteiligung scraper may already have cached semantics this cycle; main() clears it."""
+        _hash_cache["beteiligung-doc"] = {}
+        try:
+            with patch("bawue.bawue_vorgaenge_scraper.asyncio.to_thread", return_value=[]):
+                await _make_scraper_with_mock_parlis().listing_page_extractor("Gesetzgebung")
+            assert "beteiligung-doc" in _hash_cache
+        finally:
+            _hash_cache.clear()
 
 
 class TestItemExtractor:
