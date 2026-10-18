@@ -114,7 +114,7 @@ def _llm_semaphore() -> asyncio.Semaphore:
 
 # Two-tier LLM semantics cache, keyed by (doc_hash, prompt_hash):
 # 1. _hash_cache (in-memory dict): fast intra-cycle deduplication, cleared each cycle
-#    via clear_hash_cache() to prevent unbounded memory growth.
+#    by __main__.main() via clear_hash_cache() to prevent unbounded memory growth.
 # 2. Redis (via BawueCache): persistent cross-cycle deduplication, survives restarts.
 #    Key format: "llm-semantics:{doc_hash}:{prompt_hash}".
 # The prompt hash covers the system prompt plus the doktyp-specific body prompt, so
@@ -125,7 +125,7 @@ _REDIS_CACHE_PREFIX = "llm-semantics:"
 
 
 def clear_hash_cache() -> None:
-    """Clear the in-memory hash cache between scraper cycles."""
+    """Clear the in-memory hash cache; called once per cycle by ``__main__.main()``."""
     _hash_cache.clear()
 
 

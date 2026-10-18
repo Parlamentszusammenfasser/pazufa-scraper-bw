@@ -15,6 +15,7 @@ import aiohttp
 from dotenv import load_dotenv
 
 from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
+from bawue.bawue_dok import clear_hash_cache
 from bawue.bawue_sitzungen_scraper import BawueSitzungenScraper
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.cache import RedisUnavailableError
@@ -52,6 +53,7 @@ def load_scrapers(config: BawueConfig, session: aiohttp.ClientSession) -> list[S
 
 async def main(config: BawueConfig) -> None:
     logger.info("Starting new Scraping Cycle")
+    clear_hash_cache()  # once per cycle: the scrapers run concurrently and share it (issue #101)
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit_per_host=1)) as session:
         scrapers = load_scrapers(config, session)
         scraper_tasks = []
