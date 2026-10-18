@@ -6103,3 +6103,13 @@ class TestIssue128MissingDocuments:
 
         assert scraper.missing_documents == []
         assert "V-248237" in scraper._retry_next_cycle  # retried all the same (DD-067)
+
+    def test_oldest_first_with_drucksache_and_fallback_labels(self, monkeypatch):
+        scraper = self._scraper(monkeypatch, date(2026, 11, 20), 404)
+        scraper._note_missing({"station_typ": "Gesetzesbeschluss"}, date(2026, 10, 8), "https://x/b.pdf", "V-2")
+        scraper._note_missing({"drucksache": "18/1234"}, date(2026, 10, 1), "https://x/a.pdf", "V-1")
+
+        assert [line.split(" - ")[0] for line in scraper.missing_documents] == [
+            "- Drucksache 18/1234 (01.10.2026)",
+            "- Gesetzesbeschluss (08.10.2026)",
+        ]
