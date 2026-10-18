@@ -171,6 +171,8 @@ _GERMAN_DATE_RE = re.compile(
 # stricter class) is the expression the year fallback has always used; both forms
 # agree on all 170 Gesetzblatt Fundstellen of WP17, so it is kept as-is.
 _GESETZBLATT_REF_RE = re.compile(r"Gesetzblatt.*?(\d{4})\s+Nr\.\s*(\d+)")
+_PROTOKOLL_SEITEN_RE = re.compile(r"\bS\.\s*(\d+(?:-\d+)?(?:;\s*\d+(?:-\d+)?)*)")
+_SEITEN_SEGMENT_RE = re.compile(r"(\d+)(?:-(\d+))?")
 
 
 def parse_fundstelle_text(text: str) -> dict:
@@ -216,6 +218,11 @@ def parse_fundstelle_text(text: str) -> dict:
     pp_match = re.search(r"Plenarprotokoll\s+(\d+/\d+)", text)
     if pp_match:
         result["plenarprotokoll"] = pp_match.group(1)
+        # Printed pages of this agenda item: "S. 168-172; 179" (issue #74).
+        if seiten := _PROTOKOLL_SEITEN_RE.search(text, pp_match.end()):
+            result["druckseiten"] = sorted(
+                {p for lo, hi in _SEITEN_SEGMENT_RE.findall(seiten.group(1)) for p in range(int(lo), int(hi or lo) + 1)}
+            )
 
     # Station type: leading word(s) before a double-space or single-tab separator.
     # \t is listed separately because \s{2,} requires two chars and would miss a lone tab.
