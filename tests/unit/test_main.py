@@ -129,11 +129,14 @@ class TestIssue101HashCachePerCycle:
             async def run(self) -> None:
                 seen.append(dict(_hash_cache))
 
-        with (
-            patch("bawue.__main__.load_scrapers", return_value=[_Probe(None)]),
-            patch("bawue.__main__.send_run_report"),
-        ):
-            await main(_config(False))
+        try:
+            with (
+                patch("bawue.__main__.load_scrapers", return_value=[_Probe(None)]),
+                patch("bawue.__main__.send_run_report"),
+            ):
+                await main(_config(False))
+        finally:
+            _hash_cache.clear()
 
         assert seen == [{}]
 
