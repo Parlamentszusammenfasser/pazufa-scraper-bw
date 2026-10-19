@@ -351,6 +351,8 @@ class TestParseFundstelleText:
             "Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287 - 291",
             "Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287 ff.",
             "Zweite Beratung   Plenarprotokoll 18/7 01.07.2026  S. 168-172, 179",
+            # Only an "S." after the protocol number counts.
+            "Beschluss S. 23 (Nr. 1) Plenarprotokoll 18/10 23.07.2026",
         ],
     )
     def test_issue74_no_protocol_pages(self, raw):
