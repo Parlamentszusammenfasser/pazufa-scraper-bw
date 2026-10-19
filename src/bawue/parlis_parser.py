@@ -171,7 +171,8 @@ _GERMAN_DATE_RE = re.compile(
 # stricter class) is the expression the year fallback has always used; both forms
 # agree on all 170 Gesetzblatt Fundstellen of WP17, so it is kept as-is.
 _GESETZBLATT_REF_RE = re.compile(r"Gesetzblatt.*?(\d{4})\s+Nr\.\s*(\d+)")
-_PROTOKOLL_SEITEN_RE = re.compile(r"\bS\.\s*(\d+(?:-\d+)?(?:;\s*\d+(?:-\d+)?)*)")
+# Only a list that ends cleanly: an unknown shape yields no pages, not too few.
+_PROTOKOLL_SEITEN_RE = re.compile(r"\bS\.\s*(\d+(?:-\d+)?(?:;\s*\d+(?:-\d+)?)*)(?=\s*(?:\(|@@|$))")
 _SEITEN_SEGMENT_RE = re.compile(r"(\d+)(?:-(\d+))?")
 
 

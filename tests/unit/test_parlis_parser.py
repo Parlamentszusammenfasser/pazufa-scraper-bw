@@ -346,6 +346,11 @@ class TestParseFundstelleText:
             "Erste Beratung   Plenarprotokoll 18/13 08.10.2026",  # not published yet
             "Änderungsantrag    Fraktion der FDP/DVP  16.11.2021 Drucksache 17/1203   S. 23 (Nr. 17)",
             "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+            # Shapes PARLIS does not use today: no pages rather than too few (review of PR #153).
+            "Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287\u2013291",  # en dash
+            "Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287 - 291",
+            "Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287 ff.",
+            "Zweite Beratung   Plenarprotokoll 18/7 01.07.2026  S. 168-172, 179",
         ],
     )
     def test_issue74_no_protocol_pages(self, raw):
