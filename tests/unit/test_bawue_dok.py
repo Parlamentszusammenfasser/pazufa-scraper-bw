@@ -249,39 +249,20 @@ class TestExtractPdfText:
         assert doc_hash == SAMPLE_HASH
 
     @pytest.mark.asyncio
-    async def test_extract_pdf_text_with_page_hint(self, tmp_path):
-        """When page_hint is set, PageConfig(insert_page_markers=True) should be used."""
+    async def test_extract_pdf_text_with_page_markers(self, tmp_path):
+        """page_markers inserts kreuzberg's page markers and keeps every page: the caller
+        cuts the #page=N window, so a protocol can still pick its agenda pages (issue #74)."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-
-        # Build text with page markers — page 33 has the relevant content
-        pages = []
-        for i in range(1, 40):
-            pages.append(f"\n\n<!-- PAGE {i} -->\n\nContent of page {i}")
-        marked_text = "".join(pages)
-
-        mock_result = _mock_extraction_result(content=marked_text)
-        with patch("bawue.bawue_dok.extract_file", new_callable=AsyncMock, return_value=mock_result) as mock_extract:
-            text, _ = await extract_pdf_text(pdf_file, page_hint=33)
-
-        # Verify PageConfig was used
-        call_config = mock_extract.call_args_list[0].kwargs["config"]
-        assert call_config.pages is not None
-        assert call_config.pages.insert_page_markers is True
-        # Verify only relevant pages returned
-        assert "Content of page 33" in text
-        assert "Content of page 1" not in text
-
-    @pytest.mark.asyncio
-    async def test_issue74_without_window_keeps_all_pages_and_markers(self, tmp_path):
-        pdf_file = tmp_path / "plp.pdf"
         pdf_file.write_bytes(SAMPLE_PDF_BYTES)
         marked_text = "".join(f"\n\n<!-- PAGE {i} -->\n\nContent of page {i}" for i in range(1, 40))
 
         mock_result = _mock_extraction_result(content=marked_text)
-        with patch("bawue.bawue_dok.extract_file", new_callable=AsyncMock, return_value=mock_result):
-            text, _ = await extract_pdf_text(pdf_file, page_hint=33, window=False)
+        with patch("bawue.bawue_dok.extract_file", new_callable=AsyncMock, return_value=mock_result) as mock_extract:
+            text, _ = await extract_pdf_text(pdf_file, page_markers=True)
 
+        call_config = mock_extract.call_args_list[0].kwargs["config"]
+        assert call_config.pages is not None
+        assert call_config.pages.insert_page_markers is True
         assert text == marked_text
 
     @pytest.mark.asyncio
@@ -749,8 +730,8 @@ class TestEnrichDokument:
 
         # download_pdf receives the full URL (fragment stripping happens inside)
         mock_download.assert_called_once_with(session, page_url)
-        # extract_pdf_text receives the page_hint; enrich cuts the window itself (issue #74)
-        mock_extract.assert_called_once_with(Path("/tmp/fake.pdf"), page_hint=33, window=False)
+        # An anchor asks for page markers; enrich cuts the window itself (issue #74)
+        mock_extract.assert_called_once_with(Path("/tmp/fake.pdf"), page_markers=True)
         # dok.link preserves the original URL with fragment
         assert result.dokument.link == page_url
 
@@ -2015,7 +1996,7 @@ class TestExtractPdfTextOcrRetry:
         assert ocr_call_config.pages is None or ocr_call_config.pages.insert_page_markers is False
 
     @pytest.mark.asyncio
-    async def test_ocr_retry_keeps_page_markers_when_page_hint_set(self, tmp_path):
+    async def test_ocr_retry_keeps_page_markers(self, tmp_path):
         """With a #page=N hint the OCR retry must insert page markers too.
 
         OCR replaces the whole text; without markers _extract_relevant_pages
@@ -2034,13 +2015,13 @@ class TestExtractPdfTextOcrRetry:
             new_callable=AsyncMock,
             side_effect=[_mock_extraction_result(content=garbled_text), _mock_extraction_result(content=ocr_text)],
         ) as mock_extract:
-            text, _hash = await extract_pdf_text(pdf_file, page_hint=2)
+            text, _hash = await extract_pdf_text(pdf_file, page_markers=True)
 
         ocr_call_config = mock_extract.call_args_list[1].kwargs["config"]
         assert ocr_call_config.force_ocr is True
         assert ocr_call_config.pages.insert_page_markers is True
-        # The hint window survived: page 2 only, not the whole OCR output.
-        assert text.strip() == clean_page_2
+        # The hint window survives: page 2 only, not the whole OCR output.
+        assert _extract_relevant_pages(text, 2).strip() == clean_page_2
 
     @pytest.mark.asyncio
     async def test_clean_text_no_ocr_retry(self, tmp_path):
