@@ -579,23 +579,23 @@ def _page_map(text: str) -> dict[int, str]:
     return {int(parts[i]): parts[i + 1] for i in range(1, len(parts) - 1, 2)}
 
 
-def _agenda_text(text: str, page_hint: int, druckseiten: list[int]) -> tuple[str, list[int]] | None:
+def _agenda_text(text: str, page_hint: int | None, druckseiten: list[int] | None) -> tuple[str, list[int]] | None:
     """The agenda item's pages of a marked protocol text, normalized, with their PDF numbers.
 
     The anchor is the item's first printed page (verified on 489 WP17/18 Fundstellen), so
-    printed page p is PDF page ``page_hint + p - druckseiten[0]`` (issue #74). Capped at the
-    volltext window: the LLM never reads more than before. None if a page is missing, does
-    not start with its printed number (2635 of 2635 real pages do), or the pages hold little
-    more than their headers: then the caller keeps the whole window.
+    the PDF page is the printed page plus a fixed offset (issue #74). Capped at the volltext
+    window: the LLM never reads more than before. None without anchor or pages, or if a
+    page is missing, does not start with its printed number (2635 of 2635 real pages do),
+    or holds little more than its header: then the caller keeps the whole window.
     """
-    window = range(page_hint, page_hint + _WINDOW_PAGES)
-    printed = [p for p in druckseiten if page_hint + p - druckseiten[0] in window]
-    pages = [page_hint + p - druckseiten[0] for p in printed]
-    page_map = _page_map(text)
-    if not pages or any(
-        not re.match(rf"\s*{p}(?!\d)", page_map.get(q, "")) for p, q in zip(printed, pages, strict=True)
-    ):
+    if not page_hint or not druckseiten:
         return None
+    offset = page_hint - druckseiten[0]
+    printed = {p + offset: p for p in druckseiten if p + offset < page_hint + _WINDOW_PAGES}  # PDF → printed
+    page_map = _page_map(text)
+    if not all(re.match(rf"\s*{p}(?!\d)", page_map.get(pdf, "")) for pdf, p in printed.items()):
+        return None
+    pages = sorted(printed)
     agenda = normalize_volltext("\n\n".join(page_map[p] for p in pages))
     return (agenda, pages) if len(agenda) >= _MIN_AGENDA_PAGE_CHARS * len(pages) else None
 
@@ -1309,10 +1309,10 @@ async def enrich_dokument(
             context_vorgang_vnr = None
             context_drucksnr = None
             cache_hash = file_hash
-            agenda = _agenda_text(marked_text, page_hint, druckseiten) if page_hint and druckseiten else None
-            if agenda is not None:
-                summary_text, body_prompt = agenda[0], BODY_PROMPT_REDEPROTOKOLL_TOP
-                cache_hash = hashlib.sha256(f"{file_hash}#pages={agenda[1]}".encode()).hexdigest()
+            if (agenda := _agenda_text(marked_text, page_hint, druckseiten)) is not None:
+                summary_text, pages = agenda
+                body_prompt = BODY_PROMPT_REDEPROTOKOLL_TOP
+                cache_hash = hashlib.sha256(f"{file_hash}#pages={pages}".encode()).hexdigest()
         else:
             context_titel = vorgang_titel or dok.titel
             context_vorgang_vnr = vorgang_vnr
