@@ -2641,10 +2641,13 @@ class TestIssue42PartialSummaries:
 # ---------------------------------------------------------------------------
 
 
-def _marked(pages: range, short: frozenset[int] = frozenset()) -> str:
-    """Extraction text with kreuzberg page markers; each page names itself."""
+def _marked(pages: range, offset: int = 0, short: frozenset[int] = frozenset()) -> str:
+    """Extraction text with kreuzberg page markers. Like a real protocol page, each starts
+    with its printed number (PDF page + *offset*); SEITE-n names the PDF page."""
     return "".join(
-        f"\n\n<!-- PAGE {p} -->\n\nSEITE-{p} " + ("" if p in short else "Redebeitrag im Plenum. " * 5) for p in pages
+        f"\n\n<!-- PAGE {p} -->\n\n{p + offset}\n"
+        + ("" if p in short else f"SEITE-{p} " + "Redebeitrag im Plenum. " * 5)
+        for p in pages
     )
 
 
@@ -2662,8 +2665,9 @@ class TestIssue74AgendaPages:
     async def _enrich(self, druckseiten, anchor=31, text=None, typ=Doktyp.REDEPROTOKOLL):
         link = f"{self.PLP}#page={anchor}" if anchor else self.PLP
         dok = _make_plain_dokument(typ=typ, link=link)
+        offset = druckseiten[0] - anchor if druckseiten and anchor else 0
         with (
-            _patch_pdf_pipeline(text_and_hash=(text or _marked(range(1, 80)), SAMPLE_HASH)),
+            _patch_pdf_pipeline(text_and_hash=(text or _marked(range(1, 80), offset), SAMPLE_HASH)),
             _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC) as llm_call,
         ):
             result = await enrich_dokument(MagicMock(), _make_llm_mock(), dok, druckseiten=druckseiten)
@@ -2706,10 +2710,12 @@ class TestIssue74AgendaPages:
             ([], 31, None),
             (list(range(287, 292)), None, None),  # no #page anchor
             (list(range(287, 292)), 31, "Protokoll ohne Seitenmarker. " * 10),  # OCR text without markers
-            (list(range(287, 292)), 78, _marked(range(1, 79))),  # PDF ends on page 78: wrong offset
-            (list(range(287, 292)), 31, _marked(range(1, 80), short=frozenset(range(31, 36)))),  # near-empty pages
+            (list(range(287, 292)), 78, _marked(range(1, 79), 209)),  # PDF ends on page 78: wrong offset
+            (list(range(287, 292)), 31, _marked(range(1, 80), 256, short=frozenset(range(31, 36)))),  # near-empty
+            (list(range(287, 292)), 30, _marked(range(1, 80), 256)),  # anchor one page early (review of PR #153)
+            ([179, 287, 288], 31, _marked(range(1, 80), 256)),  # "S. 287-288; 179", sorted: 179 is no anchor page
         ],
-        ids=["no-pages", "empty-pages", "no-anchor", "no-markers", "beyond-pdf", "near-empty"],
+        ids=["no-pages", "empty-pages", "no-anchor", "no-markers", "beyond-pdf", "near-empty", "shifted", "unordered"],
     )
     async def test_falls_back_to_todays_input(self, druckseiten, anchor, text):
         """Without usable agenda pages nothing changes: same input, prompt and cache key."""
@@ -2733,7 +2739,7 @@ class TestIssue74AgendaPages:
         dok_b = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link=f"{self.PLP}#page=40")
         dok_a2 = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link=f"{self.PLP}#page=31")
         with (
-            _patch_pdf_pipeline(text_and_hash=(_marked(range(1, 80)), SAMPLE_HASH)),
+            _patch_pdf_pipeline(text_and_hash=(_marked(range(1, 80), 256), SAMPLE_HASH)),
             _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC) as llm_call,
         ):
             await enrich_dokument(MagicMock(), _make_llm_mock(), dok_a, druckseiten=[287, 288])
@@ -2766,6 +2772,10 @@ class TestIssue74RealProtocol:
         assert "Drucksache\n18/191" in agenda and "Glücksspiel" in agenda
         assert "Palantir" not in agenda
         assert "Palantir" in _extract_relevant_pages(self.TEXT, 31)
+
+    def test_a_shifted_anchor_falls_back(self):
+        """#page=30 for S. 287-291 would drop page 35 with the referral of 18/191."""
+        assert _agenda_text(self.TEXT, 30, list(range(287, 292))) is None
 
     def test_an_item_past_the_last_page_falls_back(self):
         """The PDF has 49 pages (printed 257-305): a range beyond them means a wrong offset."""

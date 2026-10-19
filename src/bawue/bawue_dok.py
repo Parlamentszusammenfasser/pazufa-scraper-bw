@@ -582,13 +582,17 @@ def _agenda_text(text: str, page_hint: int, druckseiten: list[int]) -> tuple[str
 
     The anchor is the item's first printed page (verified on 489 WP17/18 Fundstellen), so
     printed page p is PDF page ``page_hint + p - druckseiten[0]``. Capped at the volltext
-    window: the LLM never reads more than before. None if a page is missing or the pages
-    are near-empty: then the offset is wrong and the caller keeps the whole window.
+    window: the LLM never reads more than before. None if a page is missing, does not start
+    with its printed number (2635 of 2635 real pages do), or the pages are near-empty: then
+    the offset is wrong and the caller keeps the whole window.
     """
     window = range(page_hint, page_hint + _WINDOW_PAGES)
-    pages = [page_hint + p - druckseiten[0] for p in druckseiten if page_hint + p - druckseiten[0] in window]
+    printed = [p for p in druckseiten if page_hint + p - druckseiten[0] in window]
+    pages = [page_hint + p - druckseiten[0] for p in printed]
     page_map = _page_map(text)
-    if not pages or any(p not in page_map for p in pages):
+    if not pages or any(
+        not re.match(rf"\s*{p}(?!\d)", page_map.get(q, "")) for p, q in zip(printed, pages, strict=True)
+    ):
         return None
     agenda = "\n\n".join(page_map[p] for p in pages)
     return (agenda, pages) if len(agenda.strip()) >= MIN_TEXT_LENGTH else None
