@@ -2778,6 +2778,17 @@ class TestIssue74AgendaPages:
         assert llm_call.await_count == 2
 
     @pytest.mark.asyncio
+    async def test_anchored_non_protocols_keep_one_summary_each(self):
+        """Issue #72: Änderungsanträge packed into one PDF must not share a summary."""
+        base = "https://www.landtag-bw.de/resource/blob/3/17_4495.pdf"
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC) as llm_call:
+            for page in (1, 5):
+                dok = _make_plain_dokument(typ=Doktyp.ENTWURF, link=f"{base}#page={page}")
+                await enrich_dokument(MagicMock(), _make_llm_mock(), dok, druckseiten=[1, 2])
+
+        assert llm_call.await_count == 2
+
+    @pytest.mark.asyncio
     async def test_same_anchor_other_pages_is_another_summary(self):
         """PlPr 17/140 #page=71: S. 8622 and S. 8622-8623 are two items on one page."""
         _, [one] = await self._enrich([8622], anchor=71)
