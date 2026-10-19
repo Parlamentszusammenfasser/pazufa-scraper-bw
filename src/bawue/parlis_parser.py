@@ -177,7 +177,7 @@ _SEITEN_SEGMENT_RE = re.compile(r"(\d+)(?:-(\d+))?")
 
 
 def _expand_pages(spec: str) -> list[int]:
-    """ "168-170; 179" → [168, 169, 170, 179]; overlapping segments count once."""
+    """Expand "168-170; 179" to [168, 169, 170, 179]; overlapping segments count once."""
     pages = set()
     for first, last in _SEITEN_SEGMENT_RE.findall(spec):
         pages.update(range(int(first), int(last or first) + 1))
