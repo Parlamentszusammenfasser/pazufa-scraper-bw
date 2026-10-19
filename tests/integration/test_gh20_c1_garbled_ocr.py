@@ -24,7 +24,7 @@ Run with: pytest -m integration tests/integration/test_gh20_c1_garbled_ocr.py
 import aiohttp
 import pytest
 
-from bawue.bawue_dok import download_pdf, extract_pdf_text, normalize_volltext
+from bawue.bawue_dok import _extract_relevant_pages, download_pdf, extract_pdf_text, normalize_volltext
 
 pytestmark = pytest.mark.integration
 
@@ -38,8 +38,8 @@ async def _volltext(page_hint: int | None) -> str:
     async with aiohttp.ClientSession() as session:
         path = await download_pdf(session, DS_17_1201_URL)
     try:
-        text, _hash = await extract_pdf_text(path, page_hint=page_hint)
-        return normalize_volltext(text)
+        text, _hash = await extract_pdf_text(path, page_markers=page_hint is not None)
+        return normalize_volltext(text if page_hint is None else _extract_relevant_pages(text, page_hint))
     finally:
         path.unlink(missing_ok=True)
 

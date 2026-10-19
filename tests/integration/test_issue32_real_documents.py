@@ -46,7 +46,7 @@ import aiohttp
 import litellm
 import pytest
 
-from bawue.bawue_dok import _hash_cache, download_pdf, extract_pdf_text, normalize_volltext
+from bawue.bawue_dok import _extract_relevant_pages, _hash_cache, download_pdf, extract_pdf_text, normalize_volltext
 from bawue.types import Doktyp, Dokument
 
 pytestmark = pytest.mark.integration
@@ -84,7 +84,8 @@ async def _extract_window(url: str, page_hint: int) -> str:
     async with aiohttp.ClientSession() as session:
         path = await download_pdf(session, url)
         try:
-            text, _hash = await extract_pdf_text(path, page_hint=page_hint)
+            text, _hash = await extract_pdf_text(path, page_markers=True)
+            text = _extract_relevant_pages(text, page_hint)
         finally:
             path.unlink(missing_ok=True)
     return normalize_volltext(text)

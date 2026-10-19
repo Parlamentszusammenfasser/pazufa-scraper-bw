@@ -704,16 +704,14 @@ _OCR_CONFIG_PAGE_MARKERS = ExtractionConfig(
 )
 
 
-async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None, window: bool = True) -> tuple[str, str]:
+async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[str, str]:
     """Extract text and compute SHA256 hash from a PDF file.
 
     Args:
         pdf_path: Path to the PDF file.
-        page_hint: Optional page number (from ``#page=N`` URL fragment).
-            When set, page markers are inserted during extraction and only
-            the 30 pages from *page_hint* on are returned.
-        window: False returns the whole text with its page markers; the caller
-            cuts the window (issue #74).
+        page_markers: Insert kreuzberg's page markers, also on the OCR retry, so the
+            caller can cut a ``#page=N`` window (``_extract_relevant_pages``) or a
+            protocol's agenda pages (``_agenda_text``, issue #74).
 
     Returns (full_text, hash).  Falls back to OCR when:
     1. Normal extraction yields fewer than 64 characters, or
@@ -724,7 +722,7 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None, window:
     with open(pdf_path, "rb") as f:
         doc_hash = hashlib.file_digest(f, "sha256").hexdigest()
 
-    if page_hint is not None:
+    if page_markers:
         config = ExtractionConfig(force_ocr=False, pages=PageConfig(insert_page_markers=True))
         ocr_config = _OCR_CONFIG_PAGE_MARKERS
     else:
@@ -751,9 +749,6 @@ async def extract_pdf_text(pdf_path: Path, page_hint: int | None = None, window:
                 logger.warning("OCR did not improve garbled text, keeping original")
         except Exception as exc:
             logger.warning("OCR retry failed (%s), keeping original garbled text", type(exc).__name__)
-
-    if page_hint is not None and window:
-        text = _extract_relevant_pages(text, page_hint)
 
     return text, doc_hash
 
@@ -1267,7 +1262,7 @@ async def enrich_dokument(
 
         # Extract text + hash, then normalize. The page markers stay until the
         # window is cut, so a protocol can still pick its agenda pages (issue #74).
-        marked_text, doc_hash = await extract_pdf_text(pdf_path, page_hint=page_hint, window=False)
+        marked_text, doc_hash = await extract_pdf_text(pdf_path, page_markers=page_hint is not None)
         full_text = normalize_volltext(
             marked_text if page_hint is None else _extract_relevant_pages(marked_text, page_hint)
         )

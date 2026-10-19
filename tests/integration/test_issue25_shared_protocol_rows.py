@@ -42,7 +42,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-from bawue.bawue_dok import _hash_cache, download_pdf, enrich_dokument, extract_pdf_text, normalize_volltext
+from bawue.bawue_dok import (
+    _extract_relevant_pages,
+    _hash_cache,
+    download_pdf,
+    enrich_dokument,
+    extract_pdf_text,
+    normalize_volltext,
+)
 from bawue.parlis_client import ParlisClient
 from bawue.types import Autor, Doktyp, Dokument
 
@@ -130,7 +137,8 @@ async def test_pdf_windows_confirm_the_anchors():
         path = await download_pdf(session, PLP_17_137_URL)
         try:
             for vid, (_reading, page, _keyword) in CASES.items():
-                text, _hash = await extract_pdf_text(path, page_hint=page)
+                text, _hash = await extract_pdf_text(path, page_markers=True)
+                text = _extract_relevant_pages(text, page)
                 windows[vid] = normalize_volltext(text)
         finally:
             path.unlink(missing_ok=True)
