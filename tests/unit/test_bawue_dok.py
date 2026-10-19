@@ -707,7 +707,7 @@ class TestEnrichDokument:
 
     @pytest.mark.asyncio
     async def test_enrich_dokument_with_page_hint(self):
-        """URL with #page=N: fragment stripped for download, page_hint passed to extraction, link preserved."""
+        """URL with #page=N: fragment stripped for download, page markers requested from extraction, link preserved."""
         page_url = "https://www.landtag-bw.de/files/plp/17_141.pdf#page=33"
         dok = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link=page_url)
         session = MagicMock()
