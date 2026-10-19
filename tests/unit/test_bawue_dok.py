@@ -2700,6 +2700,7 @@ class TestIssue74AgendaPages:
         """Haushalt sessions span up to 104 pages (PlPr 17/51 S. 2932-3035)."""
         _, [prompt] = await self._enrich(list(range(2932, 3036)), anchor=16)
 
+        assert BODY_PROMPT_REDEPROTOKOLL_TOP in prompt  # narrowed, not the fallback window
         assert self._pages(prompt) == list(range(16, 46))
 
     @pytest.mark.asyncio
