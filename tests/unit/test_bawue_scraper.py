@@ -6123,3 +6123,82 @@ class TestIssue128MissingDocuments:
         lines = scraper.missing_documents
         assert len(lines) == 21
         assert lines[-1] == "… 2 weitere"
+
+
+class TestIssue74ProtocolPagesReachEnrichment:
+    """Issue #74: the Fundstelle's printed pages go to enrich_dokument; nothing else changes."""
+
+    @pytest.mark.asyncio
+    async def test_druckseiten_reach_enrich_dokument(self, monkeypatch):
+        from bawue.bawue_dok import EnrichmentResult
+
+        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper._wahlperiode = 18
+        scraper._filter_sonstig = True
+        scraper.session = MagicMock()
+        scraper._client = MagicMock()
+        scraper.config = MagicMock()
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        scraper._llm_metrics = LLMMetrics()
+        scraper._retry_next_cycle = set()
+        seen = {}
+
+        async def _fake_enrich(session, llm, dok, **kwargs):
+            seen[dok.titel] = kwargs.get("druckseiten")
+            return EnrichmentResult(dokument=dok)
+
+        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
+        raw = _make_raw_vorgang(
+            "V-247045",
+            fundstellen=[
+                parse_fundstelle_text("Gesetzentwurf    Landesregierung  07.07.2026 Drucksache 18/191   (20 S.)")
+                | {"pdf_url": "https://www.landtag-bw.de/resource/blob/1/18_191.pdf"},
+                parse_fundstelle_text("Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287-291")
+                | {"pdf_url": "https://www.landtag-bw.de/files/18%5F0010%5F23072026.pdf#page=31"},
+            ],
+        )
+        await scraper._build_vorgang(raw)
+
+        assert seen == {"Gesetzentwurf": None, "Erste Beratung": [287, 288, 289, 290, 291]}
+
+
+_PLP_18_10_FUNDSTELLE = {
+    "raw": "Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287-291",
+    "datum": "23.07.2026",
+    "plenarprotokoll": "18/10",
+    "druckseiten": [287, 288, 289, 290, 291],
+    "station_typ": "Erste Beratung",
+    "pdf_url": "https://www.landtag-bw.de/files/18%5F0010%5F23072026.pdf#page=31",
+}
+
+
+class TestIssue74OneTimeRebuild:
+    """DD-037: cached Vorgänge with protocol pages are rebuilt once, so their summary narrows."""
+
+    @staticmethod
+    def _before(raw):
+        """_vorgang_fingerprint as on main before issue #74."""
+        fundstellen = sorted([f.get("raw", ""), f.get("pdf_url") or ""] for f in raw["fundstellen_parsed"])
+        payload = [raw.get("Aktueller Stand", ""), fundstellen]
+        if any(f.get("gesetzblatt_nr") for f in raw["fundstellen_parsed"]):
+            payload.append("postparl-kraft")
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
+
+    def test_vorgang_with_protocol_pages_gets_a_new_fingerprint(self):
+        raw = _make_raw_vorgang("V-247045", fundstellen=[_GBL_GESETZENTWURF, _PLP_18_10_FUNDSTELLE])
+        assert _vorgang_fingerprint(raw) != self._before(raw)
+
+    @pytest.mark.parametrize(
+        "fundstellen",
+        [
+            [_GBL_GESETZENTWURF],
+            [_GBL_GESETZENTWURF, _GBL_FUNDSTELLE],  # keeps its DD-071 salt
+            [{**_PLP_18_10_FUNDSTELLE, "raw": "Erste Beratung   Plenarprotokoll 18/13 08.10.2026", "druckseiten": []}],
+        ],
+        ids=["drucksache", "law", "unpublished-protocol"],
+    )
+    def test_other_vorgaenge_keep_theirs(self, fundstellen):
+        raw = _make_raw_vorgang("V-1", fundstellen=fundstellen)
+        assert _vorgang_fingerprint(raw) == self._before(raw)

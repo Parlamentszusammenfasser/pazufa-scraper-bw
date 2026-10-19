@@ -264,6 +264,7 @@ class RawFundstelle(TypedDict, total=False):
     autor_text: str | None
     ausschuss: str | None
     seiten: int | None
+    druckseiten: list[int]  # a Plenarprotokoll's printed pages (issue #74)
     pdf_url: str | None
 
 

@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import re
 import ssl
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -14,10 +15,13 @@ import pytest
 from bawue.bawue_dok import (
     BODY_PROMPT_BESCHLUSSEMPF,
     BODY_PROMPT_ENTWURF,
+    BODY_PROMPT_REDEPROTOKOLL,
+    BODY_PROMPT_REDEPROTOKOLL_TOP,
     ZUSAMMENFASSUNG_TEILE,
     EnrichmentResult,
     LLMMetrics,
     PdfNotAvailableError,
+    _agenda_text,
     _cache_key,
     _extract_relevant_pages,
     _hash_cache,
@@ -267,6 +271,18 @@ class TestExtractPdfText:
         # Verify only relevant pages returned
         assert "Content of page 33" in text
         assert "Content of page 1" not in text
+
+    @pytest.mark.asyncio
+    async def test_issue74_without_window_keeps_all_pages_and_markers(self, tmp_path):
+        pdf_file = tmp_path / "plp.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+        marked_text = "".join(f"\n\n<!-- PAGE {i} -->\n\nContent of page {i}" for i in range(1, 40))
+
+        mock_result = _mock_extraction_result(content=marked_text)
+        with patch("bawue.bawue_dok.extract_file", new_callable=AsyncMock, return_value=mock_result):
+            text, _ = await extract_pdf_text(pdf_file, page_hint=33, window=False)
+
+        assert text == marked_text
 
     @pytest.mark.asyncio
     async def test_ocr_fallback_on_short_text(self, tmp_path):
@@ -733,8 +749,8 @@ class TestEnrichDokument:
 
         # download_pdf receives the full URL (fragment stripping happens inside)
         mock_download.assert_called_once_with(session, page_url)
-        # extract_pdf_text receives the page_hint
-        mock_extract.assert_called_once_with(Path("/tmp/fake.pdf"), page_hint=33)
+        # extract_pdf_text receives the page_hint; enrich cuts the window itself (issue #74)
+        mock_extract.assert_called_once_with(Path("/tmp/fake.pdf"), page_hint=33, window=False)
         # dok.link preserves the original URL with fragment
         assert result.dokument.link == page_url
 
@@ -2618,3 +2634,190 @@ class TestIssue42PartialSummaries:
 
         assert result.dokument.zusammenfassung is None
         assert result.dokument.kurztitel == "Kurz"
+
+
+# ---------------------------------------------------------------------------
+# Issue #74: a protocol's summary reads only its agenda item's pages
+# ---------------------------------------------------------------------------
+
+
+def _marked(pages: range, offset: int = 0, short: frozenset[int] = frozenset()) -> str:
+    """Extraction text with kreuzberg page markers. Like a real protocol page, each starts
+    with its printed number (PDF page + *offset*); SEITE-n names the PDF page."""
+    return "".join(
+        f"\n\n<!-- PAGE {p} -->\n\n{p + offset}\n"
+        + ("" if p in short else f"SEITE-{p} " + "Redebeitrag im Plenum. " * 25)
+        for p in pages
+    )
+
+
+_HEADERS_ONLY = "".join(
+    f"\n\n<!-- PAGE {p} -->\n\n{p + 256}\nLandtag von Baden-Württemberg - 18. Wahlperiode - 10. Sitzung"
+    " - Donnerstag, 23. Juli 2026"
+    for p in range(1, 80)
+)
+
+
+class TestIssue74AgendaPages:
+    """PlPr 18/10 S. 287-291 (#page=31): the summary covered Palantir and the Fragestunde."""
+
+    PLP = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Plp/18%5F0010%5F23072026.pdf"
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    async def _enrich(self, druckseiten, anchor=31, text=None, typ=Doktyp.REDEPROTOKOLL):
+        link = f"{self.PLP}#page={anchor}" if anchor else self.PLP
+        dok = _make_plain_dokument(typ=typ, link=link)
+        offset = druckseiten[0] - anchor if druckseiten and anchor else 0
+        with (
+            _patch_pdf_pipeline(text_and_hash=(text or _marked(range(1, 80), offset), SAMPLE_HASH)),
+            _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC) as llm_call,
+        ):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), dok, druckseiten=druckseiten)
+        prompts = [c.kwargs["messages"][-1]["content"] for c in llm_call.await_args_list]
+        return result, prompts
+
+    @staticmethod
+    def _pages(prompt: str) -> list[int]:
+        return [int(p) for p in re.findall(r"SEITE-(\d+)", prompt)]
+
+    @pytest.mark.asyncio
+    async def test_summary_reads_only_the_agenda_pages(self):
+        result, [prompt] = await self._enrich(list(range(287, 292)))
+
+        assert self._pages(prompt) == [31, 32, 33, 34, 35]
+        assert BODY_PROMPT_REDEPROTOKOLL_TOP in prompt
+        # volltext stays the 30-page window from the anchor (DD-049), without markers.
+        assert self._pages(result.dokument.volltext) == list(range(31, 61))
+        assert "<!-- PAGE" not in result.dokument.volltext
+
+    @pytest.mark.asyncio
+    async def test_agenda_text_is_normalized_like_volltext(self):
+        """Same cleaning as the window: markup stripped, hyphen artefacts rejoined (issue #20)."""
+        text = _marked(range(1, 80), 256).replace("SEITE-32 ", "SEITE-32 Kosten abzu-senken <script>x</script> ")
+        _, [prompt] = await self._enrich(list(range(287, 292)), text=text)
+
+        assert "abzusenken" in prompt
+        assert "abzu-senken" not in prompt and "<script>" not in prompt
+
+    @pytest.mark.asyncio
+    async def test_every_segment_is_kept(self):
+        """PlPr 18/7 S. 168-172; 179 @@ D-246981: the vote follows other items."""
+        _, [prompt] = await self._enrich([168, 169, 170, 171, 172, 179], anchor=30)
+
+        assert self._pages(prompt) == [30, 31, 32, 33, 34, 41]
+
+    @pytest.mark.asyncio
+    async def test_never_more_than_the_window(self):
+        """Haushalt sessions span up to 104 pages (PlPr 17/51 S. 2932-3035)."""
+        _, [prompt] = await self._enrich(list(range(2932, 3036)), anchor=16)
+
+        assert BODY_PROMPT_REDEPROTOKOLL_TOP in prompt  # narrowed, not the fallback window
+        assert self._pages(prompt) == list(range(16, 46))
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("druckseiten", "anchor", "text"),
+        [
+            (None, 31, None),  # no "S." in the Fundstelle
+            ([], 31, None),
+            (list(range(287, 292)), None, None),  # no #page anchor
+            (list(range(287, 292)), 31, "Protokoll ohne Seitenmarker. " * 10),  # OCR text without markers
+            (list(range(287, 292)), 78, _marked(range(1, 79), 209)),  # PDF ends on page 78: wrong offset
+            (list(range(287, 292)), 31, _marked(range(1, 80), 256, short=frozenset(range(31, 36)))),  # near-empty
+            (list(range(287, 292)), 30, _marked(range(1, 80), 256)),  # anchor one page early (review of PR #153)
+            ([179, 287, 288], 31, _marked(range(1, 80), 256)),  # "S. 287-288; 179", sorted: 179 is no anchor page
+            (list(range(287, 292)), 31, _HEADERS_ONLY),  # each page only its header line (review of PR #153)
+        ],
+        ids=[
+            "no-pages",
+            "empty-pages",
+            "no-anchor",
+            "no-markers",
+            "beyond-pdf",
+            "near-empty",
+            "shifted",
+            "unordered",
+            "headers-only",
+        ],
+    )
+    async def test_falls_back_to_todays_input(self, druckseiten, anchor, text):
+        """Without usable agenda pages nothing changes: same input, prompt and cache key."""
+        result, [prompt] = await self._enrich(druckseiten, anchor=anchor, text=text)
+
+        assert BODY_PROMPT_REDEPROTOKOLL in prompt
+        assert prompt.endswith(result.dokument.volltext)
+        assert list(_hash_cache) == [_cache_key(SAMPLE_HASH, _prompt_fingerprint(Doktyp.REDEPROTOKOLL))]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("typ", [Doktyp.ENTWURF, Doktyp.BESCHLUSSEMPF, Doktyp.SONSTIG])
+    async def test_other_doktypen_are_not_narrowed(self, typ):
+        _, [prompt] = await self._enrich(list(range(287, 292)), typ=typ)
+
+        assert self._pages(prompt) == list(range(31, 61))
+
+    @pytest.mark.asyncio
+    async def test_each_agenda_item_gets_its_own_summary(self):
+        """Two items of one sitting: one LLM call each, no longer one per file (DD-037)."""
+        dok_a = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link=f"{self.PLP}#page=31")
+        dok_b = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link=f"{self.PLP}#page=40")
+        dok_a2 = _make_plain_dokument(typ=Doktyp.REDEPROTOKOLL, link=f"{self.PLP}#page=31")
+        with (
+            _patch_pdf_pipeline(text_and_hash=(_marked(range(1, 80), 256), SAMPLE_HASH)),
+            _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC) as llm_call,
+        ):
+            await enrich_dokument(MagicMock(), _make_llm_mock(), dok_a, druckseiten=[287, 288])
+            await enrich_dokument(MagicMock(), _make_llm_mock(), dok_b, druckseiten=[296, 297])
+            # Jointly debated: same anchor, same pages, same row and summary.
+            await enrich_dokument(MagicMock(), _make_llm_mock(), dok_a2, druckseiten=[287, 288])
+
+        assert llm_call.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_anchored_non_protocols_keep_one_summary_each(self):
+        """Issue #72: Änderungsanträge packed into one PDF must not share a summary."""
+        base = "https://www.landtag-bw.de/resource/blob/3/17_4495.pdf"
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC) as llm_call:
+            for page in (1, 5):
+                dok = _make_plain_dokument(typ=Doktyp.ENTWURF, link=f"{base}#page={page}")
+                await enrich_dokument(MagicMock(), _make_llm_mock(), dok, druckseiten=[1, 2])
+
+        assert llm_call.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_same_anchor_other_pages_is_another_summary(self):
+        """PlPr 17/140 #page=71: S. 8622 and S. 8622-8623 are two items on one page."""
+        _, [one] = await self._enrich([8622], anchor=71)
+        _, [two] = await self._enrich([8622, 8623], anchor=71)
+
+        assert (self._pages(one), self._pages(two)) == ([71], [71, 72])
+
+
+class TestIssue74RealProtocol:
+    """The whole PlPr 18/10 as kreuzberg extracts it (page markers kept), unshortened."""
+
+    TEXT = (Path(__file__).parent.parent / "fixtures" / "pdf" / "18_0010_23072026_marked.txt").read_text()
+
+    def test_glücksspiel_item_without_the_palantir_debate(self):
+        """V-247045 Erste Beratung: S. 287-291, #page=31; the window ran into Palantir."""
+        agenda, pages = _agenda_text(self.TEXT, 31, list(range(287, 292)))
+
+        assert pages == [31, 32, 33, 34, 35]
+        assert agenda.startswith("287\nLandtag von Baden-Württemberg")
+        assert "Drucksache\n18/191" in agenda and "Glücksspiel" in agenda
+        assert "Palantir" not in agenda
+        assert "Palantir" in _extract_relevant_pages(self.TEXT, 31)
+
+    def test_a_shifted_anchor_falls_back(self):
+        """#page=30 for S. 287-291 would drop page 35 with the referral of 18/191."""
+        assert _agenda_text(self.TEXT, 30, list(range(287, 292))) is None
+
+    def test_an_item_past_the_last_page_falls_back(self):
+        """The PDF has 49 pages (printed 257-305): a range beyond them means a wrong offset."""
+        assert _agenda_text(self.TEXT, 31, list(range(287, 306)))[1] == list(range(31, 50))
+        assert _agenda_text(self.TEXT, 31, list(range(287, 307))) is None
+        assert _agenda_text(self.TEXT, 60, list(range(287, 292))) is None

@@ -171,6 +171,17 @@ _GERMAN_DATE_RE = re.compile(
 # stricter class) is the expression the year fallback has always used; both forms
 # agree on all 170 Gesetzblatt Fundstellen of WP17, so it is kept as-is.
 _GESETZBLATT_REF_RE = re.compile(r"Gesetzblatt.*?(\d{4})\s+Nr\.\s*(\d+)")
+# Only a list that ends cleanly: an unknown shape yields no pages, not too few.
+_PROTOKOLL_SEITEN_RE = re.compile(r"\bS\.\s*(\d+(?:-\d+)?(?:;\s*\d+(?:-\d+)?)*)(?=\s*(?:\(|@@|$))")
+_SEITEN_SEGMENT_RE = re.compile(r"(\d+)(?:-(\d+))?")
+
+
+def _expand_pages(spec: str) -> list[int]:
+    """Expand "168-170; 179" to [168, 169, 170, 179]; overlapping segments count once."""
+    pages = set()
+    for first, last in _SEITEN_SEGMENT_RE.findall(spec):
+        pages.update(range(int(first), int(last or first) + 1))
+    return sorted(pages)
 
 
 def parse_fundstelle_text(text: str) -> dict:
@@ -216,6 +227,9 @@ def parse_fundstelle_text(text: str) -> dict:
     pp_match = re.search(r"Plenarprotokoll\s+(\d+/\d+)", text)
     if pp_match:
         result["plenarprotokoll"] = pp_match.group(1)
+        # Printed pages of this agenda item: "S. 168-172; 179" (issue #74).
+        if seiten := _PROTOKOLL_SEITEN_RE.search(text, pp_match.end()):
+            result["druckseiten"] = _expand_pages(seiten.group(1))
 
     # Station type: leading word(s) before a double-space or single-tab separator.
     # \t is listed separately because \s{2,} requires two chars and would miss a lone tab.

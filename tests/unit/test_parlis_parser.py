@@ -321,6 +321,43 @@ class TestParseFundstelleText:
         result = parse_fundstelle_text("Erste Beratung   Plenarprotokoll 17/141 05.02.2026")
         assert result["plenarprotokoll"] == "17/141"
 
+    @pytest.mark.parametrize(
+        ("raw", "pages"),
+        [
+            ("Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287-291", [287, 288, 289, 290, 291]),
+            ("Zweite Beratung   Plenarprotokoll 18/7 01.07.2026  S. 168-170; 179 @@ D-246981", [168, 169, 170, 179]),
+            ("Erste Beratung   Plenarprotokoll 17/138 11.12.2025  S. 8434-8435; 8435-8436", [8434, 8435, 8436]),
+            ("Zweite Beratung   Plenarprotokoll 17/140 04.02.2026  S. 8622", [8622]),
+            ("Zweite Beratung   Plenarprotokoll 17/128 23.07.2025  S. 7748 (abgesetzt)", [7748]),
+            # Einzelplan numbers in brackets are no pages.
+            (
+                "Zweite Beratung   Plenarprotokoll 17/53 16.12.2022  S. 3168-3170 (Epl 06, 12, 16, StHG)",
+                [3168, 3169, 3170],
+            ),
+            ("Erste Beratung   Plenarprotokoll 17/24 17.12.2021  S. 1261-1262 (Epl 06, StHG 2022)", [1261, 1262]),
+        ],
+    )
+    def test_issue74_extracts_protocol_pages(self, raw, pages):
+        assert parse_fundstelle_text(raw)["druckseiten"] == pages
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "Erste Beratung   Plenarprotokoll 18/13 08.10.2026",  # not published yet
+            "Änderungsantrag    Fraktion der FDP/DVP  16.11.2021 Drucksache 17/1203   S. 23 (Nr. 17)",
+            "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
+            # Shapes PARLIS does not use today: no pages rather than too few (review of PR #153).
+            "Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287\u2013291",  # en dash
+            "Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287 - 291",
+            "Erste Beratung   Plenarprotokoll 18/10 23.07.2026  S. 287 ff.",
+            "Zweite Beratung   Plenarprotokoll 18/7 01.07.2026  S. 168-172, 179",
+            # Only an "S." after the protocol number counts.
+            "Beschluss S. 23 (Nr. 1) Plenarprotokoll 18/10 23.07.2026",
+        ],
+    )
+    def test_issue74_no_protocol_pages(self, raw):
+        assert "druckseiten" not in parse_fundstelle_text(raw)
+
     def test_extracts_station_typ(self):
         result = parse_fundstelle_text("Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)")
         assert result["station_typ"] == "Gesetzentwurf"
