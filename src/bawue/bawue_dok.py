@@ -561,6 +561,8 @@ _PAGE_MARKER_RE = re.compile(r"(?:\A|\n\n)<!-- PAGE (\d+) -->(?:\n\n|\Z)")
 
 # Pages of a #page=N window: the volltext of an anchored Fundstelle.
 _WINDOW_PAGES = 30
+# Real agenda pages hold ≥ 3584 chars (WP17/18); a page with only its header ~95.
+_MIN_AGENDA_PAGE_CHARS = 500
 
 
 def _parse_page_hint(url: str) -> int | None:
@@ -578,13 +580,13 @@ def _page_map(text: str) -> dict[int, str]:
 
 
 def _agenda_text(text: str, page_hint: int, druckseiten: list[int]) -> tuple[str, list[int]] | None:
-    """The agenda item's pages of a marked protocol text, with their PDF numbers (issue #74).
+    """The agenda item's pages of a marked protocol text, normalized, with their PDF numbers.
 
     The anchor is the item's first printed page (verified on 489 WP17/18 Fundstellen), so
-    printed page p is PDF page ``page_hint + p - druckseiten[0]``. Capped at the volltext
-    window: the LLM never reads more than before. None if a page is missing, does not start
-    with its printed number (2635 of 2635 real pages do), or the pages are near-empty: then
-    the offset is wrong and the caller keeps the whole window.
+    printed page p is PDF page ``page_hint + p - druckseiten[0]`` (issue #74). Capped at the
+    volltext window: the LLM never reads more than before. None if a page is missing, does
+    not start with its printed number (2635 of 2635 real pages do), or the pages hold little
+    more than their headers: then the caller keeps the whole window.
     """
     window = range(page_hint, page_hint + _WINDOW_PAGES)
     printed = [p for p in druckseiten if page_hint + p - druckseiten[0] in window]
@@ -594,8 +596,8 @@ def _agenda_text(text: str, page_hint: int, druckseiten: list[int]) -> tuple[str
         not re.match(rf"\s*{p}(?!\d)", page_map.get(q, "")) for p, q in zip(printed, pages, strict=True)
     ):
         return None
-    agenda = "\n\n".join(page_map[p] for p in pages)
-    return (agenda, pages) if len(agenda.strip()) >= MIN_TEXT_LENGTH else None
+    agenda = normalize_volltext("\n\n".join(page_map[p] for p in pages))
+    return (agenda, pages) if len(agenda) >= _MIN_AGENDA_PAGE_CHARS * len(pages) else None
 
 
 def _extract_relevant_pages(text: str, start_page: int, max_pages: int = _WINDOW_PAGES) -> str:
@@ -1309,7 +1311,7 @@ async def enrich_dokument(
             cache_hash = file_hash
             agenda = _agenda_text(marked_text, page_hint, druckseiten) if page_hint and druckseiten else None
             if agenda is not None:
-                summary_text, body_prompt = normalize_volltext(agenda[0]), BODY_PROMPT_REDEPROTOKOLL_TOP
+                summary_text, body_prompt = agenda[0], BODY_PROMPT_REDEPROTOKOLL_TOP
                 cache_hash = hashlib.sha256(f"{file_hash}#pages={agenda[1]}".encode()).hexdigest()
         else:
             context_titel = vorgang_titel or dok.titel

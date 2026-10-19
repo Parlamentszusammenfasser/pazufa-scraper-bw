@@ -2646,9 +2646,16 @@ def _marked(pages: range, offset: int = 0, short: frozenset[int] = frozenset()) 
     with its printed number (PDF page + *offset*); SEITE-n names the PDF page."""
     return "".join(
         f"\n\n<!-- PAGE {p} -->\n\n{p + offset}\n"
-        + ("" if p in short else f"SEITE-{p} " + "Redebeitrag im Plenum. " * 5)
+        + ("" if p in short else f"SEITE-{p} " + "Redebeitrag im Plenum. " * 25)
         for p in pages
     )
+
+
+_HEADERS_ONLY = "".join(
+    f"\n\n<!-- PAGE {p} -->\n\n{p + 256}\nLandtag von Baden-Württemberg - 18. Wahlperiode - 10. Sitzung"
+    " - Donnerstag, 23. Juli 2026"
+    for p in range(1, 80)
+)
 
 
 class TestIssue74AgendaPages:
@@ -2724,8 +2731,19 @@ class TestIssue74AgendaPages:
             (list(range(287, 292)), 31, _marked(range(1, 80), 256, short=frozenset(range(31, 36)))),  # near-empty
             (list(range(287, 292)), 30, _marked(range(1, 80), 256)),  # anchor one page early (review of PR #153)
             ([179, 287, 288], 31, _marked(range(1, 80), 256)),  # "S. 287-288; 179", sorted: 179 is no anchor page
+            (list(range(287, 292)), 31, _HEADERS_ONLY),  # each page only its header line (review of PR #153)
         ],
-        ids=["no-pages", "empty-pages", "no-anchor", "no-markers", "beyond-pdf", "near-empty", "shifted", "unordered"],
+        ids=[
+            "no-pages",
+            "empty-pages",
+            "no-anchor",
+            "no-markers",
+            "beyond-pdf",
+            "near-empty",
+            "shifted",
+            "unordered",
+            "headers-only",
+        ],
     )
     async def test_falls_back_to_todays_input(self, druckseiten, anchor, text):
         """Without usable agenda pages nothing changes: same input, prompt and cache key."""
