@@ -176,6 +176,14 @@ _PROTOKOLL_SEITEN_RE = re.compile(r"\bS\.\s*(\d+(?:-\d+)?(?:;\s*\d+(?:-\d+)?)*)(
 _SEITEN_SEGMENT_RE = re.compile(r"(\d+)(?:-(\d+))?")
 
 
+def _expand_pages(spec: str) -> list[int]:
+    """ "168-170; 179" → [168, 169, 170, 179]; overlapping segments count once."""
+    pages = set()
+    for first, last in _SEITEN_SEGMENT_RE.findall(spec):
+        pages.update(range(int(first), int(last or first) + 1))
+    return sorted(pages)
+
+
 def parse_fundstelle_text(text: str) -> dict:
     """Parse a Fundstelle text entry into structured station data."""
     result: dict = {"raw": text}
@@ -221,9 +229,7 @@ def parse_fundstelle_text(text: str) -> dict:
         result["plenarprotokoll"] = pp_match.group(1)
         # Printed pages of this agenda item: "S. 168-172; 179" (issue #74).
         if seiten := _PROTOKOLL_SEITEN_RE.search(text, pp_match.end()):
-            result["druckseiten"] = sorted(
-                {p for lo, hi in _SEITEN_SEGMENT_RE.findall(seiten.group(1)) for p in range(int(lo), int(hi or lo) + 1)}
-            )
+            result["druckseiten"] = _expand_pages(seiten.group(1))
 
     # Station type: leading word(s) before a double-space or single-tab separator.
     # \t is listed separately because \s{2,} requires two chars and would miss a lone tab.
