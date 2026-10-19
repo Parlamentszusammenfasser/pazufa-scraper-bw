@@ -2689,6 +2689,15 @@ class TestIssue74AgendaPages:
         assert "<!-- PAGE" not in result.dokument.volltext
 
     @pytest.mark.asyncio
+    async def test_agenda_text_is_normalized_like_volltext(self):
+        """Same cleaning as the window: markup stripped, hyphen artefacts rejoined (issue #20)."""
+        text = _marked(range(1, 80), 256).replace("SEITE-32 ", "SEITE-32 Kosten abzu-senken <script>x</script> ")
+        _, [prompt] = await self._enrich(list(range(287, 292)), text=text)
+
+        assert "abzusenken" in prompt
+        assert "abzu-senken" not in prompt and "<script>" not in prompt
+
+    @pytest.mark.asyncio
     async def test_every_segment_is_kept(self):
         """PlPr 18/7 S. 168-172; 179 @@ D-246981: the vote follows other items."""
         _, [prompt] = await self._enrich([168, 169, 170, 171, 172, 179], anchor=30)
