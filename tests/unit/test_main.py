@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bawue.__main__ import load_config, log_startup, main, run
+from bawue.__main__ import load_config, load_scrapers, log_startup, main, run
 from bawue.bawue_dok import _hash_cache
 
 
@@ -256,3 +256,23 @@ class TestIssue128MissingDocuments:
             await main(_config(False))
 
         assert send.call_args.kwargs["plain_sections"] == plain
+
+
+class TestLoadScrapers:
+    NAMES = ("BawueVorgaengeScraper", "BawueBeteiligungScraper", "BawueSitzungenScraper")
+
+    @pytest.mark.parametrize(
+        ("selected", "expected"),
+        [
+            ([], list(NAMES)),  # production: every scraper, in registry order
+            (["bawuesitzungen", "BAWUEVORGAENGE"], ["BawueVorgaengeScraper", "BawueSitzungenScraper"]),
+        ],
+        ids=["all", "prefix-any-case"],
+    )
+    def test_selects_by_class_name_prefix(self, monkeypatch, selected, expected):
+        fakes = [type(name, (), {"__init__": lambda self, config, session: None}) for name in self.NAMES]
+        monkeypatch.setattr("bawue.__main__.SCRAPERS", fakes)
+
+        scrapers = load_scrapers(MagicMock(scrapers=selected), MagicMock())
+
+        assert [type(s).__name__ for s in scrapers] == expected

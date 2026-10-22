@@ -442,6 +442,10 @@ SAMPLE_JSON_IN_HTML = f"""<html><body>
 
 
 class TestParseResultsDispatcher:
+    def test_falls_back_to_html_when_json_has_no_vorgang(self):
+        html = SAMPLE_HTML_RECORD.replace("<body>", '<body><!--{"unrelated": 1}-->', 1)
+        assert [r["vorgangs_id"] for r in parse_results(html)] == ["V-12345"]
+
     def test_prefers_json_when_available(self):
         results = parse_results(SAMPLE_JSON_IN_HTML)
         assert len(results) == 1
