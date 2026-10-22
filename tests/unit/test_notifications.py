@@ -34,87 +34,41 @@ def _patch_notif(hook: str = HOOK_URL, username: str = "bawue-scraper"):
 
 
 class TestExtractEnvironment:
-    def test_staging_config(self):
+    @pytest.mark.parametrize(
+        ("config_file", "env", "environment"),
+        [
+            ("config.staging.toml", None, "staging"),
+            ("config.production.toml", None, "production"),
+            ("/app/config.staging.toml", None, "staging"),
+            ("config.toml", None, "local"),
+            (None, None, "local"),
+            # Cloud deployments run the default config.toml, so the filename says nothing.
+            ("config.toml", "staging", "staging"),
+            ("config.production.toml", "", "production"),  # an empty ENVIRONMENT is ignored
+        ],
+    )
+    def test_extract_environment(self, monkeypatch, config_file, env, environment):
+        if env is not None:
+            monkeypatch.setenv("ENVIRONMENT", env)
         config = MagicMock()
-        config.config_file = "config.staging.toml"
-        assert _extract_environment(config) == "staging"
-
-    def test_production_config(self):
-        config = MagicMock()
-        config.config_file = "config.production.toml"
-        assert _extract_environment(config) == "production"
-
-    def test_plain_config_falls_back_to_local(self):
-        config = MagicMock()
-        config.config_file = "config.toml"
-        assert _extract_environment(config) == "local"
-
-    def test_absolute_path(self):
-        config = MagicMock()
-        config.config_file = "/app/config.staging.toml"
-        assert _extract_environment(config) == "staging"
-
-    def test_no_config_file_falls_back_to_local(self):
-        config = MagicMock()
-        config.config_file = None
-        assert _extract_environment(config) == "local"
-
-    def test_environment_env_var_wins(self, monkeypatch):
-        """Cloud deployments run the default config.toml, so the filename says nothing."""
-        monkeypatch.setenv("ENVIRONMENT", "staging")
-        config = MagicMock()
-        config.config_file = "config.toml"
-        assert _extract_environment(config) == "staging"
-
-    def test_empty_environment_env_var_is_ignored(self, monkeypatch):
-        monkeypatch.setenv("ENVIRONMENT", "")
-        config = MagicMock()
-        config.config_file = "config.production.toml"
-        assert _extract_environment(config) == "production"
+        config.config_file = config_file
+        assert _extract_environment(config) == environment
 
 
 class TestSendRunReport:
     @responses_lib.activate
-    def test_sends_post_to_hook(self, mock_config):
-        responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
-        with _patch_notif():
-            send_run_report(mock_config, [("Vorgänge Run", ["Published: 5", "Failed: 0"])])
-        assert len(responses_lib.calls) == 1
-        assert responses_lib.calls[0].request.url == HOOK_URL
-
-    @responses_lib.activate
-    def test_skips_post_when_hook_empty(self, mock_config):
-        with _patch_notif(hook=""):
+    @pytest.mark.parametrize("hook", ["", "   "])
+    def test_skips_post_without_hook(self, mock_config, hook):
+        with _patch_notif(hook=hook):
             send_run_report(mock_config, [("Vorgänge Run", ["Published: 5"])])
         assert len(responses_lib.calls) == 0
 
     @responses_lib.activate
-    def test_skips_post_when_hook_whitespace_only(self, mock_config):
-        with _patch_notif(hook="   "):
-            send_run_report(mock_config, [("Vorgänge Run", ["Published: 5"])])
-        assert len(responses_lib.calls) == 0
-
-    @responses_lib.activate
-    def test_payload_includes_username(self, mock_config):
-        responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
-        with _patch_notif(username="my-bot"):
-            send_run_report(mock_config, [("Title", [])])
-        import json
-
-        body = json.loads(responses_lib.calls[0].request.body)
-        assert body["username"] == "my-bot"
-
-    @responses_lib.activate
-    def test_does_not_raise_on_http_error(self, mock_config, caplog):
-        responses_lib.add(responses_lib.POST, HOOK_URL, status=500)
-        with _patch_notif(), caplog.at_level(logging.WARNING, logger="bawue.notifications"):
-            send_run_report(mock_config, [("Run", ["line"])])
-        assert "Failed to send Mattermost notification" in caplog.text
-        assert "testhook" not in caplog.text  # the hook URL is the secret
-
-    @responses_lib.activate
-    def test_does_not_raise_on_connection_error(self, mock_config, caplog):
-        responses_lib.add(responses_lib.POST, HOOK_URL, body=ConnectionError("timeout"))
+    @pytest.mark.parametrize(
+        "failure", [{"status": 500}, {"body": ConnectionError("timeout")}], ids=["http-error", "connection-error"]
+    )
+    def test_does_not_raise_on_failure(self, mock_config, caplog, failure):
+        responses_lib.add(responses_lib.POST, HOOK_URL, **failure)
         with _patch_notif(), caplog.at_level(logging.WARNING, logger="bawue.notifications"):
             send_run_report(mock_config, [("Run", ["line"])])
         assert "Failed to send Mattermost notification" in caplog.text
@@ -125,7 +79,7 @@ class TestSendRunReport:
         """Issue #52: one message per cycle and environment, not one per scraper."""
         mock_config.config_file = "config.prod.toml"
         responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
-        with _patch_notif():
+        with _patch_notif(username="my-bot"):
             send_run_report(
                 mock_config,
                 [("Vorgänge", ["Found: 3"]), ("Beteiligung", ["Found: 1"]), ("Sitzungen", ["Dates found: 50"])],
@@ -133,6 +87,8 @@ class TestSendRunReport:
         import json
 
         assert len(responses_lib.calls) == 1
+        assert responses_lib.calls[0].request.url == HOOK_URL
+        assert json.loads(responses_lib.calls[0].request.body)["username"] == "my-bot"
         # Environment once; each section keeps its own code block for column alignment.
         assert json.loads(responses_lib.calls[0].request.body)["text"] == (
             "**[prod] BaWue Run Summary**"

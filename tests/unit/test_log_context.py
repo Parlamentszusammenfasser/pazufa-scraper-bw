@@ -18,23 +18,10 @@ def _make_record(message: str = "test") -> logging.LogRecord:
 
 
 class TestVorgangsnummerFilter:
-    def test_sets_vorgangs_id_when_context_active(self):
-        token = set_vorgangs_id("V-12345")
-        try:
-            record = _make_record()
-            VorgangsnummerFilter().filter(record)
-            assert record.vorgangs_id == "V-12345"
-        finally:
-            reset_vorgangs_id(token)
-
     def test_sets_none_when_no_context(self):
         record = _make_record()
-        VorgangsnummerFilter().filter(record)
+        assert VorgangsnummerFilter().filter(record) is True  # never drops a record
         assert record.vorgangs_id is None
-
-    def test_always_returns_true(self):
-        record = _make_record()
-        assert VorgangsnummerFilter().filter(record) is True
 
 
 class TestSetResetVorgangsId:

@@ -1,33 +1,26 @@
 """Tests for run_report helpers (duration formatting, failed item section)."""
 
+import pytest
+
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
 
 
 class TestFormatDuration:
-    def test_sub_minute(self):
-        assert format_duration(0.4) == "0m 00s"
-
-    def test_seconds_only(self):
-        assert format_duration(45.0) == "0m 45s"
-
-    def test_exact_minute(self):
-        assert format_duration(60.0) == "1m 00s"
-
-    def test_minutes_and_seconds(self):
-        assert format_duration(125.0) == "2m 05s"
-
-    def test_hours_minutes_seconds(self):
-        assert format_duration(3665.0) == "1h 01m 05s"
-
-    def test_long_run_is_readable(self):
-        # The case from the user's report: 23045.7s -> 6h 24m 06s
-        assert format_duration(23045.7) == "6h 24m 06s"
-
-    def test_zero(self):
-        assert format_duration(0.0) == "0m 00s"
-
-    def test_negative_clamped(self):
-        assert format_duration(-5.0) == "0m 00s"
+    @pytest.mark.parametrize(
+        ("seconds", "text"),
+        [
+            (0.0, "0m 00s"),
+            (0.4, "0m 00s"),
+            (-5.0, "0m 00s"),  # clamped
+            (45.0, "0m 45s"),
+            (60.0, "1m 00s"),
+            (125.0, "2m 05s"),
+            (3665.0, "1h 01m 05s"),
+            (23045.7, "6h 24m 06s"),  # the case from the user's report
+        ],
+    )
+    def test_format_duration(self, seconds, text):
+        assert format_duration(seconds) == text
 
 
 class TestFormatFailedSection:
@@ -72,23 +65,19 @@ class TestFormatFailedSection:
 
 
 class TestApiExceptionReason:
-    def test_http_status_with_reason(self):
+    @pytest.mark.parametrize(
+        ("status", "reason", "text"),
+        [
+            (422, "Unprocessable Entity", "HTTP 422 Unprocessable Entity"),
+            (500, None, "HTTP 500"),
+            (500, "", "HTTP 500"),
+        ],
+    )
+    def test_http_status(self, status, reason, text):
         exc = type("FakeApiException", (Exception,), {})()
-        exc.status = 422
-        exc.reason = "Unprocessable Entity"
-        assert api_exception_reason(exc) == "HTTP 422 Unprocessable Entity"
-
-    def test_http_status_without_reason(self):
-        exc = type("FakeApiException", (Exception,), {})()
-        exc.status = 500
-        exc.reason = None
-        assert api_exception_reason(exc) == "HTTP 500"
-
-    def test_http_status_with_empty_reason(self):
-        exc = type("FakeApiException", (Exception,), {})()
-        exc.status = 500
-        exc.reason = ""
-        assert api_exception_reason(exc) == "HTTP 500"
+        exc.status = status
+        exc.reason = reason
+        assert api_exception_reason(exc) == text
 
     def test_no_status_falls_back_to_type_and_message(self):
         exc = ValueError("boom")

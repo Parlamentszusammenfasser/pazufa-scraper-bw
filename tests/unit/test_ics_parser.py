@@ -25,75 +25,67 @@ def ics_bytes() -> bytes:
 class TestExtractSessionNumber:
     """Test session number extraction from SUMMARY strings."""
 
-    def test_plenarsitzung_extracts_number(self):
-        assert extract_session_number("Plenarsitzung: 142. Sitzung") == 142
-
-    def test_plenarsitzung_large_number(self):
-        assert extract_session_number("Plenarsitzung: 143. Sitzung") == 143
-
-    def test_ausschuss_returns_zero(self):
-        assert extract_session_number("Fraktions- und Ausschusssitzungen: Ausschuesse") == 0
-
-    def test_fina_returns_zero(self):
-        assert extract_session_number("Fraktions- und Ausschusssitzungen: FinA") == 0
-
-    def test_haushaltsberatungen_returns_zero(self):
-        assert extract_session_number("Haushaltsberatungen: Finanzausschuss") == 0
+    @pytest.mark.parametrize(
+        ("summary", "nummer"),
+        [
+            ("Plenarsitzung: 142. Sitzung", 142),
+            ("Plenarsitzung: 143. Sitzung", 143),
+            ("Fraktions- und Ausschusssitzungen: Ausschuesse", 0),
+            ("Fraktions- und Ausschusssitzungen: FinA", 0),
+            ("Haushaltsberatungen: Finanzausschuss", 0),
+        ],
+    )
+    def test_extract_session_number(self, summary, nummer):
+        assert extract_session_number(summary) == nummer
 
 
 class TestCleanTitle:
     """Test title cleaning to remove trailing colon artifacts."""
 
-    def test_strips_trailing_colon_space(self):
-        assert clean_title("Plenarsitzung: ") == "Plenarsitzung"
-
-    def test_strips_trailing_colon_no_space(self):
-        assert clean_title("Plenarsitzung:") == "Plenarsitzung"
-
-    def test_preserves_full_title(self):
-        assert clean_title("Plenarsitzung: 142. Sitzung") == "Plenarsitzung: 142. Sitzung"
-
-    def test_preserves_committee_title(self):
-        title = "Fraktions- und Ausschusssitzungen: Ausschuesse"
-        assert clean_title(title) == title
-
-    def test_empty_string(self):
-        assert clean_title("") == ""
+    @pytest.mark.parametrize(
+        ("title", "cleaned"),
+        [
+            ("Plenarsitzung: ", "Plenarsitzung"),
+            ("Plenarsitzung:", "Plenarsitzung"),
+            ("Plenarsitzung: 142. Sitzung", "Plenarsitzung: 142. Sitzung"),
+            ("Fraktions- und Ausschusssitzungen: Ausschuesse", "Fraktions- und Ausschusssitzungen: Ausschuesse"),
+            ("", ""),
+        ],
+    )
+    def test_clean_title(self, title, cleaned):
+        assert clean_title(title) == cleaned
 
 
 class TestExtractGremiumNames:
     """Test gremium name extraction from SUMMARY strings."""
 
-    def test_plenarsitzung(self):
-        assert extract_gremium_names("Plenarsitzung: 142. Sitzung") == ["plenum"]
+    @pytest.mark.parametrize(
+        ("summary", "names"),
+        [
+            ("Plenarsitzung: 142. Sitzung", ["plenum"]),
+            ("Fraktions- und Ausschusssitzungen: FinA", ["Ausschuss für Finanzen"]),
+            ("Haushaltsberatungen: FinA", ["Ausschuss für Finanzen"]),
+        ],
+    )
+    def test_extract_gremium_names(self, summary, names):
+        assert extract_gremium_names(summary) == names
 
-    def test_unnamed_committee_block_excluded(self, caplog):
-        """The live feed's umbrella entry names no committee (DD-006 name-specificity)."""
+    @pytest.mark.parametrize(
+        "summary",
+        [
+            # The live feed's umbrella entry names no committee (DD-006 name-specificity), 28 in the feed.
+            "Fraktions- und Ausschusssitzungen: ",
+            "Fraktions- und Ausschusssitzungen: Fraktionen",  # 49 in the feed
+            "Präsidium: ",
+            "Wahl: Oberbuergermeisterwahl",
+            "Something entirely different",
+        ],
+    )
+    def test_excluded_silently(self, summary, caplog):
         with caplog.at_level(logging.WARNING, logger="bawue.ics_parser"):
-            assert extract_gremium_names("Fraktions- und Ausschusssitzungen: ") == []
+            assert extract_gremium_names(summary) == []
 
-        assert not caplog.records  # 28 such entries in the feed: silent, not "Unknown committee"
-
-    def test_finanzausschuss(self):
-        assert extract_gremium_names("Fraktions- und Ausschusssitzungen: FinA") == ["Ausschuss für Finanzen"]
-
-    def test_haushaltsberatungen(self):
-        assert extract_gremium_names("Haushaltsberatungen: FinA") == ["Ausschuss für Finanzen"]
-
-    def test_fraktionen_excluded(self, caplog):
-        with caplog.at_level(logging.WARNING, logger="bawue.ics_parser"):
-            assert extract_gremium_names("Fraktions- und Ausschusssitzungen: Fraktionen") == []
-
-        assert not caplog.records  # 49 such entries in the feed: silent, not "Unknown committee"
-
-    def test_praesidium_excluded(self):
-        assert extract_gremium_names("Präsidium: ") == []
-
-    def test_wahl_excluded(self):
-        assert extract_gremium_names("Wahl: Oberbuergermeisterwahl") == []
-
-    def test_unknown_prefix_excluded(self):
-        assert extract_gremium_names("Something entirely different") == []
+        assert not caplog.records  # not "Unknown committee"
 
 
 class TestIssue117NamedCommittees:
@@ -153,54 +145,26 @@ class TestParseIcsFeed:
 
     def test_parses_included_events(self, ics_bytes):
         events = parse_ics_feed(ics_bytes)
-        # 9 total events, 4 excluded (unnamed committee block, Fraktionen,
-        # Prasidium, Wahl) → 5 included
+        # 9 total events, 4 excluded (unnamed committee block, Fraktionen, Präsidium, Wahl) → 5 included
         assert len(events) == 5
+        uids = {e.uid for e in events}
+        for excluded in ["ausschuss-001", "fraktion-001", "praesidium-001", "wahl-001"]:
+            assert f"evt-{excluded}@landtag-bw.de" not in uids
 
     def test_event_fields(self, ics_bytes):
-        events = parse_ics_feed(ics_bytes)
-        plenar = [e for e in events if e.uid == "evt-plenar-001@landtag-bw.de"]
-        assert len(plenar) == 1
-        evt = plenar[0]
+        events = {e.uid: e for e in parse_ics_feed(ics_bytes)}
+        evt = events["evt-plenar-001@landtag-bw.de"]
         assert evt.summary == "Plenarsitzung: 142. Sitzung"
         assert evt.gremium_name == "plenum"
         assert evt.nummer == 142
         assert evt.dtstart == datetime(2026, 2, 25, 11, 0)
         assert evt.dtend == datetime(2026, 2, 25, 18, 0)
-
-    def test_trailing_colon_summary_is_cleaned(self, ics_bytes):
-        events = parse_ics_feed(ics_bytes)
-        evt = [e for e in events if e.uid == "evt-plenar-003@landtag-bw.de"]
-        assert len(evt) == 1
-        assert evt[0].summary == "Plenarsitzung"
-        assert evt[0].gremium_name == "plenum"
-
-    def test_finanzausschuss_event_nummer_is_zero(self, ics_bytes):
-        """Non-plenary events have nummer=0 (no regex match in SUMMARY)."""
-        events = parse_ics_feed(ics_bytes)
-        fina = [e for e in events if e.gremium_name == "Ausschuss für Finanzen"]
-        assert len(fina) >= 1
-        assert fina[0].nummer == 0
-
-    def test_excludes_ausschuesse_umbrella(self, ics_bytes):
-        events = parse_ics_feed(ics_bytes)
-        uids = [e.uid for e in events]
-        assert "evt-ausschuss-001@landtag-bw.de" not in uids
-
-    def test_excludes_fraktionen(self, ics_bytes):
-        events = parse_ics_feed(ics_bytes)
-        uids = [e.uid for e in events]
-        assert "evt-fraktion-001@landtag-bw.de" not in uids
-
-    def test_excludes_praesidium(self, ics_bytes):
-        events = parse_ics_feed(ics_bytes)
-        uids = [e.uid for e in events]
-        assert "evt-praesidium-001@landtag-bw.de" not in uids
-
-    def test_excludes_wahl(self, ics_bytes):
-        events = parse_ics_feed(ics_bytes)
-        uids = [e.uid for e in events]
-        assert "evt-wahl-001@landtag-bw.de" not in uids
+        # A trailing-colon summary is cleaned.
+        assert events["evt-plenar-003@landtag-bw.de"].summary == "Plenarsitzung"
+        assert events["evt-plenar-003@landtag-bw.de"].gremium_name == "plenum"
+        # Non-plenary events have nummer=0 (no regex match in SUMMARY).
+        fina = [e for e in events.values() if e.gremium_name == "Ausschuss für Finanzen"]
+        assert fina and fina[0].nummer == 0
 
     def test_empty_calendar(self):
         ics = b"BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Test//EN\nEND:VCALENDAR\n"
@@ -211,29 +175,14 @@ class TestGroupEventsByDate:
     """Test grouping parsed events by calendar date."""
 
     def test_groups_by_date(self, ics_bytes):
-        events = parse_ics_feed(ics_bytes)
-        grouped = group_events_by_date(events)
+        grouped = group_events_by_date(parse_ics_feed(ics_bytes))
 
-        # 2026-02-24: FinA (the unnamed committee block is filtered, DD-006)
-        assert len(grouped[date(2026, 2, 24)]) == 1
-        # 2026-02-25: Plenar 142
-        assert len(grouped[date(2026, 2, 25)]) == 1
-        # 2026-02-26: Plenar 143
-        assert len(grouped[date(2026, 2, 26)]) == 1
-        # 2026-02-27: Plenar (trailing colon)
-        assert len(grouped[date(2026, 2, 27)]) == 1
-        # 2026-03-03: Haushaltsberatungen
-        assert len(grouped[date(2026, 3, 3)]) == 1
-
-    def test_returns_correct_dates(self, ics_bytes):
-        events = parse_ics_feed(ics_bytes)
-        grouped = group_events_by_date(events)
-        assert set(grouped.keys()) == {
-            date(2026, 2, 24),
-            date(2026, 2, 25),
-            date(2026, 2, 26),
-            date(2026, 2, 27),
-            date(2026, 3, 3),
+        assert {day: len(events) for day, events in grouped.items()} == {
+            date(2026, 2, 24): 1,  # FinA (the unnamed committee block is filtered, DD-006)
+            date(2026, 2, 25): 1,  # Plenar 142
+            date(2026, 2, 26): 1,  # Plenar 143
+            date(2026, 2, 27): 1,  # Plenar (trailing colon)
+            date(2026, 3, 3): 1,  # Haushaltsberatungen
         }
 
     def test_empty_events(self):

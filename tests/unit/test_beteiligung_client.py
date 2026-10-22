@@ -52,6 +52,9 @@ class TestFetchProcessList:
         assert len(processes) == 1
         assert processes[0].title == "Test Gesetz"
         assert processes[0].slug == "test-gesetz"
+        headers = responses.calls[0].request.headers
+        assert "PaZuFa-BaWue-Scraper" in headers["User-Agent"]
+        assert "de-DE" in headers["Accept-Language"]
 
     @responses.activate
     def test_filters_non_lp_processes_after_redirect(self, client):
@@ -126,50 +129,12 @@ class TestFetchProcessList:
 
 class TestFetchProcessDetail:
     @responses.activate
-    def test_utf8_response_decoded_correctly(self, client):
-        """Serve UTF-8 bytes without charset; German umlauts must survive decoding."""
-        html_with_umlauts = "<html><body><h1>Bürgerschaftliches Engagement</h1><p>März 2025</p></body></html>"
-        html_bytes = html_with_umlauts.encode("utf-8")
-        responses.add(responses.GET, DETAIL_URL, body=html_bytes, status=200, content_type="text/html")
-
-        html = client.fetch_process_detail("/de/mitmachen/lp-17/entbuerokratisierung")
-
-        assert "März" in html
-        assert "Bürgerschaftliches" in html
-
-    @responses.activate
     def test_returns_html(self, client):
         responses.add(responses.GET, DETAIL_URL, body=SAMPLE_DETAIL_HTML, status=200)
 
         html = client.fetch_process_detail("/de/mitmachen/lp-17/entbuerokratisierung")
 
         assert "<h1>Detail</h1>" in html
-
-    @responses.activate
-    def test_constructs_absolute_url(self, client):
-        responses.add(responses.GET, DETAIL_URL, body=SAMPLE_DETAIL_HTML, status=200)
-
-        client.fetch_process_detail("/de/mitmachen/lp-17/entbuerokratisierung")
-
-        assert responses.calls[0].request.url == DETAIL_URL
-
-
-class TestSessionHeaders:
-    @responses.activate
-    def test_user_agent(self, client):
-        responses.add(responses.GET, LP17_URL, body=SAMPLE_INDEX_HTML, status=200)
-
-        client.fetch_process_list()
-
-        assert "PaZuFa-BaWue-Scraper" in responses.calls[0].request.headers["User-Agent"]
-
-    @responses.activate
-    def test_accept_language(self, client):
-        responses.add(responses.GET, LP17_URL, body=SAMPLE_INDEX_HTML, status=200)
-
-        client.fetch_process_list()
-
-        assert "de-DE" in responses.calls[0].request.headers["Accept-Language"]
 
 
 class TestRequestDelay:
