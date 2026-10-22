@@ -2,7 +2,7 @@
 
 # LLM-Anreicherung
 
-Was das LLM liefert, mit welchem Prompt und wie gecacht wird (`bawue_dok.py`). Die
+Was das LLM liefert, mit welchem Prompt und wie gecacht wird (`bawue_dok.py`, je Vorgang `vorgang_llm.py`). Die
 Anreicherung ist optional (`LLM_PROVIDER_KEY`). Die Modelle sampeln (DD-063); stabil zwischen
 Läufen sind die Antworten nur durch den Cache. Jede Änderung am Cache-Schlüssel kann
 sichtbare Texte ändern.
