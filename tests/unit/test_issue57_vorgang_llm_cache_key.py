@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from bawue.bawue_dok import vorgang_kurztitel, vorgang_ressort
+from bawue.vorgang_llm import vorgang_kurztitel, vorgang_ressort
 
 TITEL = "Gesetz zur Änderung des Landeshochschulgesetzes"
 SUMMARY = "Der Entwurf ändert das Hochschulrecht."

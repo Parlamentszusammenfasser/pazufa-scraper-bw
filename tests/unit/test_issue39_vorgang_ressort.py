@@ -21,8 +21,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bawue.bawue_dok import RESSORT_PROMPT, vorgang_ressort
 from bawue.types import TODO_MARKER, Ressort
+from bawue.vorgang_llm import RESSORT_PROMPT, vorgang_ressort
 
 TITEL = "Gesetz zur Förderung des Ausbaus der Windenergie in Baden-Württemberg"
 SUMMARY = "Der Entwurf beschleunigt Genehmigungen für Windkraftanlagen."
