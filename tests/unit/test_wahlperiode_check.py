@@ -2,6 +2,7 @@
 
 import logging
 
+import pytest
 import requests
 import responses
 
@@ -22,15 +23,17 @@ class TestCheckForNewerWahlperiode:
         assert any("18" in msg for msg in caplog.messages)
 
     @responses.activate
-    def test_no_warning_when_404(self, caplog):
+    @pytest.mark.parametrize("wahlperiode", [17, 19])
+    def test_no_warning_when_404(self, caplog, wahlperiode):
         """HTTP 404 for lp-{n+1} means no new period — no warning emitted."""
-        responses.add(responses.GET, f"{BASE_URL}/de/mitmachen/lp-18", status=404)
+        url = f"{BASE_URL}/de/mitmachen/lp-{wahlperiode + 1}"
+        responses.add(responses.GET, url, status=404)
 
         with caplog.at_level(logging.WARNING, logger="bawue.wahlperiode_check"):
-            check_for_newer_wahlperiode(17)
+            check_for_newer_wahlperiode(wahlperiode)
 
         assert not caplog.records
-        assert [c.request.url for c in responses.calls] == [f"{BASE_URL}/de/mitmachen/lp-18"]  # lp-{n+1} only
+        assert [c.request.url for c in responses.calls] == [url]  # lp-{n+1} only
 
     @responses.activate
     def test_no_exception_on_network_error(self, caplog):
