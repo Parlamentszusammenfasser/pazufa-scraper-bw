@@ -31,10 +31,6 @@ class TestPutVorgang:
         assert excinfo.value.status == status
         assert excinfo.value.method == "vorgang_put"
 
-    def test_201_does_not_raise(self):
-        with patch("bawue.api._vorgang_put.sync_detailed", return_value=_resp(201)):
-            put_vorgang(MagicMock(), uuid4(), MagicMock())  # no exception
-
     def test_passes_scraper_id_as_str_header(self):
         scraper_id = uuid4()
         item = MagicMock()

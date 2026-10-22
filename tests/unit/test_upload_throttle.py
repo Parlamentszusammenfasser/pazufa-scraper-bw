@@ -30,21 +30,13 @@ def limiter():
 
 
 class TestRetryOn429:
-    def test_succeeds_after_transient_429(self, limiter):
-        """A single 429 followed by success should return the result."""
-        api_call = MagicMock(side_effect=[FakeApiException(429), "ok"])
-        with patch("bawue.rate_limiter.time.sleep"):
-            result = with_upload_retry(api_call, limiter, exception_type=FakeApiException)
-        assert result == "ok"
-        assert api_call.call_count == 2
-
-    def test_succeeds_after_multiple_429s(self, limiter):
-        """Multiple 429s followed by success should eventually return."""
-        api_call = MagicMock(side_effect=[FakeApiException(429), FakeApiException(429), FakeApiException(429), "done"])
+    @pytest.mark.parametrize("n_429", [1, 3])
+    def test_succeeds_after_transient_429s(self, limiter, n_429):
+        api_call = MagicMock(side_effect=[FakeApiException(429)] * n_429 + ["ok"])
         with patch("bawue.rate_limiter.time.sleep"):
             result = with_upload_retry(api_call, limiter, max_retries=5, exception_type=FakeApiException)
-        assert result == "done"
-        assert api_call.call_count == 4
+        assert result == "ok"
+        assert api_call.call_count == n_429 + 1
 
 
 class TestMaxRetriesExhausted:
@@ -57,16 +49,10 @@ class TestMaxRetriesExhausted:
 
 
 class TestNon429NotRetried:
-    def test_500_raises_immediately(self, limiter):
+    @pytest.mark.parametrize("status", [500, 422])
+    def test_raises_immediately(self, limiter, status):
         """Non-429 API errors should not be retried."""
-        api_call = MagicMock(side_effect=FakeApiException(500))
-        with pytest.raises(FakeApiException):
-            with_upload_retry(api_call, limiter, exception_type=FakeApiException)
-        assert api_call.call_count == 1
-
-    def test_422_raises_immediately(self, limiter):
-        """422 Unprocessable Entity should not be retried."""
-        api_call = MagicMock(side_effect=FakeApiException(422))
+        api_call = MagicMock(side_effect=FakeApiException(status))
         with pytest.raises(FakeApiException):
             with_upload_retry(api_call, limiter, exception_type=FakeApiException)
         assert api_call.call_count == 1

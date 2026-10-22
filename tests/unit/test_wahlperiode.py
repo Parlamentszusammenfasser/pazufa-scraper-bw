@@ -8,10 +8,6 @@ import pytest
 from bawue.wahlperiode import wahlperiode_start
 
 
-def test_override_also_covers_an_unknown_wahlperiode():
-    assert wahlperiode_start(19, "2026-09-01") == date(2026, 9, 1)
-
-
 def test_unknown_wahlperiode_without_override_says_what_to_do():
     with pytest.raises(ValueError, match=r"19.*WAHLPERIODE_START.*wahlperiode-start-date"):
         wahlperiode_start(19)
@@ -35,6 +31,13 @@ def test_override_outside_the_wahlperiode_is_rejected(override):
         wahlperiode_start(18, override)
 
 
-@pytest.mark.parametrize("override", ["2026-05-01", date.today().isoformat()])
-def test_override_bounds_are_inclusive(override):
-    assert wahlperiode_start(18, override) == date.fromisoformat(override)
+@pytest.mark.parametrize(
+    ("wahlperiode", "override"),
+    [
+        (18, "2026-05-01"),  # bounds are inclusive
+        (18, date.today().isoformat()),
+        (19, "2026-09-01"),  # also covers an unknown Wahlperiode
+    ],
+)
+def test_override_is_used(wahlperiode, override):
+    assert wahlperiode_start(wahlperiode, override) == date.fromisoformat(override)

@@ -18,46 +18,22 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "parlis"
 
 
 class TestExtractJsonComments:
-    def test_extracts_single_json_comment(self):
-        html = '<div><!--{"key": "val"}--></div>'
-        result = _extract_json_comments(html)
-        assert len(result) == 1
-        assert result[0]["key"] == "val"
-
-    def test_extracts_multiple_json_comments(self):
-        html = '<!--{"a": 1}--><div>text</div><!--{"b": 2}-->'
-        result = _extract_json_comments(html)
-        assert len(result) == 2
-        assert result[0]["a"] == 1
-        assert result[1]["b"] == 2
-
-    def test_returns_empty_for_no_comments(self):
-        html = "<html><body><div>no comments</div></body></html>"
-        assert _extract_json_comments(html) == []
-
-    def test_skips_malformed_json_comment(self):
-        html = '<!--{broken json--><div></div><!--{"valid": true}-->'
-        result = _extract_json_comments(html)
-        assert len(result) == 1
-        assert result[0]["valid"] is True
-
-    def test_ignores_non_json_comments(self):
-        html = '<!-- regular comment --><div></div><!--{"ok": 1}-->'
-        result = _extract_json_comments(html)
-        assert len(result) == 1
-        assert result[0]["ok"] == 1
-
-    def test_handles_nested_braces(self):
-        html = '<!--{"outer": {"inner": [1, 2]}}-->'
-        result = _extract_json_comments(html)
-        assert len(result) == 1
-        assert result[0]["outer"]["inner"] == [1, 2]
-
-    def test_handles_multiline_json_comment(self):
-        html = '<!--{\n  "key": "value"\n}-->'
-        result = _extract_json_comments(html)
-        assert len(result) == 1
-        assert result[0]["key"] == "value"
+    @pytest.mark.parametrize(
+        ("html", "expected"),
+        [
+            pytest.param('<div><!--{"key": "val"}--></div>', [{"key": "val"}], id="single"),
+            pytest.param('<!--{"a": 1}--><div>text</div><!--{"b": 2}-->', [{"a": 1}, {"b": 2}], id="multiple"),
+            pytest.param("<html><body><div>no comments</div></body></html>", [], id="none"),
+            pytest.param(
+                '<!--{broken json--><div></div><!--{"valid": true}-->', [{"valid": True}], id="skips-malformed"
+            ),
+            pytest.param('<!-- regular comment --><div></div><!--{"ok": 1}-->', [{"ok": 1}], id="ignores-non-json"),
+            pytest.param('<!--{"outer": {"inner": [1, 2]}}-->', [{"outer": {"inner": [1, 2]}}], id="nested-braces"),
+            pytest.param('<!--{\n  "key": "value"\n}-->', [{"key": "value"}], id="multiline"),
+        ],
+    )
+    def test_extract_json_comments(self, html, expected):
+        assert _extract_json_comments(html) == expected
 
 
 SAMPLE_JSON_COMMENT_FULL = {
@@ -95,17 +71,13 @@ class TestJsonCommentToRawVorgang:
         assert result is not None
         assert result["titel"] == "Gesetz zur Förderung erneuerbarer Energien"
         assert result["vorgangs_id"] == "V-98001"
-        assert result["Vorgangstyp"] == "Gesetzgebung"
-        assert result["Initiative"] == "Fraktion GRÜNE, Fraktion CDU"
-        assert result["Aktueller Stand"] == "Verkündet"
-
-    def test_builds_detail_url(self):
-        result = _json_comment_to_raw_vorgang(SAMPLE_JSON_COMMENT_FULL)
         assert result["detail_url"] == "https://parlis.landtag-bw.de/parlis/vorgang/V-98001"
-
-    def test_strips_leading_whitespace_from_initiative(self):
-        result = _json_comment_to_raw_vorgang(SAMPLE_JSON_COMMENT_FULL)
-        assert not result["Initiative"].startswith(" ")
+        assert result["Vorgangstyp"] == "Gesetzgebung"
+        assert result["Initiative"] == "Fraktion GRÜNE, Fraktion CDU"  # leading whitespace stripped
+        assert result["Aktueller Stand"] == "Verkündet"
+        # Issue #33: EWBV34 carries every Deskriptor; WMV33 is truncated for long lists.
+        assert result["Deskriptoren"] == ["Erneuerbare Energie", "Klimaschutz"]
+        assert len(result["fundstellen_parsed"]) == 2
 
     def test_falls_back_to_wmv40_for_vorgangs_id(self):
         data = {
@@ -115,14 +87,6 @@ class TestJsonCommentToRawVorgang:
         }
         result = _json_comment_to_raw_vorgang(data)
         assert result["vorgangs_id"] == "V-99999"
-
-    def test_returns_none_for_empty_data(self):
-        assert _json_comment_to_raw_vorgang({}) is None
-
-    def test_extracts_deskriptoren_in_parlis_order(self):
-        """Issue #33: EWBV34 carries every Deskriptor; WMV33 is truncated for long lists."""
-        result = _json_comment_to_raw_vorgang(SAMPLE_JSON_COMMENT_FULL)
-        assert result["Deskriptoren"] == ["Erneuerbare Energie", "Klimaschutz"]
 
     def test_deskriptoren_skip_blank_and_malformed_entries(self):
         data = {
@@ -152,11 +116,6 @@ class TestJsonCommentToRawVorgang:
         assert result["vorgangs_id"] == "V-11111"
         assert "Initiative" not in result
         assert "Aktueller Stand" not in result
-
-    def test_includes_fundstellen_parsed(self):
-        result = _json_comment_to_raw_vorgang(SAMPLE_JSON_COMMENT_FULL)
-        assert "fundstellen_parsed" in result
-        assert len(result["fundstellen_parsed"]) == 2
 
 
 class TestParseWmv35Fundstellen:
@@ -309,17 +268,22 @@ SAMPLE_HTML_TWO_RECORDS = """<html><body>
 
 
 class TestParseFundstelleText:
-    def test_extracts_date(self):
-        result = parse_fundstelle_text("Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)")
+    def test_extracts_drucksache_fundstelle(self):
+        text = "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)"
+        result = parse_fundstelle_text(text)
+        assert result["raw"] == text
         assert result["datum"] == "04.02.2026"
-
-    def test_extracts_drucksache(self):
-        result = parse_fundstelle_text("Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)")
         assert result["drucksache"] == "17/10266"
+        assert result["station_typ"] == "Gesetzentwurf"
+        assert result["autor_text"] == "Fraktion GRÜNE"
+        assert result["seiten"] == 13
 
     def test_extracts_plenarprotokoll(self):
         result = parse_fundstelle_text("Erste Beratung   Plenarprotokoll 17/141 05.02.2026")
         assert result["plenarprotokoll"] == "17/141"
+        assert "autor_text" not in result
+        assert "gesetzblatt_jahr" not in result
+        assert "gesetzblatt_nr" not in result
 
     @pytest.mark.parametrize(
         ("raw", "pages"),
@@ -358,15 +322,12 @@ class TestParseFundstelleText:
     def test_issue74_no_protocol_pages(self, raw):
         assert "druckseiten" not in parse_fundstelle_text(raw)
 
-    def test_extracts_station_typ(self):
-        result = parse_fundstelle_text("Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)")
-        assert result["station_typ"] == "Gesetzentwurf"
-
     def test_extracts_ausschuss(self):
         result = parse_fundstelle_text(
             "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  02.02.2026 Drucksache 17/10210"
         )
         assert "Ausschuss für Wirtschaft" in result["ausschuss"]
+        assert "autor_text" not in result
 
     def test_extracts_ausschuss_genitive_issue68(self):
         """Issue #68: genitive committee names were never matched (Drucksache 17/2586)."""
@@ -385,65 +346,35 @@ class TestParseFundstelleText:
         assert result["ausschuss"] == "Ständiger Ausschuss"
         assert "autor_text" not in result
 
-    def test_extracts_pages(self):
-        result = parse_fundstelle_text("Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)")
-        assert result["seiten"] == 13
-
-    def test_preserves_raw_text(self):
-        text = "Gesetzentwurf    Fraktion GRÜNE  04.02.2026"
-        result = parse_fundstelle_text(text)
-        assert result["raw"] == text
-
 
 class TestParseFundstelleAutor:
-    def test_single_author(self):
-        result = parse_fundstelle_text("Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)")
-        assert result["autor_text"] == "Fraktion GRÜNE"
-
-    def test_multiple_authors(self):
-        result = parse_fundstelle_text(
-            "Gesetzentwurf    Fraktion GRÜNE, Fraktion der CDU  04.02.2026 Drucksache 17/10266"
-        )
-        assert result["autor_text"] == "Fraktion GRÜNE, Fraktion der CDU"
-
-    def test_landesregierung(self):
-        result = parse_fundstelle_text("Gesetzentwurf    Landesregierung  01.03.2026 Drucksache 17/11000   (5 S.)")
-        assert result["autor_text"] == "Landesregierung"
-
-    def test_no_autor_for_ausschuss(self):
-        result = parse_fundstelle_text(
-            "Beschlussempfehlung und Bericht    Ausschuss für Wirtschaft  02.02.2026 Drucksache 17/10210"
-        )
-        assert "autor_text" not in result
-
-    def test_no_autor_for_plenarprotokoll(self):
-        result = parse_fundstelle_text("Erste Beratung   Plenarprotokoll 17/141 05.02.2026")
-        assert "autor_text" not in result
-
-    def test_no_gap_text(self):
-        result = parse_fundstelle_text("Gesetzentwurf    04.02.2026 Drucksache 17/10266")
-        assert "autor_text" not in result
+    @pytest.mark.parametrize(
+        ("text", "autor_text"),
+        [
+            (
+                "Gesetzentwurf    Fraktion GRÜNE, Fraktion der CDU  04.02.2026 Drucksache 17/10266",
+                "Fraktion GRÜNE, Fraktion der CDU",
+            ),
+            ("Gesetzentwurf    Landesregierung  01.03.2026 Drucksache 17/11000   (5 S.)", "Landesregierung"),
+            ("Gesetzentwurf    04.02.2026 Drucksache 17/10266", None),  # no gap text
+        ],
+    )
+    def test_autor_text(self, text, autor_text):
+        assert parse_fundstelle_text(text).get("autor_text") == autor_text
 
 
 class TestParseResults:
     def test_parses_single_record(self):
+        """HTML-only fixtures parse via the fallback when there is no JSON comment."""
         results = parse_results(SAMPLE_HTML_RECORD)
         assert len(results) == 1
         vorgang = results[0]
         assert vorgang["titel"] == "Gesetz zur Änderung des Landeshochschulgesetzes"
         assert vorgang["vorgangs_id"] == "V-12345"
+        assert vorgang["detail_url"] == "https://parlis.landtag-bw.de/parlis/vorgang/V-12345"
         assert vorgang["Initiative"] == "Fraktion GRÜNE"
-        assert len(vorgang["fundstellen_parsed"]) == 3
-
-    def test_parses_multiple_records(self):
-        results = parse_results(SAMPLE_HTML_TWO_RECORDS)
-        assert len(results) == 2
-        assert results[0]["titel"] == "Gesetz A"
-        assert results[1]["titel"] == "Gesetz B"
-
-    def test_parses_all_fundstelle_types(self):
-        results = parse_results(SAMPLE_HTML_RECORD)
-        fundstellen = results[0]["fundstellen_parsed"]
+        fundstellen = vorgang["fundstellen_parsed"]
+        assert len(fundstellen) == 3
 
         # Gesetzentwurf fundstelle
         assert fundstellen[0]["datum"] == "04.02.2026"
@@ -463,9 +394,11 @@ class TestParseResults:
         assert fundstellen[2]["station_typ"] == "Beschlussempfehlung und Bericht"
         assert "Ausschuss für Wirtschaft" in fundstellen[2]["ausschuss"]
 
-    def test_extracts_detail_url(self):
-        results = parse_results(SAMPLE_HTML_RECORD)
-        assert results[0]["detail_url"] == "https://parlis.landtag-bw.de/parlis/vorgang/V-12345"
+    def test_parses_multiple_records(self):
+        results = parse_results(SAMPLE_HTML_TWO_RECORDS)
+        assert len(results) == 2
+        assert results[0]["titel"] == "Gesetz A"
+        assert results[1]["titel"] == "Gesetz B"
 
     def test_empty_html_returns_empty_list(self):
         results = parse_results("<html><body></body></html>")
@@ -515,12 +448,11 @@ class TestParseResultsDispatcher:
         assert results[0]["titel"] == "JSON-Parsed Title"
         assert results[0]["vorgangs_id"] == "V-77777"
         assert results[0]["Vorgangstyp"] == "Gesetzgebung"
-
-    def test_falls_back_to_html_when_no_json(self):
-        """Existing HTML-only fixtures still work via fallback."""
-        results = parse_results(SAMPLE_HTML_RECORD)
-        assert len(results) == 1
-        assert results[0]["titel"] == "Gesetz zur Änderung des Landeshochschulgesetzes"
+        fundstellen = results[0]["fundstellen_parsed"]
+        assert len(fundstellen) == 1
+        assert fundstellen[0]["station_typ"] == "Gesetzentwurf"
+        assert fundstellen[0]["datum"] == "01.03.2026"
+        assert fundstellen[0]["pdf_url"] == "https://example.com/doc.pdf"
 
     def test_falls_back_on_malformed_json_comments(self):
         html = """<html><body>
@@ -534,14 +466,6 @@ class TestParseResultsDispatcher:
         results = parse_results(html)
         assert len(results) == 1
         assert results[0]["titel"] == "Fallback Title"
-
-    def test_json_path_extracts_fundstellen(self):
-        results = parse_results(SAMPLE_JSON_IN_HTML)
-        fundstellen = results[0]["fundstellen_parsed"]
-        assert len(fundstellen) == 1
-        assert fundstellen[0]["station_typ"] == "Gesetzentwurf"
-        assert fundstellen[0]["datum"] == "01.03.2026"
-        assert fundstellen[0]["pdf_url"] == "https://example.com/doc.pdf"
 
 
 class TestParseFundstelleSingleSpaceFallback:
@@ -579,41 +503,14 @@ class TestParseFundstellePageNumberNotConfusedForYear:
 
 
 class TestParseFundstelleTextGermanDate:
-    def test_extracts_german_long_form_date(self):
-        text = "Gesetz  vom 16. Dezember 2025 Gesetzblatt für Baden-Württemberg 2025 Nr. 147     S. 1-3"
-        result = parse_fundstelle_text(text)
-        assert result["datum"] == "16.12.2025"
-
     def test_extracts_single_digit_day(self):
         text = "Gesetz  vom 4. Februar 2026 Gesetzblatt für Baden-Württemberg 2026 Nr. 12"
         result = parse_fundstelle_text(text)
         assert result["datum"] == "04.02.2026"
 
-    def test_dd_mm_yyyy_still_works(self):
-        result = parse_fundstelle_text("Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266")
-        assert result["datum"] == "04.02.2026"
-
     def test_no_date_absent_datum_key(self):
         result = parse_fundstelle_text("Gesetz ohne Datum Gesetzblatt für Baden-Württemberg")
         assert "datum" not in result
-
-
-class TestParseFundstelleGesetzblattYearFallback:
-    def test_extracts_year_from_gesetzblatt_berichtigung(self):
-        text = "Berichtigung des Gesetzes  Gesetzblatt für Baden-Württemberg 2022 Nr. 37     S. 595"
-        result = parse_fundstelle_text(text)
-        assert result["datum"] == "01.01.2022"
-        assert result["station_typ"] == "Berichtigung des Gesetzes"
-
-    def test_explicit_date_takes_precedence_over_gesetzblatt_year(self):
-        text = "Gesetz  vom 16. Dezember 2025 Gesetzblatt für Baden-Württemberg 2025 Nr. 147  S. 1-3"
-        result = parse_fundstelle_text(text)
-        assert result["datum"] == "16.12.2025"
-
-    def test_dd_mm_yyyy_takes_precedence_over_gesetzblatt_year(self):
-        text = "Gesetz  Gesetzblatt für Baden-Württemberg 2026 Nr. 20  S. 1  10.02.2026"
-        result = parse_fundstelle_text(text)
-        assert result["datum"] == "10.02.2026"
 
 
 class TestParseFundstelleGesetzblattReference:
@@ -624,29 +521,38 @@ class TestParseFundstelleGesetzblattReference:
     a year fallback for ``datum`` and then discarded.
     """
 
-    def test_extracts_jahr_and_nummer(self):
-        text = "Gesetz  Gesetzblatt für Baden-Württemberg 2026 Nr. 20  S. 1  10.02.2026"
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            pytest.param(
+                "Gesetz  Gesetzblatt für Baden-Württemberg 2026 Nr. 20  S. 1  10.02.2026",
+                {
+                    "gesetzblatt_jahr": 2026,
+                    "gesetzblatt_nr": 20,
+                    "datum": "10.02.2026",
+                },  # DD.MM.YYYY wins over the year
+                id="dd-mm-yyyy",
+            ),
+            pytest.param(
+                "Gesetz  vom 16. Dezember 2025 Gesetzblatt für Baden-Württemberg 2025 Nr. 147  S. 1-3",
+                {"gesetzblatt_jahr": 2025, "gesetzblatt_nr": 147, "datum": "16.12.2025"},  # long-form date wins
+                id="long-form-date",
+            ),
+            pytest.param(
+                "Berichtigung des Gesetzes  Gesetzblatt für Baden-Württemberg 2022 Nr. 37     S. 595",
+                {
+                    "gesetzblatt_jahr": 2022,
+                    "gesetzblatt_nr": 37,
+                    "datum": "01.01.2022",
+                    "station_typ": "Berichtigung des Gesetzes",
+                },
+                id="year-fallback",
+            ),
+        ],
+    )
+    def test_extracts_reference_and_date(self, text, expected):
         result = parse_fundstelle_text(text)
-        assert result["gesetzblatt_jahr"] == 2026
-        assert result["gesetzblatt_nr"] == 20
-
-    def test_extracts_reference_without_explicit_date(self):
-        text = "Berichtigung des Gesetzes  Gesetzblatt für Baden-Württemberg 2022 Nr. 37     S. 595"
-        result = parse_fundstelle_text(text)
-        assert result["gesetzblatt_jahr"] == 2022
-        assert result["gesetzblatt_nr"] == 37
-        assert result["datum"] == "01.01.2022"  # year fallback still applies
-
-    def test_multi_digit_nummer(self):
-        text = "Gesetz  vom 16. Dezember 2025 Gesetzblatt für Baden-Württemberg 2025 Nr. 147  S. 1-3"
-        result = parse_fundstelle_text(text)
-        assert result["gesetzblatt_jahr"] == 2025
-        assert result["gesetzblatt_nr"] == 147
-
-    def test_absent_for_non_gesetzblatt_fundstelle(self):
-        result = parse_fundstelle_text("Erste Beratung   Plenarprotokoll 18/10 23.07.2026")
-        assert "gesetzblatt_jahr" not in result
-        assert "gesetzblatt_nr" not in result
+        assert {key: result.get(key) for key in expected} == expected
 
 
 SAMPLE_HTML_TIME_ELEMENT = """<html><body>

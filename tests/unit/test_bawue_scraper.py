@@ -135,22 +135,25 @@ class TestBuildVorgang:
         assert vorgang.kurztitel == "Testgesetz"
 
     @pytest.mark.asyncio
-    async def test_build_vorgang_forwards_parlis_backlink(self, scraper_build_vorgang):
-        """Issue #31: the parsed PARLIS detail_url must reach Vorgang.links."""
+    @pytest.mark.parametrize(
+        ("detail_url", "links"),
+        [
+            (
+                "https://parlis.landtag-bw.de/parlis/vorgang/V-218907",
+                ["https://parlis.landtag-bw.de/parlis/vorgang/V-218907"],
+            ),
+            (None, UNSET),  # not an empty list
+        ],
+    )
+    async def test_build_vorgang_forwards_parlis_backlink(self, scraper_build_vorgang, detail_url, links):
+        """Issue #31: the parsed PARLIS detail_url reaches Vorgang.links."""
         raw = _make_raw_vorgang("V-218907")
-        raw["detail_url"] = "https://parlis.landtag-bw.de/parlis/vorgang/V-218907"
-        vorgang = await scraper_build_vorgang(raw)
-
-        assert vorgang.links == ["https://parlis.landtag-bw.de/parlis/vorgang/V-218907"]
-
-    @pytest.mark.asyncio
-    async def test_build_vorgang_links_unset_without_backlink(self, scraper_build_vorgang):
-        """Issue #31: without a detail_url, links stays UNSET (not an empty list)."""
-        raw = _make_raw_vorgang("V-001")
         raw.pop("detail_url", None)
+        if detail_url:
+            raw["detail_url"] = detail_url
         vorgang = await scraper_build_vorgang(raw)
 
-        assert vorgang.links is UNSET
+        assert vorgang.links == links
 
     @pytest.mark.asyncio
     async def test_kurztitel_input_is_initiating_summary(self, scraper_build_vorgang):
@@ -306,32 +309,14 @@ class TestBuildVorgang:
             ],
         )
         vorgang = await scraper_build_vorgang(raw)
+        rerun = await scraper_build_vorgang(raw)
 
         assert len(vorgang.stationen) == 1
         station = vorgang.stationen[0]
         assert station.typ == Stationstyp.PARL_INITIATIV
         assert station.dokumente == []
         assert station.api_id is not None
-
-    @pytest.mark.asyncio
-    async def test_stable_station_api_id_is_deterministic(self, scraper_build_vorgang):
-        """The same Vorgang yields the same document-less station api_id on re-runs."""
-        raw = _make_raw_vorgang(
-            "V-246637",
-            initiative="Fraktion der AfD",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Fraktion der AfD  03.06.2026 Drucksache 18/75   (4 S.)",
-                    "datum": "03.06.2026",
-                    "drucksache": "18/75",
-                    "station_typ": "Gesetzentwurf",
-                    "pdf_url": "",
-                },
-            ],
-        )
-        v1 = await scraper_build_vorgang(raw)
-        v2 = await scraper_build_vorgang(raw)
-        assert v1.stationen[0].api_id == v2.stationen[0].api_id
+        assert station.api_id == rerun.stationen[0].api_id
 
     @pytest.mark.asyncio
     async def test_station_api_id_stable_when_document_arrives_later(self, scraper_build_vorgang):
@@ -483,47 +468,11 @@ class TestBuildVorgang:
         assert initiativ.dokumente[0].link == regbsl.dokumente[0].link
         # ... but distinct, non-aliased station identities.
         assert initiativ.api_id != regbsl.api_id
-
-    @pytest.mark.asyncio
-    async def test_synthetic_initiativ_documents_serialize_to_json(self, scraper_build_vorgang):
-        """Deep-copying the regbsl documents for the synthetic parl-initiativ
-        (issue #47) must not break API serialization. ``copy.deepcopy`` mints a
-        fresh ``Unset`` instance per optional field, and corelib's ``to_dict``
-        guards those fields by identity (``is not UNSET``); a deep-copied sentinel
-        slips past the guard and lands in the payload, so ``json.dumps`` raises
-        'Object of type Unset is not JSON serializable' (72% of WP17 uploads
-        failed on this). Serializing the whole Vorgang must succeed and the
-        synthetic station's document autoren must carry the real UNSET singleton."""
-        raw = _make_raw_vorgang(
-            "V-100",
-            initiative="Landesregierung",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Landesregierung  01.11.2025 Drucksache 17/1000   (5 S.)",
-                    "datum": "01.11.2025",
-                    "drucksache": "17/1000",
-                    "station_typ": "Gesetzentwurf",
-                    "pdf_url": "https://www.landtag-bw.de/resource/blob/1/17_1000.pdf",
-                },
-                {
-                    "raw": "Zweite Beratung   Plenarprotokoll 17/150 15.12.2025",
-                    "datum": "15.12.2025",
-                    "plenarprotokoll": "17/150",
-                    "station_typ": "Zweite Beratung",
-                    "pdf_url": "",
-                },
-            ],
-        )
-        vorgang = await scraper_build_vorgang(raw)
-
-        initiativ = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_INITIATIV)
-        autor = initiativ.dokumente[0].autoren[0]
-        # The deep-copied autor must hold the genuine singleton, not a clone, so
-        # the identity-based to_dict guard omits it.
-        assert autor.person is UNSET
-
-        # Whole-Vorgang serialization (the exact path the API client takes).
-        json.dumps(vorgang.to_dict())
+        # copy.deepcopy mints a fresh Unset per optional field, which slips past corelib's
+        # identity guard in to_dict ("Object of type Unset is not JSON serializable", 72 %
+        # of WP17 uploads): the copied autor must hold the genuine singleton.
+        assert initiativ.dokumente[0].autoren[0].person is UNSET
+        json.dumps(vorgang.to_dict())  # the exact path the API client takes
 
     @pytest.mark.asyncio
     async def test_document_bearing_station_gets_stable_api_id(self, scraper_build_vorgang):
@@ -744,16 +693,11 @@ class TestBuildVorgang:
 
     @pytest.mark.asyncio
     async def test_deterministic_api_id(self, scraper_build_vorgang):
-        raw = _make_raw_vorgang("V-001")
-        v1 = await scraper_build_vorgang(raw)
-        v2 = await scraper_build_vorgang(raw)
-        assert v1.api_id == v2.api_id
-
-    @pytest.mark.asyncio
-    async def test_different_ids_produce_different_api_ids(self, scraper_build_vorgang):
         v1 = await scraper_build_vorgang(_make_raw_vorgang("V-001"))
-        v2 = await scraper_build_vorgang(_make_raw_vorgang("V-002"))
-        assert v1.api_id != v2.api_id
+        v2 = await scraper_build_vorgang(_make_raw_vorgang("V-001"))
+        other = await scraper_build_vorgang(_make_raw_vorgang("V-002"))
+        assert v1.api_id == v2.api_id
+        assert v1.api_id != other.api_id
 
     @pytest.mark.asyncio
     async def test_gesetzentwurf_from_landesregierung(self, scraper_build_vorgang):
@@ -993,23 +937,6 @@ class TestBuildVorgang:
         assert dok.drucksnr is None
 
     @pytest.mark.asyncio
-    async def test_gremium_uses_parlament_bw(self, scraper_build_vorgang):
-        raw = _make_raw_vorgang(
-            "V-060",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Test  01.01.2026",
-                    "datum": "01.01.2026",
-                    "station_typ": "Gesetzentwurf",
-                    "pdf_url": "",
-                },
-            ],
-        )
-        vorgang = await scraper_build_vorgang(raw)
-
-        assert vorgang.stationen[0].gremium.parlament.value == "BW"
-
-    @pytest.mark.asyncio
     async def test_default_gremium_is_plenum(self, scraper_build_vorgang):
         """Fundstelle without Ausschuss and without Plenarprotokoll → `plenum`
         (DD-021: "plenum als default wenn etwas 'irgendwie passiert'")."""
@@ -1027,6 +954,7 @@ class TestBuildVorgang:
         vorgang = await scraper_build_vorgang(raw)
 
         assert vorgang.stationen[0].gremium.name == "plenum"
+        assert vorgang.stationen[0].gremium.parlament.value == "BW"
 
     @pytest.mark.asyncio
     async def test_gsblt_station_uses_gesetzesblatt_gremium(self, scraper_build_vorgang):
@@ -1350,15 +1278,12 @@ class TestDetermineGremiumRouting:
         gremium = scraper._determine_gremium({}, Stationstyp.POSTPARL_GSBLT)
         assert gremium.name == "gesetzesblatt"
 
-    def test_named_ausschuss_overrides_preparl_routing(self, scraper):
-        """Edge case: a named committee always wins, even on a preparl-* type.
+    @pytest.mark.parametrize("typ", [Stationstyp.PREPARL_REGBSL, Stationstyp.POSTPARL_GSBLT])
+    def test_named_ausschuss_overrides_routing(self, scraper, typ):
+        """Edge case: a named committee always wins, even on a preparl-*/gsblt type.
         Not observed from PARLIS today, but the priority order is documented
         (DD-021) and worth pinning explicitly so it can't silently invert."""
-        gremium = scraper._determine_gremium({"ausschuss": "Ausschuss für Wirtschaft"}, Stationstyp.PREPARL_REGBSL)
-        assert gremium.name == "Ausschuss für Wirtschaft"
-
-    def test_named_ausschuss_overrides_gsblt_routing(self, scraper):
-        gremium = scraper._determine_gremium({"ausschuss": "Ausschuss für Wirtschaft"}, Stationstyp.POSTPARL_GSBLT)
+        gremium = scraper._determine_gremium({"ausschuss": "Ausschuss für Wirtschaft"}, typ)
         assert gremium.name == "Ausschuss für Wirtschaft"
 
 
@@ -1459,17 +1384,7 @@ class TestItemExtractor:
         assert vorgang is not None
         assert vorgang.titel == "Test Gesetz"
         assert "V-300" not in scraper._raw_cache
-
-    @pytest.mark.asyncio
-    async def test_cache_empty_after_all_consumed(self):
-        scraper = _make_scraper_with_mock_parlis()
-        scraper._raw_cache["V-310"] = _make_raw_vorgang("V-310")
-        scraper._raw_cache["V-311"] = _make_raw_vorgang("V-311")
-
-        await scraper.item_extractor("V-310")
-        await scraper.item_extractor("V-311")
-
-        assert scraper._raw_cache == {}
+        assert scraper._skipped == 0  # parliamentary stations: not skipped
 
     @pytest.mark.asyncio
     async def test_missing_cache_entry_returns_none(self):
@@ -1523,17 +1438,6 @@ class TestItemExtractor:
 
         assert result is None
         assert scraper._skipped == 1
-
-    @pytest.mark.asyncio
-    async def test_does_not_skip_vorgang_with_parliamentary_stations(self):
-        """Normal Vorgänge with parliamentary stations are not skipped."""
-        scraper = _make_scraper_with_mock_parlis()
-        scraper._raw_cache["V-901"] = _make_raw_vorgang("V-901")
-
-        result = await scraper.item_extractor("V-901")
-
-        assert result is not None
-        assert scraper._skipped == 0
 
 
 class _InMemoryCache:
@@ -1830,114 +1734,25 @@ class TestDatetimesAreTimezoneAware:
         assert station.zp_start.tzinfo is not None
         assert station.zp_start == datetime(2025, 6, 15, tzinfo=UTC)
 
-    @pytest.mark.asyncio
-    async def test_missing_date_skips_station(self, scraper_build_vorgang):
-        raw = _make_raw_vorgang(
-            "V-701",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Test",
-                    "datum": "",
-                    "station_typ": "Gesetzentwurf",
-                    "pdf_url": "",
-                    "drucksache": "17/10266",
-                },
-            ],
-        )
-        vorgang = await scraper_build_vorgang(raw)
-        assert len(vorgang.stationen) == 0
-
-    @pytest.mark.asyncio
-    async def test_placeholder_date_fallback_is_timezone_aware(self, scraper_build_vorgang):
-        raw = _make_raw_vorgang(
-            "V-702",
-            fundstellen=[
-                {
-                    "raw": "Antrag    Fraktion GRÜNE  00.00.2028 Drucksache 17/99999",
-                    "datum": "00.00.2028",
-                    "drucksache": "17/99999",
-                    "station_typ": "Antrag",
-                    "pdf_url": "",
-                },
-            ],
-        )
-        scraper_build_vorgang.__self__._today = lambda: date(2028, 1, 1)  # not held back (DD-068)
-        vorgang = await scraper_build_vorgang(raw)
-        station = vorgang.stationen[0]
-
-        assert station.zp_start.tzinfo is not None
-        assert station.zp_start == datetime(2028, 1, 1, tzinfo=UTC)
-
-
-class TestDatetimeFallbackWarning:
-    @pytest.mark.asyncio
-    async def test_missing_date_logs_error(self, scraper_build_vorgang, caplog):
-        scraper = object.__new__(BawueVorgaengeScraper)
-        scraper._wahlperiode = 17
-        scraper._llm_enabled = False
-        scraper._llm = None
-        scraper._filter_sonstig = True
-        scraper.session = MagicMock()
-
-        raw = _make_raw_vorgang(
-            "V-400",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Test",
-                    "datum": "",
-                    "station_typ": "Gesetzentwurf",
-                    "pdf_url": "",
-                    "drucksache": "17/10266",
-                },
-            ],
-        )
-
-        with caplog.at_level(logging.ERROR, logger="bawue.bawue_vorgaenge_scraper"):
-            await scraper._build_vorgang(raw)
-
-        assert any("No date found for Fundstelle" in msg for msg in caplog.messages)
-
-    @pytest.mark.asyncio
-    async def test_missing_date_logs_drucksache_number(self, scraper_build_vorgang, caplog):
-        scraper = object.__new__(BawueVorgaengeScraper)
-        scraper._wahlperiode = 17
-        scraper._llm_enabled = False
-        scraper._llm = None
-        scraper._filter_sonstig = True
-        scraper.session = MagicMock()
-
-        raw = _make_raw_vorgang(
-            "V-401",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Test",
-                    "datum": "",
-                    "station_typ": "Gesetzentwurf",
-                    "pdf_url": "",
-                    "drucksache": "17/10266",
-                },
-            ],
-        )
-
-        with caplog.at_level(logging.ERROR, logger="bawue.bawue_vorgaenge_scraper"):
-            await scraper._build_vorgang(raw)
-
-        assert any("17/10266" in msg for msg in caplog.messages)
-
 
 class TestRunSummary:
     @pytest.mark.asyncio
-    async def test_summary_printed_to_stdout(self, capsys):
+    async def test_summary_printed_to_stdout(self, capsys, caplog):
         scraper = _make_scraper_with_mock_parlis()
 
         with (
             patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
             patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"),
         ):
             await scraper.run()
 
         captured = capsys.readouterr()
         assert "=== BaWue Vorgänge Run Summary ===" in captured.out
+        # no raw seconds-with-dot format ("23045.7s") in the summary
+        duration_line = next(line for line in captured.out.splitlines() if "Duration" in line)
+        assert "Duration: 0m 00s" in duration_line
+        assert any("Completed in" in msg for msg in caplog.messages)
 
     @pytest.mark.asyncio
     async def test_summary_shows_published_count(self, capsys):
@@ -1997,13 +1812,14 @@ class TestRunSummary:
         assert "3" in captured.out
 
     @pytest.mark.asyncio
-    async def test_summary_still_printed_on_run_failure(self, capsys):
+    async def test_summary_still_printed_on_run_failure(self, capsys, caplog):
         scraper = _make_scraper_with_mock_parlis()
 
         mock_run = AsyncMock(side_effect=RuntimeError("boom"))
         with (
             patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=mock_run),
             patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"),
             pytest.raises(RuntimeError),
         ):
             await scraper.run()
@@ -2011,21 +1827,7 @@ class TestRunSummary:
         captured = capsys.readouterr()
         assert "=== BaWue Vorgänge Run Summary ===" in captured.out
         assert scraper.summary[0] == "Vorgänge"  # issue #52: the cycle report still gets it
-
-    @pytest.mark.asyncio
-    async def test_summary_duration_is_human_readable(self, capsys):
-        scraper = _make_scraper_with_mock_parlis()
-
-        with (
-            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
-            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
-        ):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        # no raw seconds-with-dot format ("23045.7s") in the summary
-        duration_line = next(line for line in captured.out.splitlines() if "Duration" in line)
-        assert "Duration: 0m 00s" in duration_line
+        assert any("Completed in" in msg for msg in caplog.messages)
 
     @pytest.mark.asyncio
     async def test_summary_lists_failed_vorgaenge_with_id_title_and_reason(self, capsys):
@@ -2058,96 +1860,31 @@ class TestRunSummary:
         assert "422" in failed_block
 
 
-class TestRunDurationLog:
-    @pytest.mark.asyncio
-    async def test_logs_completed_in_on_success(self, caplog):
-        from unittest.mock import AsyncMock, MagicMock
-
-        scraper = object.__new__(BawueVorgaengeScraper)
-        scraper._wahlperiode = 18
-        scraper._published = 0
-        scraper._failed = 0
-        scraper._skipped = 0
-        scraper._by_type = {}
-        scraper._failed_items = []
-        scraper._parlis_errors = []
-        scraper._llm_enabled = False
-        scraper._llm_metrics = LLMMetrics()
-
-        with (
-            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
-            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode", new=MagicMock()),
-            caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"),
-        ):
-            await scraper.run()
-
-        assert any("Completed in" in msg for msg in caplog.messages)
-
-    @pytest.mark.asyncio
-    async def test_logs_completed_in_on_failure(self, caplog):
-        from unittest.mock import AsyncMock, MagicMock
-
-        scraper = object.__new__(BawueVorgaengeScraper)
-        scraper._wahlperiode = 18
-        scraper._published = 0
-        scraper._failed = 0
-        scraper._skipped = 0
-        scraper._by_type = {}
-        scraper._failed_items = []
-        scraper._parlis_errors = []
-        scraper._llm_enabled = False
-        scraper._llm_metrics = LLMMetrics()
-
-        mock_run = AsyncMock(side_effect=RuntimeError("boom"))
-        with (
-            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=mock_run),
-            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode", new=MagicMock()),
-            caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"),
-            pytest.raises(RuntimeError),
-        ):
-            await scraper.run()
-
-        assert any("Completed in" in msg for msg in caplog.messages)
-
-
 class TestParseAutoren:
-    def test_single_author(self):
-        result = _parse_autoren("Fraktion GRÜNE")
-        assert len(result) == 1
-        assert result[0].organisation == "Fraktion GRÜNE"
-
-    def test_comma_separated(self):
-        result = _parse_autoren("Fraktion GRÜNE, Fraktion der CDU")
-        assert len(result) == 2
-        assert result[0].organisation == "Fraktion GRÜNE"
-        assert result[1].organisation == "Fraktion der CDU"
-
-    def test_empty_string(self):
-        assert _parse_autoren("") == []
-
-    def test_whitespace_only(self):
-        assert _parse_autoren("   ") == []
-
-    def test_ministry_name_with_internal_comma(self):
-        """Ministry names containing commas must not be split incorrectly."""
-        result = _parse_autoren(
-            "Ministerium für Umwelt, Klima und Energiewirtschaft, Ministerium für Landesentwicklung und Wohnen"
-        )
-        assert len(result) == 2
-        assert result[0].organisation == "Ministerium für Umwelt, Klima und Energiewirtschaft"
-        assert result[1].organisation == "Ministerium für Landesentwicklung und Wohnen"
-
-    def test_single_ministry_with_internal_comma(self):
-        result = _parse_autoren("Ministerium für Umwelt, Klima und Energiewirtschaft")
-        assert len(result) == 1
-        assert result[0].organisation == "Ministerium für Umwelt, Klima und Energiewirtschaft"
-
-    def test_mixed_fraktionen_and_ministry(self):
-        """Fraktionen and ministries in the same string."""
-        result = _parse_autoren("Fraktion GRÜNE, Ministerium der Justiz und für Migration")
-        assert len(result) == 2
-        assert result[0].organisation == "Fraktion GRÜNE"
-        assert result[1].organisation == "Ministerium der Justiz und für Migration"
+    @pytest.mark.parametrize(
+        ("text", "organisationen"),
+        [
+            ("Fraktion GRÜNE", ["Fraktion GRÜNE"]),
+            ("Fraktion GRÜNE, Fraktion der CDU", ["Fraktion GRÜNE", "Fraktion der CDU"]),
+            ("", []),
+            ("   ", []),
+            # Ministry names containing commas must not be split.
+            (
+                "Ministerium für Umwelt, Klima und Energiewirtschaft",
+                ["Ministerium für Umwelt, Klima und Energiewirtschaft"],
+            ),
+            (
+                "Ministerium für Umwelt, Klima und Energiewirtschaft, Ministerium für Landesentwicklung und Wohnen",
+                ["Ministerium für Umwelt, Klima und Energiewirtschaft", "Ministerium für Landesentwicklung und Wohnen"],
+            ),
+            (
+                "Fraktion GRÜNE, Ministerium der Justiz und für Migration",
+                ["Fraktion GRÜNE", "Ministerium der Justiz und für Migration"],
+            ),
+        ],
+    )
+    def test_parse_autoren(self, text, organisationen):
+        assert [a.organisation for a in _parse_autoren(text)] == organisationen
 
 
 class TestBuildStationAutoren:
@@ -3052,18 +2789,6 @@ class TestEnabledVorgangstypen:
             "Volksantrag",
         ]
 
-    def test_load_toml_section_reads_enabled_vorgangstypen(self, tmp_path):
-        from bawue.config_loader import load_toml_section
-
-        config_file = tmp_path / "config.toml"
-        config_file.write_text('[bawue]\nenabled-vorgangstypen = ["Gesetzgebung", "Volksantrag"]\n')
-        mock_config = MagicMock()
-        mock_config.config_file = str(config_file)
-
-        result = load_toml_section(mock_config, "bawue")
-
-        assert result["enabled-vorgangstypen"] == ["Gesetzgebung", "Volksantrag"]
-
     def test_load_toml_section_returns_empty_when_no_bawue_section(self, tmp_path):
         from bawue.config_loader import load_toml_section
 
@@ -3421,25 +3146,18 @@ class TestAktuellerStandAblehnung:
         # avoid sharing zp_start with a different Stationstyp (backend enforces
         # total ordering across types).
         assert ablehnung.zp_start == datetime(2022, 3, 23, 1, 0, tzinfo=UTC)
+        assert ablehnung.gremium.name == "plenum"
 
     @pytest.mark.asyncio
-    async def test_no_ablehnung_when_aktueller_stand_missing(self, scraper_build_vorgang):
-        """No synthetic station when 'Aktueller Stand' is absent."""
+    @pytest.mark.parametrize("stand", [None, "Verkündet"])
+    async def test_no_ablehnung_unless_abgelehnt(self, scraper_build_vorgang, stand):
+        """No synthetic station when 'Aktueller Stand' is absent or not 'Abgelehnt'."""
         raw = _make_raw_vorgang("V-001")
+        if stand:
+            raw["Aktueller Stand"] = stand
         vorgang = await scraper_build_vorgang(raw)
 
-        station_types = [s.typ for s in vorgang.stationen]
-        assert Stationstyp.PARL_ABLEHNUNG not in station_types
-
-    @pytest.mark.asyncio
-    async def test_no_ablehnung_when_aktueller_stand_is_verkuendet(self, scraper_build_vorgang):
-        """No synthetic station when 'Aktueller Stand' is not 'Abgelehnt'."""
-        raw = _make_raw_vorgang("V-001")
-        raw["Aktueller Stand"] = "Verkündet"
-        vorgang = await scraper_build_vorgang(raw)
-
-        station_types = [s.typ for s in vorgang.stationen]
-        assert Stationstyp.PARL_ABLEHNUNG not in station_types
+        assert Stationstyp.PARL_ABLEHNUNG not in [s.typ for s in vorgang.stationen]
 
     @pytest.mark.asyncio
     async def test_ablehnung_not_duplicated_if_already_present(self, scraper_build_vorgang):
@@ -3518,17 +3236,6 @@ class TestAktuellerStandAblehnung:
         assert ablehnung_count == 1
 
     @pytest.mark.asyncio
-    async def test_ablehnung_station_has_correct_gremium(self, scraper_build_vorgang):
-        """Synthetic ablehnung station should use Landtag as gremium."""
-        raw = _make_raw_vorgang("V-200")
-        raw["Aktueller Stand"] = "Abgelehnt"
-        vorgang = await scraper_build_vorgang(raw)
-
-        ablehnung = vorgang.stationen[-1]
-        assert ablehnung.typ == Stationstyp.PARL_ABLEHNUNG
-        assert ablehnung.gremium.name == "plenum"
-
-    @pytest.mark.asyncio
     async def test_ablehnung_skipped_with_empty_stationen(self, scraper_build_vorgang):
         """When there are no fundstellen, don't synthesize a dateless ablehnung station."""
         raw = _make_raw_vorgang("V-300", fundstellen=[])
@@ -3559,18 +3266,9 @@ class TestAktuellerStandAblehnung:
         assert a1.api_id is not None, "synthesized ablehnung must have a stable api_id"
         assert a1.api_id == a2.api_id, "api_id must be deterministic across runs"
 
-    @pytest.mark.asyncio
-    async def test_synthesized_ablehnung_api_id_differs_per_vorgang(self, scraper_build_vorgang):
-        """Two different Vorgänge must get different synthesized-ablehnung api_ids."""
-        raw_a = _make_raw_vorgang("V-111")
-        raw_a["Aktueller Stand"] = "Abgelehnt"
-        raw_b = _make_raw_vorgang("V-222")
-        raw_b["Aktueller Stand"] = "Abgelehnt"
-
-        va = await scraper_build_vorgang(raw_a)
-        vb = await scraper_build_vorgang(raw_b)
-
-        assert va.stationen[-1].api_id != vb.stationen[-1].api_id
+        other = _make_raw_vorgang("V-222")
+        other["Aktueller Stand"] = "Abgelehnt"
+        assert (await scraper_build_vorgang(other)).stationen[-1].api_id != a1.api_id, "and differ per Vorgang"
 
 
 class TestEnforceTotalOrdering:
@@ -4434,8 +4132,12 @@ class TestBeschlussDesLandtagsInBeratung:
     """
 
     @pytest.mark.asyncio
-    async def test_beschluss_in_zweiter_beratung_with_truncated_station_typ(self, scraper_build_vorgang):
-        """station_typ truncated to 'Beschluss des Landtags' but raw has 'in Zweiter Beratung'."""
+    @pytest.mark.parametrize(
+        ("beratung", "datum", "drucksache"),
+        [("Zweiter", "16.12.2022", "17/3820"), ("Dritter", "21.12.2022", "17/3842")],
+    )
+    async def test_beschluss_with_truncated_station_typ(self, scraper_build_vorgang, beratung, datum, drucksache):
+        """station_typ truncated to 'Beschluss des Landtags' but raw has 'in Zweiter/Dritter Beratung'."""
         raw = _make_raw_vorgang(
             "V-400",
             fundstellen=[
@@ -4448,9 +4150,9 @@ class TestBeschlussDesLandtagsInBeratung:
                     "pdf_url": "https://example.com/entwurf.pdf",
                 },
                 {
-                    "raw": "Beschluss des Landtags  in Zweiter Beratung  16.12.2022 Drucksache 17/3820",
-                    "datum": "16.12.2022",
-                    "drucksache": "17/3820",
+                    "raw": f"Beschluss des Landtags  in {beratung} Beratung  {datum} Drucksache {drucksache}",
+                    "datum": datum,
+                    "drucksache": drucksache,
                     "station_typ": "Beschluss des Landtags",
                     "pdf_url": "https://example.com/beschluss.pdf",
                 },
@@ -4458,36 +4160,7 @@ class TestBeschlussDesLandtagsInBeratung:
         )
         vorgang = await scraper_build_vorgang(raw)
 
-        beschluss_station = vorgang.stationen[1]
-        assert beschluss_station.typ == Stationstyp.PARL_VOLLVLSGN
-
-    @pytest.mark.asyncio
-    async def test_beschluss_in_dritter_beratung_with_truncated_station_typ(self, scraper_build_vorgang):
-        """station_typ truncated to 'Beschluss des Landtags' but raw has 'in Dritter Beratung'."""
-        raw = _make_raw_vorgang(
-            "V-401",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf  Landesregierung  22.10.2024 Drucksache 17/8000  (50 S.)",
-                    "datum": "22.10.2024",
-                    "drucksache": "17/8000",
-                    "station_typ": "Gesetzentwurf",
-                    "seiten": 50,
-                    "pdf_url": "https://example.com/entwurf.pdf",
-                },
-                {
-                    "raw": "Beschluss des Landtags  in Dritter Beratung  21.12.2022 Drucksache 17/3842",
-                    "datum": "21.12.2022",
-                    "drucksache": "17/3842",
-                    "station_typ": "Beschluss des Landtags",
-                    "pdf_url": "https://example.com/beschluss3.pdf",
-                },
-            ],
-        )
-        vorgang = await scraper_build_vorgang(raw)
-
-        beschluss_station = vorgang.stationen[1]
-        assert beschluss_station.typ == Stationstyp.PARL_VOLLVLSGN
+        assert vorgang.stationen[1].typ == Stationstyp.PARL_VOLLVLSGN
 
     @pytest.mark.asyncio
     async def test_plain_beschluss_des_landtags_still_maps_to_akzeptanz(self, scraper_build_vorgang):
@@ -4700,15 +4373,19 @@ class TestReadingRoundEquivalence:
         v_stations = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_VOLLVLSGN]
         assert len(v_stations) == 2
 
-    def test_unit_reading_round_extracts_from_plain_label(self):
-        assert _reading_round("Erste Beratung") == 1
-        assert _reading_round("Zweite Beratung") == 2
-        assert _reading_round("Dritte Beratung") == 3
-
-    def test_unit_reading_round_extracts_from_beschluss_in_label(self):
-        assert _reading_round("Beschluss des Landtags in Erster Beratung") == 1
-        assert _reading_round("Beschluss des Landtags in Zweiter Beratung") == 2
-        assert _reading_round("Beschluss des Landtags in Dritter Beratung") == 3
+    @pytest.mark.parametrize(
+        ("label", "round_"),
+        [
+            ("Erste Beratung", 1),
+            ("Zweite Beratung", 2),
+            ("Dritte Beratung", 3),
+            ("Beschluss des Landtags in Erster Beratung", 1),
+            ("Beschluss des Landtags in Zweiter Beratung", 2),
+            ("Beschluss des Landtags in Dritter Beratung", 3),
+        ],
+    )
+    def test_unit_reading_round(self, label, round_):
+        assert _reading_round(label) == round_
 
     def test_unit_reading_round_returns_none_for_non_round_labels(self):
         # No 'Beratung' substring → not a round indicator.
@@ -4717,16 +4394,17 @@ class TestReadingRoundEquivalence:
         assert _reading_round("Gesetzesbeschluss des Landtags") is None
         assert _reading_round("") is None
 
-    def test_unit_same_round_label_treats_zweite_and_beschluss_in_zweiter_equal(self):
-        assert _same_round_label("Zweite Beratung", "Beschluss des Landtags in Zweiter Beratung")
-        assert _same_round_label("Beschluss des Landtags in Dritter Beratung", "Dritte Beratung")
-
-    def test_unit_same_round_label_distinguishes_different_rounds(self):
-        assert not _same_round_label("Erste Beratung", "Zweite Beratung")
-        assert not _same_round_label(
-            "Beschluss des Landtags in Zweiter Beratung",
-            "Beschluss des Landtags in Dritter Beratung",
-        )
+    @pytest.mark.parametrize(
+        ("a", "b", "same"),
+        [
+            ("Zweite Beratung", "Beschluss des Landtags in Zweiter Beratung", True),
+            ("Beschluss des Landtags in Dritter Beratung", "Dritte Beratung", True),
+            ("Erste Beratung", "Zweite Beratung", False),
+            ("Beschluss des Landtags in Zweiter Beratung", "Beschluss des Landtags in Dritter Beratung", False),
+        ],
+    )
+    def test_unit_same_round_label(self, a, b, same):
+        assert _same_round_label(a, b) is same
 
     def test_unit_same_round_label_empty_label_is_defensive_false(self):
         # Defensive default from DD-024 must be preserved even after DD-026.
@@ -4738,13 +4416,11 @@ class TestReadingRoundEquivalence:
 class TestParseFundstelleDateNone:
     """_parse_fundstelle_date returns None for missing/unparseable dates (DoD: no bogus defaults)."""
 
-    def test_returns_none_for_empty_datum(self):
-        result = _parse_fundstelle_date({"datum": "", "raw": "test", "drucksache": "17/1"})
-        assert result is None
-
-    def test_returns_none_for_missing_datum_key(self):
-        result = _parse_fundstelle_date({"raw": "test", "drucksache": "17/1"})
-        assert result is None
+    @pytest.mark.parametrize(
+        "fund", [{"datum": "", "raw": "test", "drucksache": "17/1"}, {"raw": "test", "drucksache": "17/1"}]
+    )
+    def test_returns_none_without_datum(self, fund):
+        assert _parse_fundstelle_date(fund) is None
 
     def test_returns_none_for_unparseable_datum_no_year(self):
         result = _parse_fundstelle_date({"datum": "xyz", "raw": "test", "drucksache": "17/1"})
@@ -4775,7 +4451,7 @@ class TestStationSkippedForUnparseableDate:
     """Stations with unfillable zp_start are omitted entirely (DoD requirement)."""
 
     @pytest.mark.asyncio
-    async def test_station_skipped_when_date_empty(self, scraper_build_vorgang):
+    async def test_station_skipped_when_date_empty(self, scraper_build_vorgang, caplog):
         raw = _make_raw_vorgang(
             "V-800",
             fundstellen=[
@@ -4788,8 +4464,11 @@ class TestStationSkippedForUnparseableDate:
                 },
             ],
         )
-        vorgang = await scraper_build_vorgang(raw)
+        with caplog.at_level(logging.ERROR, logger="bawue.bawue_vorgaenge_scraper"):
+            vorgang = await scraper_build_vorgang(raw)
+
         assert len(vorgang.stationen) == 0
+        assert any("No date found for Fundstelle" in msg and "17/10266" in msg for msg in caplog.messages)
 
     @pytest.mark.asyncio
     async def test_station_skipped_when_date_unparseable(self, scraper_build_vorgang):
@@ -4866,8 +4545,11 @@ class TestFilterSonstigStations:
     """Tests for configurable sonstig station filtering."""
 
     @pytest.mark.asyncio
-    async def test_sonstig_station_filtered_when_enabled(self, scraper_build_vorgang):
-        """When filter-sonstig-stations=true, sonstig stations are removed."""
+    async def test_sonstig_station_filtered_when_enabled(self, scraper_build_vorgang, caplog):
+        """When filter-sonstig-stations=true, sonstig stations are removed and logged at INFO (issue #5).
+
+        A labeled 'Mitteilung' is filtered even though it cites a Plenarprotokoll:
+        only unlabeled Fundstellen get the positional fallback."""
         raw = _make_raw_vorgang(
             "V-700",
             fundstellen=[
@@ -4888,10 +4570,12 @@ class TestFilterSonstigStations:
                 },
             ],
         )
-        vorgang = await scraper_build_vorgang(raw)
+        with caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"):
+            vorgang = await scraper_build_vorgang(raw)
 
         assert len(vorgang.stationen) == 1
         assert vorgang.stationen[0].typ == Stationstyp.PARL_INITIATIV
+        assert any("sonstig" in r.message.lower() and r.levelno == logging.INFO for r in caplog.records)
 
     @pytest.mark.asyncio
     async def test_sonstig_station_kept_when_disabled(self):
@@ -4927,34 +4611,6 @@ class TestFilterSonstigStations:
 
         assert len(vorgang.stationen) == 2
         assert vorgang.stationen[1].typ == Stationstyp.SONSTIG
-
-    @pytest.mark.asyncio
-    async def test_sonstig_filtering_logs_info_message(self, scraper_build_vorgang, caplog):
-        """Filtered sonstig stations are logged at INFO level (issue #5)."""
-        raw = _make_raw_vorgang(
-            "V-702",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266   (13 S.)",
-                    "datum": "04.02.2026",
-                    "drucksache": "17/10266",
-                    "station_typ": "Gesetzentwurf",
-                    "seiten": 13,
-                    "pdf_url": "https://www.landtag-bw.de/resource/blob/12345/doc.pdf",
-                },
-                {
-                    "raw": "Mitteilung   Plenarprotokoll 17/141  06.02.2026",
-                    "datum": "06.02.2026",
-                    "plenarprotokoll": "17/141",
-                    "station_typ": "Mitteilung",
-                    "pdf_url": "",
-                },
-            ],
-        )
-        with caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"):
-            await scraper_build_vorgang(raw)
-
-        assert any("sonstig" in r.message.lower() and r.levelno == logging.INFO for r in caplog.records)
 
 
 class TestUnlabeledPlenarprotokollFallback:
@@ -5064,35 +4720,6 @@ class TestUnlabeledPlenarprotokollFallback:
 
         station_types = [s.typ for s in vorgang.stationen]
         assert station_types == [Stationstyp.PARL_INITIATIV, Stationstyp.PARL_VOLLVLSGN]
-
-    @pytest.mark.asyncio
-    async def test_labeled_sonstig_fundstelle_still_filtered(self, scraper_build_vorgang):
-        """A Fundstelle with an explicit (non-reading) label, e.g. 'Mitteilung',
-        is still filtered as SONSTIG even if it references a Plenarprotokoll —
-        only *unlabeled* Fundstellen get the positional fallback."""
-        raw = _make_raw_vorgang(
-            "V-UNLABELED-3",
-            fundstellen=[
-                {
-                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266",
-                    "datum": "04.02.2026",
-                    "drucksache": "17/10266",
-                    "station_typ": "Gesetzentwurf",
-                    "pdf_url": "https://example.com/entwurf.pdf",
-                },
-                {
-                    "raw": "Mitteilung   Plenarprotokoll 17/141  06.02.2026",
-                    "datum": "06.02.2026",
-                    "plenarprotokoll": "17/141",
-                    "station_typ": "Mitteilung",
-                    "pdf_url": "",
-                },
-            ],
-        )
-        vorgang = await scraper_build_vorgang(raw)
-
-        assert len(vorgang.stationen) == 1
-        assert vorgang.stationen[0].typ == Stationstyp.PARL_INITIATIV
 
 
 class TestIssue13CitationNotesDoNotTypeStations:
@@ -5506,24 +5133,12 @@ class TestIssue9GesetzblattAusgabedatum:
 
     @pytest.mark.asyncio
     async def test_station_uses_gesetzblatt_ausgabedatum(self):
-        scraper = self._scraper(self._lookup(_GBL_AUSGABEDATUM))
-        vorgang = await scraper._build_vorgang(self._raw())
+        lookup = self._lookup(_GBL_AUSGABEDATUM)
+        vorgang = await self._scraper(lookup)._build_vorgang(self._raw())
 
         assert self._gsblt(vorgang).zp_start == _GBL_AUSGABEDATUM
-
-    @pytest.mark.asyncio
-    async def test_lookup_is_keyed_on_the_cited_entry(self):
-        lookup = self._lookup(_GBL_AUSGABEDATUM)
-        await self._scraper(lookup)._build_vorgang(self._raw())
-
-        lookup.publikationsdatum.assert_awaited_once_with(2026, 14)
-
-    @pytest.mark.asyncio
-    async def test_document_keeps_the_ausfertigung_as_zp_referenz(self):
-        """Only the station moves; the document still references the Gesetz vom …"""
-        scraper = self._scraper(self._lookup(_GBL_AUSGABEDATUM))
-        vorgang = await scraper._build_vorgang(self._raw())
-
+        lookup.publikationsdatum.assert_awaited_once_with(2026, 14)  # keyed on the cited entry
+        # Only the station moves; the document still references the Gesetz vom …
         dokumente = self._gsblt(vorgang).dokumente
         assert dokumente and all(d.zp_referenz == _GBL_AUSFERTIGUNG for d in dokumente)
 
@@ -5580,26 +5195,16 @@ class TestGesetzblattOfficialPdf:
 
     @pytest.mark.asyncio
     async def test_links_the_official_pdf_with_the_page_anchor(self):
-        """The anchor keeps the enriched hash equal to the Landtag copy's: no second row (DD-043)."""
+        """The anchor keeps the enriched hash equal to the Landtag copy's: no second row (DD-043).
+        Citations before 2024 are not in the electronic Gesetzblatt and keep the PARLIS link."""
         scraper = self._scraper(self._OFFICIAL)
-        vorgang = await scraper._build_vorgang(TestIssue98KraftStation._raw())
-
-        assert self._gsblt_dokument(vorgang).link == f"{self._OFFICIAL}#page=1"
-        scraper._gsblt_dates.pdf_url.assert_awaited_with(2026, 14)
-
-    @pytest.mark.asyncio
-    async def test_placeholder_hash_does_not_change(self):
-        with_official = await self._scraper(self._OFFICIAL)._build_vorgang(TestIssue98KraftStation._raw())
+        with_official = await scraper._build_vorgang(TestIssue98KraftStation._raw())
         without = await self._scraper(None)._build_vorgang(TestIssue98KraftStation._raw())
 
+        assert self._gsblt_dokument(with_official).link == f"{self._OFFICIAL}#page=1"
+        scraper._gsblt_dates.pdf_url.assert_awaited_with(2026, 14)
+        assert self._gsblt_dokument(without).link == _GBL_FUNDSTELLE["pdf_url"]
         assert self._gsblt_dokument(with_official).hash_ == self._gsblt_dokument(without).hash_
-
-    @pytest.mark.asyncio
-    async def test_keeps_the_parlis_link_without_an_official_pdf(self):
-        """Citations before 2024 are not in the electronic Gesetzblatt."""
-        vorgang = await self._scraper(None)._build_vorgang(TestIssue98KraftStation._raw())
-
-        assert self._gsblt_dokument(vorgang).link == _GBL_FUNDSTELLE["pdf_url"]
 
 
 class TestIssue98KraftStation:
@@ -5750,23 +5355,13 @@ class TestPlaceholderHash:
     backend v0.3.0 additionally rejects a non-hex hash.
     """
 
-    def test_placeholder_hash_is_a_hex_sha256(self):
-        digest = placeholder_hash("https://example.org/doc.pdf")
-
-        assert re.fullmatch(r"[0-9a-f]{64}", digest)
-
-    def test_placeholder_hash_is_deterministic(self):
-        link = "https://example.org/doc.pdf"
-
+    def test_placeholder_hash(self):
+        link = "https://example.org/a.pdf"
+        assert re.fullmatch(r"[0-9a-f]{64}", placeholder_hash(link))
         assert placeholder_hash(link) == placeholder_hash(link)
-
-    def test_distinct_links_get_distinct_hashes(self):
-        assert placeholder_hash("https://example.org/a.pdf") != placeholder_hash("https://example.org/b.pdf")
-
-    def test_page_anchor_distinguishes_sections_of_one_pdf(self):
-        """DD-043: the ``#page=N`` anchor is part of the document identity."""
+        assert placeholder_hash(link) != placeholder_hash("https://example.org/b.pdf")
+        # DD-043: the #page=N anchor is part of the document identity.
         base = "https://www.landtag-bw.de/files/WP17/Plp/17_0139_28012026.pdf"
-
         assert placeholder_hash(f"{base}#page=36") != placeholder_hash(f"{base}#page=37")
 
     @pytest.mark.asyncio

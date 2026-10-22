@@ -44,11 +44,6 @@ class TestWait:
 
 
 class TestOnSuccess:
-    def test_success_decreases_delay(self, limiter):
-        initial = limiter.current_delay
-        limiter.on_success()
-        assert limiter.current_delay < initial
-
     def test_success_multiplies_by_factor(self, limiter):
         limiter.on_success()
         assert limiter.current_delay == pytest.approx(1.0 * 0.9)

@@ -29,14 +29,6 @@ def client() -> GesetzblattClient:
 
 class TestFetchDetail:
     @responses.activate
-    def test_returns_html(self, client):
-        responses.add(responses.GET, DETAIL_URL, body=SAMPLE_DETAIL_HTML, status=200)
-
-        html = client.fetch_detail(DETAIL_URL)
-
-        assert "<h1>Gesetz zur Detail</h1>" in html
-
-    @responses.activate
     def test_retries_on_429(self, client):
         responses.add(responses.GET, DETAIL_URL, status=429)
         responses.add(responses.GET, DETAIL_URL, body=SAMPLE_DETAIL_HTML, status=200)

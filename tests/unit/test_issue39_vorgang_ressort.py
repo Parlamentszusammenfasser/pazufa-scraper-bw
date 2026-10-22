@@ -60,14 +60,29 @@ def _empty_cache():
 class TestVorgangRessort:
     @pytest.mark.asyncio
     async def test_classifies_into_the_enum(self):
-        with _patch_llm("Energie"):
-            assert await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_empty_cache()) == Ressort.ENERGIE
+        cache = _empty_cache()
+        with _patch_llm("Energie") as mock_call:
+            assert await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=cache) == Ressort.ENERGIE
+
+        # A truncated or stale list silently narrows what the classifier can return
+        # (same canary as the BB scraper's).
+        prompt = mock_call.call_args.kwargs["messages"][-1]["content"]
+        missing = [r.value for r in Ressort if r.value not in prompt]
+        assert not missing, f"Ressort values never shown to the model: {missing}"
+        # Cached under its own prefix, so llm-semantics: stays untouched.
+        key, value = cache.store_raw.call_args[0][:2]
+        assert key.startswith("vorgang-ressort:")
+        assert json.loads(value)["ressort"] == "Energie"
 
     @pytest.mark.asyncio
     async def test_none_when_nothing_fits(self):
-        """`null` must survive: the caller omits the field rather than guessing."""
+        """`null` must survive: the caller omits the field rather than guessing. It is a
+        permanent answer, so it is cached too — re-asking pays for the same null forever
+        and lets the label flip between runs."""
+        cache = _empty_cache()
         with _patch_llm(None):
-            assert await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_empty_cache()) is None
+            assert await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=cache) is None
+        assert json.loads(cache.store_raw.call_args[0][1])["ressort"] is None
 
     @pytest.mark.asyncio
     async def test_value_outside_the_enum_is_rejected(self):
@@ -115,49 +130,15 @@ class TestVorgangRessort:
 
     @pytest.mark.asyncio
     async def test_llm_failure_yields_none(self):
+        cache = _empty_cache()
         with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, side_effect=RuntimeError("boom")):
-            assert await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_empty_cache()) is None
-
-    @pytest.mark.asyncio
-    async def test_every_ressort_value_reaches_the_model(self):
-        """A truncated or stale list silently narrows what the classifier can return
-        (same canary as the BB scraper's)."""
-        with _patch_llm("Energie") as mock_call:
-            await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_empty_cache())
-        prompt = mock_call.call_args.kwargs["messages"][-1]["content"]
-        missing = [r.value for r in Ressort if r.value not in prompt]
-        assert not missing, f"Ressort values never shown to the model: {missing}"
+            assert await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=cache) is None
+        cache.store_raw.assert_not_called()  # a transient failure must not pin an empty result
 
     @pytest.mark.asyncio
     async def test_prompt_states_the_shared_rule(self):
         """The subject matter decides, not the submitting body — the rule BW and BB share."""
         assert "nicht der einbringende Akteur" in RESSORT_PROMPT
-
-    @pytest.mark.asyncio
-    async def test_result_is_cached_under_its_own_prefix(self):
-        cache = _empty_cache()
-        with _patch_llm("Energie"):
-            await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=cache)
-        key, value = cache.store_raw.call_args[0][:2]
-        assert key.startswith("vorgang-ressort:")
-        assert json.loads(value)["ressort"] == "Energie"
-
-    @pytest.mark.asyncio
-    async def test_classified_null_is_cached_too(self):
-        """ "Nothing fits" is a permanent answer — re-asking it every run pays for the
-        same null forever and lets the label flip between runs."""
-        cache = _empty_cache()
-        with _patch_llm(None):
-            assert await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=cache) is None
-        assert json.loads(cache.store_raw.call_args[0][1])["ressort"] is None
-
-    @pytest.mark.asyncio
-    async def test_failed_call_is_not_cached(self):
-        """A transient failure must not pin an empty result."""
-        cache = _empty_cache()
-        with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, side_effect=RuntimeError("boom")):
-            await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=cache)
-        cache.store_raw.assert_not_called()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("stored", ['{"ressort": "Umwelt"}', "Umwelt", "not json at all"])

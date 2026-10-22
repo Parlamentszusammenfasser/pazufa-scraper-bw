@@ -13,10 +13,12 @@ UPSTASH_URL = "rediss://default:secret-token@example-12345.upstash.io:6379"
 UPSTASH_TARGET = "example-12345.upstash.io:6379"
 
 
-def test_host_port_used_when_no_url():
+@pytest.mark.parametrize("redis_url", [None, ""])
+def test_host_port_used_when_no_url(redis_url):
     with patch("bawue.cache.redis.Redis") as mock_redis:
-        cache = BawueCache("localhost", 6379)
+        cache = BawueCache("localhost", 6379, redis_url=redis_url)
     mock_redis.assert_called_once_with(host="localhost", port=6379, decode_responses=True, retry=ANY)
+    mock_redis.from_url.assert_not_called()
     mock_redis.return_value.ping.assert_called_once()
     assert not cache.disabled
 
@@ -33,13 +35,6 @@ def test_url_alone_enables_cache_without_host_port():
     with patch("bawue.cache.redis.Redis"):
         cache = BawueCache(None, None, redis_url=UPSTASH_URL)
     assert not cache.disabled
-
-
-def test_empty_url_falls_back_to_host_port():
-    with patch("bawue.cache.redis.Redis") as mock_redis:
-        BawueCache("localhost", 6379, redis_url="")
-    mock_redis.assert_called_once()
-    mock_redis.from_url.assert_not_called()
 
 
 def test_disabled_without_url_or_host():
@@ -76,9 +71,11 @@ def test_connection_failure_raises_naming_the_target(caplog):
 
 
 def test_config_forwards_redis_url_to_cache(monkeypatch, tmp_path):
-    """REDIS_URL must survive the trip through BawueConfig into BawueCache."""
+    """REDIS_URL must survive the trip through BawueConfig into BawueCache.
+
+    --once is a no-op since every run is one cycle, but old commands still pass it."""
     monkeypatch.chdir(tmp_path)  # no config.toml here — env-only resolution
-    monkeypatch.setattr("sys.argv", ["bawue"])
+    monkeypatch.setattr("sys.argv", ["bawue", "--once"])  # an unknown flag would exit 2
     monkeypatch.setenv("REDIS_URL", UPSTASH_URL)
     monkeypatch.setenv("COLLECTOR_ID", "00000000-0000-0000-0000-000000000001")
     monkeypatch.setenv("LTZF_API_KEY", "test-key")
@@ -115,15 +112,3 @@ def test_issue105_read_error_raises_instead_of_reading_as_a_miss():
 
 def test_issue105_disabled_cache_still_reads_as_a_miss():
     assert BawueCache(None, None).get_raw("vg2:V-1") is None
-
-
-def test_once_flag_is_still_accepted(monkeypatch, tmp_path):
-    """--once is a no-op since every run is one cycle, but old commands still pass it."""
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("sys.argv", ["bawue", "--once"])
-    monkeypatch.setenv("REDIS_URL", UPSTASH_URL)
-    monkeypatch.setenv("COLLECTOR_ID", "00000000-0000-0000-0000-000000000001")
-    monkeypatch.setenv("LTZF_API_KEY", "test-key")
-
-    with patch("bawue.cache.redis.Redis"):
-        BawueConfig().load()  # an unknown flag would exit 2 here
