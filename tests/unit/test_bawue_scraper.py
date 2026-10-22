@@ -4546,10 +4546,7 @@ class TestFilterSonstigStations:
 
     @pytest.mark.asyncio
     async def test_sonstig_station_filtered_when_enabled(self, scraper_build_vorgang, caplog):
-        """When filter-sonstig-stations=true, sonstig stations are removed and logged at INFO (issue #5).
-
-        A labeled 'Mitteilung' is filtered even though it cites a Plenarprotokoll:
-        only unlabeled Fundstellen get the positional fallback."""
+        """When filter-sonstig-stations=true, sonstig stations are removed and logged at INFO (issue #5)."""
         raw = _make_raw_vorgang(
             "V-700",
             fundstellen=[
@@ -4720,6 +4717,35 @@ class TestUnlabeledPlenarprotokollFallback:
 
         station_types = [s.typ for s in vorgang.stationen]
         assert station_types == [Stationstyp.PARL_INITIATIV, Stationstyp.PARL_VOLLVLSGN]
+
+    @pytest.mark.asyncio
+    async def test_labeled_sonstig_fundstelle_still_filtered(self, scraper_build_vorgang):
+        """A Fundstelle with an explicit (non-reading) label, e.g. 'Mitteilung',
+        is still filtered as SONSTIG even if it references a Plenarprotokoll —
+        only *unlabeled* Fundstellen get the positional fallback."""
+        raw = _make_raw_vorgang(
+            "V-UNLABELED-3",
+            fundstellen=[
+                {
+                    "raw": "Gesetzentwurf    Fraktion GRÜNE  04.02.2026 Drucksache 17/10266",
+                    "datum": "04.02.2026",
+                    "drucksache": "17/10266",
+                    "station_typ": "Gesetzentwurf",
+                    "pdf_url": "https://example.com/entwurf.pdf",
+                },
+                {
+                    "raw": "Mitteilung   Plenarprotokoll 17/141  06.02.2026",
+                    "datum": "06.02.2026",
+                    "plenarprotokoll": "17/141",
+                    "station_typ": "Mitteilung",
+                    "pdf_url": "",
+                },
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        assert len(vorgang.stationen) == 1
+        assert vorgang.stationen[0].typ == Stationstyp.PARL_INITIATIV
 
 
 class TestIssue13CitationNotesDoNotTypeStations:

@@ -627,10 +627,7 @@ class TestEnrichDokument:
         assert any("token" in r.message.lower() for r in caplog.records)
         assert result.dokument.volltext == SAMPLE_FULL_TEXT
         assert result.dokument.hash_ == SAMPLE_HASH
-        # Issue #42 (DD-054): sent as the typed tuple, not a plain string.
-        assert result.dokument.to_dict()["zusammenfassung"] == [
-            {"typ": "full-llm", "inhalt": "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."}
-        ]
+        assert zusammenfassung_text(result.dokument) == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
         assert result.dokument.schlagworte == ["umwelt", "klimaschutz", "energie"]
         assert result.dokument.kurztitel == "Erneuerbare-Energien-Gesetz"
         assert result.dokument.vorwort == "Ziel dieses Gesetzentwurfs ist die Förderung erneuerbarer Energien."
@@ -2074,6 +2071,23 @@ class TestIssue42TypedZusammenfassung:
         assert zusammenfassung_text(dok) is None
         dok.zusammenfassung = [Zusammenfassungstupel(typ="full-llm", inhalt="Kurz gesagt.")]
         assert zusammenfassung_text(dok) == "Kurz gesagt."
+
+    @pytest.mark.asyncio
+    async def test_summary_is_sent_as_full_llm_tuple(self):
+        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument(typ=Doktyp.ENTWURF))
+
+        assert result.dokument.to_dict()["zusammenfassung"] == [
+            {"typ": "full-llm", "inhalt": "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."}
+        ]
+
+    @pytest.mark.asyncio
+    async def test_missing_summary_sends_no_tuple(self):
+        response = json.dumps({"schlagworte": ["umwelt"], "kurztitel": "Klima"})
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument(typ=Doktyp.ENTWURF))
+
+        assert result.dokument.zusammenfassung is None
 
 
 class TestIssue42PartialSummaries:

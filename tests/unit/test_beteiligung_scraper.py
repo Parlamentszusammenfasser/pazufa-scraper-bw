@@ -92,34 +92,47 @@ def _make_process(
 class TestBuildVorgang:
     @pytest.mark.asyncio
     async def test_builds_vorgang_with_preparl_regent_station(self):
-        scraper = _make_scraper()
-        vorgang = await scraper._build_vorgang("entbuerokratisierung", _make_detail())
+        vorgang = await _make_scraper()._build_vorgang("entbuerokratisierung", _make_detail())
 
         assert vorgang.typ == Vorgangstyp.GG_LAND_PARL
         # Deterministic and per slug.
         assert str(vorgang.api_id) == str(uuid5(NAMESPACE_URL, "beteiligung-entbuerokratisierung"))
-        assert len(vorgang.initiatoren) == 1
-        assert vorgang.initiatoren[0].organisation == "Ministerium des Inneren, für Digitalisierung und Kommunen"
-        # Issue #24: the source URL is a backlink, not a Vorgangsnummer; pre-parliamentary
-        # drafts have no VNr, and the URL as a `vorgnr` ident overflowed the website's id field.
-        assert len(vorgang.links) == 1
-        assert "beteiligungsportal" in str(vorgang.links[0])
-        assert not vorgang.ids
-
+        assert [a.organisation for a in vorgang.initiatoren] == [
+            "Ministerium des Inneren, für Digitalisierung und Kommunen"
+        ]
         [station] = vorgang.stationen
         assert station.typ == Stationstyp.PREPARL_REGENT
         assert station.gremium.parlament == Parlament.BW
         assert station.gremium.name == "regierung"
         assert station.gremium.wahlperiode == 17
-        # Naive datetimes cause API 422 'premature end of input' errors.
-        assert station.zp_start == datetime(2025, 10, 15, tzinfo=UTC)
+        assert [d.typ for d in station.dokumente] == [Doktyp.PREPARL_ENTWURF]
 
-        [doc] = station.dokumente
-        assert doc.typ == Doktyp.PREPARL_ENTWURF
+    @pytest.mark.asyncio
+    async def test_issue24_url_is_a_backlink_not_a_vorgnr(self):
+        """Pre-parliamentary drafts have no VNr; the URL as a `vorgnr` ident overflowed the website's id field."""
+        vorgang = await _make_scraper()._build_vorgang("entbuerokratisierung", _make_detail())
+
+        assert len(vorgang.links) == 1
+        assert "beteiligungsportal" in str(vorgang.links[0])
+        assert not vorgang.ids
+
+    @pytest.mark.asyncio
+    async def test_dates_are_timezone_aware(self):
+        """Naive datetimes cause API 422 'premature end of input' errors."""
+        vorgang = await _make_scraper()._build_vorgang("entbuerokratisierung", _make_detail())
+
+        assert vorgang.stationen[0].zp_start == datetime(2025, 10, 15, tzinfo=UTC)
+        doc = vorgang.stationen[0].dokumente[0]
         assert doc.zp_modifiziert.tzinfo is not None
         assert doc.zp_referenz.tzinfo is not None
-        # Without LLM enrichment, volltext carries the TODO marker (never empty);
-        # hash_ is link-derived, not a shared marker (DD-048).
+
+    @pytest.mark.asyncio
+    async def test_dokument_placeholders_when_llm_disabled(self):
+        """Without LLM enrichment, volltext carries the TODO marker (never empty);
+        hash_ is link-derived, not a shared marker (DD-048)."""
+        vorgang = await _make_scraper()._build_vorgang("entbuerokratisierung", _make_detail())
+
+        doc = vorgang.stationen[0].dokumente[0]
         assert doc.volltext == "TODO"
         assert doc.hash_ == placeholder_hash(doc.link)
 
