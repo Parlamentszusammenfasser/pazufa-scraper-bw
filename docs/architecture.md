@@ -47,7 +47,8 @@ graph LR
         GBL["GesetzblattDateLookup<br/>(Ausgabedatum-Lookup)"]
         GBC["GesetzblattClient"]
         GBP["gesetzblatt_parser"]
-        BDK["BawueDok<br/>(PDF + LLM enrichment)"]
+        BDK["BawueDok<br/>(LLM enrichment)"]
+        PDF["PdfText<br/>(PDF download + text)"]
         RL["AdaptiveRateLimiter"]
         UT["UploadThrottle"]
     end
@@ -76,7 +77,9 @@ graph LR
     APIClient -->|" PUT /api/v2/vorgang "| API
     APIClient -->|" PUT /api/v2/kalender "| API
     PDFs --> DocPipeline
-    PDFs -->|" PDF download "| BDK
+    PDFs -->|" PDF download "| PDF
+    PDF -->|" text "| BDK
+    PDF -->|" Tagesordnung text "| BSS
     LLMProvider -->|" semantic extraction "| BDK
     BVS --> BDK
     BBS --> BDK
@@ -448,7 +451,7 @@ Retry wrapper for direct API uploads (`upload_throttle.py`). Used by `BawueVorga
 
 ### BawueDok (Document Enrichment)
 
-Optional document enrichment module (`bawue_dok.py`). Downloads PDFs, extracts text, and calls an LLM for semantic
+Optional document enrichment module (`bawue_dok.py`). Gets a PDF's text from `pdf_text.py` and calls an LLM for semantic
 metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` environment variable.
 
 **PDF pipeline** (`pdf_text.py`):

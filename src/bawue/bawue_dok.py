@@ -1,6 +1,6 @@
-"""Document enrichment module: PDF text extraction + LLM semantic extraction.
+"""Document enrichment module: LLM semantic extraction on top of pdf_text.
 
-Downloads PDFs, extracts text via kreuzberg, then uses pazufa-scraper-core's LLMConnector
+Gets a PDF's text from ``pdf_text``, then uses pazufa-scraper-core's LLMConnector
 to extract structured metadata (summary, keywords, scores) from the text.
 
 BaWue-specific: PARLIS already provides title, authors, dates, and drucksache number.
