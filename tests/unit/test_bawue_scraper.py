@@ -1674,10 +1674,8 @@ class TestPlaceholderDate:
         vorgang = await scraper_build_vorgang(raw)
 
         station = vorgang.stationen[0]
-        assert station.zp_start.year == 2028
-        assert station.zp_start.month == 1
-        assert station.zp_start.day == 1
-        assert station.zp_start.tzinfo is not None, "zp_start must be timezone-aware to avoid API 422 errors"
+        # Exactly midnight UTC: naive datetimes cause API 422 errors.
+        assert station.zp_start == datetime(2028, 1, 1, tzinfo=UTC)
 
     @pytest.mark.asyncio
     async def test_zero_day_month_logs_warning(self, scraper_build_vorgang, caplog):
