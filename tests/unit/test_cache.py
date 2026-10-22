@@ -7,7 +7,6 @@ import pytest
 import redis
 
 from bawue.cache import BawueCache, RedisUnavailableError
-from bawue.config import BawueConfig
 
 UPSTASH_URL = "rediss://default:secret-token@example-12345.upstash.io:6379"
 UPSTASH_TARGET = "example-12345.upstash.io:6379"
@@ -76,44 +75,6 @@ def test_connection_failure_raises_naming_the_target(caplog, error):
     assert UPSTASH_TARGET in str(exc.value)
     assert UPSTASH_TARGET in caplog.text
     assert "secret-token" not in str(exc.value) + caplog.text
-
-
-@pytest.mark.parametrize(
-    "argv",
-    [
-        ["bawue"],
-        ["bawue", "--once"],  # a no-op since every run is one cycle; old commands still pass it
-    ],
-    ids=["plain", "once-flag"],
-)
-def test_config_forwards_redis_url_to_cache(monkeypatch, tmp_path, argv):
-    """REDIS_URL must survive the trip through BawueConfig into BawueCache."""
-    monkeypatch.chdir(tmp_path)  # no config.toml here — env-only resolution
-    monkeypatch.setattr("sys.argv", argv)  # an unknown flag would exit 2
-    monkeypatch.setenv("REDIS_URL", UPSTASH_URL)
-    monkeypatch.setenv("COLLECTOR_ID", "00000000-0000-0000-0000-000000000001")
-    monkeypatch.setenv("LTZF_API_KEY", "test-key")
-
-    with patch("bawue.cache.redis.Redis") as mock_redis:
-        BawueConfig().load()
-
-    mock_redis.from_url.assert_called_once_with(UPSTASH_URL, decode_responses=True, retry=ANY)
-
-
-def test_dump_config_redacts_secrets(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("sys.argv", ["bawue"])
-    monkeypatch.setenv("REDIS_URL", UPSTASH_URL)
-    monkeypatch.setenv("COLLECTOR_ID", "00000000-0000-0000-0000-000000000001")
-    monkeypatch.setenv("LTZF_API_KEY", "test-key")
-
-    with patch("bawue.cache.redis.Redis"):
-        config = BawueConfig()
-        config.load()
-
-    dumped = str(config)
-    assert "secret-token" not in dumped
-    assert "test-key" not in dumped
 
 
 def test_issue105_read_error_raises_instead_of_reading_as_a_miss():

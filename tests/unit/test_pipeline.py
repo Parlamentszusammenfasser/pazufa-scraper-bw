@@ -9,7 +9,7 @@ from bawue.pipeline import Scraper
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("linearize", [False, True], ids=["gathered", "linearized"])
-async def test_failing_listing_page_keeps_the_others(linearize):
+async def test_failing_listing_page_keeps_the_others(linearize, caplog):
     """A PARLIS error in one Vorgangstyp search is logged and skipped, in either mode."""
     scraper = MagicMock()
     scraper.config.linearize = linearize
@@ -27,3 +27,4 @@ async def test_failing_listing_page_keeps_the_others(linearize):
         "Staatsvertrag-1",
         "V-shared",  # deduplicated across pages
     }
+    assert "Volksantrag" in caplog.text

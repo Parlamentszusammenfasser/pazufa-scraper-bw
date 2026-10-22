@@ -1,17 +1,24 @@
 """BawueConfig.load(): CLI > env > config file > default, as documented in config.py."""
 
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 
 from bawue.config import BawueConfig
 
 COLLECTOR = '[main]\ncollector-uuid = "00000000-0000-0000-0000-000000000001"\n'
+UPSTASH_URL = "rediss://default:secret-token@example-12345.upstash.io:6379"
 ENV = ("LTZF_API_KEY", "COLLECTOR_ID", "MAX_CONCURRENCY", "REDIS_PORT", "REDIS_HOST", "REDIS_URL")
 
 
 @pytest.fixture
-def load(monkeypatch, tmp_path):
+def redis_mock():
+    with patch("bawue.cache.redis.Redis") as mock:
+        yield mock
+
+
+@pytest.fixture
+def load(monkeypatch, tmp_path, redis_mock):
     monkeypatch.chdir(tmp_path)
     for var in ENV:
         monkeypatch.delenv(var, raising=False)
@@ -21,9 +28,8 @@ def load(monkeypatch, tmp_path):
         monkeypatch.setattr("sys.argv", ["bawue", *argv])
         for var, value in env.items():
             monkeypatch.setenv(var, value)
-        with patch("bawue.cache.redis.Redis"):
-            config = BawueConfig()
-            config.load()
+        config = BawueConfig()
+        config.load()
         return config
 
     return _load
@@ -62,3 +68,20 @@ def test_missing_required_setting_exits(load):
     with pytest.raises(SystemExit) as exc:
         load(toml="")  # neither collector-uuid nor an API key
     assert exc.value.code == 1
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [(), ("--once",)],  # --once is a no-op since every run is one cycle; old commands still pass it
+    ids=["plain", "once-flag"],
+)
+def test_config_forwards_redis_url_to_cache(load, redis_mock, argv):
+    """REDIS_URL must survive the trip through BawueConfig into BawueCache."""
+    load(*argv, LTZF_API_KEY="test-key", REDIS_URL=UPSTASH_URL)
+    redis_mock.from_url.assert_called_once_with(UPSTASH_URL, decode_responses=True, retry=ANY)
+
+
+def test_dump_config_redacts_secrets(load):
+    dumped = str(load(LTZF_API_KEY="test-key", REDIS_URL=UPSTASH_URL))
+    assert "secret-token" not in dumped
+    assert "test-key" not in dumped
