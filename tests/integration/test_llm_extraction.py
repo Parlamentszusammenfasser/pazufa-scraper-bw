@@ -13,14 +13,9 @@ from datetime import UTC, datetime
 import aiohttp
 import pytest
 
-from bawue.bawue_dok import (
-    KURZTITEL_MAX_LEN,
-    enrich_dokument,
-    vorgang_kurztitel,
-    vorgang_ressort,
-    zusammenfassung_text,
-)
+from bawue.bawue_dok import enrich_dokument, zusammenfassung_text
 from bawue.types import Autor, Doktyp, Dokument, Ressort
+from bawue.vorgang_llm import KURZTITEL_MAX_LEN, vorgang_kurztitel, vorgang_ressort
 
 pytestmark = pytest.mark.integration
 

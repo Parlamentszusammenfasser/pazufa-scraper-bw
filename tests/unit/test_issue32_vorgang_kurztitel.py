@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bawue.bawue_dok import KURZTITEL_MAX_LEN, _kurztitel_problem, vorgang_kurztitel
+from bawue.vorgang_llm import KURZTITEL_MAX_LEN, _kurztitel_problem, vorgang_kurztitel
 
 LONG_TITEL = (
     "Gesetz zum besseren Schutz vor Straftaten gegen die sexuelle Selbstbestimmung "

@@ -19,9 +19,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bawue.bawue_beteiligung_scraper import _print_beteiligung_summary
-from bawue.bawue_dok import KURZTITEL_MAX_LEN, LLMMetrics, vorgang_kurztitel, vorgang_ressort
+from bawue.bawue_dok import LLMMetrics
 from bawue.bawue_vorgaenge_scraper import _print_vorgaenge_summary
 from bawue.types import TODO_MARKER
+from bawue.vorgang_llm import KURZTITEL_MAX_LEN, vorgang_kurztitel, vorgang_ressort
 
 TITEL = "Gesetz zur Förderung des Ausbaus der Windenergie in Baden-Württemberg"
 SUMMARY = "Der Entwurf beschleunigt Genehmigungen für Windkraftanlagen."
@@ -90,7 +91,7 @@ class TestRessortCounters:
         """Null is the one way to say "nothing fits"; anything else off the enum is a
         drift the run report must show — and the warning must name it."""
         metrics = LLMMetrics()
-        with _patch_llm({"ressort": answer}), caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"):
+        with _patch_llm({"ressort": answer}), caplog.at_level(logging.WARNING, logger="bawue.vorgang_llm"):
             assert await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_cache(), metrics=metrics) is None
 
         assert vars(metrics) == _only("ressort_rejected")
@@ -154,7 +155,7 @@ class TestRessortCounters:
         forge log lines in the plain-text production log."""
         with (
             _patch_llm({"begruendung": "Kurz.\nERROR forged line", "ressort": "x" * 10_000}),
-            caplog.at_level(logging.INFO, logger="bawue.bawue_dok"),
+            caplog.at_level(logging.INFO, logger="bawue.vorgang_llm"),
         ):
             await vorgang_ressort(_llm(), TITEL, SUMMARY, cache=_cache())
 

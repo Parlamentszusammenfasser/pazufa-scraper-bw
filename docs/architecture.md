@@ -232,6 +232,12 @@ classDiagram
         -_llm_semaphore() Semaphore
     }
 
+    class VorgangLlm {
+        <<module>>
+        +vorgang_kurztitel(llm, titel, zusammenfassung, model, cache, metrics) str
+        +vorgang_ressort(llm, titel, zusammenfassung, model, cache, metrics) Ressort
+    }
+
     class UploadThrottle {
         <<module>>
         +with_upload_retry(api_call, rate_limiter, max_retries, exception_type) T
@@ -240,10 +246,13 @@ classDiagram
 
     BawueVorgaengeScraper --> ParlisClient
     BawueVorgaengeScraper --> BawueDok
+    BawueVorgaengeScraper --> VorgangLlm
     BawueVorgaengeScraper --> UploadThrottle
     ParlisClient --> ParlisParser
     BawueBeteiligungScraper --> BeteiligungClient
     BawueBeteiligungScraper --> BawueDok
+    BawueBeteiligungScraper --> VorgangLlm
+    VorgangLlm --> BawueDok
     BawueBeteiligungScraper --> UploadThrottle
     BeteiligungClient --> BeteiligungParser
     BawueSitzungenScraper --> IcsParser
@@ -444,7 +453,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 - Extracts: `zusammenfassung`, `schlagworte`, `kurztitel`, and optionally `meinung` (1–5 score) and `vorwort`
 - `zusammenfassung` is sent as the typed tuple `[(full-llm, …)]` (DD-054)
 - Entwurf / Beschlussempfehlung additionally carry the partial summaries `intention-llm`, `regelungsinhalt-llm`, `kosten-llm` from the same call, mirrored from the BB scraper (DD-056)
-- `Vorgang.ressort` is an own LLM call per Vorgang, classified by subject matter; prompt mirrored from the BB scraper (DD-055)
+- Per Vorgang, `vorgang_llm.py` makes own LLM calls for `Vorgang.kurztitel` (DD-053) and `Vorgang.ressort`, classified by subject matter, prompt mirrored from the BB scraper (DD-055)
 - JSON mode; malformed JSON is fixed with json-repair; up to 3 API retries
 - Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
 - Two-level cache skips LLM calls for known PDFs: in-memory per cycle, then Redis (key = content hash + prompt fingerprint, DD-020)

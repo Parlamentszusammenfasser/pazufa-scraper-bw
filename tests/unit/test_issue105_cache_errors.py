@@ -46,7 +46,7 @@ async def test_kurztitel_fails_the_build_without_llm_call():
     """A fallback would be cached with the Vorgang if Redis is back by then; failing retries it."""
     from unittest.mock import patch
 
-    from bawue.bawue_dok import vorgang_kurztitel
+    from bawue.vorgang_llm import vorgang_kurztitel
 
     with (
         patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock) as llm_call,
@@ -60,7 +60,7 @@ async def test_kurztitel_fails_the_build_without_llm_call():
 async def test_ressort_fails_the_build_without_llm_call():
     from unittest.mock import patch
 
-    from bawue.bawue_dok import vorgang_ressort
+    from bawue.vorgang_llm import vorgang_ressort
 
     with (
         patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock) as llm_call,

@@ -12,7 +12,7 @@ from uuid import NAMESPACE_URL, uuid5
 import aiohttp
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, vorgang_kurztitel, vorgang_ressort, zusammenfassung_text
+from bawue.bawue_dok import LLMMetrics, zusammenfassung_text
 from bawue.beteiligung_client import BASE_URL, BeteiligungClient
 from bawue.beteiligung_parser import (
     RawBeteiligungDetail,
@@ -44,6 +44,7 @@ from bawue.types import (
     todo_if_blank,
 )
 from bawue.upload_throttle import upload_vorgang
+from bawue.vorgang_llm import vorgang_kurztitel, vorgang_ressort
 from bawue.wahlperiode import CURRENT_WAHLPERIODE, wahlperiode_start
 
 logger = logging.getLogger(__name__)

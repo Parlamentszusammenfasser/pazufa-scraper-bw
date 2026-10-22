@@ -19,7 +19,7 @@ import aiohttp
 import certifi
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, vorgang_kurztitel, vorgang_ressort, zusammenfassung_text
+from bawue.bawue_dok import LLMMetrics, zusammenfassung_text
 from bawue.cache import drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
@@ -56,6 +56,7 @@ from bawue.types import (
     todo_if_blank,
 )
 from bawue.upload_throttle import upload_vorgang
+from bawue.vorgang_llm import vorgang_kurztitel, vorgang_ressort
 from bawue.wahlperiode import CURRENT_WAHLPERIODE, wahlperiode_start
 from bawue.wahlperiode_check import check_for_newer_wahlperiode
 
