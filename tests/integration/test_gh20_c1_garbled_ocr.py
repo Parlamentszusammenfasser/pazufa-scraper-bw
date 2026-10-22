@@ -24,7 +24,7 @@ Run with: pytest -m integration tests/integration/test_gh20_c1_garbled_ocr.py
 import aiohttp
 import pytest
 
-from bawue.bawue_dok import _extract_relevant_pages, download_pdf, extract_pdf_text, normalize_volltext
+from bawue.pdf_text import _extract_relevant_pages, download_pdf, extract_pdf_text, normalize_volltext
 
 pytestmark = pytest.mark.integration
 

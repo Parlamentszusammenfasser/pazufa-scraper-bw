@@ -46,7 +46,8 @@ import aiohttp
 import litellm
 import pytest
 
-from bawue.bawue_dok import _extract_relevant_pages, _hash_cache, download_pdf, extract_pdf_text, normalize_volltext
+from bawue.bawue_dok import _hash_cache
+from bawue.pdf_text import _extract_relevant_pages, download_pdf, extract_pdf_text, normalize_volltext
 from bawue.types import Doktyp, Dokument
 
 pytestmark = pytest.mark.integration

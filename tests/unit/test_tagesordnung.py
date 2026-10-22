@@ -2,7 +2,7 @@
 
 Fixture: the agenda of the 14th Plenarsitzung on 21.10.2026 as published on
 https://www.landtag-bw.de/de/aktuelles/tagesordnungen (Stand 16.10.2026), text as
-extracted by ``bawue_dok.extract_pdf_text`` (kreuzberg 4.10.3). The extraction differs by
+extracted by ``pdf_text.extract_pdf_text`` (kreuzberg 4.10.3). The extraction differs by
 platform: on Linux (CI, Docker) it has no blank lines between paragraphs, on macOS it has.
 """
 

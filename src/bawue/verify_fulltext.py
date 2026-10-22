@@ -22,13 +22,13 @@ from pathlib import Path
 
 import aiohttp
 
-from bawue.bawue_dok import (
+from bawue.parlis_client import ParlisClient
+from bawue.pdf_text import (
     _is_garbled,
     _paragraph_quality_score,
     extract_pdf_text,
     normalize_volltext,
 )
-from bawue.parlis_client import ParlisClient
 from bawue.wahlperiode import CURRENT_WAHLPERIODE, wahlperiode_start
 
 logger = logging.getLogger(__name__)
@@ -109,7 +109,7 @@ def _analyze_pdf(url: str, raw_text: str, normalized_text: str, doc_hash: str) -
 
 
 class OcrLogCapture(logging.Handler):
-    """Captures OCR-related log messages from bawue_dok."""
+    """Captures OCR-related log messages from pdf_text."""
 
     def __init__(self):
         super().__init__()
@@ -333,7 +333,7 @@ async def _run(args: argparse.Namespace) -> None:
     print(f"Found {len(urls)} PDF URLs, processing...", file=sys.stderr)
 
     # Set up OCR log capture
-    dok_logger = logging.getLogger("bawue.bawue_dok")
+    dok_logger = logging.getLogger("bawue.pdf_text")
     ocr_handler = OcrLogCapture()
     ocr_handler.setLevel(logging.WARNING)
     dok_logger.addHandler(ocr_handler)

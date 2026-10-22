@@ -19,7 +19,7 @@ pazufa-corelib = {git = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git", r
 httpx = ">=0.28"          # via corelib transitively; pinned explicitly (used by bawue.api)
 redis = ">=7.4"           # was transitively provided by collector; used by bawue.cache
 python-dotenv = ">=1.0"   # was transitively provided by collector; used by bawue.__main__
-kreuzberg = ">=4.7"       # was transitively provided by collector; used by bawue_dok
+kreuzberg = ">=4.7"       # was transitively provided by collector; used by bawue.pdf_text
 lxml = ">=6.0"
 requests = "^2.32"
 toml = ">=0.10"

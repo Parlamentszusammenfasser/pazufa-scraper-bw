@@ -17,9 +17,9 @@ import tempfile
 from datetime import UTC, datetime, time
 from pathlib import Path
 
-from bawue.bawue_dok import extract_pdf_text
 from bawue.gesetzblatt_client import GesetzblattClient
 from bawue.gesetzblatt_parser import RawGesetzblattDetail, parse_detail, parse_inkrafttreten
+from bawue.pdf_text import extract_pdf_text
 
 logger = logging.getLogger(__name__)
 

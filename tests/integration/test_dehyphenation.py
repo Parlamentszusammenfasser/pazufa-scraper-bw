@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from bawue.bawue_dok import extract_pdf_text, normalize_volltext
+from bawue.pdf_text import extract_pdf_text, normalize_volltext
 
 pytestmark = pytest.mark.integration
 
