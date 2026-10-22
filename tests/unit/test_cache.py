@@ -63,8 +63,8 @@ def test_credentials_are_never_logged(url, credential, target, caplog):
 
 @pytest.mark.parametrize(
     "error",
-    [redis.ConnectionError("refused"), redis.ResponseError("WRONGPASS invalid password")],
-    ids=["refused", "rejected-token"],
+    [redis.ConnectionError("refused"), redis.TimeoutError("Timeout connecting to server")],
+    ids=["refused", "timeout"],  # TimeoutError is not a ConnectionError
 )
 def test_connection_failure_raises_naming_the_target(caplog, error):
     """DD-073: any failure to connect stops the run, not only a refused connection."""
