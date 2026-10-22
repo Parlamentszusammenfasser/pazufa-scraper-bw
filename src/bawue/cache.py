@@ -65,7 +65,7 @@ class BawueCache:
             logger.error("Failed to connect to Redis at %s: %s", target, e)
             raise RedisUnavailableError(f"Redis at {target} unreachable ({type(e).__name__})") from e
         except Exception as e:
-            logger.error("Unexpected error connecting to Redis: %s", e)
+            logger.error("Unexpected error connecting to Redis at %s: %s", target, e)
             raise RedisUnavailableError(f"Redis at {target} failed: {type(e).__name__}") from e
 
     def store_raw(self, key: str, value: str, typehint: str = "Raw Value") -> bool:
