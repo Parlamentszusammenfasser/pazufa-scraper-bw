@@ -8,10 +8,11 @@ from bawue.pipeline import Scraper
 
 
 @pytest.mark.asyncio
-async def test_failing_listing_page_keeps_the_others():
-    """Production gathers the Vorgangstyp searches; a PARLIS error in one is logged and skipped."""
+@pytest.mark.parametrize("linearize", [False, True], ids=["gathered", "linearized"])
+async def test_failing_listing_page_keeps_the_others(linearize):
+    """A PARLIS error in one Vorgangstyp search is logged and skipped, in either mode."""
     scraper = MagicMock()
-    scraper.config.linearize = False
+    scraper.config.linearize = linearize
     scraper.listing_urls = ["Gesetzgebung", "Volksantrag", "Staatsvertrag"]
 
     async def extract(url):
