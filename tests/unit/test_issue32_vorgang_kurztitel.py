@@ -64,18 +64,34 @@ class TestVorgangKurztitel:
 
     @pytest.mark.asyncio
     async def test_generates_short_title_from_titel_and_summary(self):
+        cache = _empty_cache()
         with _patch_llm(GOOD) as acomp:
-            result = await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY, cache=_empty_cache())
+            result = await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY, cache=cache)
 
         assert result == GOOD
         prompt = acomp.call_args.kwargs["messages"][-1]["content"]
         assert LONG_TITEL in prompt
         assert SUMMARY in prompt
+        key, value = cache.store_raw.call_args[0][:2]
+        assert key.startswith("vorgang-kurztitel:")
+        assert value == GOOD
 
     @pytest.mark.asyncio
-    async def test_short_titel_may_come_back_unchanged(self):
-        with _patch_llm("Effizienzgesetz"):
-            assert await vorgang_kurztitel(_llm(), "Effizienzgesetz", SUMMARY) == "Effizienzgesetz"
+    @pytest.mark.parametrize(
+        ("titel", "answer", "kurztitel"),
+        [
+            pytest.param("Effizienzgesetz", "Effizienzgesetz", "Effizienzgesetz", id="short-titel-unchanged"),
+            pytest.param(
+                LONG_TITEL, "Förderung für Sportvereine e.V.", "Förderung für Sportvereine e.V.", id="abbreviation-kept"
+            ),
+            pytest.param(LONG_TITEL, f"„{GOOD}.“", GOOD, id="trailing-period-and-quotes"),
+            # DD-027: the backend's XSS validator rejects < and >.
+            pytest.param(LONG_TITEL, "Schutz vor Gewalt</narrow>", "Schutz vor Gewalt", id="angle-brackets"),
+        ],
+    )
+    async def test_answer_is_cleaned(self, titel, answer, kurztitel):
+        with _patch_llm(answer):
+            assert await vorgang_kurztitel(_llm(), titel, SUMMARY) == kurztitel
 
     @pytest.mark.asyncio
     async def test_too_long_output_is_reprompted_once(self):
@@ -136,35 +152,9 @@ class TestVorgangKurztitel:
         assert "Verfahrensstand („umgesetzt“)" in acomp.call_args.kwargs["messages"][-1]["content"]
 
     @pytest.mark.asyncio
-    async def test_abbreviation_period_is_kept(self):
-        with _patch_llm("Förderung für Sportvereine e.V."):
-            assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == "Förderung für Sportvereine e.V."
-
-    @pytest.mark.asyncio
-    async def test_trailing_period_and_quotes_are_stripped(self):
-        with _patch_llm(f"„{GOOD}.“"):
-            assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == GOOD
-
-    @pytest.mark.asyncio
-    async def test_angle_brackets_are_sanitized(self):
-        """DD-027: the backend's XSS validator rejects < and >."""
-        with _patch_llm("Schutz vor Gewalt</narrow>"):
-            assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == "Schutz vor Gewalt"
-
-    @pytest.mark.asyncio
     async def test_llm_error_falls_back_to_titel(self):
         with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, side_effect=RuntimeError("down")):
             assert await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY) == LONG_TITEL
-
-    @pytest.mark.asyncio
-    async def test_result_is_cached_in_redis(self):
-        cache = _empty_cache()
-        with _patch_llm(GOOD):
-            await vorgang_kurztitel(_llm(), LONG_TITEL, SUMMARY, cache=cache)
-
-        key, value = cache.store_raw.call_args[0][:2]
-        assert key.startswith("vorgang-kurztitel:")
-        assert value == GOOD
 
     @pytest.mark.asyncio
     async def test_cache_hit_skips_llm(self):

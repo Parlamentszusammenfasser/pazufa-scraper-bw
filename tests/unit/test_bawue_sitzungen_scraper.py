@@ -74,32 +74,9 @@ class TestListingPageExtractor:
 
         date_keys = await scraper.listing_page_extractor(ICS_URL)
 
-        # Should return ISO date strings for each unique date with included events
-        assert isinstance(date_keys, list)
-        assert "2026-02-24" in date_keys
-        assert "2026-02-25" in date_keys
-        assert "2026-02-26" in date_keys
-        assert "2026-02-27" in date_keys
-        assert "2026-03-03" in date_keys
-        assert len(date_keys) == 5
-
-    @pytest.mark.asyncio
-    async def test_populates_events_by_date(self):
-        scraper = _make_scraper()
-
-        mock_response = AsyncMock()
-        mock_response.read = AsyncMock(return_value=ICS_BYTES)
-        mock_response.status = 200
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-
-        scraper.session.get = MagicMock(return_value=mock_response)
-
-        await scraper.listing_page_extractor(ICS_URL)
-
-        # events_by_date should have entries for all included dates
-        assert "2026-02-24" in scraper._events_by_date
-        # Only FinA — the unnamed committee block is filtered (DD-006).
+        # ISO date strings for each unique date with included events
+        assert sorted(date_keys) == ["2026-02-24", "2026-02-25", "2026-02-26", "2026-02-27", "2026-03-03"]
+        # Only FinA on 24 Feb — the unnamed committee block is filtered (DD-006).
         assert len(scraper._events_by_date["2026-02-24"]) == 1
 
 
@@ -107,13 +84,12 @@ class TestItemExtractor:
     """Test that item_extractor converts stored events into (datetime, List[Sitzung])."""
 
     @pytest.mark.asyncio
-    async def test_returns_datetime_and_sitzungen(self, ics_scraper_with_events):
-        result = await ics_scraper_with_events.item_extractor("2026-02-25")
+    async def test_returns_datetime_and_sitzungen(self, ics_scraper_with_events, caplog):
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_sitzungen_scraper"):
+            termin, sitzungen = await ics_scraper_with_events.item_extractor("2026-02-25")
 
-        termin, sitzungen = result
         assert isinstance(termin, datetime.datetime)
         assert len(sitzungen) == 1
-
         sitzung = sitzungen[0]
         assert sitzung.gremium.name == "plenum"
         assert sitzung.gremium.parlament.value == "BW"
@@ -122,6 +98,10 @@ class TestItemExtractor:
         assert sitzung.public is True
         assert sitzung.tops == []
         assert sitzung.titel == "Plenarsitzung: 142. Sitzung"
+        # Tuple termin and Sitzung termin are both timezone-aware (UTC).
+        assert termin.tzinfo is not None
+        assert sitzung.termin.tzinfo is not None
+        assert not caplog.records  # issue #65: a known session number is not logged
 
     @pytest.mark.asyncio
     async def test_deterministic_api_id(self, ics_scraper_with_events):
@@ -152,14 +132,6 @@ class TestItemExtractor:
         assert len(sitzungen) == 1
         assert sitzungen[0].gremium.name == "Ausschuss für Finanzen"
 
-    @pytest.mark.asyncio
-    async def test_datetimes_are_utc(self, ics_scraper_with_events):
-        """Tuple termin and individual Sitzung termins must both be timezone-aware (UTC)."""
-        result = await ics_scraper_with_events.item_extractor("2026-02-25")
-        termin, sitzungen = result
-        assert termin.tzinfo is not None
-        assert sitzungen[0].termin.tzinfo is not None
-
 
 class TestIssue65SessionNumber:
     """Issue #65: a Sitzung without a session number stays 0 and is logged (DD-064)."""
@@ -178,13 +150,6 @@ class TestIssue65SessionNumber:
 
         assert sitzungen[0].nummer == 0
         assert f"No session number for {gremium} on {date_key}" in caplog.text
-
-    @pytest.mark.asyncio
-    async def test_known_number_is_not_logged(self, ics_scraper_with_events, caplog):
-        with caplog.at_level(logging.WARNING, logger="bawue.bawue_sitzungen_scraper"):
-            await ics_scraper_with_events.item_extractor("2026-02-25")
-
-        assert not caplog.records
 
 
 _ADDED_EVENT = (
@@ -521,59 +486,39 @@ class TestIssue52RunReport:
 
 class TestRunSummary:
     @pytest.mark.asyncio
-    async def test_summary_printed_to_stdout(self, capsys):
-        scraper = _make_scraper()
-
-        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        assert "=== BaWue Sitzungen Run Summary ===" in captured.out
-
-    @pytest.mark.asyncio
-    async def test_summary_shows_published_dates(self, capsys):
+    async def test_summary_printed_to_stdout(self, capsys, caplog):
         scraper = _make_scraper()
         scraper._total_dates = 5
         scraper._published_dates = 3
-
-        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        assert "Dates published:" in captured.out
-        assert "3" in captured.out
-
-    @pytest.mark.asyncio
-    async def test_summary_shows_failed_dates(self, capsys):
-        scraper = _make_scraper()
         scraper._failed_dates = 2
-
-        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        assert "Dates failed:" in captured.out
-        assert "2" in captured.out
-
-    @pytest.mark.asyncio
-    async def test_summary_shows_total_sitzungen(self, capsys):
-        scraper = _make_scraper()
         scraper._published_sitzungen = 7
 
-        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
+        with (
+            patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_sitzungen_scraper"),
+        ):
             await scraper.run()
 
-        captured = capsys.readouterr()
-        assert "Total sitzungen:" in captured.out
-        assert "7" in captured.out
+        out = capsys.readouterr().out
+        assert "=== BaWue Sitzungen Run Summary ===" in out
+
+        def line(label):
+            return next(row for row in out.splitlines() if label in row)
+
+        assert "3" in line("Dates published:")
+        assert "2" in line("Dates failed:")
+        assert "7" in line("Total sitzungen:")
+        assert "Duration: 0m 00s" in line("Duration")  # human readable, no raw seconds
+        assert any("Completed in" in msg for msg in caplog.messages)
 
     @pytest.mark.asyncio
-    async def test_summary_still_printed_on_run_failure(self, capsys):
+    async def test_summary_still_printed_on_run_failure(self, capsys, caplog):
         scraper = _make_scraper()
 
         mock_run = AsyncMock(side_effect=RuntimeError("boom"))
         with (
             patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=mock_run),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_sitzungen_scraper"),
             pytest.raises(RuntimeError),
         ):
             await scraper.run()
@@ -581,17 +526,7 @@ class TestRunSummary:
         captured = capsys.readouterr()
         assert "=== BaWue Sitzungen Run Summary ===" in captured.out
         assert scraper.summary[0] == "Sitzungen"  # issue #52: the cycle report still gets it
-
-    @pytest.mark.asyncio
-    async def test_summary_duration_is_human_readable(self, capsys):
-        scraper = _make_scraper()
-
-        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        duration_line = next(line for line in captured.out.splitlines() if "Duration" in line)
-        assert "Duration: 0m 00s" in duration_line
+        assert any("Completed in" in msg for msg in caplog.messages)
 
     @pytest.mark.asyncio
     async def test_summary_lists_failed_dates_with_reason(self, capsys):
@@ -611,34 +546,6 @@ class TestRunSummary:
         failed_block = captured.out.split("Failed Sitzung dates", 1)[1]
         assert "2026-03-12" in failed_block
         assert "500" in failed_block
-
-
-class TestRunDurationLog:
-    @pytest.mark.asyncio
-    async def test_logs_completed_in_on_success(self, caplog):
-        scraper = _make_scraper()
-
-        with (
-            patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()),
-            caplog.at_level(logging.INFO, logger="bawue.bawue_sitzungen_scraper"),
-        ):
-            await scraper.run()
-
-        assert any("Completed in" in msg for msg in caplog.messages)
-
-    @pytest.mark.asyncio
-    async def test_logs_completed_in_on_failure(self, caplog):
-        scraper = _make_scraper()
-
-        mock_run = AsyncMock(side_effect=RuntimeError("boom"))
-        with (
-            patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=mock_run),
-            caplog.at_level(logging.INFO, logger="bawue.bawue_sitzungen_scraper"),
-            pytest.raises(RuntimeError),
-        ):
-            await scraper.run()
-
-        assert any("Completed in" in msg for msg in caplog.messages)
 
 
 _AGENDA_PDF = (

@@ -64,8 +64,9 @@ class TestSearchQueryConstruction:
             status=200,
         )
 
-        client.search("Gesetzgebung", date(2026, 1, 1), date(2026, 2, 1))
+        results = client.search("Gesetzgebung", date(2026, 1, 1), date(2026, 2, 1))
 
+        assert results == []  # item_count 0
         post_call = responses.calls[1]
         import json
 
@@ -153,13 +154,6 @@ class TestResultParsing:
         assert len(results) == 1
         assert results[0]["titel"] == "Gesetz zur Änderung des Landeshochschulgesetzes"
         assert results[0]["vorgangs_id"] == "V-12345"
-
-    @responses.activate
-    def test_zero_results_returns_empty_list(self, client):
-        _mock_search(SAMPLE_HTML_RECORD, item_count=0)
-
-        results = client.search("Gesetzgebung", date(2026, 1, 1), date(2026, 2, 1))
-        assert results == []
 
 
 class TestPagination:
@@ -406,15 +400,24 @@ class TestMonthlyWindows:
         assert len(windows) == 1
         assert windows[0] == (date(2026, 1, 1), date(2026, 1, 31))
 
-    def test_multiple_months(self):
-        windows = ParlisClient._monthly_windows(date(2026, 1, 15), date(2026, 3, 20))
-        assert len(windows) == 3
-        assert windows[0] == (date(2026, 1, 15), date(2026, 1, 31))
-        assert windows[1] == (date(2026, 2, 1), date(2026, 2, 28))
-        assert windows[2] == (date(2026, 3, 1), date(2026, 3, 20))
-
-    def test_cross_year_boundary(self):
-        windows = ParlisClient._monthly_windows(date(2025, 12, 1), date(2026, 1, 15))
-        assert len(windows) == 2
-        assert windows[0] == (date(2025, 12, 1), date(2025, 12, 31))
-        assert windows[1] == (date(2026, 1, 1), date(2026, 1, 15))
+    @pytest.mark.parametrize(
+        ("start", "end", "windows"),
+        [
+            (
+                date(2026, 1, 15),
+                date(2026, 3, 20),
+                [
+                    (date(2026, 1, 15), date(2026, 1, 31)),
+                    (date(2026, 2, 1), date(2026, 2, 28)),
+                    (date(2026, 3, 1), date(2026, 3, 20)),
+                ],
+            ),
+            (  # across the year boundary
+                date(2025, 12, 1),
+                date(2026, 1, 15),
+                [(date(2025, 12, 1), date(2025, 12, 31)), (date(2026, 1, 1), date(2026, 1, 15))],
+            ),
+        ],
+    )
+    def test_multiple_months(self, start, end, windows):
+        assert ParlisClient._monthly_windows(start, end) == windows
