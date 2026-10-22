@@ -42,14 +42,9 @@ class TestPublikationsdatum:
     @pytest.mark.asyncio
     async def test_returns_publikationsdatum_not_ausfertigung(self):
         """Issue #9: the Ausgabedatum (27.02.) is wanted, not the Ausfertigung (10.02.)."""
-        lookup = GesetzblattDateLookup(_client())
-        assert await lookup.publikationsdatum(2026, 11) == datetime(2026, 2, 27, tzinfo=UTC)
-
-    @pytest.mark.asyncio
-    async def test_requests_the_cited_entry(self):
         client = _client()
-        await GesetzblattDateLookup(client).publikationsdatum(2026, 11)
-        client.fetch_detail_for.assert_called_once_with(2026, 11)
+        assert await GesetzblattDateLookup(client).publikationsdatum(2026, 11) == datetime(2026, 2, 27, tzinfo=UTC)
+        client.fetch_detail_for.assert_called_once_with(2026, 11)  # the cited entry
 
     @pytest.mark.asyncio
     async def test_caches_repeated_lookups(self):

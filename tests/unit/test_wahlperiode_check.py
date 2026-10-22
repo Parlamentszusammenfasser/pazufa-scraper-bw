@@ -30,6 +30,7 @@ class TestCheckForNewerWahlperiode:
             check_for_newer_wahlperiode(17)
 
         assert not caplog.records
+        assert [c.request.url for c in responses.calls] == [f"{BASE_URL}/de/mitmachen/lp-18"]  # lp-{n+1} only
 
     @responses.activate
     def test_no_exception_on_network_error(self, caplog):
@@ -44,13 +45,3 @@ class TestCheckForNewerWahlperiode:
             check_for_newer_wahlperiode(17)  # must not raise
 
         assert any("lp-18" in msg for msg in caplog.messages)
-
-    @responses.activate
-    def test_checks_correct_next_wahlperiode_url(self):
-        """The URL probed must be lp-{n+1} for the configured WP n."""
-        responses.add(responses.GET, f"{BASE_URL}/de/mitmachen/lp-20", status=404)
-
-        check_for_newer_wahlperiode(19)
-
-        assert len(responses.calls) == 1
-        assert responses.calls[0].request.url == f"{BASE_URL}/de/mitmachen/lp-20"

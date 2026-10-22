@@ -36,7 +36,8 @@ def config(tmp_path):
     return cfg
 
 
-def test_file_values_used_when_no_env(config):
+def test_file_values_used_when_no_env(config, monkeypatch):
+    monkeypatch.setenv("WAHLPERIODE", "")  # Cloud Run passes unset variables as empty strings
     section = load_toml_section(config, "bawue")
     assert section["wahlperiode"] == 17
     assert section["parlis-request-delay-s"] == 1.0
@@ -61,12 +62,6 @@ def test_mattermost_hook_from_env(config, monkeypatch):
     section = load_toml_section(config, "notifications")
     assert section["mattermost-hook"] == "https://chat.example.org/hooks/from-env"
     assert section["mattermost-username"] == "bawue-scraper"
-
-
-def test_empty_env_does_not_override(config, monkeypatch):
-    """Cloud Run passes unset variables as empty strings — those must be ignored."""
-    monkeypatch.setenv("WAHLPERIODE", "")
-    assert load_toml_section(config, "bawue")["wahlperiode"] == 17
 
 
 def test_env_applies_without_a_config_file(monkeypatch):
