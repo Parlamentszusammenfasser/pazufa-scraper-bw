@@ -418,6 +418,7 @@ class TestMonthlyWindows:
                 [(date(2025, 12, 1), date(2025, 12, 31)), (date(2026, 1, 1), date(2026, 1, 15))],
             ),
         ],
+        ids=["three-months", "across-year"],
     )
     def test_multiple_months(self, start, end, windows):
         assert ParlisClient._monthly_windows(start, end) == windows

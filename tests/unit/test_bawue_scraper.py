@@ -4415,7 +4415,9 @@ class TestParseFundstelleDateNone:
     """_parse_fundstelle_date returns None for missing/unparseable dates (DoD: no bogus defaults)."""
 
     @pytest.mark.parametrize(
-        "fund", [{"datum": "", "raw": "test", "drucksache": "17/1"}, {"raw": "test", "drucksache": "17/1"}]
+        "fund",
+        [{"datum": "", "raw": "test", "drucksache": "17/1"}, {"raw": "test", "drucksache": "17/1"}],
+        ids=["empty", "missing"],
     )
     def test_returns_none_without_datum(self, fund):
         assert _parse_fundstelle_date(fund) is None

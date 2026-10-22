@@ -36,8 +36,10 @@ def config(tmp_path):
     return cfg
 
 
-def test_file_values_used_when_no_env(config, monkeypatch):
-    monkeypatch.setenv("WAHLPERIODE", "")  # Cloud Run passes unset variables as empty strings
+@pytest.mark.parametrize("env", [None, ""], ids=["unset", "empty"])  # Cloud Run passes unset variables as ""
+def test_file_values_used_without_env_value(config, monkeypatch, env):
+    if env is not None:
+        monkeypatch.setenv("WAHLPERIODE", env)
     section = load_toml_section(config, "bawue")
     assert section["wahlperiode"] == 17
     assert section["parlis-request-delay-s"] == 1.0
