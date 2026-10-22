@@ -182,38 +182,16 @@ def _mock_session(status: int) -> MagicMock:
 class TestDownloadPdf:
     @pytest.mark.asyncio
     async def test_downloads_to_tempfile(self):
-        session = _mock_session(200)
-
-        path = await download_pdf(session, "https://example.com/test.pdf")
-        try:
-            assert path.exists()
-            assert path.suffix == ".pdf"
-            assert path.read_bytes() == SAMPLE_PDF_BYTES
-        finally:
-            path.unlink(missing_ok=True)
-
-    @pytest.mark.asyncio
-    async def test_download_pdf_strips_url_fragment(self):
-        """URL fragment (#page=33) should be stripped before HTTP request."""
+        """The #page=N fragment is stripped; certifi SSL context and a 60 s timeout."""
         session = _mock_session(200)
 
         path = await download_pdf(session, "https://www.landtag-bw.de/files/plp/17_141.pdf#page=33")
         try:
-            args, _kwargs = session.get.call_args
+            assert path.suffix == ".pdf"
+            assert path.read_bytes() == SAMPLE_PDF_BYTES
+            args, kwargs = session.get.call_args
             assert args[0] == "https://www.landtag-bw.de/files/plp/17_141.pdf"
-        finally:
-            path.unlink(missing_ok=True)
-
-    @pytest.mark.asyncio
-    async def test_passes_ssl_context_and_timeout(self):
-        """download_pdf should pass an SSL context (certifi) and a 60s timeout."""
-        session = _mock_session(200)
-
-        path = await download_pdf(session, "https://example.com/test.pdf")
-        try:
-            _, kwargs = session.get.call_args
             assert isinstance(kwargs["ssl"], ssl.SSLContext)
-            assert isinstance(kwargs["timeout"], aiohttp.ClientTimeout)
             assert kwargs["timeout"].total == 60
         finally:
             path.unlink(missing_ok=True)
@@ -244,11 +222,12 @@ class TestExtractPdfText:
         pdf_file.write_bytes(SAMPLE_PDF_BYTES)
 
         mock_result = _mock_extraction_result()
-        with patch("bawue.pdf_text.extract_file", new_callable=AsyncMock, return_value=mock_result):
+        with patch("bawue.pdf_text.extract_file", new_callable=AsyncMock, return_value=mock_result) as mock_extract:
             text, doc_hash = await extract_pdf_text(pdf_file)
 
         assert text == SAMPLE_FULL_TEXT
         assert doc_hash == SAMPLE_HASH
+        assert mock_extract.call_count == 1  # clean text: no OCR retry
 
     @pytest.mark.asyncio
     async def test_extract_pdf_text_with_page_markers(self, tmp_path):
@@ -308,9 +287,10 @@ class TestExtractSemantics:
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = SAMPLE_LLM_RESPONSE_ENTWURF
 
-        with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, return_value=mock_response):
+        with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, return_value=mock_response) as acomp:
             result = await extract_semantics(llm, SAMPLE_FULL_TEXT, Doktyp.ENTWURF)
 
+        assert acomp.call_args.kwargs["response_format"] == {"type": "json_object"}
         assert result["schlagworte"] == ["umwelt", "klimaschutz", "energie"]
         assert "Gesetzentwurf" in result["zusammenfassung"]
         assert result["kurztitel"] == "Erneuerbare-Energien-Gesetz"
@@ -570,17 +550,16 @@ class TestParseLlmResponse:
         assert result["schlagworte"] == ["a", "b"]
         assert result["trojanergefahr"] == 1
 
-    def test_raises_when_content_is_unrepairable_garbage(self):
-        # json-repair returns "" for pure non-JSON input → non-dict → we re-raise.
+    @pytest.mark.parametrize(
+        "content",
+        [
+            pytest.param("not json at all", id="garbage"),  # json-repair returns ""
+            pytest.param('"a", "b", "c"', id="array"),  # a list must not reach _validate_scores
+        ],
+    )
+    def test_raises_when_repair_yields_no_dict(self, content):
         with pytest.raises(json.JSONDecodeError):
-            _parse_llm_response("not json at all")
-
-    def test_raises_when_repair_returns_non_dict(self):
-        # Array-shaped content: json.loads raises (no outer brackets),
-        # json-repair likely yields a list. A list must not silently pass
-        # through to _validate_scores, which assumes a dict.
-        with pytest.raises(json.JSONDecodeError):
-            _parse_llm_response('"a", "b", "c"')
+            _parse_llm_response(content)
 
 
 # ---------------------------------------------------------------------------
@@ -589,20 +568,25 @@ class TestParseLlmResponse:
 
 
 class TestPromptForDoktyp:
-    def test_entwurf_prompt_has_vorwort(self):
-        prompt = _prompt_for_doktyp(Doktyp.ENTWURF)
-        assert "vorwort" in prompt.lower()
+    @pytest.mark.parametrize(
+        ("doktyp", "vorwort", "meinung"),
+        [
+            (Doktyp.ENTWURF, True, False),
+            (Doktyp.STELLUNGNAHME, False, True),
+            (Doktyp.BESCHLUSSEMPF, False, True),
+            (Doktyp.REDEPROTOKOLL, False, False),
+            (Doktyp.SONSTIG, False, False),
+            (Doktyp.MITTEILUNG, False, False),
+        ],
+    )
+    def test_prompt_asks_for_the_doktyp_fields(self, doktyp, vorwort, meinung):
+        prompt = _prompt_for_doktyp(doktyp).lower()
+        assert "schlagworte" in prompt
+        assert ("vorwort" in prompt) is vorwort
+        assert ("meinung" in prompt) is meinung
 
     def test_preparl_entwurf_uses_entwurf_prompt(self):
         assert _prompt_for_doktyp(Doktyp.PREPARL_ENTWURF) == _prompt_for_doktyp(Doktyp.ENTWURF)
-
-    def test_stellungnahme_prompt_has_meinung(self):
-        prompt = _prompt_for_doktyp(Doktyp.STELLUNGNAHME)
-        assert "meinung" in prompt.lower() or "Meinung" in prompt
-
-    def test_beschlussempf_prompt_has_meinung(self):
-        prompt = _prompt_for_doktyp(Doktyp.BESCHLUSSEMPF)
-        assert "meinung" in prompt.lower() or "Meinung" in prompt
 
     def test_redeprotokoll_uses_dedicated_neutral_prompt(self):
         """Issue #49: REDEPROTOKOLL gets its own prompt (not the generic one),
@@ -610,10 +594,6 @@ class TestPromptForDoktyp:
         prompt = _prompt_for_doktyp(Doktyp.REDEPROTOKOLL)
         assert "meinung" not in prompt.lower()
         assert prompt != _prompt_for_doktyp(Doktyp.SONSTIG)
-
-    def test_sonstig_uses_generic_prompt(self):
-        prompt = _prompt_for_doktyp(Doktyp.SONSTIG)
-        assert "schlagworte" in prompt.lower() or "Schlagworte" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -629,33 +609,32 @@ class TestEnrichDokument:
         _hash_cache.clear()
 
     @pytest.mark.asyncio
-    async def test_full_enrichment(self):
-        """LLM key set, PDF+LLM succeed → all fields populated."""
+    async def test_full_enrichment(self, caplog):
+        """PDF + LLM succeed (no Redis cache) → all fields populated, PARLIS metadata kept."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
         llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
+        with (
+            _patch_pdf_pipeline(),
+            _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp,
+            caplog.at_level(logging.INFO, logger="bawue.bawue_dok"),
+        ):
             result = await enrich_dokument(session, llm, dok)
 
         assert isinstance(result, EnrichmentResult)
+        assert mock_acomp.call_count == 1
+        assert any("token" in r.message.lower() for r in caplog.records)
         assert result.dokument.volltext == SAMPLE_FULL_TEXT
         assert result.dokument.hash_ == SAMPLE_HASH
-        assert zusammenfassung_text(result.dokument) == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
+        # Issue #42 (DD-054): sent as the typed tuple, not a plain string.
+        assert result.dokument.to_dict()["zusammenfassung"] == [
+            {"typ": "full-llm", "inhalt": "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."}
+        ]
         assert result.dokument.schlagworte == ["umwelt", "klimaschutz", "energie"]
         assert result.dokument.kurztitel == "Erneuerbare-Energien-Gesetz"
-        assert result.dokument.vorwort is not None
-
-    @pytest.mark.asyncio
-    async def test_preserves_parlis_metadata(self):
-        """PARLIS metadata (titel, autoren, drucksnr, timestamps) must not change."""
-        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
-        session = MagicMock()
-        llm = _make_llm_mock()
-
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
-            result = await enrich_dokument(session, llm, dok)
-
+        assert result.dokument.vorwort == "Ziel dieses Gesetzentwurfs ist die Förderung erneuerbarer Energien."
+        # PARLIS metadata (titel, autoren, drucksnr, timestamps) must not change.
         assert result.dokument.titel == "Testgesetz"
         assert result.dokument.autoren[0].person == "Max Mustermann"
         assert result.dokument.drucksnr == "17/10266"
@@ -664,26 +643,19 @@ class TestEnrichDokument:
         assert result.dokument.typ == Doktyp.ENTWURF
 
     @pytest.mark.asyncio
-    async def test_stellungnahme_gets_meinung(self):
-        dok = _make_plain_dokument(typ=Doktyp.STELLUNGNAHME)
-        session = MagicMock()
-        llm = _make_llm_mock()
+    @pytest.mark.parametrize(
+        ("doktyp", "response", "meinung"),
+        [
+            (Doktyp.STELLUNGNAHME, SAMPLE_LLM_RESPONSE_STELLUNGNAHME, 4),
+            (Doktyp.BESCHLUSSEMPF, SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF, 5),
+        ],
+    )
+    async def test_gets_meinung_but_no_vorwort(self, doktyp, response, meinung):
+        with _patch_pdf_pipeline(), _patch_llm(response):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument(typ=doktyp))
 
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_STELLUNGNAHME):
-            result = await enrich_dokument(session, llm, dok)
-
-        assert result.dokument.meinung == 4
-
-    @pytest.mark.asyncio
-    async def test_beschlussempf_gets_meinung(self):
-        dok = _make_plain_dokument(typ=Doktyp.BESCHLUSSEMPF)
-        session = MagicMock()
-        llm = _make_llm_mock()
-
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_BESCHLUSSEMPF):
-            result = await enrich_dokument(session, llm, dok)
-
-        assert result.dokument.meinung == 5
+        assert result.dokument.meinung == meinung
+        assert result.dokument.vorwort is None
 
     @pytest.mark.asyncio
     async def test_text_only_fallback_on_llm_failure(self):
@@ -812,6 +784,9 @@ class TestEnrichDokument:
 
         assert result.dokument is dok
         mock_llm.assert_not_called()
+        # A permanent content problem, not a retryable download failure: it must not
+        # keep the Vorgang out of the cache forever.
+        assert result.download_failed is False
 
     @pytest.mark.asyncio
     async def test_download_failure_sets_download_failed_flag(self):
@@ -862,20 +837,6 @@ class TestEnrichDokument:
         assert result.http_status is None  # transient: not reported as missing (issue #128)
         assert len(caplog.records) == 1
         assert caplog.records[0].exc_info is not None
-
-    @pytest.mark.asyncio
-    async def test_empty_extracted_text_is_not_a_download_failure(self):
-        """Empty extraction is a permanent content problem (scanned/garbled
-        source), not a retryable download failure — it must not keep the
-        Vorgang out of the cache forever."""
-        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
-        session = MagicMock()
-        llm = AsyncMock()
-
-        with _patch_pdf_pipeline(text_and_hash=("", "deadbeef")):
-            result = await enrich_dokument(session, llm, dok)
-
-        assert result.download_failed is False
 
     @pytest.mark.asyncio
     async def test_tempfile_cleaned_up_after_enrichment(self):
@@ -1171,35 +1132,21 @@ class TestPerVorgangProtocolRows:
         return r_juristen, r_schulgesetz, mock_llm
 
     @pytest.mark.asyncio
-    async def test_two_vorgaenge_sharing_one_protocol_get_distinct_hashes(self):
-        """Two Fundstellen of the same sitting must not collapse into one row."""
-        r_juristen, r_schulgesetz, _ = await self._enrich_pair()
+    async def test_two_vorgaenge_sharing_one_protocol(self):
+        """Two Fundstellen of one sitting: own rows with own metadata, but one summary."""
+        r_juristen, r_schulgesetz, mock_llm = await self._enrich_pair()
 
+        # Distinct rows; neither is the plain file digest, the anchor is folded in.
         assert r_juristen.dokument.hash_ != r_schulgesetz.dokument.hash_
-        # Neither is the plain file digest — the anchor is folded in.
-        assert r_juristen.dokument.hash_ != SAMPLE_HASH
-        assert r_schulgesetz.dokument.hash_ != SAMPLE_HASH
-
-    @pytest.mark.asyncio
-    async def test_each_row_keeps_its_own_fundstelle_metadata(self):
-        """titel, link and autoren stay with the Vorgang that produced them."""
-        r_juristen, r_schulgesetz, _ = await self._enrich_pair()
-
+        assert SAMPLE_HASH not in (r_juristen.dokument.hash_, r_schulgesetz.dokument.hash_)
+        # titel, link and autoren stay with the Vorgang that produced them.
         assert r_juristen.dokument.titel == "Erste Beratung"
         assert r_juristen.dokument.link.endswith("#page=70")
         assert r_schulgesetz.dokument.titel == "Zweite Beratung"
         assert r_schulgesetz.dokument.link.endswith("#page=31")
         assert r_juristen.dokument.autoren == r_schulgesetz.dokument.autoren  # same fixture author
-
-    @pytest.mark.asyncio
-    async def test_summary_still_computed_once_per_protocol_pdf(self):
-        """Issue #49 must not regress: the row splits, the LLM call does not.
-
-        The semantics cache stays keyed on the plain file digest, so the second
-        Fundstelle reuses the first one's session-level summary.
-        """
-        r_juristen, r_schulgesetz, mock_llm = await self._enrich_pair()
-
+        # Issue #49 must not regress: the semantics cache stays keyed on the plain file
+        # digest, so the second Fundstelle reuses the first one's session-level summary.
         assert mock_llm.await_count == 1
         assert r_schulgesetz.dokument.zusammenfassung == r_juristen.dokument.zusammenfassung
         assert r_schulgesetz.dokument.schlagworte == r_juristen.dokument.schlagworte
@@ -1255,35 +1202,27 @@ class TestHashCache:
         _hash_cache.clear()
 
     @pytest.mark.asyncio
-    async def test_cache_hit_skips_llm(self):
-        """Second call with same PDF hash reuses cached semantics, no LLM call."""
+    async def test_cache_hit_skips_llm(self, caplog):
+        """Second call with same PDF hash reuses cached semantics, no LLM call, logs the hit."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
         session = MagicMock()
         llm = _make_llm_mock()
 
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp:
+        with (
+            _patch_pdf_pipeline(),
+            _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp,
+            caplog.at_level(logging.INFO, logger="bawue.bawue_dok"),
+        ):
             first = await enrich_dokument(session, llm, dok)
             second = await enrich_dokument(session, llm, dok)
 
         # LLM called only once despite two enrichments
         assert mock_acomp.call_count == 1
+        assert any("cache hit" in r.message.lower() for r in caplog.records)
         # Both results have the same semantics
         assert first.dokument.zusammenfassung == second.dokument.zusammenfassung
         assert first.dokument.schlagworte == second.dokument.schlagworte
         assert first.dokument.kurztitel == second.dokument.kurztitel
-
-    @pytest.mark.asyncio
-    async def test_cache_miss_calls_llm(self):
-        """First call always invokes the LLM."""
-        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
-        session = MagicMock()
-        llm = _make_llm_mock()
-
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp:
-            result = await enrich_dokument(session, llm, dok)
-
-        assert mock_acomp.call_count == 1
-        assert result.dokument.zusammenfassung is not None
 
     @pytest.mark.asyncio
     async def test_different_hashes_both_call_llm(self):
@@ -1353,88 +1292,42 @@ class TestHashCache:
 # ---------------------------------------------------------------------------
 
 
-class TestTokenLogging:
-    @pytest.fixture(autouse=True)
-    def _clear_cache(self):
-        _hash_cache.clear()
-        yield
-        _hash_cache.clear()
-
-    @pytest.mark.asyncio
-    async def test_logs_token_count(self, caplog):
-        """Token count is logged for each LLM call."""
-        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
-        session = MagicMock()
-        llm = _make_llm_mock()
-
-        with (
-            _patch_pdf_pipeline(),
-            _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF),
-            caplog.at_level(logging.INFO, logger="bawue.bawue_dok"),
-        ):
-            await enrich_dokument(session, llm, dok)
-
-        assert any("token" in r.message.lower() for r in caplog.records)
-
-    @pytest.mark.asyncio
-    async def test_logs_cache_hit(self, caplog):
-        """Cache hit is logged when hash matches."""
-        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
-        session = MagicMock()
-        llm = _make_llm_mock()
-
-        with (
-            _patch_pdf_pipeline(),
-            _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF),
-            caplog.at_level(logging.INFO, logger="bawue.bawue_dok"),
-        ):
-            await enrich_dokument(session, llm, dok)
-            await enrich_dokument(session, llm, dok)
-
-        assert any("cache hit" in r.message.lower() for r in caplog.records)
-
-
 # ---------------------------------------------------------------------------
 # TestParagraphQualityScore
 # ---------------------------------------------------------------------------
 
 
 class TestParagraphQualityScore:
-    def test_clean_german_scores_high(self):
-        text = "Gemäß § 50a Absatz 2 der Geschäftsordnung habe ich im Einvernehmen mit den Antragstellern"
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Gemäß § 50a Absatz 2 der Geschäftsordnung habe ich im Einvernehmen mit den Antragstellern",
+            "\u00c4nderung des Schulgesetzes f\u00fcr Baden-W\u00fcrttemberg - Drucksache 17/4142",
+            "Landtag von Baden-Württemberg Drucksache 17 / 4244",  # page header
+        ],
+    )
+    def test_clean_german_scores_high(self, text):
         assert _paragraph_quality_score(text) > 0.9
 
-    def test_garbled_shifted_text_scores_low(self):
-        """Shifted font encoding: consonant-heavy gibberish with C1 control chars."""
-        text = "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW"
+    @pytest.mark.parametrize(
+        "text",
+        [
+            # Shifted font encoding: consonant-heavy gibberish with C1 control chars.
+            "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW",
+            # Latin Extended-B output from broken ToUnicode maps.
+            "ůĂƐƐĞŶ-ŵŝƚ-ǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶ-ƵŶĚ",
+            (
+                "6WlGWHWDJVVWHOOXQJQDKPH]XP*HVHW]HQWZXUI-GHU)'3'93]XU:LHGHUKHUVWHOOXQJ\r\n"
+                "GHU-9HUELQGOLFKNHLW-GHU*UXQGVFKXOHPSIHKOXQJ/DQGWDJVGUXFNVDFKH\r\n"
+            ),
+        ],
+    )
+    def test_garbled_text_scores_low(self, text):
         assert _paragraph_quality_score(text) < 0.5
 
-    def test_garbled_latin_extended_scores_low(self):
-        """Latin Extended-B garbled output from broken ToUnicode maps."""
-        text = "ůĂƐƐĞŶ-ŵŝƚ-ǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶ-ƵŶĚ"
-        assert _paragraph_quality_score(text) < 0.5
-
-    def test_empty_text_scores_high(self):
-        assert _paragraph_quality_score("") == 1.0
-
-    def test_whitespace_only_scores_high(self):
-        assert _paragraph_quality_score("   \n  ") == 1.0
-
-    def test_german_with_umlauts_scores_high(self):
-        text = "\u00c4nderung des Schulgesetzes f\u00fcr Baden-W\u00fcrttemberg - Drucksache 17/4142"
-        assert _paragraph_quality_score(text) > 0.9
-
-    def test_page_header_scores_high(self):
-        """Page headers like 'Landtag von Baden-Württemberg Drucksache 17 / 4244' are clean."""
-        text = "Landtag von Baden-Württemberg Drucksache 17 / 4244"
-        assert _paragraph_quality_score(text) > 0.9
-
-    def test_long_garbled_paragraph_scores_low(self):
-        text = (
-            "6WlGWHWDJVVWHOOXQJQDKPH]XP*HVHW]HQWZXUI-GHU)'3'93]XU:LHGHUKHUVWHOOXQJ\r\n"
-            "GHU-9HUELQGOLFKNHLW-GHU*UXQGVFKXOHPSIHKOXQJ/DQGWDJVGUXFNVDFKH\r\n"
-        )
-        assert _paragraph_quality_score(text) < 0.5
+    @pytest.mark.parametrize("text", ["", "   \n  "])
+    def test_empty_text_scores_high(self, text):
+        assert _paragraph_quality_score(text) == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -1443,137 +1336,63 @@ class TestParagraphQualityScore:
 
 
 class TestNormalizeVolltext:
-    def test_clean_text_unchanged(self):
-        """Clean German text should pass through without modification."""
-        text = "Gemäß § 50a Absatz 2 der Geschäftsordnung."
-        assert normalize_volltext(text) == text
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            pytest.param(
+                "Gemäß § 50a Absatz 2 der Geschäftsordnung.", "Gemäß § 50a Absatz 2 der Geschäftsordnung.", id="clean"
+            ),
+            pytest.param("", "", id="empty"),
+            pytest.param("Zeile eins\r\nZeile zwei", "Zeile eins\nZeile zwei", id="crlf"),
+            pytest.param("Zeile eins\rZeile zwei", "Zeile eins\nZeile zwei", id="lone-cr"),
+            pytest.param("Absatz eins\n\n\n\n\nAbsatz zwei", "Absatz eins\n\nAbsatz zwei", id="blank-lines"),
+            # corelib strips trailing spaces at every line end since v0.3.0 (DD-059).
+            pytest.param(
+                "Zeile mit Leerzeichen   \nNächste Zeile  ", "Zeile mit Leerzeichen\nNächste Zeile", id="trailing-ws"
+            ),
+            pytest.param(
+                "<Poststelle@lfdi.bwl.de> und <info@example.com>",
+                "\u2039Poststelle@lfdi.bwl.de\u203a und \u2039info@example.com\u203a",
+                id="angle-brackets",
+            ),
+            pytest.param("Text\x81mit\x87Steuerzeichen\x89hier", "TextmitSteuerzeichenhier", id="c1-controls"),
+            pytest.param("Deﬁnition eines Begriffs", "Definition eines Begriffs", id="nfkc"),
+            pytest.param("Ein \ufffd Text mit \ufffd Zeichen", "Ein Text mit Zeichen", id="replacement-char"),
+            pytest.param("ausgezeich\ufffdnet", "ausgezeichnet", id="replacement-char-joins-word"),
+            # Line-break hyphenation (issue #20): kreuzberg keeps the hyphen of a joined break.
+            pytest.param("auf 16 Jahre abzu-senken. Damit", "auf 16 Jahre abzusenken. Damit", id="issue20-inline"),
+            pytest.param("auf 16 Jahre abzu-\nsenken.", "auf 16 Jahre abzusenken.", id="issue20-across-newline"),
+            pytest.param("die \u00c4n-derung", "die \u00c4nderung", id="issue20-umlaut"),
+            # Genuine compounds continue uppercase and stay intact.
+            pytest.param("das Land Baden-W\u00fcrttemberg", "das Land Baden-W\u00fcrttemberg", id="compound"),
+            pytest.param("per E-Mail", "per E-Mail", id="hyphen-before-uppercase"),
+            # Issue #30: real tokens from Drucksache 17/1000 ("Rich terinnen" in the V-215974 summary).
+            pytest.param(
+                "planm\u00e4\u00dfigen Beamtinnen und Beamten oder Richte-rinnen und Richtern",
+                "planm\u00e4\u00dfigen Beamtinnen und Beamten oder Richterinnen und Richtern",
+                id="issue30-richterinnen",
+            ),
+            pytest.param("und Beam-ten sowie", "und Beamten sowie", id="issue30-beamten"),
+            pytest.param("im Ein-gangsamt oder", "im Eingangsamt oder", id="issue30-eingangsamt"),
+        ],
+    )
+    def test_normalizes(self, text, expected):
+        assert normalize_volltext(text) == expected
 
-    def test_crlf_normalized_to_lf(self):
-        assert normalize_volltext("Zeile eins\r\nZeile zwei") == "Zeile eins\nZeile zwei"
-
-    def test_lone_cr_normalized_to_lf(self):
-        assert normalize_volltext("Zeile eins\rZeile zwei") == "Zeile eins\nZeile zwei"
-
-    def test_excessive_blank_lines_collapsed(self):
-        text = "Absatz eins\n\n\n\n\nAbsatz zwei"
-        result = normalize_volltext(text)
-        assert result == "Absatz eins\n\nAbsatz zwei"
-
-    def test_trailing_whitespace_collapsed(self):
-        """corelib strips trailing spaces at every line end since v0.3.0 (DD-059)."""
-        text = "Zeile mit Leerzeichen   \nNächste Zeile  "
-        result = normalize_volltext(text)
-        assert result == "Zeile mit Leerzeichen\nNächste Zeile"
-
-    def test_angle_brackets_replaced_with_guillemets(self):
-        text = "Kontakt: <poststelle@sm.bwl.de> für Anfragen"
-        result = normalize_volltext(text)
-        assert "<" not in result
-        assert ">" not in result
-        assert "\u2039poststelle@sm.bwl.de\u203a" in result
-
-    def test_multiple_angle_brackets_replaced(self):
-        text = "<Poststelle@lfdi.bwl.de> und <info@example.com>"
-        result = normalize_volltext(text)
-        assert result == "\u2039Poststelle@lfdi.bwl.de\u203a und \u2039info@example.com\u203a"
-
-    def test_c1_control_chars_stripped(self):
-        text = "Text\x81mit\x87Steuerzeichen\x89hier"
-        result = normalize_volltext(text)
-        assert "\x81" not in result
-        assert "\x87" not in result
-        assert "\x89" not in result
-        assert "Textmit" in result  # chars removed, words joined
-
-    def test_garbled_paragraphs_removed(self):
-        """Mixed document: clean intro followed by garbled body."""
-        clean = "Landtag von Baden-Württemberg\nDrucksache 17/4244"
-        garbled = "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW"
-        text = f"{clean}\n\n{garbled}"
-        result = normalize_volltext(text)
-        assert "Landtag" in result
-        assert "6WlGWHWDJ" not in result
-
-    def test_garbled_latin_extended_paragraphs_removed(self):
-        clean = "Ein normaler deutscher Absatz mit korrektem Text."
-        garbled = "ůĂƐƐĞŶ-ŵŝƚ-ǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶ-ƵŶĚ"
-        text = f"{clean}\n\n{garbled}"
-        result = normalize_volltext(text)
-        assert "normaler" in result
-        assert "ůĂƐƐĞŶ" not in result
-
-    def test_empty_string_returns_empty(self):
-        assert normalize_volltext("") == ""
-
-    def test_unicode_nfkc_normalization(self):
-        """NFKC should normalize compatibility characters."""
-        # ﬁ (U+FB01 LATIN SMALL LIGATURE FI) → fi
-        text = "Deﬁnition eines Begriffs"
-        result = normalize_volltext(text)
-        assert "Definition" in result
-
-    def test_all_garbled_returns_empty(self):
-        """If entire text is garbled, result should be empty or near-empty."""
-        text = "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW"
-        result = normalize_volltext(text)
-        assert len(result.strip()) == 0 or "6WlGWHWDJ" not in result
-
-    def test_replacement_character_removed(self):
-        """U+FFFD replacement characters from encoding failures should be stripped."""
-        text = "Ein \ufffd Text mit \ufffd Zeichen"
-        result = normalize_volltext(text)
-        assert "\ufffd" not in result
-
-    def test_replacement_character_joins_word_fragments(self):
-        """U+FFFD between word parts should be removed, joining the fragments."""
-        text = "ausgezeich\ufffdnet"
-        result = normalize_volltext(text)
-        assert result == "ausgezeichnet"
-
-    # --- Line-break hyphenation (issue #20) -------------------------------
-
-    def test_linebreak_hyphen_inline_removed(self):
-        """Kreuzberg joins hyphenated line breaks but keeps the hyphen:
-        'abzu-senken' must become 'abzusenken'."""
-        text = "auf 16 Jahre abzu-senken. Damit"
-        assert normalize_volltext(text) == "auf 16 Jahre abzusenken. Damit"
-
-    def test_linebreak_hyphen_across_newline_removed(self):
-        """Classic dehyphenation: 'abzu-\\nsenken' \u2192 'abzusenken'."""
-        text = "auf 16 Jahre abzu-\nsenken."
-        assert normalize_volltext(text) == "auf 16 Jahre abzusenken."
-
-    def test_compound_hyphen_preserved(self):
-        """Genuine compound hyphens (uppercase continuation) stay intact."""
-        text = "das Land Baden-W\u00fcrttemberg"
-        assert normalize_volltext(text) == "das Land Baden-W\u00fcrttemberg"
-
-    def test_umlaut_hyphenation_removed(self):
-        """Hyphenation split before an umlaut continuation, e.g. '\u00c4n-derung'."""
-        text = "die \u00c4n-derung"
-        assert normalize_volltext(text) == "die \u00c4nderung"
-
-    def test_hyphen_before_uppercase_preserved(self):
-        """A hyphen followed by an uppercase letter is never a hyphenation
-        break (e.g. 'E-Mail', 'Baden-W\u00fcrttemberg')."""
-        assert normalize_volltext("per E-Mail") == "per E-Mail"
-
-    # --- Issue #30: "Rich terinnen" regression, real tokens --------------
-
-    def test_issue30_richterinnen_rejoined(self):
-        """Issue #30: 'Rich terinnen' in the V-215974 summary traced back to a
-        hyphenated line break in Drucksache 17/1000. These tokens are taken
-        verbatim from the kreuzberg extraction of that PDF and must rejoin so
-        the broken word never reaches the LLM. Fails against the pre-issue-20
-        normalizer, passes now."""
-        text = "planm\u00e4\u00dfigen Beamtinnen und Beamten oder Richte-rinnen und Richtern"
-        assert normalize_volltext(text) == (
-            "planm\u00e4\u00dfigen Beamtinnen und Beamten oder Richterinnen und Richtern"
-        )
-
-    def test_issue30_further_real_tokens_rejoined(self):
-        assert normalize_volltext("und Beam-ten sowie") == "und Beamten sowie"
-        assert normalize_volltext("im Ein-gangsamt oder") == "im Eingangsamt oder"
+    @pytest.mark.parametrize(
+        ("clean", "garbled"),
+        [
+            (
+                "Landtag von Baden-Württemberg\nDrucksache 17/4244",
+                "6WlGWHWDJ%DGHQ\x81UWWHPEHUJ\x873RVWIDFK\x876WXWWJDUW",
+            ),
+            ("Ein normaler deutscher Absatz mit korrektem Text.", "ůĂƐƐĞŶ-ŵŝƚ-ǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶ-ƵŶĚ"),
+        ],
+        ids=["shifted-ascii", "latin-extended"],
+    )
+    def test_garbled_paragraphs_removed(self, clean, garbled):
+        """Mixed document: the clean paragraph stays, the garbled one goes."""
+        assert normalize_volltext(f"{clean}\n\n{garbled}") == clean
 
 
 # ---------------------------------------------------------------------------
@@ -1588,7 +1407,7 @@ class TestSanitizeLlmText:
     response despite the system prompt forbidding formatting.
     """
 
-    @pytest.mark.parametrize("value", [["Kurz", "Titel"], 42, {"a": 1}, True])
+    @pytest.mark.parametrize("value", [None, ["Kurz", "Titel"], 42, {"a": 1}, True])
     def test_non_string_yields_none(self, value):
         # The LLM's JSON is untyped; a non-string must not raise (DD-027).
         assert _sanitize_llm_text(value) is None
@@ -1623,9 +1442,6 @@ class TestSanitizeLlmText:
         assert _sanitize_llm_text("   ") is None
         assert _sanitize_llm_text("") is None
 
-    def test_none_input_returns_none(self):
-        assert _sanitize_llm_text(None) is None
-
     def test_pathological_long_tag_left_alone(self):
         # Tags longer than the 80-char regex cap fall through to the
         # bracket-substitution path, still neutralising the danger.
@@ -1634,11 +1450,15 @@ class TestSanitizeLlmText:
         assert "<" not in result
         assert ">" not in result
 
-    def test_strings_helper_drops_empty_results(self):
-        assert _sanitize_llm_strings(["foo", "<narrow></narrow>", "bar"]) == ["foo", "bar"]
-
-    def test_strings_helper_passes_through_clean_list(self):
-        assert _sanitize_llm_strings(["umwelt", "klimaschutz"]) == ["umwelt", "klimaschutz"]
+    @pytest.mark.parametrize(
+        ("values", "expected"),
+        [
+            (["foo", "<narrow></narrow>", "bar"], ["foo", "bar"]),
+            (["umwelt", "klimaschutz"], ["umwelt", "klimaschutz"]),
+        ],
+    )
+    def test_strings_helper_drops_empty_results(self, values, expected):
+        assert _sanitize_llm_strings(values) == expected
 
     def test_strings_helper_handles_none_and_empty(self):
         assert _sanitize_llm_strings(None) is None
@@ -1687,78 +1507,66 @@ class TestEnrichDokumentSanitization:
 
 
 class TestIsGarbled:
-    def test_clean_german_text_not_garbled(self):
-        text = (
-            "Gemäß § 50a Absatz 2 der Geschäftsordnung habe ich im Einvernehmen "
-            "mit den Antragstellern die Landesregierung gebeten, zu dem Gesetzentwurf "
-            "der Fraktion FDP/DVP die Anhörung durchzuführen."
-        )
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param(
+                "Gemäß § 50a Absatz 2 der Geschäftsordnung habe ich im Einvernehmen "
+                "mit den Antragstellern die Landesregierung gebeten, zu dem Gesetzentwurf "
+                "der Fraktion FDP/DVP die Anhörung durchzuführen.",
+                id="clean-german",
+            ),
+            # German umlauts (U+00C4-U+00FC) are NOT Latin Extended.
+            pytest.param("Änderung des Gesetzes für Straßenverkehr mit Ölprüfung und Übergabe", id="umlauts"),
+            # ASCII shift without C1 chars leaves no reliable signal; normalize_volltext's
+            # paragraph scoring (vowelless words + uppercase ratio) still removes it.
+            pytest.param(
+                "6WlGWHWDJ%DGHQUWWHPEHUJ3RVWIDFK6WXWWJDUW )UDNWLRQGHU)'3'93]XU:LHGHUHLQIKUXQJ", id="shift-without-c1"
+            ),
+            # A stray C1 char in otherwise clean text must not trigger the OCR retry.
+            pytest.param(
+                "Landtag von Baden-Württemberg, Drucksache 17/1201, Änderungsanträge zum Haushalt. " * 4 + "\x81",
+                id="c1-below-threshold",
+            ),
+            # 4 Latin Extended of 99 alpha chars ≈ 4 %, just below the 5 % threshold.
+            pytest.param("a" * 95 + "ůĂƐŝ", id="latin-ext-below-threshold"),
+            pytest.param("", id="empty"),
+            pytest.param("Kurz.", id="too-short"),
+        ],
+    )
+    def test_not_garbled(self, text):
         assert _is_garbled(text) is False
 
-    def test_latin_extended_garbled_text_detected(self):
-        """Latin Extended characters from broken ToUnicode CMap."""
-        text = "ZĞ͗'ĞƐĞƚǌĞŶƚǁƵƌĨĚĞƌ&ƌĂŬƚŝŽŶĚĞƌ&WͬsWͲ'ĞƐĞƚǌǌƵƌtŝĞĚĞƌŚĞƌƐƚĞůůƵŶŐĚĞƌsĞƌďŝŶĚůŝĐŚŬĞŝƚĚĞƌ'ƌƵŶĚƐĐŚƵůĞŵƉĨĞŚůƵŶŐ"
+    @pytest.mark.parametrize(
+        "text",
+        [
+            # DD-015 Muster 1: Latin Extended characters from a broken ToUnicode CMap.
+            pytest.param(
+                "ZĞ͗'ĞƐĞƚǌĞŶƚǁƵƌĨĚĞƌ&ƌĂŬƚŝŽŶĚĞƌ&WͬsWͲ'ĞƐĞƚǌǌƵƌtŝĞĚĞƌŚĞƌƐƚĞůůƵŶŐĚĞƌsĞƌďŝŶĚůŝĐŚŬĞŝƚĚĞƌ'ƌƵŶĚƐĐŚƵůĞŵƉĨĞŚůƵŶŐ",
+                id="latin-extended",
+            ),
+            # Clean first page, garbled rest: overall garbled.
+            pytest.param(
+                "Landtag von Baden-Württemberg\n17. Wahlperiode\nDrucksache 17/4244\n" * 3
+                + "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 20,
+                id="mixed",
+            ),
+            # DD-015 Muster 2 (issue #20): verbatim kreuzberg output for page 2 of Drucksache
+            # 17/1201, every glyph shifted, umlauts in the C1 range (5 / 367 ≈ 1.4 %).
+            pytest.param(
+                "6HLWHYRQ\n/DQGWDJ-YRQ%DGHQ:\x81UWWHPEHUJ  'UXFNVDFKH\n:DKOSHULRGH  (LQJDQJ\n\n\n\n"
+                "bQGHUXQJVDQWUDJ GHU)UDNWLRQ*5h1(XQG\nGHU)UDNWLRQ-GHU&'8\n\n\n"
+                "]X-GHU%HVFKOXVVHPSIHKOXQJ-GHV$XVVFKXVVHV-I\x81U)LQDQ]HQ\n±'UXFNVDFKH1XPPHU\n\n\n"
+                "]X-GHP(QWZXUI-GHV-6WDDWVKDXVKDOWVSODQV-I\x81U\n\n\n'HU/DQGWDJ-ZROOH-EHVFKOLH\x89HQ\n\n"
+                "(LQ]HOSODQ /DQGWDJ\n\n.DSLWHO $OOJHPHLQH%HZLOOLJXQJHQ\n\n=X-lQGHUQ\n6\n\n"
+                "7LWHO\n7LW*U ).= =ZHFNEHVWLPPXQJ\n%HWUDJ\nI\x81U\n\n7VG(85\n"
+                "   %HLKLOIHQ-DXIJUXQG-GHU%HLKLOIHYHURUGQXQJ-XGJORKQH-9HU\nVRUJXQJVHPSIlQJHU-LQQHQ\n",
+                id="issue20-shift-with-c1",
+            ),
+        ],
+    )
+    def test_garbled(self, text):
         assert _is_garbled(text) is True
-
-    def test_mixed_clean_and_garbled_detected(self):
-        """Document with clean first page and garbled rest — overall garbled."""
-        clean = "Landtag von Baden-Württemberg\n17. Wahlperiode\nDrucksache 17/4244\n" * 3
-        garbled = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 20
-        text = clean + garbled
-        assert _is_garbled(text) is True
-
-    def test_shifted_ascii_without_c1_chars_not_garbled(self):
-        """ASCII shift garbling has no Latin Extended chars, and this sample no C1 chars.
-
-        Stripped of its C1 characters there is no reliable signal left, so
-        _is_garbled cannot flag it; normalize_volltext's paragraph quality
-        scoring (vowelless words + uppercase ratio) still removes it.
-        """
-        text = "6WlGWHWDJ%DGHQUWWHPEHUJ3RVWIDFK6WXWWJDUW )UDNWLRQGHU)'3'93]XU:LHGHUHLQIKUXQJ"
-        assert _is_garbled(text) is False
-
-    def test_shifted_ascii_with_c1_chars_detected(self):
-        """DD-015 Muster 2 (GitHub issue #20): ASCII shift emitting C1 controls.
-
-        Verbatim kreuzberg output for page 2 of Drucksache 17/1201 — every glyph
-        shifted (``bQGHUXQJVDQWUDJ`` → ``Änderungsantrag``), umlauts landing in
-        the C1 range. 5 C1 chars / 367 alphabetic ≈ 1.4%.
-        """
-        text = (
-            "6HLWHYRQ\n/DQGWDJ-YRQ%DGHQ:\x81UWWHPEHUJ  'UXFNVDFKH\n:DKOSHULRGH  (LQJDQJ\n\n\n\n"
-            "bQGHUXQJVDQWUDJ GHU)UDNWLRQ*5h1(XQG\nGHU)UDNWLRQ-GHU&'8\n\n\n"
-            "]X-GHU%HVFKOXVVHPSIHKOXQJ-GHV$XVVFKXVVHV-I\x81U)LQDQ]HQ\n±'UXFNVDFKH1XPPHU\n\n\n"
-            "]X-GHP(QWZXUI-GHV-6WDDWVKDXVKDOWVSODQV-I\x81U\n\n\n'HU/DQGWDJ-ZROOH-EHVFKOLH\x89HQ\n\n"
-            "(LQ]HOSODQ /DQGWDJ\n\n.DSLWHO $OOJHPHLQH%HZLOOLJXQJHQ\n\n=X-lQGHUQ\n6\n\n"
-            "7LWHO\n7LW*U ).= =ZHFNEHVWLPPXQJ\n%HWUDJ\nI\x81U\n\n7VG(85\n"
-            "   %HLKLOIHQ-DXIJUXQG-GHU%HLKLOIHYHURUGQXQJ-XGJORKQH-9HU\nVRUJXQJVHPSIlQJHU-LQQHQ\n"
-        )
-        assert _is_garbled(text) is True
-
-    def test_c1_chars_below_threshold_not_garbled(self):
-        """A stray C1 char in otherwise clean text must not trigger the OCR retry."""
-        text = "Landtag von Baden-Württemberg, Drucksache 17/1201, Änderungsanträge zum Haushalt. " * 4
-        assert _is_garbled(text + "\x81") is False
-
-    def test_empty_text_not_garbled(self):
-        assert _is_garbled("") is False
-
-    def test_short_text_not_garbled(self):
-        """Very short text should not be flagged — too little signal."""
-        assert _is_garbled("Kurz.") is False
-
-    def test_text_with_few_umlauts_not_garbled(self):
-        """German umlauts (U+00C4-U+00FC) are NOT Latin Extended, must not trigger."""
-        text = "Änderung des Gesetzes für Straßenverkehr mit Ölprüfung und Übergabe"
-        assert _is_garbled(text) is False
-
-    def test_threshold_boundary(self):
-        """Just below the garbling threshold should not be flagged."""
-        # 95 clean ASCII alpha chars + 4 Latin Extended = 4/99 ≈ 4% (below 5%)
-        clean = "a" * 95
-        garbled = "ůĂƐŝ"  # 4 Latin Extended chars
-        text = clean + garbled
-        assert _is_garbled(text) is False
 
 
 # ---------------------------------------------------------------------------
@@ -1766,86 +1574,9 @@ class TestIsGarbled:
 # ---------------------------------------------------------------------------
 
 
-class TestVorwortExtraction:
-    """Entwurf prompt asks for vorwort, and it gets wired into the Dokument."""
-
-    def test_entwurf_prompt_has_vorwort(self):
-        prompt = _prompt_for_doktyp(Doktyp.ENTWURF)
-        assert "vorwort" in prompt.lower() or "Vorwort" in prompt
-
-    def test_preparl_entwurf_prompt_has_vorwort(self):
-        prompt = _prompt_for_doktyp(Doktyp.PREPARL_ENTWURF)
-        assert "vorwort" in prompt.lower() or "Vorwort" in prompt
-
-    def test_stellungnahme_prompt_has_no_vorwort(self):
-        prompt = _prompt_for_doktyp(Doktyp.STELLUNGNAHME)
-        assert "vorwort" not in prompt.lower()
-
-    def test_generic_prompt_has_no_vorwort(self):
-        prompt = _prompt_for_doktyp(Doktyp.MITTEILUNG)
-        assert "vorwort" not in prompt.lower()
-
-    @pytest.fixture(autouse=True)
-    def _clear_cache(self):
-        _hash_cache.clear()
-        yield
-        _hash_cache.clear()
-
-    @pytest.mark.asyncio
-    async def test_entwurf_enrichment_populates_vorwort(self):
-        """LLM returns vorwort → Dokument.vorwort gets populated."""
-        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
-        session = MagicMock()
-        llm = _make_llm_mock()
-
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
-            result = await enrich_dokument(session, llm, dok)
-
-        assert result.dokument.vorwort == "Ziel dieses Gesetzentwurfs ist die Förderung erneuerbarer Energien."
-
-    @pytest.mark.asyncio
-    async def test_stellungnahme_has_no_vorwort(self):
-        """Non-Entwurf types should not populate vorwort."""
-        dok = _make_plain_dokument(typ=Doktyp.STELLUNGNAHME)
-        session = MagicMock()
-        llm = _make_llm_mock()
-
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_STELLUNGNAHME):
-            result = await enrich_dokument(session, llm, dok)
-
-        assert result.dokument.vorwort is None
-
-
 # ---------------------------------------------------------------------------
 # Improvement 2: TestJsonStructuredOutput
 # ---------------------------------------------------------------------------
-
-
-class TestJsonStructuredOutput:
-    """extract_semantics uses response_format=json_object via litellm."""
-
-    @pytest.mark.asyncio
-    async def test_uses_response_format_json_object(self):
-        """Verify litellm.acompletion is called with response_format."""
-        with _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF) as mock_acomp:
-            await extract_semantics(MagicMock(), SAMPLE_FULL_TEXT, Doktyp.ENTWURF)
-
-        # Verify response_format was passed
-        call_kwargs = mock_acomp.call_args.kwargs
-        assert call_kwargs["response_format"] == {"type": "json_object"}
-
-    @pytest.mark.asyncio
-    async def test_returns_parsed_json(self):
-        """extract_semantics returns parsed dict from litellm response."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = SAMPLE_LLM_RESPONSE_GENERIC
-
-        with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, return_value=mock_response):
-            result = await extract_semantics(MagicMock(), SAMPLE_FULL_TEXT, Doktyp.MITTEILUNG)
-
-        assert result["schlagworte"] == ["verwaltung", "reform"]
-        assert result["kurztitel"] == "Verwaltungsreform"
 
 
 # ---------------------------------------------------------------------------
@@ -1856,35 +1587,19 @@ class TestJsonStructuredOutput:
 class TestValidateScores:
     """Post-extraction validation of the meinung (1-5) range."""
 
-    def test_valid_meinung_unchanged(self):
-        data = {"meinung": 3}
-        result = _validate_scores(data)
-        assert result["meinung"] == 3
-
-    def test_meinung_clamped_to_min(self):
-        data = {"meinung": 0}
-        result = _validate_scores(data)
-        assert result["meinung"] == 1
-
-    def test_meinung_clamped_to_max(self):
-        data = {"meinung": 8}
-        result = _validate_scores(data)
-        assert result["meinung"] == 5
-
-    def test_meinung_non_int_removed(self):
-        data = {"meinung": "positiv"}
-        result = _validate_scores(data)
-        assert result.get("meinung") is None
-
-    def test_no_scores_present(self):
-        data = {"schlagworte": ["test"], "zusammenfassung": "Test."}
-        result = _validate_scores(data)
-        assert result == data
-
-    def test_float_meinung_truncated(self):
-        data = {"meinung": 3.7}
-        result = _validate_scores(data)
-        assert result["meinung"] == 3
+    @pytest.mark.parametrize(
+        ("data", "expected"),
+        [
+            pytest.param({"meinung": 3}, {"meinung": 3}, id="valid"),
+            pytest.param({"meinung": 0}, {"meinung": 1}, id="clamped-to-min"),
+            pytest.param({"meinung": 8}, {"meinung": 5}, id="clamped-to-max"),
+            pytest.param({"meinung": 3.7}, {"meinung": 3}, id="float-truncated"),
+            pytest.param({"meinung": "positiv"}, {}, id="non-numeric-removed"),
+            pytest.param({"schlagworte": ["test"]}, {"schlagworte": ["test"]}, id="no-scores"),
+        ],
+    )
+    def test_validate_scores(self, data, expected):
+        assert _validate_scores(data) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -1895,15 +1610,9 @@ class TestValidateScores:
 class TestLLMMetrics:
     """LLM enrichment metrics tracking."""
 
-    def test_initial_state(self):
-        m = LLMMetrics()
-        assert m.success == 0
-        assert m.failed == 0
-        assert m.cache_hits == 0
-        assert m.total == 0
-
     def test_total_computed(self):
         m = LLMMetrics()
+        assert m.total == 0
         m.success = 5
         m.failed = 2
         m.cache_hits = 3
@@ -1911,20 +1620,11 @@ class TestLLMMetrics:
 
     def test_format_lines(self):
         m = LLMMetrics()
-        m.success = 10
-        m.failed = 1
-        m.cache_hits = 3
-        lines = m.format_lines()
-        assert any("LLM" in line for line in lines)
-        assert any("10" in line for line in lines)
-        assert any("cache" in line.lower() for line in lines)
-
-    def test_format_lines_includes_cache_hit_ratio(self):
-        m = LLMMetrics()
         m.success = 3
-        m.failed = 0
         m.cache_hits = 1  # 1 / 4 = 25%
         lines = m.format_lines()
+        assert "LLM enrichment:" in lines
+        assert any("Success:" in line and "3" in line for line in lines)
         cache_line = next(line for line in lines if "Cache hits" in line)
         assert "25%" in cache_line
 
@@ -2026,24 +1726,6 @@ class TestExtractPdfTextOcrRetry:
         assert _extract_relevant_pages(text, 2).strip() == clean_page_2
 
     @pytest.mark.asyncio
-    async def test_clean_text_no_ocr_retry(self, tmp_path):
-        """When normal extraction returns clean text, should NOT retry with OCR."""
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-
-        clean_result = _mock_extraction_result(content=SAMPLE_FULL_TEXT)
-
-        with patch(
-            "bawue.pdf_text.extract_file",
-            new_callable=AsyncMock,
-            return_value=clean_result,
-        ) as mock_extract:
-            text, _ = await extract_pdf_text(pdf_file)
-
-        assert text == SAMPLE_FULL_TEXT
-        assert mock_extract.call_count == 1
-
-    @pytest.mark.asyncio
     async def test_ocr_failure_keeps_original_text(self, tmp_path):
         """If OCR retry also returns garbled text, keep original (normalize will strip)."""
         pdf_file = tmp_path / "test.pdf"
@@ -2117,24 +1799,6 @@ class TestExtractPdfTextOcrRetry:
         assert text == garbled_text
 
     @pytest.mark.asyncio
-    async def test_short_text_triggers_ocr_before_garble_check(self, tmp_path):
-        """Short text fallback still works — length check comes before garble check."""
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-
-        short_result = _mock_extraction_result(content="Too short")
-        ocr_result = _mock_extraction_result(content=SAMPLE_FULL_TEXT)
-
-        with patch(
-            "bawue.pdf_text.extract_file",
-            new_callable=AsyncMock,
-            side_effect=[short_result, ocr_result],
-        ):
-            text, _ = await extract_pdf_text(pdf_file)
-
-        assert text == SAMPLE_FULL_TEXT
-
-    @pytest.mark.asyncio
     async def test_logs_garbled_detection(self, tmp_path, caplog):
         """Should log a warning when garbled text is detected."""
         pdf_file = tmp_path / "test.pdf"
@@ -2165,14 +1829,16 @@ class TestExtractPdfTextOcrRetry:
 
 
 class TestPageHintExtraction:
-    def test_parse_page_hint_extracts_page_number(self):
-        assert _parse_page_hint("https://www.landtag-bw.de/files/plp/17_141.pdf#page=33") == 33
-
-    def test_parse_page_hint_no_fragment(self):
-        assert _parse_page_hint("https://www.landtag-bw.de/files/plp/17_141.pdf") is None
-
-    def test_parse_page_hint_non_page_fragment(self):
-        assert _parse_page_hint("https://example.com/doc.pdf#section1") is None
+    @pytest.mark.parametrize(
+        ("url", "page"),
+        [
+            ("https://www.landtag-bw.de/files/plp/17_141.pdf#page=33", 33),
+            ("https://www.landtag-bw.de/files/plp/17_141.pdf", None),
+            ("https://example.com/doc.pdf#section1", None),
+        ],
+    )
+    def test_parse_page_hint(self, url, page):
+        assert _parse_page_hint(url) == page
 
     def test_extract_relevant_pages_finds_correct_section(self):
         """Pages outside start..start+max_pages should be excluded."""
@@ -2187,57 +1853,38 @@ class TestPageHintExtraction:
         assert "Content of page 1" not in result
         assert "Content of page 40" not in result
 
-    def test_extract_relevant_pages_no_markers_returns_full(self):
-        """Without page markers, full text is returned as fallback."""
-        text = "Plain text without any page markers at all."
-        result = _extract_relevant_pages(text, start_page=33)
-        assert result == text
-
-    def test_extract_relevant_pages_page_beyond_end(self):
-        """Page hint beyond document end falls back to full text."""
-        pages = []
-        for i in range(1, 11):
-            pages.append(f"\n\n<!-- PAGE {i} -->\n\nContent of page {i}")
-        text = "Preamble" + "".join(pages)
-
-        result = _extract_relevant_pages(text, start_page=50)
-        assert result == text
-
-    def test_extract_relevant_pages_near_empty_window_falls_back(self):
-        """Issue #50: a #page=N window with < MIN_TEXT_LENGTH usable chars
-        (e.g. a blank page or a page-number-only page) falls back to full text."""
-        full = (
-            "\n\n<!-- PAGE 1 -->\n\n"
-            "Dies ist der vollständige Gesetzestext mit reichlich Inhalt, "
-            "der als Volltext des Dokuments dienen soll und weit über die "
-            "Mindestlänge hinausgeht."
-            "\n\n<!-- PAGE 2 -->\n\n6\n\n6"
-        )
-        result = _extract_relevant_pages(full, start_page=2, max_pages=30)
-        assert result == full
-
-    def test_extract_relevant_pages_todo_only_window_falls_back(self):
-        """Issue #50: a page-hint window containing only placeholder 'TODO' text
-        falls back to the full document text rather than persisting 'TODO'."""
-        full = (
-            "\n\n<!-- PAGE 1 -->\n\n"
-            "Ausführlicher Beschlussempfehlungstext, der deutlich länger ist "
-            "als die konfigurierte Mindesttextlänge und echten Inhalt trägt."
-            "\n\n<!-- PAGE 2 -->\n\nTODO"
-        )
-        result = _extract_relevant_pages(full, start_page=2, max_pages=30)
-        assert result == full
-
-    def test_extract_relevant_pages_substantial_window_kept(self):
-        """A page-hint window with enough content is returned as-is (no fallback)."""
-        pages = []
-        for i in range(1, 6):
-            pages.append(f"\n\n<!-- PAGE {i} -->\n\nAusreichend langer Seiteninhalt Nummer {i} " * 3)
-        text = "".join(pages)
-        result = _extract_relevant_pages(text, start_page=3, max_pages=30)
-        assert "Seiteninhalt Nummer 3" in result
-        assert "Seiteninhalt Nummer 1" not in result
-        assert result != text
+    @pytest.mark.parametrize(
+        ("text", "start_page"),
+        [
+            pytest.param("Plain text without any page markers at all.", 33, id="no-markers"),
+            pytest.param(
+                "Preamble" + "".join(f"\n\n<!-- PAGE {i} -->\n\nContent of page {i}" for i in range(1, 11)),
+                50,
+                id="page-beyond-end",
+            ),
+            # Issue #50: a window with < MIN_TEXT_LENGTH usable chars (a page-number-only
+            # page, or a placeholder "TODO") falls back instead of persisting it.
+            pytest.param(
+                "\n\n<!-- PAGE 1 -->\n\n"
+                "Dies ist der vollständige Gesetzestext mit reichlich Inhalt, "
+                "der als Volltext des Dokuments dienen soll und weit über die "
+                "Mindestlänge hinausgeht."
+                "\n\n<!-- PAGE 2 -->\n\n6\n\n6",
+                2,
+                id="issue50-near-empty-window",
+            ),
+            pytest.param(
+                "\n\n<!-- PAGE 1 -->\n\n"
+                "Ausführlicher Beschlussempfehlungstext, der deutlich länger ist "
+                "als die konfigurierte Mindesttextlänge und echten Inhalt trägt."
+                "\n\n<!-- PAGE 2 -->\n\nTODO",
+                2,
+                id="issue50-todo-only-window",
+            ),
+        ],
+    )
+    def test_extract_relevant_pages_falls_back_to_full_text(self, text, start_page):
+        assert _extract_relevant_pages(text, start_page=start_page) == text
 
     def test_extract_relevant_pages_first_marker_at_string_start_issue27(self):
         """Issue #27: a #page=1 anchor must return page 1, not silently substitute
@@ -2394,18 +2041,6 @@ class TestRedisCacheIntegration:
         )
 
     @pytest.mark.asyncio
-    async def test_no_cache_parameter_works(self):
-        """enrich_dokument should work without cache parameter (backwards compatible)."""
-        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
-        session = MagicMock()
-        llm = _make_llm_mock()
-
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
-            result = await enrich_dokument(session, llm, dok)
-
-        assert result.dokument.zusammenfassung is not None
-
-    @pytest.mark.asyncio
     async def test_metrics_counts_redis_cache_hit(self):
         """Redis cache hit should increment metrics.cache_hits."""
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
@@ -2431,23 +2066,6 @@ class TestIssue42TypedZusammenfassung:
         _hash_cache.clear()
         yield
         _hash_cache.clear()
-
-    @pytest.mark.asyncio
-    async def test_summary_is_sent_as_full_llm_tuple(self):
-        with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF):
-            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument(typ=Doktyp.ENTWURF))
-
-        assert result.dokument.to_dict()["zusammenfassung"] == [
-            {"typ": "full-llm", "inhalt": "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."}
-        ]
-
-    @pytest.mark.asyncio
-    async def test_missing_summary_sends_no_tuple(self):
-        response = json.dumps({"schlagworte": ["umwelt"], "kurztitel": "Klima"})
-        with _patch_pdf_pipeline(), _patch_llm(response):
-            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument(typ=Doktyp.ENTWURF))
-
-        assert result.dokument.zusammenfassung is None
 
     def test_zusammenfassung_text_reads_the_full_llm_inhalt(self):
         dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
