@@ -131,6 +131,19 @@ SAMPLE_HTML_MARCH_DATE = """<html><body>
 
 class TestResultParsing:
     @responses.activate
+    def test_star_error_is_reported_not_swallowed(self, client):
+        """A rejected search must reach the run report instead of reading as "no Vorgänge"."""
+        responses.add(responses.GET, BASE_URL, body="<html></html>", status=200)
+        star = {"error": "-1", "errormsg": "Syntaxfehler", "status": "error"}
+        responses.add(responses.POST, BROWSE_URL, json={"report_id": "", "sources": {"Star": star}}, status=200)
+
+        assert client.search("Gesetzgebung", date(2026, 1, 1), date(2026, 1, 31)) == []
+        [error] = client.pop_errors()
+        assert "Gesetzgebung" in error
+        assert "Syntaxfehler" in error
+        assert client.pop_errors() == []  # reported once
+
+    @responses.activate
     def test_utf8_fundstelle_date_decoded_correctly(self, client):
         """Serve UTF-8 bytes without charset; März must survive decoding."""
         html_bytes = SAMPLE_HTML_MARCH_DATE.encode("utf-8")

@@ -5,8 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from bawue.api import BawueApiError
 from bawue.rate_limiter import AdaptiveRateLimiter
-from bawue.upload_throttle import with_upload_retry
+from bawue.upload_throttle import UploadOutcome, upload_vorgang, with_upload_retry
 
 _logger = logging.getLogger("test")
 
@@ -98,3 +99,21 @@ class TestSuccessOnFirstTry:
             result = with_upload_retry(api_call, limiter, exception_type=FakeApiException)
         assert result == {"id": "123"}
         assert api_call.call_count == 1
+
+
+class TestUploadVorgang:
+    """A failed upload is reported for the run summary; it never stops the run."""
+
+    @pytest.mark.parametrize(
+        ("error", "reason"),
+        [
+            (BawueApiError(401, b"Unauthorized", "vorgang_put"), "HTTP 401"),
+            (ConnectionError("network down"), "ConnectionError: network down"),
+        ],
+        ids=["auth", "network"],
+    )
+    def test_failure_is_returned_not_raised(self, limiter, error, reason):
+        with patch("bawue.upload_throttle.put_vorgang", side_effect=error):
+            outcome = upload_vorgang(MagicMock(), "scraper-id", limiter, MagicMock(titel="T"))
+
+        assert outcome == UploadOutcome(vorgang=None, error=reason)

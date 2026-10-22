@@ -148,16 +148,36 @@ class TestParseInkrafttretenIssue98:
     @pytest.mark.parametrize(
         "clause",
         [
-            # GBl 2025 Nr. 81 without its paragraph (2): the date belongs to a "Fassung"
-            "Artikel 7\nDie Artikel 1 und 3 treten in Kraft, sobald alle Länder die Verträge in der am "
-            "1. Januar 2025 geltenden Fassung geändert haben. Artikel 2 tritt am 1. Januar 2027 in Kraft.\n",
-            "Artikel 5\n(2) Artikel 3 ist erstmals am 1. Januar 2027 anzuwenden. (3) Artikel 4 tritt in Kraft, "
-            "sobald der Bund zustimmt.\n",
+            # Review of PR #125: an unrelated date hid a condition and dated the station.
+            # GBl 2025 Nr. 81 without its paragraph (2): the date belongs to a "Fassung".
+            pytest.param(
+                "Artikel 7\nDie Artikel 1 und 3 treten in Kraft, sobald alle Länder die Verträge in der am "
+                "1. Januar 2025 geltenden Fassung geändert haben. Artikel 2 tritt am 1. Januar 2027 in Kraft.\n",
+                id="date-of-a-fassung",
+            ),
+            pytest.param(
+                "Artikel 5\n(2) Artikel 3 ist erstmals am 1. Januar 2027 anzuwenden. (3) Artikel 4 tritt in Kraft, "
+                "sobald der Bund zustimmt.\n",
+                id="date-of-another-sentence",
+            ),
+            pytest.param(
+                "Artikel 2\nDieses Gesetz tritt dreizehn Monate nach seiner Verkündung in Kraft.\n", id="unknown-number"
+            ),
+            pytest.param(
+                "Artikel 2\nDieses Gesetz tritt am ersten Tag des auf die Verkündung folgenden "
+                "dreizehnten Monats in Kraft.\n",
+                id="unknown-ordinal",
+            ),
+            pytest.param("Artikel 1\nÄnderung\nStuttgart, den 1. März 2026", id="no-clause"),
         ],
     )
-    def test_date_of_another_sentence_does_not_count(self, clause):
-        """Review of PR #125: an unrelated date hid a condition and dated the station."""
+    def test_no_date_is_guessed(self, clause):
+        """DD-071: no date rather than a wrong one."""
         assert parse_inkrafttreten(clause, date(2025, 7, 1)) == []
 
-    def test_no_clause(self):
-        assert parse_inkrafttreten("Artikel 1\nÄnderung\nStuttgart, den 1. März 2026", date(2026, 3, 1)) == []
+    def test_ausser_kraft_date_does_not_count(self):
+        clause = (
+            "Artikel 3\nDieses Gesetz tritt am 1. Juni 2026 in Kraft. "
+            "Das bisherige Gesetz tritt am 31. Mai 2026 außer Kraft.\n"
+        )
+        assert parse_inkrafttreten(clause, date(2026, 3, 1)) == [date(2026, 6, 1)]

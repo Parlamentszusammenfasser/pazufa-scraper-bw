@@ -63,7 +63,12 @@ class Scraper(ABC):
             tasks = [self.listing_page_extractor(lpage) for lpage in self.listing_urls]
 
             if self.config.linearize:
-                item_list = [await t for t in tasks]
+                item_list = []
+                for t in tasks:
+                    try:
+                        item_list.append(await t)
+                    except Exception as e:  # like gather's return_exceptions: one page must not lose the rest
+                        item_list.append(e)
             else:
                 item_list = await asyncio.gather(*tasks, return_exceptions=True)
 
