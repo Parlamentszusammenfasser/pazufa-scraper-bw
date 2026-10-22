@@ -30,7 +30,7 @@ Run with: pytest -m integration tests/integration/test_issue30_real_documents.py
 import aiohttp
 import pytest
 
-from bawue.bawue_dok import extract_pdf_text, normalize_volltext
+from bawue.pdf_text import extract_pdf_text, normalize_volltext
 
 pytestmark = pytest.mark.integration
 
@@ -50,7 +50,7 @@ _BROKEN_TOKENS = ["Richte-rinnen", "Rich terinnen", "Beam-ten", "Ein-gangsamt"]
 
 async def _extract(session: aiohttp.ClientSession, url: str) -> str:
     """Download a PDF and return its extracted (un-normalized) text."""
-    from bawue.bawue_dok import download_pdf
+    from bawue.pdf_text import download_pdf
 
     path = await download_pdf(session, url)
     try:

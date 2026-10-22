@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
-from bawue.bawue_dok import normalize_volltext
+from bawue.pdf_text import normalize_volltext
 
 logger = logging.getLogger(__name__)
 

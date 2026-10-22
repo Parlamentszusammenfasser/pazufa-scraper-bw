@@ -225,11 +225,17 @@ classDiagram
     class BawueDok {
         <<module>>
         +enrich_dokument(session, llm, dok, model, vorgang_titel, …) EnrichmentResult
-        +download_pdf(session, url) Path
-        +extract_pdf_text(pdf_path) tuple
         +extract_semantics(llm, text, doktyp, model, dok_titel, drucksnr) dict
         -_hash_cache: dict
         -_llm_semaphore() Semaphore
+    }
+
+    class PdfText {
+        <<module>>
+        +download_pdf(session, url) Path
+        +extract_pdf_text(pdf_path, page_markers) tuple
+        +normalize_volltext(text) str
+        -_ocr_semaphore() Semaphore
     }
 
     class VorgangLlm {
@@ -253,9 +259,11 @@ classDiagram
     BawueBeteiligungScraper --> BawueDok
     BawueBeteiligungScraper --> VorgangLlm
     VorgangLlm --> BawueDok
+    BawueDok --> PdfText
     BawueBeteiligungScraper --> UploadThrottle
     BeteiligungClient --> BeteiligungParser
     BawueSitzungenScraper --> IcsParser
+    BawueSitzungenScraper --> PdfText
 ```
 
 ### Scraper Contract
@@ -285,7 +293,7 @@ IDs. Items whose `Vorgangstyp` field doesn't match the enabled set are dropped d
 | Redis caching       | `bawue.cache` — no TTL, `vg2:`/`sz:`/`llm-semantics:`/`drucks-hash:` keys (DD-052/066) |
 | API client          | `pazufa-scraper-core` httpx client + `bawue.upload_throttle` retry |
 | Models              | `pazufa-scraper-core` models generated from OpenAPI spec |
-| Document processing | Kreuzberg/OCR + LLM pipeline (`bawue.bawue_dok`)         |
+| Document processing | Kreuzberg/OCR + LLM pipeline (`bawue.pdf_text`, `bawue.bawue_dok`) |
 | Error tolerance     | `bawue.pipeline` — per-item handling, doesn't stop on single failures |
 | Config              | `bawue.config` — 4-tier: Defaults → TOML → env vars → CLI |
 
@@ -443,7 +451,7 @@ Retry wrapper for direct API uploads (`upload_throttle.py`). Used by `BawueVorga
 Optional document enrichment module (`bawue_dok.py`). Downloads PDFs, extracts text, and calls an LLM for semantic
 metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` environment variable.
 
-**PDF pipeline:**
+**PDF pipeline** (`pdf_text.py`):
 - Downloads PDF via `aiohttp` session to a temporary file
 - Extracts text via `kreuzberg` (normal extraction first; OCR fallback if result < 64 chars or garbled, DD-015)
 - Computes SHA256 hash for deduplication

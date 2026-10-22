@@ -160,7 +160,7 @@ real PaZuFa backend.
 
 `bawue_vorgaenge_scraper.py` (PARLIS → Vorgang; station building, ordering, synthetic
 stations, stable ids) · `parlis_client.py` / `parlis_parser.py` (PARLIS fetch + parse) ·
-`enum_mapper.py` (PARLIS terms → PaZuFa enums, context-aware) · `bawue_dok.py` (PDF + LLM
-enrichment) · `vorgang_llm.py` (Kurztitel, Ressort) · `pipeline.py` (scraper base classes, run loop, `log_item`) ·
+`enum_mapper.py` (PARLIS terms → PaZuFa enums, context-aware) · `bawue_dok.py` (LLM
+enrichment) · `pdf_text.py` (PDF download, text, OCR) · `vorgang_llm.py` (Kurztitel, Ressort) · `pipeline.py` (scraper base classes, run loop, `log_item`) ·
 `bawue_beteiligung_scraper.py` / `bawue_sitzungen_scraper.py` / `ics_parser.py` ·
 `config.py` / `config_loader.py` · `cache.py` (Redis) · `upload_throttle.py` (retry/429).

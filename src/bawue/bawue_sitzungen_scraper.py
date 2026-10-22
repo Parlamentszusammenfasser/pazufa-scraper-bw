@@ -16,12 +16,12 @@ import aiohttp
 import certifi
 
 from bawue.api import BawueApiError, build_client, put_kalender
-from bawue.bawue_dok import download_pdf, extract_pdf_text
 from bawue.bawue_vorgaenge_scraper import _construct_drucksache_pdf_url
 from bawue.cache import RedisUnavailableError, drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.ics_parser import ParsedEvent, group_events_by_date, parse_ics_feed
+from bawue.pdf_text import download_pdf, extract_pdf_text
 from bawue.pipeline import SitzungsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section

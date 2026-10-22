@@ -2,7 +2,7 @@
 
 # Dokumente und Volltext
 
-PDF-Download, Textextraktion und Dokumentdaten (`bawue_dok.py`). Läuft nur mit aktivem LLM;
+PDF-Download, Textextraktion und Dokumentdaten (`pdf_text.py`, Anreicherung in `bawue_dok.py`). Läuft nur mit aktivem LLM;
 ohne LLM lädt der Scraper keine PDFs, `volltext` bleibt `TODO`, `hash_` ein Platzhalter
 (DD-048).
 

@@ -1,4 +1,4 @@
-"""Tests for the bawue_dok document enrichment module."""
+"""Tests for document enrichment: bawue_dok and pdf_text."""
 
 import hashlib
 import json
@@ -20,29 +20,31 @@ from bawue.bawue_dok import (
     ZUSAMMENFASSUNG_TEILE,
     EnrichmentResult,
     LLMMetrics,
-    PdfNotAvailableError,
-    _agenda_text,
     _cache_key,
-    _extract_relevant_pages,
     _hash_cache,
-    _is_garbled,
-    _paragraph_quality_score,
     _parse_llm_response,
-    _parse_page_hint,
     _prompt_fingerprint,
     _prompt_for_doktyp,
     _sanitize_llm_strings,
     _sanitize_llm_text,
     _validate_scores,
-    ausgegeben_datum,
     clear_hash_cache,
-    download_pdf,
     enrich_dokument,
-    extract_pdf_text,
     extract_semantics,
     narrow_to_relevant_section,
-    normalize_volltext,
     zusammenfassung_text,
+)
+from bawue.pdf_text import (
+    PdfNotAvailableError,
+    _agenda_text,
+    _extract_relevant_pages,
+    _is_garbled,
+    _paragraph_quality_score,
+    _parse_page_hint,
+    ausgegeben_datum,
+    download_pdf,
+    extract_pdf_text,
+    normalize_volltext,
 )
 from bawue.types import UNSET, Autor, Doktyp, Dokument, Zusammenfassungstupel
 
@@ -223,7 +225,7 @@ class TestDownloadPdf:
 
         with (
             pytest.raises(PdfNotAvailableError, match=r"HTTP 404: https://example.com/missing.pdf"),
-            caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"),
+            caplog.at_level(logging.WARNING, logger="bawue.pdf_text"),
         ):
             await download_pdf(session, "https://example.com/missing.pdf")
 
@@ -242,7 +244,7 @@ class TestExtractPdfText:
         pdf_file.write_bytes(SAMPLE_PDF_BYTES)
 
         mock_result = _mock_extraction_result()
-        with patch("bawue.bawue_dok.extract_file", new_callable=AsyncMock, return_value=mock_result):
+        with patch("bawue.pdf_text.extract_file", new_callable=AsyncMock, return_value=mock_result):
             text, doc_hash = await extract_pdf_text(pdf_file)
 
         assert text == SAMPLE_FULL_TEXT
@@ -257,7 +259,7 @@ class TestExtractPdfText:
         marked_text = "".join(f"\n\n<!-- PAGE {i} -->\n\nContent of page {i}" for i in range(1, 40))
 
         mock_result = _mock_extraction_result(content=marked_text)
-        with patch("bawue.bawue_dok.extract_file", new_callable=AsyncMock, return_value=mock_result) as mock_extract:
+        with patch("bawue.pdf_text.extract_file", new_callable=AsyncMock, return_value=mock_result) as mock_extract:
             text, _ = await extract_pdf_text(pdf_file, page_markers=True)
 
         call_config = mock_extract.call_args_list[0].kwargs["config"]
@@ -274,7 +276,7 @@ class TestExtractPdfText:
         ocr_result = _mock_extraction_result(content=SAMPLE_FULL_TEXT)
 
         with patch(
-            "bawue.bawue_dok.extract_file",
+            "bawue.pdf_text.extract_file",
             new_callable=AsyncMock,
             side_effect=[short_result, ocr_result],
         ):
@@ -973,7 +975,7 @@ class TestAusgegebenDatum:
         ],
     )
     def test_issue23_implausible_date_is_dropped_with_warning(self, footer, caplog):
-        with caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"):
+        with caplog.at_level(logging.WARNING, logger="bawue.pdf_text"):
             assert ausgegeben_datum(f"Drucksache 17 / 1102\n{footer}", "17/1102", PARLIS_17_1102) is None
         assert "17/1102" in caplog.text
 
@@ -1958,7 +1960,7 @@ class TestExtractPdfTextOcrRetry:
         ocr_result = _mock_extraction_result(content=clean_text)
 
         with patch(
-            "bawue.bawue_dok.extract_file",
+            "bawue.pdf_text.extract_file",
             new_callable=AsyncMock,
             side_effect=[garbled_result, ocr_result],
         ):
@@ -1980,7 +1982,7 @@ class TestExtractPdfTextOcrRetry:
         ocr_result = _mock_extraction_result(content=clean_text)
 
         with patch(
-            "bawue.bawue_dok.extract_file",
+            "bawue.pdf_text.extract_file",
             new_callable=AsyncMock,
             side_effect=[garbled_result, ocr_result],
         ) as mock_extract:
@@ -2011,7 +2013,7 @@ class TestExtractPdfTextOcrRetry:
         ocr_text = f"<!-- PAGE 1 -->\n\nDeckblatt des Landtags\n\n<!-- PAGE 2 -->\n\n{clean_page_2}"
 
         with patch(
-            "bawue.bawue_dok.extract_file",
+            "bawue.pdf_text.extract_file",
             new_callable=AsyncMock,
             side_effect=[_mock_extraction_result(content=garbled_text), _mock_extraction_result(content=ocr_text)],
         ) as mock_extract:
@@ -2032,7 +2034,7 @@ class TestExtractPdfTextOcrRetry:
         clean_result = _mock_extraction_result(content=SAMPLE_FULL_TEXT)
 
         with patch(
-            "bawue.bawue_dok.extract_file",
+            "bawue.pdf_text.extract_file",
             new_callable=AsyncMock,
             return_value=clean_result,
         ) as mock_extract:
@@ -2053,7 +2055,7 @@ class TestExtractPdfTextOcrRetry:
         still_garbled = _mock_extraction_result(content=garbled_text)
 
         with patch(
-            "bawue.bawue_dok.extract_file",
+            "bawue.pdf_text.extract_file",
             new_callable=AsyncMock,
             side_effect=[garbled_result, still_garbled],
         ):
@@ -2084,7 +2086,7 @@ class TestExtractPdfTextOcrRetry:
         assert _is_garbled(sparse_ocr) is False
 
         with patch(
-            "bawue.bawue_dok.extract_file",
+            "bawue.pdf_text.extract_file",
             new_callable=AsyncMock,
             side_effect=[
                 _mock_extraction_result(content=partly_garbled),
@@ -2106,7 +2108,7 @@ class TestExtractPdfTextOcrRetry:
         garbled_result = _mock_extraction_result(content=garbled_text)
 
         with patch(
-            "bawue.bawue_dok.extract_file",
+            "bawue.pdf_text.extract_file",
             new_callable=AsyncMock,
             side_effect=[garbled_result, RuntimeError("OCR failed")],
         ):
@@ -2124,7 +2126,7 @@ class TestExtractPdfTextOcrRetry:
         ocr_result = _mock_extraction_result(content=SAMPLE_FULL_TEXT)
 
         with patch(
-            "bawue.bawue_dok.extract_file",
+            "bawue.pdf_text.extract_file",
             new_callable=AsyncMock,
             side_effect=[short_result, ocr_result],
         ):
@@ -2146,11 +2148,11 @@ class TestExtractPdfTextOcrRetry:
 
         with (
             patch(
-                "bawue.bawue_dok.extract_file",
+                "bawue.pdf_text.extract_file",
                 new_callable=AsyncMock,
                 side_effect=[garbled_result, ocr_result],
             ),
-            caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"),
+            caplog.at_level(logging.WARNING, logger="bawue.pdf_text"),
         ):
             await extract_pdf_text(pdf_file)
 

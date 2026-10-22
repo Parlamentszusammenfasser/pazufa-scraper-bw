@@ -42,15 +42,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-from bawue.bawue_dok import (
-    _extract_relevant_pages,
-    _hash_cache,
-    download_pdf,
-    enrich_dokument,
-    extract_pdf_text,
-    normalize_volltext,
-)
+from bawue.bawue_dok import _hash_cache, enrich_dokument
 from bawue.parlis_client import ParlisClient
+from bawue.pdf_text import _extract_relevant_pages, download_pdf, extract_pdf_text, normalize_volltext
 from bawue.types import Autor, Doktyp, Dokument
 
 pytestmark = pytest.mark.integration
