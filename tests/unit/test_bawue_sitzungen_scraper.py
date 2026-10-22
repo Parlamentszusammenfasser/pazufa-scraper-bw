@@ -84,9 +84,8 @@ class TestItemExtractor:
     """Test that item_extractor converts stored events into (datetime, List[Sitzung])."""
 
     @pytest.mark.asyncio
-    async def test_returns_datetime_and_sitzungen(self, ics_scraper_with_events, caplog):
-        with caplog.at_level(logging.WARNING, logger="bawue.bawue_sitzungen_scraper"):
-            termin, sitzungen = await ics_scraper_with_events.item_extractor("2026-02-25")
+    async def test_returns_datetime_and_sitzungen(self, ics_scraper_with_events):
+        termin, sitzungen = await ics_scraper_with_events.item_extractor("2026-02-25")
 
         assert isinstance(termin, datetime.datetime)
         assert len(sitzungen) == 1
@@ -101,7 +100,6 @@ class TestItemExtractor:
         # Tuple termin and Sitzung termin are both timezone-aware (UTC).
         assert termin.tzinfo is not None
         assert sitzung.termin.tzinfo is not None
-        assert not caplog.records  # issue #65: a known session number is not logged
 
     @pytest.mark.asyncio
     async def test_deterministic_api_id(self, ics_scraper_with_events):
@@ -150,6 +148,13 @@ class TestIssue65SessionNumber:
 
         assert sitzungen[0].nummer == 0
         assert f"No session number for {gremium} on {date_key}" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_known_number_is_not_logged(self, ics_scraper_with_events, caplog):
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_sitzungen_scraper"):
+            await ics_scraper_with_events.item_extractor("2026-02-25")
+
+        assert not caplog.records
 
 
 _ADDED_EVENT = (

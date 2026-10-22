@@ -130,11 +130,17 @@ class TestFetchProcessList:
 class TestFetchProcessDetail:
     @responses.activate
     def test_returns_html(self, client):
-        responses.add(responses.GET, DETAIL_URL, body=SAMPLE_DETAIL_HTML, status=200)
+        """Absolute URL; UTF-8 bytes without a charset keep their umlauts."""
+        html_with_umlauts = "<html><body><h1>Bürgerschaftliches Engagement</h1><p>März 2025</p></body></html>"
+        responses.add(
+            responses.GET, DETAIL_URL, body=html_with_umlauts.encode("utf-8"), status=200, content_type="text/html"
+        )
 
         html = client.fetch_process_detail("/de/mitmachen/lp-17/entbuerokratisierung")
 
-        assert "<h1>Detail</h1>" in html
+        assert responses.calls[0].request.url == DETAIL_URL
+        assert "März" in html
+        assert "Bürgerschaftliches" in html
 
 
 class TestRequestDelay:

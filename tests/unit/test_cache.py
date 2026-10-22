@@ -70,12 +70,18 @@ def test_connection_failure_raises_naming_the_target(caplog):
     assert "secret-token" not in str(exc.value) + caplog.text
 
 
-def test_config_forwards_redis_url_to_cache(monkeypatch, tmp_path):
-    """REDIS_URL must survive the trip through BawueConfig into BawueCache.
-
-    --once is a no-op since every run is one cycle, but old commands still pass it."""
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["bawue"],
+        ["bawue", "--once"],  # a no-op since every run is one cycle; old commands still pass it
+    ],
+    ids=["plain", "once-flag"],
+)
+def test_config_forwards_redis_url_to_cache(monkeypatch, tmp_path, argv):
+    """REDIS_URL must survive the trip through BawueConfig into BawueCache."""
     monkeypatch.chdir(tmp_path)  # no config.toml here — env-only resolution
-    monkeypatch.setattr("sys.argv", ["bawue", "--once"])  # an unknown flag would exit 2
+    monkeypatch.setattr("sys.argv", argv)  # an unknown flag would exit 2
     monkeypatch.setenv("REDIS_URL", UPSTASH_URL)
     monkeypatch.setenv("COLLECTOR_ID", "00000000-0000-0000-0000-000000000001")
     monkeypatch.setenv("LTZF_API_KEY", "test-key")
