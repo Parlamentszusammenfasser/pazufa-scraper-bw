@@ -43,6 +43,14 @@ def test_precedence(load, argv, env, api_key):
     assert config.api_key == api_key
 
 
+def test_config_file_flag_wins_over_cwd(load, tmp_path):
+    """Docker, Compose and the Makefile all start with --config-file."""
+    other = tmp_path / "other.toml"
+    other.write_text(COLLECTOR + '[backend]\nltzf-api-key = "from-flag"\n')
+    config = load("--config-file", str(other), toml=COLLECTOR + '[backend]\nltzf-api-key = "from-cwd"\n')
+    assert config.api_key == "from-flag"
+
+
 def test_env_numbers_become_ints(load):
     """Cloud Run configures by env, as strings; asyncio.Semaphore and redis need ints."""
     config = load(LTZF_API_KEY="k", MAX_CONCURRENCY="5", REDIS_PORT="6380")
