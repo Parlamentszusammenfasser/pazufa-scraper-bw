@@ -529,6 +529,20 @@ class TestIssue148FristenRegister:
 
         assert scraper.config.cache.get_raw("beteiligungsfristen") is None
 
+    @pytest.mark.asyncio
+    async def test_failed_register_write_leaves_the_vorgang_uncached(self):
+        """A cache hit would never write the register again (review of PR #164)."""
+        scraper = self._scraper()
+        cache = scraper.config.cache
+        store_raw = cache.store_raw
+        cache.store_raw = lambda key, value, typehint="": key != "beteiligungsfristen" and store_raw(key, value)
+        scraper._fingerprints["a"] = "fingerprint"
+        scraper._raw_cache["a"] = _make_process(slug="a")
+        scraper._details["a"] = _make_detail(comment_deadline=date(2099, 12, 1))
+        await scraper.store_extracted_result("a", await scraper.item_extractor("a"))
+
+        assert cache.get_raw("vg2:a") is None
+
 
 class TestListingPageExtractor:
     @pytest.mark.asyncio

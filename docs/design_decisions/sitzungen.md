@@ -99,7 +99,7 @@ ihn geschrieben hat.
 **Entscheidung:**
 1. Nach jedem Upload legt der Beteiligungs-Scraper Frist, Titel, Portal-Link und den Hash des
    ersten Entwurfs in `beteiligungsfristen` (Redis) ab, den Hash nur für ein gelesenes
-   Dokument (wie DD-070).
+   Dokument (wie DD-070). Scheitert das Schreiben, bleibt der Vorgang ungecacht.
 2. Der Sitzungen-Scraper nimmt jede Frist ab gestern (UTC, wie das Backend) in den PUT ihres
    Tages auf, auch an Tagen ohne Landtagstermin: eine Sitzung von `regierung` um 23:59 Uhr
    (Berlin), Titel `Beteiligungsfrist: <Titel>`, `link` aufs Portal, `nummer` 0, ein TOP mit

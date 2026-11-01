@@ -174,13 +174,15 @@ class BawueBeteiligungScraper(VorgangsScraper):
         return None
 
     async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
-        self._register_frist(item_key, result)
+        if not self._register_frist(item_key, result):
+            return  # uncached, so the next cycle writes the register again (DD-076)
         fingerprint = self._fingerprints.get(item_key)
         if fingerprint is not None:  # without one, the next cycle simply rebuilds
             self.config.cache.store_raw(f"vg2:{item_key}", fingerprint, "Vorgang")
 
-    def _register_frist(self, slug: str, vorgang: Vorgang) -> None:
-        """Hand the deadline and the just uploaded draft to the calendar (DD-076).
+    def _register_frist(self, slug: str, vorgang: Vorgang) -> bool:
+        """Hand the deadline and the just uploaded draft to the calendar (DD-076); False if
+        the register could not be written.
 
         No await between read and write, so concurrent items cannot interleave.
         """
@@ -188,7 +190,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         frist = self._fristen.pop(slug, None)
         if frist is None:
             if fristen.pop(slug, None) is None:
-                return
+                return True
         else:
             dok = vorgang.stationen[0].dokumente[0]
             fristen[slug] = {
@@ -199,7 +201,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
                 # Only a read document: a placeholder row is replaced once the PDF is read (as DD-070).
                 "hash": dok.hash_ if dok.volltext != TODO_MARKER else None,
             }
-        self.config.cache.store_raw(BETEILIGUNGSFRISTEN_KEY, json.dumps(fristen, ensure_ascii=False), "Fristen")
+        return self.config.cache.store_raw(BETEILIGUNGSFRISTEN_KEY, json.dumps(fristen, ensure_ascii=False), "Fristen")
 
     async def item_extractor(self, slug: str) -> Vorgang | None:
         """Fetch detail page and build a Vorgang with preparl-regent station."""
