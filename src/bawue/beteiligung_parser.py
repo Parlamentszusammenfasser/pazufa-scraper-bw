@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo
 
 from lxml import html
 
+from bawue.parlis_parser import _GERMAN_DATE_RE, _GERMAN_MONTHS
+
 
 @dataclass
 class RawBeteiligungProcess:
@@ -25,6 +27,9 @@ BERLIN_TZ = ZoneInfo("Europe/Berlin")
 # Phases that only a draft's timeline has (issue #123, DD-007).
 _DRAFT_PHASES = {"Online-Kommentierung", "Gesetzentwurf"}
 
+# "bis zum 30. Oktober 2026": anchored on "bis", the block may name a start date too (issue #148).
+_DEADLINE_RE = re.compile(r"\bbis(?:\s+zum)?\s+" + _GERMAN_DATE_RE.pattern)
+
 
 @dataclass
 class RawBeteiligungDetail:
@@ -34,6 +39,7 @@ class RawBeteiligungDetail:
     ministry: str
     pdf_links: list[dict] = field(default_factory=list)
     phases: list[str] = field(default_factory=list)
+    comment_deadline: date | None = None
 
     @property
     def is_verordnung(self) -> bool:
@@ -122,7 +128,21 @@ def parse_process_detail(html_content: str, base_url: str) -> RawBeteiligungDeta
         ministry=ministry,
         pdf_links=pdf_links,
         phases=phases,
+        comment_deadline=_comment_deadline(tree),
     )
+
+
+def _comment_deadline(tree: html.HtmlElement) -> date | None:
+    """The block reads the same while comments are open and after they closed;
+    a draft without a comment phase has none (issue #148)."""
+    block = " ".join(el.text_content() for el in tree.xpath('//div[contains(@class, "comment-list__closed")]'))
+    if not (match := _DEADLINE_RE.search(block)):
+        return None
+    day, month, year = match.groups()
+    try:
+        return date(int(year), int(_GERMAN_MONTHS[month]), int(day))
+    except ValueError:  # 31. Februar
+        return None
 
 
 # A file name starts with its date, YYMMDD_ (260922_Entwurf.pdf).

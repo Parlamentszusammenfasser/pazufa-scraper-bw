@@ -47,8 +47,29 @@ lagen alle 183 Seiten mit Frist 7–120 Tage davor. Verworfen: Freigabe-Satz im 
 Seiten, findet fremde Daten), PDF-Metadaten (Entstehung, nicht Veröffentlichung).
 
 **Konsequenz:** Ein `HEAD` je PDF bei jedem Neubau. Das Datum ist der Veröffentlichungstag,
-nicht der Kabinettsbeschluss. Die Kommentarfrist fließt nirgends mehr ein, auch nicht in den
-Fingerprint (DD-052): alle Beteiligungs-Vorgänge werden einmal mit neuem Datum hochgeladen.
+nicht der Kabinettsbeschluss. Die Kommentarfrist datiert nichts mehr; sie erscheint als eigener
+Zusammenfassungsteil (DD-075).
+
+<a id="dd-075"></a>
+## DD-075: Beteiligungsfrist als eigener Zusammenfassungsteil
+
+**Kontext:** Viele Entwürfe lassen sich bis zu einer Frist kommentieren. Das Backend hat dafür
+kein Feld (Issue #148), `zp_start` ist der Veröffentlichungstag (DD-074).
+
+**Entscheidung:**
+1. Die Frist steht im Block `comment-list__closed`, offen wie geschlossen gleich formuliert;
+   gilt das Datum nach „bis (zum)". Seiten ohne Kommentarphase haben keine.
+2. Sie geht als eigenes Tupel `beteiligungsfrist-extern` mit festem Text
+   `Beteiligungsfrist: TT.MM.JJJJ` hinaus, nicht als Text in `full-llm`: Die Website markiert
+   jeden Typ mit `llm` als KI-generiert.
+3. Das Tupel hängt am Dokument, dessen Zusammenfassung die Website zeigt: am ersten mit
+   `full-llm`, sonst am ersten.
+4. Die Frist gehört zum Fingerprint (DD-052); eine verlängerte Frist wird neu hochgeladen.
+
+**Konsequenz:** Die Website zeigt den Abschnitt „Beteiligungsfrist" unter der
+KI-Zusammenfassung, nicht davor. Das Backend löscht keine Tupel: Wechselt das Dokument mit
+Zusammenfassung, bleibt die Frist auch am alten stehen. Mit der Einführung ändert sich jeder
+Beteiligungs-Fingerprint, alle Beteiligungs-Vorgänge werden einmal neu hochgeladen.
 
 <a id="dd-047"></a>
 ## DD-047: Gesetzblatt als Datums-Lookup, nicht als eigene Vorgangsquelle
