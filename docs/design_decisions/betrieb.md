@@ -36,7 +36,7 @@ Pydantic-Modell der corelib — der attrs-Client serialisiert ungeprüft, Drift 
 als HTTP 422 auf.
 
 <a id="dd-059"></a>
-## DD-059: corelib v0.3.x / Spec 0.2.7
+## DD-059: corelib v0.3.x / Spec 0.2.7–0.2.8
 
 **Entscheidung:**
 1. `PUT kalender` sendet `X-Scraper-Id` wieder (Spec 0.2.7 verlangt ihn).
@@ -51,6 +51,12 @@ als HTTP 422 auf.
    (DD-073). Ein eigenes Redis-Backend über `cache.backends.Backend` wäre möglich, aber
    corelib-Keys verbieten `:` — alle BW-Keys (`vg2:`, `sz:`, `llm-semantics:` …) müssten
    umbenannt werden, der Cache samt bezahlter LLM-Ergebnisse liefe leer.
+5. **v0.3.2** / Spec 0.2.8: nur Pin-Wechsel; ungesetzte neue Felder fehlen im Payload. Prod
+   läuft noch auf Spec 0.2.6 (Stand 2026-11-01) und kennt keinen neuen Wert, daher bleibt
+   alles Neue ungenutzt: `gg-land-parl-haushalt` erst mit #60 und Track-Regex;
+   `Station.meta_tiebreaker` statt Stunden-Bumps (`_enforce_total_ordering`) ändert `zp_start`
+   und damit die Stations-`api_id` (DD-028), braucht also eine Migration; `Vorgang.zusammenfassung`
+   wäre ein zusätzlicher LLM-Call; `if_none_match` lohnt für den wöchentlichen Abruf (DD-072) nicht.
 
 **Konsequenz:** corelibs `html_to_text` behandelt einen Text als HTML, sobald ein einzelnes
 Block-Tag vorkommt, und verliert dann alle Absätze — die Garbled-Filter (DD-015) arbeiten

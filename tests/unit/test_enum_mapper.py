@@ -433,6 +433,8 @@ class TestEnumValuesExistInFramework:
             "parl-vermittas",
             # Spec 0.2.7 renamed parl-verfgstop (DD-059).
             "postparl-vgstp",
+            # Added by spec 0.2.8, deliberately unmapped (DD-057).
+            "parl-anhoerung",
         }
     )
 
@@ -483,6 +485,9 @@ class TestEnumValuesExistInFramework:
             # DD-051), "eckpunktepapier" is deliberately unmapped (DD-057).
             "gesetz",
             "eckpunktepapier",
+            # Added by spec 0.2.8, deliberately unmapped (DD-057).
+            "beschlussprotokoll",
+            "inhaltsprotokoll",
         }
         framework_values = {m.value for m in Doktyp}
         assert bawue_values == framework_values
