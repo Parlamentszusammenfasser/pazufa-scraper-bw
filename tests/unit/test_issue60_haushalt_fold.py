@@ -52,9 +52,10 @@ def _sthg(folded: list[dict]) -> dict:
     return next(r for r in folded if r["vorgangs_id"] == _STHG)
 
 
-def test_folds_einzelplaene_into_the_staatshaushaltsgesetz():
+def test_folds_einzelplaene_into_the_staatshaushaltsgesetz(caplog):
     folded = _fold_einzelplaene(_records())
 
+    assert "no single Staatshaushaltsgesetz" not in caplog.text
     assert sorted(r["vorgangs_id"] for r in folded) == [_BEGLEITGESETZ, _STHG]
     assert _sthg(folded)["titel"].startswith("Gesetz über die Feststellung des Staatshaushaltsplans")
     drucksachen = {f.get("drucksache") for f in _sthg(folded)["fundstellen_parsed"]}
@@ -76,6 +77,18 @@ def test_drops_what_the_staatshaushaltsgesetz_already_cites():
     # Its own citation of the second reading, not the per-Einzelplan page ranges.
     assert len(raws(plenarprotokoll="17/109")) == 1
     assert "S. 6462-6554" in raws(plenarprotokoll="17/109")[0]
+
+
+@pytest.mark.parametrize("titles", [("Einzelplan 11", "Einzelplan 04"), ("Gesetz A", "Gesetz B")])
+def test_warns_unless_the_budget_has_one_staatshaushaltsgesetz(titles, caplog):
+    """Issue #60 found exactly one per budget; otherwise a wrong record names the Vorgang."""
+    records = [r for r in _records() if r["vorgangs_id"] in ("V-237492", "V-237478")]
+    for record, titel in zip(records, titles, strict=True):
+        record["titel"] = titel
+
+    _fold_einzelplaene(records)
+
+    assert "no single Staatshaushaltsgesetz" in caplog.text
 
 
 def test_leaves_other_records_untouched():

@@ -1452,12 +1452,15 @@ def _fold_einzelplaene(raws: list[RawVorgang]) -> list[RawVorgang]:
             budgets.setdefault(initiativ, []).append(raw)
         else:
             folded.append(raw)
-    for group in budgets.values():
+    for initiativ, group in budgets.items():
         # PARLIS lists the Einzelpläne first; the Staatshaushaltsgesetz is the one that is none.
         sthg, *einzelplaene = sorted(group, key=lambda r: "Einzelplan" in r.get("titel", ""))
         if not einzelplaene:
             folded.append(sthg)
             continue
+        if sum("Einzelplan" not in r.get("titel", "") for r in group) != 1:
+            vid = sthg.get("vorgangs_id")
+            logger.warning("Budget %s has no single Staatshaushaltsgesetz, folding into %s", initiativ, vid)
         logger.info("Folding %d Einzelpläne into %s", len(einzelplaene), sthg.get("vorgangs_id"))
         cited = {_citation(f) for f in sthg.get("fundstellen_parsed", [])}
         own = [[f for f in r.get("fundstellen_parsed", []) if _citation(f) not in cited] for r in einzelplaene]
