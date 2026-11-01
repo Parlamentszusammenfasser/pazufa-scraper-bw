@@ -111,4 +111,6 @@ ihn geschrieben hat.
 
 **Konsequenz:** Ohne LLM hat der TOP kein Dokument, die Sitzung also keinen Vorgang. Eine
 verlängerte Frist erscheint am neuen Tag; den alten leert nur ein anderer PUT dieses Tages
-(DD-069). Die Website zeigt den Kalender bisher nicht an.
+(DD-069). Ändert sich die Frist an einem Plenartag, dessen Tagesordnung schon von der Seite
+verschwunden ist, gehen seine TOPs verloren (wie DD-070). Die Website zeigt den Kalender bisher
+nicht an.
