@@ -3,6 +3,7 @@
 import logging
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import NAMESPACE_URL, uuid5
 
@@ -58,6 +59,7 @@ def _make_detail(
     ministry: str = "Ministerium des Inneren, für Digitalisierung und Kommunen",
     pdf_links: list[dict] | None = None,
     phases: list[str] | None = None,
+    comment_deadline: date | None = None,
 ) -> RawBeteiligungDetail:
     if pdf_links is None:
         pdf_links = [
@@ -73,6 +75,7 @@ def _make_detail(
         ministry=ministry,
         pdf_links=pdf_links,
         phases=phases,
+        comment_deadline=comment_deadline,
     )
 
 
@@ -396,6 +399,71 @@ class TestIssue123ReleaseDate:
         assert result is None
         assert scraper._skipped == 1
         assert "no publication date" in caplog.text
+
+
+class TestIssue148Beteiligungsfrist:
+    """Issue #148 (DD-075): the comment deadline is its own summary part, never text in an AI summary."""
+
+    FRIST = Zusammenfassungstupel(typ="beteiligungsfrist-extern", inhalt="Beteiligungsfrist: 09.09.2026")
+    KI: ClassVar[list[Zusammenfassungstupel]] = [
+        Zusammenfassungstupel(typ="full-llm", inhalt="Berichtspflichten entfallen."),
+        Zusammenfassungstupel(typ="kosten-llm", inhalt="Keine."),
+    ]
+    A, B = "https://example.com/a.pdf", "https://example.com/b.pdf"
+
+    @staticmethod
+    def _llm_scraper(monkeypatch, summaries: dict):
+        """LLM enabled; enrichment gives the documents in *summaries* their (shared) summary list."""
+        from bawue.bawue_dok import EnrichmentResult
+
+        async def _fake_enrich(session, llm, dok, **kwargs):
+            if dok.link in summaries:
+                dok.zusammenfassung = summaries[dok.link]
+            return EnrichmentResult(dokument=dok)
+
+        monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
+        monkeypatch.setattr("bawue.bawue_beteiligung_scraper.vorgang_kurztitel", AsyncMock(return_value="K"))
+        monkeypatch.setattr("bawue.bawue_beteiligung_scraper.vorgang_ressort", AsyncMock(return_value=None))
+        scraper = _make_scraper()
+        scraper._llm_enabled = True
+        scraper._llm = MagicMock()
+        scraper._llm_model = "gpt-5-nano"
+        return scraper
+
+    @pytest.mark.asyncio
+    async def test_without_llm_the_deadline_is_the_only_part(self):
+        detail = _make_detail(comment_deadline=date(2026, 9, 9))
+        vorgang = await _make_scraper()._build_vorgang("effizienzgesetz", detail)
+        [dok] = vorgang.stationen[0].dokumente
+        assert dok.zusammenfassung == [self.FRIST]
+
+    @pytest.mark.asyncio
+    async def test_no_deadline_leaves_the_summary_alone(self):
+        vorgang = await _make_scraper()._build_vorgang("haushaltsbegleitgesetz-2027", _make_detail())
+        assert vorgang.stationen[0].dokumente[0].zusammenfassung is UNSET
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("summaries", "expected"),
+        [
+            # No AI summary anywhere: the first document.
+            ({}, [[FRIST], UNSET]),
+            # The website shows the first document that has a summary: the deadline goes there.
+            ({B: KI}, [UNSET, [*KI, FRIST]]),
+            # Both share one list (as from a cache): only the first gains the deadline.
+            ({A: KI, B: KI}, [[*KI, FRIST], KI]),
+        ],
+        ids=["no-summary", "second-has-summary", "shared-list"],
+    )
+    async def test_goes_with_the_summary_the_website_shows(self, monkeypatch, summaries, expected):
+        scraper = self._llm_scraper(monkeypatch, summaries)
+        detail = _make_detail(
+            pdf_links=[{"title": "A (PDF)", "url": self.A}, {"title": "B (PDF)", "url": self.B}],
+            comment_deadline=date(2026, 9, 9),
+        )
+        vorgang = await scraper._build_vorgang("effizienzgesetz", detail)
+        assert [d.zusammenfassung for d in vorgang.stationen[0].dokumente] == expected
+        assert len(self.KI) == 2  # the enrichment's list is not mutated
 
 
 class TestListingPageExtractor:
@@ -800,8 +868,9 @@ class TestIssue104RefreshOnChange:
             (_make_process(status="open"), _make_detail()),
             (_make_process(), _make_detail(title="Entbürokratisierung II")),
             (_make_process(), _make_detail(ministry="Staatsministerium")),
+            (_make_process(), _make_detail(comment_deadline=date(2025, 11, 20))),
         ],
-        ids=["added-pdf", "status", "title", "ministry"],
+        ids=["added-pdf", "status", "title", "ministry", "deadline"],
     )
     async def test_progress_is_a_miss(self, process, detail):
         scraper, _ = self._scraper_with_dict_cache()

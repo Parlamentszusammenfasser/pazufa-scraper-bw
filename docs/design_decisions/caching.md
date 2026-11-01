@@ -59,7 +59,7 @@ vollständig vor.
 4. Ein Vorgang mit noch fehlendem PDF (Issue #66) oder künftiger Fundstelle (DD-068) wird
    nicht gecacht.
 5. **Beteiligungsportal** (Issue #104): `vg2:<slug>` hält den Fingerprint aus Status (Liste),
-   Titel, Ministerium und PDF-Links (URL + Titel). Dafür wird die
+   Titel, Ministerium, PDF-Links (URL + Titel) und Kommentarfrist (DD-075). Dafür wird die
    Detailseite schon beim Listen gelesen, ein Request je Prozess und Lauf (derzeit ~6) —
    nur so fällt ein neues PDF auf. Scheitert der Abruf, gibt es
    keinen Fingerprint: kein Treffer, kein Cache-Eintrag.

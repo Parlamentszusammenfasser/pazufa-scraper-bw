@@ -38,6 +38,7 @@ from bawue.types import (
     Stationstyp,
     Vorgang,
     Vorgangstyp,
+    Zusammenfassungstupel,
     canonicalize_organisation,
     is_verfassungsaendernd,
     placeholder_hash,
@@ -50,6 +51,9 @@ from bawue.wahlperiode import CURRENT_WAHLPERIODE, wahlperiode_start
 logger = logging.getLogger(__name__)
 
 DEFAULT_BETEILIGUNG_DELAY = 2.0
+
+# Taken from the portal, so no "llm" in the typ: the website marks those as AI-written (issue #148, DD-075).
+BETEILIGUNGSFRIST_TYP = "beteiligungsfrist-extern"
 
 
 class BawueBeteiligungScraper(VorgangsScraper):
@@ -263,6 +267,9 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
             dokumente.append(dok)
 
+        if detail.comment_deadline:
+            _add_beteiligungsfrist(dokumente, detail.comment_deadline)
+
         gremium = Gremium(
             parlament=Parlament.BW,
             name=ReservedGremium.REGIERUNG,
@@ -330,6 +337,15 @@ def _midnight_utc(day: date) -> datetime:
     return datetime(day.year, day.month, day.day, tzinfo=UTC)
 
 
+def _add_beteiligungsfrist(dokumente: list[Dokument], deadline: date) -> None:
+    """Add the deadline to the summary the website shows: the first document with
+    an AI summary, else the first (DD-075). A new list: the old one may be cached."""
+    dok = next((d for d in dokumente if zusammenfassung_text(d)), dokumente[0])
+    teile = dok.zusammenfassung if isinstance(dok.zusammenfassung, list) else []
+    frist = Zusammenfassungstupel(typ=BETEILIGUNGSFRIST_TYP, inhalt=f"Beteiligungsfrist: {deadline:%d.%m.%Y}")
+    dok.zusammenfassung = [*teile, frist]
+
+
 def _print_beteiligung_summary(
     new_or_retried: int,
     cached: int,
@@ -356,7 +372,7 @@ def _print_beteiligung_summary(
 
 
 def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungDetail) -> str:
-    """What shows progress on the portal (issue #104): status, title, ministry, PDFs."""
+    """What shows progress on the portal (issue #104): status, title, ministry, PDFs, deadline (#148)."""
     pdfs = sorted([link["url"], link["title"]] for link in detail.pdf_links)
-    payload = [process.status, detail.title, detail.ministry, pdfs]
-    return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
+    payload = [process.status, detail.title, detail.ministry, pdfs, detail.comment_deadline]
+    return sha256(json.dumps(payload, ensure_ascii=False, default=str).encode()).hexdigest()

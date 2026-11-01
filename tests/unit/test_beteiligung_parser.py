@@ -129,6 +129,40 @@ class TestIssue45LinkListMarkup:
         assert detail.pdf_links == [{"title": "Entwurf (PDF)", "url": url}]
 
 
+class TestIssue148CommentDeadline:
+    """Issue #148: the deadline block reads the same while comments are open and after they closed."""
+
+    @pytest.mark.parametrize(
+        ("fixture", "expected"),
+        [
+            ("entbuerokratisierung_detail.html", date(2025, 11, 13)),
+            ("effizienzgesetz_detail.html", date(2026, 9, 9)),
+            ("mietpreisbegrenzung_detail.html", date(2026, 10, 13)),  # open: "Sie können …"
+            ("dienst_und_versorgungsbezuege_full.html", date(2026, 7, 29)),  # full page, many other dates
+            # No comment phase; "bis spätestens 13. Oktober 2026" in the text is the hearing of associations.
+            ("haushaltsbegleitgesetz_2027_detail.html", None),
+            ("klima_register_detail.html", None),
+        ],
+    )
+    def test_real_pages(self, fixture, expected):
+        detail = parse_process_detail((FIXTURES / fixture).read_text(), BASE_URL)
+        assert detail.comment_deadline == expected
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("Sie können den Gesetzentwurf bis zum 1.\xa0März 2027 kommentieren.", date(2027, 3, 1)),
+            ("Kommentierung vom 1. Oktober 2026 bis zum 30. Oktober 2026.", date(2026, 10, 30)),
+            ("Sie konnten den Gesetzentwurf bis zum 31. Februar 2027 kommentieren.", None),
+            ("Die Kommentierung ist beendet.", None),
+        ],
+        ids=["nbsp-umlaut", "start-date-first", "impossible-date", "no-date"],
+    )
+    def test_edge_cases(self, text, expected):
+        page = f'<html><body><div class="comment-list__closed"><p>{text}</p></div></body></html>'
+        assert parse_process_detail(page, BASE_URL).comment_deadline == expected
+
+
 class TestIssue123ReleaseDate:
     """Issue #123 (DD-074): the draft is dated by its publication, not by the comment deadline."""
 
