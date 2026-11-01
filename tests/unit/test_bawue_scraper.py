@@ -639,13 +639,12 @@ class TestBuildVorgang:
         assert ("initdrucks", "17/10266") in idents
 
     @pytest.mark.asyncio
-    async def test_ids_omit_initiativdrucksache_for_haushaltsgesetzgebung_issue3(self, scraper_build_vorgang):
-        """DD-041: never for Haushaltsgesetzgebung — Staatshaushaltsgesetz and its 17
-        Einzelpläne share one Initiativdrucksache (17/8000), and the backend merges
-        Vorgänge on any shared vg_ident (backend #150) → HTTP 500 rel_station_dokument_pkey."""
+    async def test_ids_include_initiativdrucksache_for_haushaltsgesetzgebung_issue60(self, scraper_build_vorgang):
+        """DD-041: Haushaltsgesetzgebung too, now that its Einzelpläne are folded into the
+        Staatshaushaltsgesetz (issue #60) and no two Vorgänge share 17/8000 any more."""
         raw = _make_raw_vorgang(
-            "V-237492",
-            titel="Staatshaushaltsplan 2025/2026 - Einzelplan 11: Rechnungshof",
+            "V-236470",
+            titel="Staatshaushaltsgesetz 2025/2026",
             vorgangstyp="Haushaltsgesetzgebung",
             initiative="Landesregierung",
             fundstellen=[
@@ -661,7 +660,7 @@ class TestBuildVorgang:
         )
         vorgang = await scraper_build_vorgang(raw)
 
-        assert [(i.typ, i.id) for i in vorgang.ids] == [("vorgnr", "V-237492")]
+        assert [(i.typ, i.id) for i in vorgang.ids] == [("vorgnr", "V-236470"), ("initdrucks", "17/8000")]
 
     @pytest.mark.asyncio
     async def test_ids_omit_initiativdrucksache_when_disabled(self, scraper_build_vorgang):

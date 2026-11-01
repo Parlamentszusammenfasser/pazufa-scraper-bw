@@ -1,6 +1,7 @@
 """BaWue Vorgänge scraper: VorgangsScraper subclass for Baden-Württemberg PARLIS."""
 
 import asyncio
+import heapq
 import json
 import logging
 import re
@@ -126,7 +127,7 @@ DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [
     "Haushaltsgesetzgebung",
     "Volksantrag",
 ]
-# Its Vorgänge share one Initiativdrucksache per budget (DD-041).
+# Its Einzelpläne are folded into their Staatshaushaltsgesetz (DD-077).
 _HAUSHALT_VORGANGSTYP = "Haushaltsgesetzgebung"
 DEFAULT_PARLIS_DELAY = 1.0
 DEFAULT_GSBLT_DELAY = 1.0
@@ -175,9 +176,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
     # Cache misses whose PARLIS record changed since its last upload (issue #52).
     _changed: int = 0
 
-    # Emit the Initiativdrucksache as a cross-reference `vg_ident` (Issue #26 / GitHub #3),
-    # except for Haushaltsgesetzgebung (DD-041). Class-level default so tests and other
-    # manual-construction paths inherit it without setting it.
+    # Emit the Initiativdrucksache as a cross-reference `vg_ident` (Issue #26 / GitHub #3,
+    # DD-041). Class-level default so tests and other manual-construction paths inherit
+    # it without setting it.
     _emit_initdrucks_ident: bool = True
 
     # Resolves a Gesetzblatt citation to its real Ausgabedatum (DD-047). Class-level
@@ -327,7 +328,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         logger.info("Found %d Vorgänge for type '%s'", len(raw_vorgaenge), vorgangstyp)
 
         vorgang_ids = []
-        for raw in raw_vorgaenge:
+        for raw in _fold_einzelplaene(raw_vorgaenge):
             vid = raw.get("vorgangs_id", "")
             typ = raw.get("Vorgangstyp", "")
             if typ not in self._enabled_vorgangstypen:
@@ -497,12 +498,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
         ids = [VgIdent(id=vorgang_id, typ="vorgnr")] if vorgang_id != "unknown" else None
 
         # Cross-referencing aid (Issue #26 / GitHub #3): expose the Initiativdrucksache
-        # so consumers can join on the originating Gesetzentwurf/Antrag number.
-        # Never for Haushaltsgesetzgebung (DD-041): the Staatshaushaltsgesetz and its
-        # Einzelpläne share one Initiativdrucksache, and the backend merges Vorgänge
-        # on any shared `vg_ident` (backend #150) → HTTP 500 `rel_station_dokument_pkey`
-        # / silent title corruption. In WP17 no other Vorgangstyp shares one.
-        if self._emit_initdrucks_ident and vorgangstyp_str != _HAUSHALT_VORGANGSTYP:
+        # so consumers can join on the originating Gesetzentwurf/Antrag number. The
+        # backend merges Vorgänge on any shared `vg_ident` (DD-041); only budget
+        # Einzelpläne share one, and they are folded into one Vorgang (DD-077).
+        if self._emit_initdrucks_ident:
             initiativ_drucks = _initiativ_drucksnr(stationen)
             if initiativ_drucks:
                 initdrucks_ident = VgIdent(id=initiativ_drucks, typ="initdrucks")
@@ -1402,7 +1401,7 @@ def _initiativ_drucksnr(stationen: list[Station]) -> str | None:
     parl-initiativ inserted after a government Gesetzentwurf has no document, so
     the preparl-regbsl Gesetzentwurf is matched in that case.
 
-    Not consulted for Haushaltsgesetzgebung or with ``emit-initdrucks-ident`` off (DD-041).
+    Not consulted with ``emit-initdrucks-ident`` off (DD-041).
     """
     for station in stationen:
         if station.typ not in _INITIATIV_TYPEN:
@@ -1428,6 +1427,46 @@ def _initiativ_drucksnr_from_fundstellen(fundstellen: list[RawFundstelle], initi
             if drucksnr:
                 return drucksnr
     return None
+
+
+def _citation(fund: RawFundstelle) -> str:
+    """What a Fundstelle cites: its Drucksache or Plenarprotokoll, else its own text."""
+    return fund.get("drucksache") or fund.get("plenarprotokoll") or fund.get("raw", "")
+
+
+def _fold_einzelplaene(raws: list[RawVorgang]) -> list[RawVorgang]:
+    """One Vorgang per budget: fold the Einzelpläne into their Staatshaushaltsgesetz (issue #60, DD-077).
+
+    PARLIS keeps each Einzelplan as a Vorgang of its own, citing the Staatshaushaltsgesetz's
+    Gesetzentwurf as Initiativdrucksache. The Staatshaushaltsgesetz keeps its id, title and
+    status. An Einzelplan adds only what it does not re-cite from it: its committee report
+    and its Anträge. Re-cited readings would land after the Gesetzblatt and break the track.
+    """
+    budgets: dict[str, list[RawVorgang]] = {}
+    folded: list[RawVorgang] = []
+    for raw in raws:
+        initiativ = raw.get("Vorgangstyp") == _HAUSHALT_VORGANGSTYP and _initiativ_drucksnr_from_fundstellen(
+            raw.get("fundstellen_parsed", []), raw.get("Initiative", "")
+        )
+        if initiativ:
+            budgets.setdefault(initiativ, []).append(raw)
+        else:
+            folded.append(raw)
+    for group in budgets.values():
+        # PARLIS lists the Einzelpläne first; the Staatshaushaltsgesetz is the one that is none.
+        sthg, *einzelplaene = sorted(group, key=lambda r: "Einzelplan" in r.get("titel", ""))
+        if not einzelplaene:
+            folded.append(sthg)
+            continue
+        logger.info("Folding %d Einzelpläne into %s", len(einzelplaene), sthg.get("vorgangs_id"))
+        cited = {_citation(f) for f in sthg.get("fundstellen_parsed", [])}
+        own = [[f for f in r.get("fundstellen_parsed", []) if _citation(f) not in cited] for r in einzelplaene]
+        # By date, each record keeping its PARLIS order: Anträge attach to the reading after them.
+        fundstellen = heapq.merge(
+            sthg.get("fundstellen_parsed", []), *own, key=lambda f: (f.get("datum") or "").split(".")[::-1]
+        )
+        folded.append({**sthg, "fundstellen_parsed": list(fundstellen)})
+    return folded
 
 
 def _initiativ_zusammenfassung(stationen: list[Station], *, any_document: bool = True) -> str | None:
