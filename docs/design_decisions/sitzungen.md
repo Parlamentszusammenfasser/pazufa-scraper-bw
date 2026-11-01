@@ -108,6 +108,10 @@ ihn geschrieben hat.
    Tage ohne Frist behalten ihren.
 4. Ein Marker `fristen` im Beteiligungs-Fingerprint baut gecachte Vorgänge einmal neu und
    füllt so das Register.
+5. Notschalter `[bawue] beteiligungsfristen` (env `BETEILIGUNGSFRISTEN`, Default an): aus,
+   gehen keine neuen Fristen hinaus, weder als Zusammenfassungsteil (DD-075) noch im Kalender.
+   Gesendetes bleibt: Das Backend löscht keine Teile und leert keine Tage; nur Tage mit
+   Landtagsterminen verlieren ihre Frist beim nächsten PUT.
 
 **Konsequenz:** Eine neue oder geänderte Frist erscheint meist einen Lauf später: Die Scraper
 laufen parallel, und der Sitzungen-Scraper liest das Register früh (mit `linearize` schon im

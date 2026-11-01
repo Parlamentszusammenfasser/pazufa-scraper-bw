@@ -63,10 +63,15 @@ class BawueBeteiligungScraper(VorgangsScraper):
     Auto-discovered by the framework when placed in the scrapers directory.
     """
 
+    # Kill switch `[bawue] beteiligungsfristen` (DD-076).
+    _beteiligungsfristen: bool = True
+
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         beteiligung_config = load_toml_section(config, "beteiligung")
+        bawue_config = load_toml_section(config, "bawue")
         # One Wahlperiode for all scrapers (issue #6).
-        self._wahlperiode = load_toml_section(config, "bawue").get("wahlperiode", CURRENT_WAHLPERIODE)
+        self._wahlperiode = bawue_config.get("wahlperiode", CURRENT_WAHLPERIODE)
+        self._beteiligungsfristen = bawue_config.get("beteiligungsfristen", True)
         if "wahlperiode" in beteiligung_config:
             logger.warning("[beteiligung] wahlperiode is ignored; set [bawue] wahlperiode instead (issue #6)")
         delay = beteiligung_config.get("request-delay-s", DEFAULT_BETEILIGUNG_DELAY)
@@ -295,7 +300,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
             dokumente.append(dok)
 
-        if detail.comment_deadline:
+        if self._beteiligungsfristen and detail.comment_deadline:
             _add_beteiligungsfrist(dokumente, detail.comment_deadline)
 
         gremium = Gremium(

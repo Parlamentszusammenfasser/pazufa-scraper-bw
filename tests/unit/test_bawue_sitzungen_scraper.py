@@ -847,6 +847,34 @@ class TestIssue148Beteiligungsfristen:
         assert await cycle(effizienzgesetz=_frist("2099-12-08")) == ["2099-12-08"]
 
     @pytest.mark.asyncio
+    async def test_switched_off_the_calendar_has_no_deadlines(self):
+        """Kill switch `[bawue] beteiligungsfristen` (DD-076)."""
+        from tests.unit.test_bawue_scraper import _InMemoryCache
+
+        scraper = _make_scraper()
+        scraper._beteiligungsfristen = False
+        cache = _registered(_InMemoryCache(), a=_frist("2099-12-01"), b=_frist("2099-12-15"))
+        scraper.config = MagicMock(cache=cache)
+        scraper.session.get = _route({ICS_URL: ICS_BYTES.replace(b"20260225", b"20991215")})
+        keys = await scraper.listing_page_extractor(ICS_URL)
+        _termin, sitzungen = await scraper.item_extractor("2099-12-15")
+
+        assert "2099-12-01" not in keys
+        assert [s.gremium.name for s in sitzungen] == ["plenum"]
+
+    @pytest.mark.asyncio
+    async def test_switching_off_reuploads_the_landtag_days_with_deadlines(self):
+        """A day that also has Landtag sessions loses its deadline; a deadline-only day is left as it is,
+        the backend cannot empty a day (DD-069)."""
+        scraper = TestSitzungenRefreshIssue85._scraper()
+        _registered(scraper.config.cache, a=_frist("2099-12-01"), b=_frist("2099-12-15"))
+        ics = ICS_BYTES.replace(b"20260225", b"20991215")
+
+        assert len(await TestSitzungenRefreshIssue85._run_cycle(scraper, ics)) == 6
+        scraper._beteiligungsfristen = False
+        assert await TestSitzungenRefreshIssue85._run_cycle(scraper, ics) == ["2099-12-15"]
+
+    @pytest.mark.asyncio
     async def test_reads_what_the_beteiligung_scraper_registers(self):
         """Both scrapers share the register's key and format."""
         from tests.unit.test_bawue_scraper import _InMemoryCache

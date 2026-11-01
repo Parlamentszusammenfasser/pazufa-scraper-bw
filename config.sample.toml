@@ -58,6 +58,9 @@ enabled-vorgangstypen = ["Gesetzgebung", "Haushaltsgesetzgebung", "Volksantrag"]
 # Never sent for Haushaltsgesetzgebung (DD-041): its Vorgänge share one ident, which
 # the backend merges on → HTTP 500 rel_station_dokument_pkey. Kill switch: false.
 #emit-initdrucks-ident = true
+# Beteiligungsfristen in the Zusammenfassung and the calendar (DD-075, DD-076). Kill switch:
+# false (env BETEILIGUNGSFRISTEN). Stops new ones; what was sent stays in the backend.
+#beteiligungsfristen = true
 
 ics-url = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkalender.ics"
 

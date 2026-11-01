@@ -11,6 +11,16 @@ from bawue.config import BawueConfig
 
 logger = logging.getLogger(__name__)
 
+
+def _flag(raw: str) -> bool:
+    """true/1 or false/0; bool("false") would be True."""
+    if raw.lower() in ("true", "1"):
+        return True
+    if raw.lower() in ("false", "0"):
+        return False
+    raise ValueError(raw)
+
+
 # Section keys that differ per environment. Unlike the [main]/[cache]/[backend]
 # options these are read straight off disk, so without an env override a cloud
 # deployment would need its own TOML baked into the image. Env wins over the
@@ -20,6 +30,7 @@ _ENV_OVERRIDES: dict[str, dict[str, tuple[str, Callable[[str], Any]]]] = {
         "wahlperiode": ("WAHLPERIODE", int),
         "wahlperiode-start-date": ("WAHLPERIODE_START_DATE", str),
         "parlis-request-delay-s": ("PARLIS_REQUEST_DELAY_S", float),
+        "beteiligungsfristen": ("BETEILIGUNGSFRISTEN", _flag),
     },
     "notifications": {
         "mattermost-hook": ("MATTERMOST_HOOK", str),

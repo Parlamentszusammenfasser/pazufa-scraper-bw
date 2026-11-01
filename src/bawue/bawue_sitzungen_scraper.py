@@ -42,9 +42,13 @@ class BawueSitzungenScraper(SitzungsScraper):
     Auto-discovered by the framework when placed in the scrapers directory.
     """
 
+    # Kill switch `[bawue] beteiligungsfristen` (DD-076).
+    _beteiligungsfristen: bool = True
+
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         bawue_config = load_toml_section(config, "bawue")
         self._wahlperiode = bawue_config.get("wahlperiode", CURRENT_WAHLPERIODE)
+        self._beteiligungsfristen = bawue_config.get("beteiligungsfristen", True)
         ics_url = bawue_config.get("ics-url", DEFAULT_ICS_URL)
 
         super().__init__(config, uuid.UUID(config.collector_id), [ics_url], session)
@@ -92,8 +96,10 @@ class BawueSitzungenScraper(SitzungsScraper):
         events = parse_ics_feed(ics_data)
         grouped = group_events_by_date(events)
         self._agendas = await self._fetch_agendas(grouped)
-        register = self.config.cache.get_raw(BETEILIGUNGSFRISTEN_KEY, "Fristen")
-        fristen = _fristen_by_date(register, datetime.datetime.now(datetime.UTC))
+        fristen = {}
+        if self._beteiligungsfristen:
+            register = self.config.cache.get_raw(BETEILIGUNGSFRISTEN_KEY, "Fristen")
+            fristen = _fristen_by_date(register, datetime.datetime.now(datetime.UTC))
 
         date_keys = []
         for key in sorted({dt.isoformat() for dt in grouped} | fristen.keys()):

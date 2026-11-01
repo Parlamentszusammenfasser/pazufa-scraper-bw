@@ -443,6 +443,14 @@ class TestIssue148Beteiligungsfrist:
         assert dok.zusammenfassung == [self.FRIST]
 
     @pytest.mark.asyncio
+    async def test_switched_off_sends_no_deadline(self):
+        """Kill switch `[bawue] beteiligungsfristen` (DD-076)."""
+        scraper = _make_scraper()
+        scraper._beteiligungsfristen = False
+        vorgang = await scraper._build_vorgang("effizienzgesetz", _make_detail(comment_deadline=date(2026, 9, 9)))
+        assert vorgang.stationen[0].dokumente[0].zusammenfassung is UNSET
+
+    @pytest.mark.asyncio
     async def test_no_deadline_leaves_the_summary_alone(self):
         vorgang = await _make_scraper()._build_vorgang("haushaltsbegleitgesetz-2027", _make_detail())
         assert vorgang.stationen[0].dokumente[0].zusammenfassung is UNSET

@@ -73,7 +73,7 @@ directly, which is create-or-update on every step.
    | | Name |
    |---|---|
    | Required | `COLLECTOR_ID`, `LTZF_API_URL` |
-   | Optional | `WAHLPERIODE`, `WAHLPERIODE_START_DATE`, `PARLIS_REQUEST_DELAY_S` |
+   | Optional | `WAHLPERIODE`, `WAHLPERIODE_START_DATE`, `PARLIS_REQUEST_DELAY_S`, `BETEILIGUNGSFRISTEN` (`false` stops the Beteiligungsfristen, DD-076) |
 
    Optional ones left unset fall back to whatever the image's `config.toml` says.
    Add a protection rule restricting deployment branches — the WIF condition
