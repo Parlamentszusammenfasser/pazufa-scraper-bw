@@ -50,23 +50,53 @@ und Inkrafttreten (DD-071). Je Vorgang gibt es höchstens eine. Reale Stationen 
 DD-028, ihr Datum stammt aus der Fundstelle und ist stabil.
 
 <a id="dd-041"></a>
-## DD-041: Initiativdrucksache als `vg_ident`, außer bei Haushaltsgesetzgebung
+## DD-041: Initiativdrucksache als `vg_ident`
 
 **Kontext:** Das Backend hält zwei Vorgänge für einen, sobald **ein** `vg_ident`
-übereinstimmt (`vorgang_merge_candidates`). `initdrucks` ist bei Haushalten n:1: Alle
-Einzelpläne zitieren das Staatshaushaltsgesetz. Folge: stille Überschreibung von Titeln und
-HTTP 500 ([pazufa-backend#150](https://codeberg.org/PaZuFa/pazufa-backend/issues/150)). Eine
-korrekte `api_id` hilft nicht, der `vg_ident`-Zweig ist ein ODER.
+übereinstimmt (`vorgang_merge_candidates`). Teilen fremde Vorgänge einen `initdrucks`, folgen
+stille Überschreibung von Titeln und HTTP 500
+([pazufa-backend#150](https://codeberg.org/PaZuFa/pazufa-backend/issues/150)). Eine korrekte
+`api_id` hilft nicht, der `vg_ident`-Zweig ist ein ODER. In WP 17 teilen sich nur die
+Einzelpläne eines Haushalts eine Initiativdrucksache (17/1000, 17/3500, 17/8000).
 
-**Entscheidung:** `initdrucks` wird gesendet, außer bei Haushaltsgesetzgebung — nur dort
-teilen sich Vorgänge die Initiativdrucksache (WP 17: 17/1000, 17/3500, 17/8000). Notschalter
-für alle: `[bawue] emit-initdrucks-ident = false`. Auch Begleitgesetze und Nachträge
-(Haushaltsgesetzgebung) verlieren damit den Querverweis — dafür bleibt die Regel ein
-einfacher Typvergleich. `vorgnr` und stabile Stations-IDs genügen
-für die Wiedererkennung.
+**Entscheidung:** `initdrucks` wird für jeden Vorgang gesendet. Die Einzelpläne werden in
+ihr Staatshaushaltsgesetz gefaltet (DD-077), danach ist `initdrucks` eindeutig. Notschalter
+für alle: `[bawue] emit-initdrucks-ident = false`; `vorgnr` und stabile Stations-IDs genügen
+dann für die Wiedererkennung.
 
-**Neu bewerten, wenn:** die Einzelpläne eines Haushalts ein Vorgang werden (GitHub #60) oder
-das Backend nur noch über 1:1-Identifier matcht.
+**Neu bewerten, wenn:** sich andere Vorgänge eine Initiativdrucksache teilen oder das Backend
+nur noch über 1:1-Identifier matcht.
+
+<a id="dd-077"></a>
+## DD-077: Ein Vorgang je Haushalt
+
+**Kontext:** PARLIS führt jeden Einzelplan als eigenen Vorgang (WP 17: drei Haushalte mit je
+17 Einzelplänen). Alle zitieren den Gesetzentwurf des Staatshaushaltsgesetzes als
+Initiativdrucksache, für das Backend also derselbe Vorgang (DD-041). Seit Backend v0.3.4 sollen
+Scraper sie zusammenführen (GitHub #60).
+
+**Entscheidung:** `listing_page_extractor` faltet Haushaltsgesetzgebung-Vorgänge mit gleicher
+Initiativdrucksache in einen.
+- Identität (vorgnr, `api_id`, Titel, „Aktueller Stand") ist die des Vorgangs ohne
+  „Einzelplan" im Titel: des Staatshaushaltsgesetzes.
+- Ein Einzelplan trägt nur Fundstellen bei, deren Drucksache oder Plenarprotokoll das
+  Staatshaushaltsgesetz nicht schon zitiert: vor allem Beschlussempfehlung und Anträge, auch
+  spätere Berichte. Seine erneuten Zitate von Lesungen und Beschlüssen (mit Einzelplan-Seiten)
+  landeten sonst hinter dem Gesetzblatt und brächen den Track.
+- Gemischt wird nach Datum, jeder Record in seiner PARLIS-Reihenfolge: Anträge hängen an der
+  folgenden oder laufenden Lesung (DD-001). Ein falsch datierter Antrag zieht die späteren
+  Fundstellen seines Records mit nach hinten.
+- Der `vg2:`-Fingerprint (DD-052) entsteht aus dem gefalteten Record, deckt also jeden
+  Einzelplan ab.
+
+**Konsequenz:** Die Beschlussempfehlungen aller Einzelpläne bilden eine `parl-ausschber`-Station
+(DD-039). Debatten je Einzelplan erreicht man nur noch über die Protokoll-Fundstellen des
+Staatshaushaltsgesetzes. Bereits hochgeladene Einzelplan-Vorgänge (WP 17: 51) löscht nur ein
+Admin, und zwar **vor** einem Neulauf von WP 17: Beim Station-Merge verknüpft das Backend nur
+neu eingefügte Dokumente, die der Einzelpläne blieben sonst ohne Verknüpfung. Die alte
+`parl-ausschber` findet das Backend über die geteilte Beschlussempfehlung und aktualisiert sie.
+Der Typ bleibt `gg-land-parl`, bis das Backend einen BW-Track für `gg-land-parl-haushalt` hat
+([parlamentszusammenfasser#92](https://codeberg.org/PaZuFa/parlamentszusammenfasser/pulls/92)).
 
 <a id="dd-043"></a>
 ## DD-043: Der `#page=N`-Anker gehört zur Dokumentidentität

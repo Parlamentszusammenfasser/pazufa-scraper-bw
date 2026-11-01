@@ -639,13 +639,12 @@ class TestBuildVorgang:
         assert ("initdrucks", "17/10266") in idents
 
     @pytest.mark.asyncio
-    async def test_ids_omit_initiativdrucksache_for_haushaltsgesetzgebung_issue3(self, scraper_build_vorgang):
-        """DD-041: never for Haushaltsgesetzgebung — Staatshaushaltsgesetz and its 17
-        Einzelpläne share one Initiativdrucksache (17/8000), and the backend merges
-        Vorgänge on any shared vg_ident (backend #150) → HTTP 500 rel_station_dokument_pkey."""
+    async def test_ids_include_initiativdrucksache_for_haushaltsgesetzgebung_issue60(self, scraper_build_vorgang):
+        """DD-041: Haushaltsgesetzgebung too, now that its Einzelpläne are folded into the
+        Staatshaushaltsgesetz (issue #60) and no two Vorgänge share 17/8000 any more."""
         raw = _make_raw_vorgang(
-            "V-237492",
-            titel="Staatshaushaltsplan 2025/2026 - Einzelplan 11: Rechnungshof",
+            "V-236470",
+            titel="Staatshaushaltsgesetz 2025/2026",
             vorgangstyp="Haushaltsgesetzgebung",
             initiative="Landesregierung",
             fundstellen=[
@@ -661,7 +660,7 @@ class TestBuildVorgang:
         )
         vorgang = await scraper_build_vorgang(raw)
 
-        assert [(i.typ, i.id) for i in vorgang.ids] == [("vorgnr", "V-237492")]
+        assert [(i.typ, i.id) for i in vorgang.ids] == [("vorgnr", "V-236470"), ("initdrucks", "17/8000")]
 
     @pytest.mark.asyncio
     async def test_ids_omit_initiativdrucksache_when_disabled(self, scraper_build_vorgang):
@@ -2878,6 +2877,35 @@ class TestAenderungsantragHandling:
         beratung = next(s for s in vorgang.stationen if s.typ == Stationstyp.PARL_VOLLVLSGN)
         drucksnrs = [d.drucksnr for d in beratung.dokumente]
         assert "17/1210" in drucksnrs, "Änderungsantrag document should be attached to Beratung station"
+
+    @pytest.mark.asyncio
+    async def test_aenderungsantrag_during_a_multi_day_reading_attaches_to_it_issue60(self, scraper_build_vorgang):
+        """An Antrag dated on day two of a reading belongs to that reading, not the next (DD-024).
+
+        Folded budgets list Einzelplan Anträge between the days of the Zweite Beratung
+        (issue #60: 23 Antrag documents of 2023/24 landed on the Dritte Beratung).
+        """
+        raw = _make_raw_vorgang(
+            "V-801",
+            initiative="Landesregierung",
+            fundstellen=[
+                parse_fundstelle_text("Gesetzentwurf    Landesregierung  25.10.2022 Drucksache 17/3500   (48 S.)")
+                | {"pdf_url": "https://example.com/entwurf.pdf"},
+                parse_fundstelle_text("Zweite Beratung   Plenarprotokoll 17/55 14.12.2022  S. 3302-3388")
+                | {"pdf_url": "https://example.com/plp55.pdf"},
+                parse_fundstelle_text("Änderungsanträge    Fraktion der AfD  15.12.2022 Drucksache 17/3810")
+                | {"pdf_url": "https://example.com/aenderung.pdf"},
+                parse_fundstelle_text("Zweite Beratung   Plenarprotokoll 17/56 15.12.2022  S. 3403-3460")
+                | {"pdf_url": "https://example.com/plp56.pdf"},
+                parse_fundstelle_text("Dritte Beratung   Plenarprotokoll 17/57 21.12.2022  S. 3530-3540")
+                | {"pdf_url": "https://example.com/plp57.pdf"},
+            ],
+        )
+        vorgang = await scraper_build_vorgang(raw)
+
+        zweite, dritte = [s for s in vorgang.stationen if s.typ == Stationstyp.PARL_VOLLVLSGN]
+        assert "17/3810" in {d.drucksnr for d in zweite.dokumente}
+        assert "17/3810" not in {d.drucksnr for d in dritte.dokumente}
 
     @pytest.mark.asyncio
     async def test_aenderungsantrag_singular_form(self, scraper_build_vorgang):

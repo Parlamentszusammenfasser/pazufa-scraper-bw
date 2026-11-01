@@ -14,7 +14,8 @@ sie starten kein Verfahren. Ein Entschließungsantrag begleitet den Entwurf inha
 (z. B. Drs. 17/10262, V-244180).
 
 **Entscheidung:** Beide hängen als Dokument (`antrag`) an der `parl-vollvlsgn`-Station, in der
-sie behandelt werden: an der nächsten Lesung, sonst an der vorherigen. Gibt es keine Lesung,
+sie behandelt werden: an der nächsten Lesung, auch wenn sie eine mehrtägige fortsetzt (DD-024),
+sonst an der vorherigen. Gibt es keine Lesung,
 wird die Fundstelle mit WARNING verworfen und gezählt (DD-017).
 
 **Konsequenz:** Keine zusätzliche Station, kein Track-Risiko. Andere Scraper (z. B. RLP)
