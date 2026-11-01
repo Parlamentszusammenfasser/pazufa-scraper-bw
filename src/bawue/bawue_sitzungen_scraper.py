@@ -115,7 +115,7 @@ class BawueSitzungenScraper(SitzungsScraper):
         return date_keys
 
     async def get_cached_result(self, item_key: str) -> str | None:
-        """A cache hit only while the date's events and agenda are unchanged (DD-066).
+        """A cache hit only while the date's events, deadlines and agenda are unchanged (DD-066, DD-076).
 
         An agenda no longer on the page (the next session's is up) keeps the hit: a
         re-upload without it would strip the uploaded TOPs (DD-070).
