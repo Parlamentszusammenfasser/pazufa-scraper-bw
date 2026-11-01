@@ -338,12 +338,12 @@ def _midnight_utc(day: date) -> datetime:
 
 
 def _add_beteiligungsfrist(dokumente: list[Dokument], deadline: date) -> None:
-    """Add the deadline to the summary the website shows: the first document with
-    an AI summary, else the first (DD-075). A new list: the old one may be cached."""
-    dok = next((d for d in dokumente if zusammenfassung_text(d)), dokumente[0])
-    teile = dok.zusammenfassung if isinstance(dok.zusammenfassung, list) else []
+    """Add the deadline to every document with an AI summary, else to the first (DD-075): the
+    website shows the first one with a summary in the backend's order, which is by link."""
     frist = Zusammenfassungstupel(typ=BETEILIGUNGSFRIST_TYP, inhalt=f"Beteiligungsfrist: {deadline:%d.%m.%Y}")
-    dok.zusammenfassung = [*teile, frist]
+    for dok in [d for d in dokumente if zusammenfassung_text(d)] or dokumente[:1]:
+        teile = dok.zusammenfassung if isinstance(dok.zusammenfassung, list) else []
+        dok.zusammenfassung = [*teile, frist]
 
 
 def _print_beteiligung_summary(

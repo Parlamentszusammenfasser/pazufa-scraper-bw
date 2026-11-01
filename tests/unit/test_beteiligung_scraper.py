@@ -446,16 +446,18 @@ class TestIssue148Beteiligungsfrist:
     @pytest.mark.parametrize(
         ("summaries", "expected"),
         [
-            # No AI summary anywhere: the first document.
+            # No AI summary anywhere: one document is enough, the website skips those without parts.
+            # A deadline-only part on more would never be removed and could later hide a summary.
             ({}, [[FRIST], UNSET]),
-            # The website shows the first document that has a summary: the deadline goes there.
+            # Only documents with a summary: a deadline-only part would hide B's summary.
             ({B: KI}, [UNSET, [*KI, FRIST]]),
-            # Both share one list (as from a cache): only the first gains the deadline.
-            ({A: KI, B: KI}, [[*KI, FRIST], KI]),
+            ({A: KI, B: KI}, [[*KI, FRIST], [*KI, FRIST]]),
         ],
-        ids=["no-summary", "second-has-summary", "shared-list"],
+        ids=["no-summary", "second-has-summary", "both-have-summary"],
     )
     async def test_goes_with_the_summary_the_website_shows(self, monkeypatch, summaries, expected):
+        """The website shows the first document with a summary in the backend's order, which
+        sorts by link, not by portal order (review of PR #163): so every summary gets it."""
         scraper = self._llm_scraper(monkeypatch, summaries)
         detail = _make_detail(
             pdf_links=[{"title": "A (PDF)", "url": self.A}, {"title": "B (PDF)", "url": self.B}],
@@ -463,7 +465,7 @@ class TestIssue148Beteiligungsfrist:
         )
         vorgang = await scraper._build_vorgang("effizienzgesetz", detail)
         assert [d.zusammenfassung for d in vorgang.stationen[0].dokumente] == expected
-        assert len(self.KI) == 2  # the enrichment's list is not mutated
+        assert len(self.KI) == 2  # the enrichment's list is not changed in place
 
 
 class TestListingPageExtractor:
