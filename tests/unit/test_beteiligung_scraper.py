@@ -1,5 +1,7 @@
 """Tests for the BawueBeteiligungScraper."""
 
+import hashlib
+import json
 import logging
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -25,6 +27,7 @@ from bawue.types import (
 )
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
+ENTWURF_HASH = hashlib.sha256(b"Entwurf").hexdigest()
 
 
 def _make_scraper():
@@ -36,6 +39,7 @@ def _make_scraper():
     scraper._raw_cache = {}
     scraper._details = {}
     scraper._fingerprints = {}
+    scraper._fristen = {}
     scraper._client = MagicMock()
     scraper._client.fetch_last_modified.return_value = date(2025, 10, 16)
     scraper._api_client = MagicMock()
@@ -468,6 +472,64 @@ class TestIssue148Beteiligungsfrist:
         assert len(self.KI) == 2  # the enrichment's list is not changed in place
 
 
+class TestIssue148FristenRegister:
+    """Issue #148 (DD-076): after an upload the deadline goes to the register the calendar reads."""
+
+    @staticmethod
+    async def _upload(scraper, slug: str, deadline: date | None, read: bool = False) -> dict:
+        """Build as item_extractor does, store as the pipeline does after a successful upload."""
+        scraper._raw_cache[slug] = _make_process(slug=slug)
+        scraper._details[slug] = _make_detail(comment_deadline=deadline)
+        vorgang = await scraper.item_extractor(slug)
+        if read:
+            dok = vorgang.stationen[0].dokumente[0]
+            dok.volltext, dok.hash_ = "Volltext", ENTWURF_HASH
+        await scraper.store_extracted_result(slug, vorgang)
+        return json.loads(scraper.config.cache.get_raw("beteiligungsfristen"))
+
+    @staticmethod
+    def _scraper():
+        from tests.unit.test_bawue_scraper import _InMemoryCache
+
+        scraper = _make_scraper()
+        scraper.config.cache = _InMemoryCache()
+        return scraper
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("read", "hash_"), [(True, ENTWURF_HASH), (False, None)], ids=["read", "unread"])
+    async def test_registers_the_deadline_with_the_uploaded_document(self, read, hash_):
+        register = await self._upload(self._scraper(), "entbuerokratisierung", date(2025, 11, 13), read)
+
+        assert register == {
+            "entbuerokratisierung": {
+                "frist": "2025-11-13",
+                "titel": "Entbürokratisierung",
+                "portal": f"{BASE_URL}/de/mitmachen/lp-17/entbuerokratisierung",
+                "pdf": _make_detail().pdf_links[0]["url"],
+                # Only a read document: a placeholder row is replaced once the PDF is read (as DD-070).
+                "hash": hash_,
+            }
+        }
+
+    @pytest.mark.asyncio
+    async def test_a_removed_deadline_leaves_the_register_and_the_others_stay(self):
+        scraper = self._scraper()
+        await self._upload(scraper, "a", date(2099, 12, 1))
+        await self._upload(scraper, "b", date(2099, 12, 8))
+
+        assert list(await self._upload(scraper, "a", None)) == ["b"]
+
+    @pytest.mark.asyncio
+    async def test_failed_upload_registers_nothing(self):
+        """store_extracted_result runs only after a successful upload; a stale entry would link nothing."""
+        scraper = self._scraper()
+        scraper._raw_cache["a"] = _make_process(slug="a")
+        scraper._details["a"] = _make_detail(comment_deadline=date(2099, 12, 1))
+        await scraper.item_extractor("a")
+
+        assert scraper.config.cache.get_raw("beteiligungsfristen") is None
+
+
 class TestListingPageExtractor:
     @pytest.mark.asyncio
     async def test_returns_slugs(self):
@@ -585,7 +647,7 @@ class TestIssue83SummaryAddsUp:
         assert "Skipped:     0" in lines
         assert "Failed:      1" in lines
         assert "  - timeout | Timeout-Gesetz | TimeoutError: portal timeout" in lines
-        stored = [c.args[0] for c in scraper.config.cache.store_raw.call_args_list]
+        stored = [c.args[0] for c in scraper.config.cache.store_raw.call_args_list if c.args[0].startswith("vg2:")]
         assert stored == ["vg2:effizienzgesetz"]  # the crashed one is retried next cycle
 
 

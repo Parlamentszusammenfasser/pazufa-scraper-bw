@@ -20,6 +20,10 @@ def drucksache_hash_key(drucksnr: str) -> str:
     return f"drucks-hash:{drucksnr}"
 
 
+# Deadlines of uploaded Beteiligung drafts, by slug, for the calendar (DD-076).
+BETEILIGUNGSFRISTEN_KEY = "beteiligungsfristen"
+
+
 def _redact(redis_url: str) -> str:
     """Host and port of a Redis URL — never the credentials it carries."""
     try:
