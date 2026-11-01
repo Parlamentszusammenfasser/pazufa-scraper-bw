@@ -395,7 +395,7 @@ Configuration from `[beteiligung]` section.
 | Station `gremium`   | `Parlament.BW, "regierung"` (reservierter Name) |
 | Station `dokumente` | Each PDF → `Doktyp.PREPARL_ENTWURF`             |
 | Station `zp_start`  | Earliest PDF publication date (DD-074)          |
-| Dokument `zusammenfassung` | Comment deadline as part `beteiligungsfrist-extern` (DD-075) |
+| `zusammenfassung`   | Per Dokument: LLM parts (DD-056) + comment deadline `beteiligungsfrist-extern` (DD-075) |
 
 ### BeteiligungClient / BeteiligungParser
 
