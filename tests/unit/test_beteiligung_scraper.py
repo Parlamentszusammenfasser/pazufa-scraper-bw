@@ -1,5 +1,6 @@
 """Tests for the BawueBeteiligungScraper."""
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -521,12 +522,16 @@ class TestIssue148FristenRegister:
 
     @pytest.mark.asyncio
     async def test_failed_upload_registers_nothing(self):
-        """store_extracted_result runs only after a successful upload; a stale entry would link nothing."""
+        """Only an uploaded draft has a row a TOP can link to (review of PR #164)."""
         scraper = self._scraper()
+        scraper.config.api_obj_log = None
+        scraper.items_done, scraper.item_count = 0, 1
+        scraper.send_result = AsyncMock(return_value=None)
         scraper._raw_cache["a"] = _make_process(slug="a")
         scraper._details["a"] = _make_detail(comment_deadline=date(2099, 12, 1))
-        await scraper.item_extractor("a")
 
+        assert await scraper.helper_extract_send_item("a", asyncio.Semaphore(1)) is None
+        scraper.send_result.assert_awaited_once()
         assert scraper.config.cache.get_raw("beteiligungsfristen") is None
 
     @pytest.mark.asyncio
