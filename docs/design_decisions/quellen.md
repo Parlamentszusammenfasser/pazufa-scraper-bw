@@ -62,8 +62,9 @@ kein Feld (Issue #148), `zp_start` ist der Veröffentlichungstag (DD-074).
 2. Sie geht als eigenes Tupel `beteiligungsfrist-extern` mit festem Text
    `Beteiligungsfrist: TT.MM.JJJJ` hinaus, nicht als Text in `full-llm`: Die Website markiert
    jeden Typ mit `llm` als KI-generiert.
-3. Das Tupel hängt am Dokument, dessen Zusammenfassung die Website zeigt: am ersten mit
-   `full-llm`, sonst am ersten.
+3. Das Tupel hängt an jedem Dokument mit `full-llm`, ohne solches an allen: Die Website zeigt
+   das erste Dokument mit Zusammenfassung, und das Backend sortiert sie nach Link, nicht in
+   Portal-Reihenfolge.
 4. Die Frist gehört zum Fingerprint (DD-052); eine verlängerte Frist wird neu hochgeladen.
 
 **Konsequenz:** Die Website zeigt den Abschnitt „Beteiligungsfrist" unter der
