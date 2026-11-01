@@ -10,10 +10,11 @@ Versionskonstante gibt es bewusst nicht; ein gezielter Neubau ändert den Finger
 | Präfix | Inhalt | DD |
 |---|---|---|
 | `vg2:` | Fingerprint je PARLIS-Vorgang bzw. Beteiligungsprozess | DD-052 |
-| `sz:` | Fingerprint der Termine (+ Tagesordnung) je Tag | DD-066, DD-070 |
+| `sz:` | Fingerprint der Termine (+ Fristen, + Tagesordnung) je Tag | DD-066, DD-070, DD-076 |
 | `llm-semantics:` | LLM-Ergebnis je Dokument und Prompt | DD-020 |
 | `vorgang-kurztitel:`, `vorgang-ressort:` | LLM-Ergebnis je Vorgang | DD-053, DD-055, DD-063 |
 | `drucks-hash:` | Hash hochgeladener Drucksachen für TOPs | DD-070 |
+| `beteiligungsfristen` | Frist, Titel, Links und Entwurf-Hash je hochgeladenem Beteiligungsprozess. Zustand, kein Cache: nicht löschen (die Fristen fielen aus dem Kalender), neu aufbauen über die Beteiligungs-`vg2:`-Einträge | DD-076 |
 | `wochenbericht` | letzte begonnene Station je Vorgang, Stand der Vorwoche | DD-072 |
 
 <a id="dd-073"></a>
@@ -59,7 +60,7 @@ vollständig vor.
 4. Ein Vorgang mit noch fehlendem PDF (Issue #66) oder künftiger Fundstelle (DD-068) wird
    nicht gecacht.
 5. **Beteiligungsportal** (Issue #104): `vg2:<slug>` hält den Fingerprint aus Status (Liste),
-   Titel, Ministerium, PDF-Links (URL + Titel) und Kommentarfrist (DD-075). Dafür wird die
+   Titel, Ministerium, PDF-Links (URL + Titel), Kommentarfrist (DD-075) und Marker `fristen` (DD-076). Dafür wird die
    Detailseite schon beim Listen gelesen, ein Request je Prozess und Lauf (derzeit ~6) —
    nur so fällt ein neues PDF auf. Scheitert der Abruf, gibt es
    keinen Fingerprint: kein Treffer, kein Cache-Eintrag.

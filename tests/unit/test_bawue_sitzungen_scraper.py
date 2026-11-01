@@ -2,14 +2,18 @@
 
 import datetime
 import hashlib
+import json
 import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import NAMESPACE_URL, uuid5
+from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
 
-from bawue.bawue_sitzungen_scraper import DEFAULT_ICS_URL, BawueSitzungenScraper
+from bawue.bawue_sitzungen_scraper import DEFAULT_ICS_URL, BawueSitzungenScraper, _fristen_by_date
+from bawue.types import Doktyp
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 ICS_BYTES = (FIXTURES_DIR / "sample_calendar.ics").read_bytes()
@@ -26,8 +30,11 @@ def _make_scraper() -> BawueSitzungenScraper:
     scraper._events_by_date = {}
     scraper._fingerprints = {}
     scraper._agendas = {}
+    scraper._fristen_by_date = {}
     scraper._retry_next_cycle = set()
     scraper.listing_urls = [ICS_URL]
+    scraper.config = MagicMock()
+    scraper.config.cache.get_raw.return_value = None  # no Beteiligungsfristen registered
     scraper.session = MagicMock()
     scraper.scraper_id = "00000000-0000-0000-0000-000000000001"
     scraper._upload_limiter = AdaptiveRateLimiter(
@@ -727,3 +734,166 @@ class TestIssue66Tops:
         # A change to the date's events still re-uploads it.
         moved = ICS_BYTES.replace(b"DTSTART:20260227T090000", b"DTSTART:20260227T100000")
         assert await cycle(_site(agenda_html=b"", **{ICS_URL: moved})) == ["2026-02-27"]
+
+
+_PORTAL = "https://beteiligungsportal.baden-wuerttemberg.de/de/mitmachen/lp-18/effizienzgesetz"
+_ENTWURF_HASH = hashlib.sha256(b"Entwurf").hexdigest()
+_ENTWURF = "https://beteiligungsportal.baden-wuerttemberg.de/fileadmin/redaktion/beteiligungsportal/StM/260730_Effizienzgesetz.pdf"
+
+
+def _frist(frist: str, titel: str = "Effizienzgesetz", hash_: str | None = _ENTWURF_HASH) -> dict:
+    """A register entry as the Beteiligung scraper writes it after an upload (DD-076)."""
+    return {"frist": frist, "titel": titel, "portal": _PORTAL, "pdf": _ENTWURF, "hash": hash_}
+
+
+def _registered(cache, **fristen: dict):
+    cache.store_raw("beteiligungsfristen", json.dumps(fristen))
+    return cache
+
+
+class TestIssue148Beteiligungsfristen:
+    """Issue #148 (DD-076): a Beteiligungsfrist goes into the calendar PUT of its day.
+
+    The PUT replaces the whole day, so the deadline must travel with that day's Landtag sessions.
+    """
+
+    @staticmethod
+    async def _extract(fristen: dict, date_key: str, ics: bytes = ICS_BYTES):
+        from tests.unit.test_bawue_scraper import _InMemoryCache
+
+        scraper = _make_scraper()
+        scraper.config = MagicMock(cache=_registered(_InMemoryCache(), **fristen))
+        scraper.session.get = _route({ICS_URL: ics})
+        keys = await scraper.listing_page_extractor(ICS_URL)
+        sitzungen = (await scraper.item_extractor(date_key))[1] if date_key in keys else None
+        return keys, sitzungen
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("frist", "utc_hour"), [("2099-12-01", 22), ("2099-07-01", 21)], ids=["winter", "summer"])
+    async def test_a_deadline_is_a_sitzung_of_the_government(self, frist, utc_hour):
+        keys, [sitzung] = await self._extract({"effizienzgesetz": _frist(frist)}, frist)
+
+        assert frist in keys
+        assert sitzung.titel == "Beteiligungsfrist: Effizienzgesetz"
+        # 23:59 in Berlin stays on the same UTC day: the backend replaces days by UTC (DD-069).
+        expected = datetime.datetime.fromisoformat(frist).replace(hour=utc_hour, minute=59, tzinfo=datetime.UTC)
+        assert sitzung.termin == expected
+        assert sitzung.gremium.name == "regierung"  # as the preparl-regent station
+        assert (sitzung.nummer, sitzung.public, sitzung.link) == (0, True, _PORTAL)
+        [top] = sitzung.tops
+        assert (top.nummer, top.titel) == (1, "Effizienzgesetz")
+        # The uploaded row, so the backend links the TOP to the Vorgang (DD-070).
+        [dok] = top.dokumente
+        assert (dok.hash_, dok.link, dok.typ) == (_ENTWURF_HASH, _ENTWURF, Doktyp.PREPARL_ENTWURF)
+
+    @pytest.mark.asyncio
+    async def test_shares_the_days_put_with_the_landtag(self):
+        ics = ICS_BYTES.replace(b"20260225", b"20991215")
+        _keys, sitzungen = await self._extract({"effizienzgesetz": _frist("2099-12-15")}, "2099-12-15", ics)
+
+        assert [s.gremium.name for s in sitzungen] == ["plenum", "regierung"]
+
+    @pytest.mark.asyncio
+    async def test_unread_document_gives_a_top_without_documents(self):
+        _keys, [sitzung] = await self._extract({"effizienzgesetz": _frist("2099-12-01", hash_=None)}, "2099-12-01")
+
+        assert sitzung.tops[0].dokumente == []
+
+    @pytest.mark.asyncio
+    async def test_only_days_the_backend_still_accepts(self):
+        """A collector writes from yesterday on; older days would be refused anyway."""
+        today = datetime.datetime.now(datetime.UTC).date()
+        yesterday, older = (str(today - datetime.timedelta(days=n)) for n in (1, 2))
+        keys, _ = await self._extract({"a": _frist(yesterday), "b": _frist(older)}, "")
+
+        assert yesterday in keys
+        assert older not in keys
+
+    def test_cutoff_is_the_backends_utc_yesterday(self):
+        """At 00:30 in Berlin, UTC still has the previous day. A Berlin cutoff dropped a deadline the
+        backend still accepted, and the day's re-upload deleted it for good (review of PR #164)."""
+        register = json.dumps({"a": _frist("2026-02-25"), "b": _frist("2026-02-24")})
+        now = datetime.datetime(2026, 2, 27, 0, 30, tzinfo=ZoneInfo("Europe/Berlin"))
+
+        assert list(_fristen_by_date(register, now)) == ["2026-02-25"]
+
+    @pytest.mark.asyncio
+    async def test_two_deadlines_on_one_day(self):
+        fristen = {"b": _frist("2099-12-01", titel="B"), "a": _frist("2099-12-01", titel="A")}
+        _keys, sitzungen = await self._extract(fristen, "2099-12-01")
+
+        assert [s.titel for s in sitzungen] == ["Beteiligungsfrist: A", "Beteiligungsfrist: B"]
+        # UNIQUE in the backend: per process and day, so an extended deadline gets a new row (DD-069).
+        assert [s.api_id for s in sitzungen] == [
+            uuid5(NAMESPACE_URL, "beteiligungsfrist|a|2099-12-01"),
+            uuid5(NAMESPACE_URL, "beteiligungsfrist|b|2099-12-01"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_only_changed_days_are_reuploaded(self):
+        scraper = TestSitzungenRefreshIssue85._scraper()
+
+        async def cycle(**fristen):
+            _registered(scraper.config.cache, **fristen)
+            return await TestSitzungenRefreshIssue85._run_cycle(scraper, ICS_BYTES)
+
+        assert len(await cycle()) == 5
+        # Days without a deadline keep their fingerprint.
+        assert await cycle(effizienzgesetz=_frist("2099-12-01", hash_=None)) == ["2099-12-01"]
+        assert await cycle(effizienzgesetz=_frist("2099-12-01", hash_=None)) == []
+        # The PDF was read: the TOP gains the Vorgang's document.
+        assert await cycle(effizienzgesetz=_frist("2099-12-01")) == ["2099-12-01"]
+        # Extended: the new day goes up; the old one cannot be emptied (backend, DD-069).
+        assert await cycle(effizienzgesetz=_frist("2099-12-08")) == ["2099-12-08"]
+
+    @pytest.mark.asyncio
+    async def test_switched_off_the_calendar_has_no_deadlines(self):
+        """Kill switch `[bawue] beteiligungsfristen` (DD-076)."""
+        from tests.unit.test_bawue_scraper import _InMemoryCache
+
+        scraper = _make_scraper()
+        scraper._beteiligungsfristen = False
+        cache = _registered(_InMemoryCache(), a=_frist("2099-12-01"), b=_frist("2099-12-15"))
+        scraper.config = MagicMock(cache=cache)
+        scraper.session.get = _route({ICS_URL: ICS_BYTES.replace(b"20260225", b"20991215")})
+        keys = await scraper.listing_page_extractor(ICS_URL)
+        _termin, sitzungen = await scraper.item_extractor("2099-12-15")
+
+        assert "2099-12-01" not in keys
+        assert [s.gremium.name for s in sitzungen] == ["plenum"]
+
+    @pytest.mark.asyncio
+    async def test_switching_off_reuploads_the_landtag_days_with_deadlines(self):
+        """A day that also has Landtag sessions loses its deadline; a deadline-only day is left as it is,
+        the backend cannot empty a day (DD-069)."""
+        scraper = TestSitzungenRefreshIssue85._scraper()
+        _registered(scraper.config.cache, a=_frist("2099-12-01"), b=_frist("2099-12-15"))
+        ics = ICS_BYTES.replace(b"20260225", b"20991215")
+
+        assert len(await TestSitzungenRefreshIssue85._run_cycle(scraper, ics)) == 6
+        scraper._beteiligungsfristen = False
+        assert await TestSitzungenRefreshIssue85._run_cycle(scraper, ics) == ["2099-12-15"]
+
+    @pytest.mark.asyncio
+    async def test_reads_what_the_beteiligung_scraper_registers(self):
+        """Both scrapers share the register's key and format."""
+        from tests.unit.test_bawue_scraper import _InMemoryCache
+        from tests.unit.test_beteiligung_scraper import _make_detail, _make_process
+        from tests.unit.test_beteiligung_scraper import _make_scraper as _beteiligung_scraper
+
+        beteiligung = _beteiligung_scraper()
+        beteiligung.config.cache = _InMemoryCache()
+        beteiligung._raw_cache["effizienzgesetz"] = _make_process(slug="effizienzgesetz")
+        detail = _make_detail(title="Effizienzgesetz", comment_deadline=datetime.date(2099, 12, 1))
+        beteiligung._details["effizienzgesetz"] = detail
+        vorgang = await beteiligung.item_extractor("effizienzgesetz")
+        await beteiligung.store_extracted_result("effizienzgesetz", vorgang)
+
+        scraper = _make_scraper()
+        scraper.config = MagicMock(cache=beteiligung.config.cache)
+        scraper.session.get = _route({ICS_URL: ICS_BYTES})
+        await scraper.listing_page_extractor(ICS_URL)
+        _termin, [sitzung] = await scraper.item_extractor("2099-12-01")
+
+        assert sitzung.titel == "Beteiligungsfrist: Effizienzgesetz"
+        assert sitzung.link == vorgang.links[0]

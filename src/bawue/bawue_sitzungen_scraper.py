@@ -17,7 +17,7 @@ import certifi
 
 from bawue.api import BawueApiError, build_client, put_kalender
 from bawue.bawue_vorgaenge_scraper import _construct_drucksache_pdf_url
-from bawue.cache import RedisUnavailableError, drucksache_hash_key
+from bawue.cache import BETEILIGUNGSFRISTEN_KEY, RedisUnavailableError, drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.ics_parser import ParsedEvent, group_events_by_date, parse_ics_feed
@@ -42,9 +42,13 @@ class BawueSitzungenScraper(SitzungsScraper):
     Auto-discovered by the framework when placed in the scrapers directory.
     """
 
+    # Kill switch `[bawue] beteiligungsfristen` (DD-076).
+    _beteiligungsfristen: bool = True
+
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         bawue_config = load_toml_section(config, "bawue")
         self._wahlperiode = bawue_config.get("wahlperiode", CURRENT_WAHLPERIODE)
+        self._beteiligungsfristen = bawue_config.get("beteiligungsfristen", True)
         ics_url = bawue_config.get("ics-url", DEFAULT_ICS_URL)
 
         super().__init__(config, uuid.UUID(config.collector_id), [ics_url], session)
@@ -55,6 +59,7 @@ class BawueSitzungenScraper(SitzungsScraper):
         self._events_by_date: dict[str, list] = {}
         self._fingerprints: dict[str, str] = {}
         self._agendas: dict[str, tuple[int, list[ParsedTop]]] = {}
+        self._fristen_by_date: dict[str, list[dict]] = {}
         self._retry_next_cycle: set[str] = set()
         self._total_events: int = 0
         self._total_dates: int = 0
@@ -91,12 +96,20 @@ class BawueSitzungenScraper(SitzungsScraper):
         events = parse_ics_feed(ics_data)
         grouped = group_events_by_date(events)
         self._agendas = await self._fetch_agendas(grouped)
+        fristen = {}
+        if self._beteiligungsfristen:
+            register = self.config.cache.get_raw(BETEILIGUNGSFRISTEN_KEY, "Fristen")
+            fristen = _fristen_by_date(register, datetime.datetime.now(datetime.UTC))
 
         date_keys = []
-        for dt, evts in sorted(grouped.items()):
-            key = dt.isoformat()
+        for key in sorted({dt.isoformat() for dt in grouped} | fristen.keys()):
+            evts = grouped.get(datetime.date.fromisoformat(key), [])
             self._events_by_date[key] = evts
             fingerprint = _events_fingerprint(evts, self._wahlperiode)
+            if key in fristen:
+                self._fristen_by_date[key] = fristen[key]
+                # In the first part: get_cached_result treats the ":<agenda>" part as optional.
+                fingerprint = _fristen_fingerprint(fingerprint, fristen[key])
             if key in self._agendas:
                 fingerprint += f":{_agenda_fingerprint(self._agendas[key])}"
             self._fingerprints[await self.make_cache_key(key)] = fingerprint
@@ -108,7 +121,7 @@ class BawueSitzungenScraper(SitzungsScraper):
         return date_keys
 
     async def get_cached_result(self, item_key: str) -> str | None:
-        """A cache hit only while the date's events and agenda are unchanged (DD-066).
+        """A cache hit only while the date's events, deadlines and agenda are unchanged (DD-066, DD-076).
 
         An agenda no longer on the page (the next session's is up) keeps the hit: a
         re-upload without it would strip the uploaded TOPs (DD-070).
@@ -252,11 +265,48 @@ class BawueSitzungenScraper(SitzungsScraper):
             )
             sitzungen.append(sitzung)
 
+        # The PUT replaces the whole day, so the deadlines travel with the Landtag's sessions (DD-076).
+        sitzungen += [self._frist_sitzung(eintrag) for eintrag in self._fristen_by_date.pop(date_key, [])]
+
         # The framework expects (datetime, List[Sitzung]) — use the date as a datetime at midnight UTC
         date_dt = datetime.date.fromisoformat(date_key)
         result_datetime = datetime.datetime(date_dt.year, date_dt.month, date_dt.day, tzinfo=datetime.UTC)
 
         return (result_datetime, sitzungen)
+
+    def _frist_sitzung(self, eintrag: dict) -> Sitzung:
+        """A Beteiligungsfrist as a Sitzung of the government, ending 23:59 in Berlin (DD-076).
+
+        Its TOP references the uploaded draft by hash, so the backend links it to the Vorgang (DD-070).
+        """
+        termin = datetime.datetime.combine(
+            datetime.date.fromisoformat(eintrag["frist"]), datetime.time(23, 59), BERLIN_TZ
+        ).astimezone(datetime.UTC)
+        dokumente = []
+        if eintrag["hash"] is not None:
+            dokumente.append(
+                Dokument(
+                    titel=eintrag["titel"],
+                    volltext=TODO_MARKER,
+                    hash_=eintrag["hash"],
+                    typ=Doktyp.PREPARL_ENTWURF,
+                    zp_modifiziert=termin,
+                    zp_referenz=termin,
+                    link=eintrag["pdf"],
+                    autoren=[],
+                )
+            )
+        return Sitzung(
+            # Per process and day: api_id is UNIQUE, an extended deadline needs a new row (DD-069).
+            api_id=uuid5(NAMESPACE_URL, f"beteiligungsfrist|{eintrag['slug']}|{eintrag['frist']}"),
+            titel=f"Beteiligungsfrist: {eintrag['titel']}",
+            termin=termin,
+            gremium=Gremium(parlament=Parlament.BW, wahlperiode=self._wahlperiode, name=ReservedGremium.REGIERUNG),
+            nummer=0,
+            public=True,
+            link=eintrag["portal"],
+            tops=[Top(nummer=1, titel=eintrag["titel"], dokumente=dokumente)],
+        )
 
     async def send_result(self, item: tuple[datetime.datetime, list[Sitzung]]) -> tuple | None:
         """Override to use Parlament.BW instead of the hardcoded Parlament.BY."""
@@ -305,6 +355,23 @@ def _events_fingerprint(events: list[ParsedEvent], wahlperiode: int) -> str:
     """Fingerprint of what a date uploads, parsed values included, order ignored (DD-066)."""
     rows = sorted([e.uid, e.dtstart.isoformat(), e.summary, e.gremium_name, e.nummer] for e in events)
     return sha256(json.dumps([wahlperiode, rows], ensure_ascii=False).encode()).hexdigest()
+
+
+def _fristen_by_date(register: str | None, now: datetime.datetime) -> dict[str, list[dict]]:
+    """Registered Beteiligungsfristen by day, from yesterday on in UTC, as the backend lets a
+    collector write (DD-069): a day it still accepts must keep its deadline."""
+    yesterday = str(now.astimezone(datetime.UTC).date() - datetime.timedelta(days=1))
+    by_date: dict[str, list[dict]] = {}
+    for slug, eintrag in sorted(json.loads(register or "{}").items()):
+        if eintrag["frist"] >= yesterday:
+            by_date.setdefault(eintrag["frist"], []).append({"slug": slug, **eintrag})
+    return by_date
+
+
+def _fristen_fingerprint(events_fingerprint: str, fristen: list[dict]) -> str:
+    """A day's events and deadlines; a day without deadlines keeps its plain events fingerprint (DD-076)."""
+    payload = json.dumps([events_fingerprint, fristen], ensure_ascii=False, sort_keys=True)
+    return sha256(payload.encode()).hexdigest()
 
 
 def _agenda_fingerprint(agenda: tuple[int, list[ParsedTop]]) -> str:

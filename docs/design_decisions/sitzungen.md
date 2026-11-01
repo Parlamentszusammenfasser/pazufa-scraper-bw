@@ -88,3 +88,35 @@ langen Lauf).
 **Konsequenz:** Ohne LLM bleibt das Hash-Register leer, TOPs haben keine Dokumente.
 Ausschüsse bekommen keine TOPs. Ändert sich ein Termin, nachdem die Tagesordnung
 verschwunden ist, gehen seine TOPs verloren.
+
+<a id="dd-076"></a>
+## DD-076: Beteiligungsfristen im Kalender
+
+**Kontext:** Die Frist eines Entwurfs (DD-075) soll auch im Kalender stehen, mit Verweis auf
+Vorgang und Portal (Issue #148). `PUT kalender` ersetzt den ganzen Tag, egal welcher Scraper
+ihn geschrieben hat.
+
+**Entscheidung:**
+1. Nach jedem Upload legt der Beteiligungs-Scraper Frist, Titel, Portal-Link und den Hash des
+   ersten Entwurfs in `beteiligungsfristen` (Redis) ab, den Hash nur für ein gelesenes
+   Dokument (wie DD-070). Scheitert das Schreiben, bleibt der Vorgang ungecacht.
+2. Der Sitzungen-Scraper nimmt jede Frist ab gestern (UTC, wie das Backend) in den PUT ihres
+   Tages auf, auch an Tagen ohne Landtagstermin: eine Sitzung von `regierung` um 23:59 Uhr
+   (Berlin), Titel `Beteiligungsfrist: <Titel>`, `link` aufs Portal, `nummer` 0, ein TOP mit
+   dem Entwurf.
+3. `api_id` aus Slug und Datum. Der Fingerprint eines Tages mit Frist enthält die Einträge;
+   Tage ohne Frist behalten ihren.
+4. Ein Marker `fristen` im Beteiligungs-Fingerprint baut gecachte Vorgänge einmal neu und
+   füllt so das Register.
+5. Notschalter `[bawue] beteiligungsfristen` (env `BETEILIGUNGSFRISTEN`, Default an): aus,
+   gehen keine neuen Fristen hinaus, weder als Zusammenfassungsteil (DD-075) noch im Kalender.
+   Gesendetes bleibt: Das Backend löscht keine Teile und leert keine Tage; nur Tage mit
+   Landtagsterminen verlieren ihre Frist beim nächsten PUT.
+
+**Konsequenz:** Eine neue oder geänderte Frist erscheint meist einen Lauf später: Die Scraper
+laufen parallel, und der Sitzungen-Scraper liest das Register früh (mit `linearize` schon im
+selben Lauf). Ohne LLM hat der TOP kein Dokument, die Sitzung also keinen Vorgang. Eine
+verlängerte Frist erscheint am neuen Tag; den alten leert nur ein anderer PUT dieses Tages
+(DD-069). Ändert sich die Frist an einem Plenartag, dessen Tagesordnung schon von der Seite
+verschwunden ist, gehen seine TOPs verloren (wie DD-070). Die Website zeigt den Kalender
+bisher nicht an.

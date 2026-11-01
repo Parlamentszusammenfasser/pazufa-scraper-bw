@@ -87,3 +87,18 @@ def test_unreadable_file_warns_and_yields_empty_section(tmp_path, caplog):
         assert load_toml_section(cfg, "beteiligung") == {}
 
     assert "Could not load" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"), [("false", False), ("False", False), ("0", False), ("true", True), ("1", True)]
+)
+def test_beteiligungsfristen_switch_from_env(config, monkeypatch, raw, expected):
+    """Issue #148 (DD-076): the deadlines can be switched off on the job, without a release."""
+    monkeypatch.setenv("BETEILIGUNGSFRISTEN", raw)
+    assert load_toml_section(config, "bawue")["beteiligungsfristen"] is expected
+
+
+def test_unknown_switch_value_fails_loudly(config, monkeypatch):
+    monkeypatch.setenv("BETEILIGUNGSFRISTEN", "nein")
+    with pytest.raises(ValueError):
+        load_toml_section(config, "bawue")

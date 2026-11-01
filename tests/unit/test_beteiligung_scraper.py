@@ -1,5 +1,8 @@
 """Tests for the BawueBeteiligungScraper."""
 
+import asyncio
+import hashlib
+import json
 import logging
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -25,6 +28,7 @@ from bawue.types import (
 )
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
+ENTWURF_HASH = hashlib.sha256(b"Entwurf").hexdigest()
 
 
 def _make_scraper():
@@ -36,6 +40,7 @@ def _make_scraper():
     scraper._raw_cache = {}
     scraper._details = {}
     scraper._fingerprints = {}
+    scraper._fristen = {}
     scraper._client = MagicMock()
     scraper._client.fetch_last_modified.return_value = date(2025, 10, 16)
     scraper._api_client = MagicMock()
@@ -438,6 +443,14 @@ class TestIssue148Beteiligungsfrist:
         assert dok.zusammenfassung == [self.FRIST]
 
     @pytest.mark.asyncio
+    async def test_switched_off_sends_no_deadline(self):
+        """Kill switch `[bawue] beteiligungsfristen` (DD-076)."""
+        scraper = _make_scraper()
+        scraper._beteiligungsfristen = False
+        vorgang = await scraper._build_vorgang("effizienzgesetz", _make_detail(comment_deadline=date(2026, 9, 9)))
+        assert vorgang.stationen[0].dokumente[0].zusammenfassung is UNSET
+
+    @pytest.mark.asyncio
     async def test_no_deadline_leaves_the_summary_alone(self):
         vorgang = await _make_scraper()._build_vorgang("haushaltsbegleitgesetz-2027", _make_detail())
         assert vorgang.stationen[0].dokumente[0].zusammenfassung is UNSET
@@ -466,6 +479,88 @@ class TestIssue148Beteiligungsfrist:
         vorgang = await scraper._build_vorgang("effizienzgesetz", detail)
         assert [d.zusammenfassung for d in vorgang.stationen[0].dokumente] == expected
         assert len(self.KI) == 2  # the enrichment's list is not changed in place
+
+
+class TestIssue148FristenRegister:
+    """Issue #148 (DD-076): after an upload the deadline goes to the register the calendar reads."""
+
+    @staticmethod
+    async def _upload(scraper, slug: str, deadline: date | None, read: bool = False) -> dict:
+        """Build as item_extractor does, store as the pipeline does after a successful upload."""
+        scraper._raw_cache[slug] = _make_process(slug=slug)
+        scraper._details[slug] = _make_detail(comment_deadline=deadline)
+        vorgang = await scraper.item_extractor(slug)
+        if read:
+            dok = vorgang.stationen[0].dokumente[0]
+            dok.volltext, dok.hash_ = "Volltext", ENTWURF_HASH
+        await scraper.store_extracted_result(slug, vorgang)
+        return json.loads(scraper.config.cache.get_raw("beteiligungsfristen"))
+
+    @staticmethod
+    def _scraper():
+        from tests.unit.test_bawue_scraper import _InMemoryCache
+
+        scraper = _make_scraper()
+        scraper.config.cache = _InMemoryCache()
+        return scraper
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("read", "hash_"), [(True, ENTWURF_HASH), (False, None)], ids=["read", "unread"])
+    async def test_registers_the_deadline_with_the_uploaded_document(self, read, hash_):
+        register = await self._upload(self._scraper(), "entbuerokratisierung", date(2025, 11, 13), read)
+
+        assert register == {
+            "entbuerokratisierung": {
+                "frist": "2025-11-13",
+                "titel": "Entbürokratisierung",
+                "portal": f"{BASE_URL}/de/mitmachen/lp-17/entbuerokratisierung",
+                "pdf": _make_detail().pdf_links[0]["url"],
+                # Only a read document: a placeholder row is replaced once the PDF is read (as DD-070).
+                "hash": hash_,
+            }
+        }
+
+    @pytest.mark.asyncio
+    async def test_a_removed_deadline_leaves_the_register_and_the_others_stay(self):
+        scraper = self._scraper()
+        await self._upload(scraper, "a", date(2099, 12, 1))
+        await self._upload(scraper, "b", date(2099, 12, 8))
+
+        assert list(await self._upload(scraper, "a", None)) == ["b"]
+
+    @pytest.mark.asyncio
+    async def test_failed_upload_registers_nothing(self):
+        """Only an uploaded draft has a row a TOP can link to (review of PR #164)."""
+        from bawue.upload_throttle import UploadOutcome
+
+        scraper = self._scraper()
+        scraper.config.api_obj_log = None
+        scraper.items_done, scraper.item_count = 0, 1
+        scraper._fingerprints["a"] = "fingerprint"
+        scraper._raw_cache["a"] = _make_process(slug="a")
+        scraper._details["a"] = _make_detail(comment_deadline=date(2099, 12, 1))
+
+        failed = UploadOutcome(None, "HTTP 500")
+        with patch("bawue.bawue_beteiligung_scraper.upload_vorgang", return_value=failed) as upload:
+            assert await scraper.helper_extract_send_item("a", asyncio.Semaphore(1)) is None
+
+        upload.assert_called_once()
+        assert scraper.config.cache.get_raw("beteiligungsfristen") is None
+        assert scraper.config.cache.get_raw("vg2:a") is None
+
+    @pytest.mark.asyncio
+    async def test_failed_register_write_leaves_the_vorgang_uncached(self):
+        """A cache hit would never write the register again (review of PR #164)."""
+        scraper = self._scraper()
+        cache = scraper.config.cache
+        store_raw = cache.store_raw
+        cache.store_raw = lambda key, value, typehint="": key != "beteiligungsfristen" and store_raw(key, value)
+        scraper._fingerprints["a"] = "fingerprint"
+        scraper._raw_cache["a"] = _make_process(slug="a")
+        scraper._details["a"] = _make_detail(comment_deadline=date(2099, 12, 1))
+        await scraper.store_extracted_result("a", await scraper.item_extractor("a"))
+
+        assert cache.get_raw("vg2:a") is None
 
 
 class TestListingPageExtractor:
@@ -585,7 +680,7 @@ class TestIssue83SummaryAddsUp:
         assert "Skipped:     0" in lines
         assert "Failed:      1" in lines
         assert "  - timeout | Timeout-Gesetz | TimeoutError: portal timeout" in lines
-        stored = [c.args[0] for c in scraper.config.cache.store_raw.call_args_list]
+        stored = [c.args[0] for c in scraper.config.cache.store_raw.call_args_list if c.args[0].startswith("vg2:")]
         assert stored == ["vg2:effizienzgesetz"]  # the crashed one is retried next cycle
 
 

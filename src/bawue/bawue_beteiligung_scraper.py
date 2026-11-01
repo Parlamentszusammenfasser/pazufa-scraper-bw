@@ -20,6 +20,7 @@ from bawue.beteiligung_parser import (
     parse_process_detail,
     release_date,
 )
+from bawue.cache import BETEILIGUNGSFRISTEN_KEY
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
 from bawue.pipeline import VorgangsScraper
@@ -62,10 +63,15 @@ class BawueBeteiligungScraper(VorgangsScraper):
     Auto-discovered by the framework when placed in the scrapers directory.
     """
 
+    # Kill switch `[bawue] beteiligungsfristen` (DD-076).
+    _beteiligungsfristen: bool = True
+
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         beteiligung_config = load_toml_section(config, "beteiligung")
+        bawue_config = load_toml_section(config, "bawue")
         # One Wahlperiode for all scrapers (issue #6).
-        self._wahlperiode = load_toml_section(config, "bawue").get("wahlperiode", CURRENT_WAHLPERIODE)
+        self._wahlperiode = bawue_config.get("wahlperiode", CURRENT_WAHLPERIODE)
+        self._beteiligungsfristen = bawue_config.get("beteiligungsfristen", True)
         if "wahlperiode" in beteiligung_config:
             logger.warning("[beteiligung] wahlperiode is ignored; set [bawue] wahlperiode instead (issue #6)")
         delay = beteiligung_config.get("request-delay-s", DEFAULT_BETEILIGUNG_DELAY)
@@ -78,6 +84,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         self._raw_cache: dict[str, RawBeteiligungProcess] = {}
         self._details: dict[str, RawBeteiligungDetail] = {}
         self._fingerprints: dict[str, str] = {}
+        self._fristen: dict[str, date | None] = {}
 
         self._upload_limiter = create_upload_limiter()
 
@@ -172,9 +179,34 @@ class BawueBeteiligungScraper(VorgangsScraper):
         return None
 
     async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
+        if not self._register_frist(item_key, result):
+            return  # uncached, so the next cycle writes the register again (DD-076)
         fingerprint = self._fingerprints.get(item_key)
         if fingerprint is not None:  # without one, the next cycle simply rebuilds
             self.config.cache.store_raw(f"vg2:{item_key}", fingerprint, "Vorgang")
+
+    def _register_frist(self, slug: str, vorgang: Vorgang) -> bool:
+        """Hand the deadline and the just uploaded draft to the calendar (DD-076); False if
+        the register could not be written.
+
+        No await between read and write, so concurrent items cannot interleave.
+        """
+        fristen = json.loads(self.config.cache.get_raw(BETEILIGUNGSFRISTEN_KEY, "Fristen") or "{}")
+        frist = self._fristen.pop(slug, None)
+        if frist is None:
+            if fristen.pop(slug, None) is None:
+                return True
+        else:
+            dok = vorgang.stationen[0].dokumente[0]
+            fristen[slug] = {
+                "frist": frist.isoformat(),
+                "titel": vorgang.titel,
+                "portal": vorgang.links[0],
+                "pdf": dok.link,
+                # Only a read document: a placeholder row is replaced once the PDF is read (as DD-070).
+                "hash": dok.hash_ if dok.volltext != TODO_MARKER else None,
+            }
+        return self.config.cache.store_raw(BETEILIGUNGSFRISTEN_KEY, json.dumps(fristen, ensure_ascii=False), "Fristen")
 
     async def item_extractor(self, slug: str) -> Vorgang | None:
         """Fetch detail page and build a Vorgang with preparl-regent station."""
@@ -189,6 +221,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             if detail is None:
                 html = await asyncio.to_thread(self._client.fetch_process_detail, process.url)
                 detail = parse_process_detail(html, BASE_URL)
+            self._fristen[slug] = detail.comment_deadline
             return await self._build_vorgang(slug, detail)
         except Exception as exc:
             # Counted so the summary adds up (issue #83); not cached, so retried next cycle.
@@ -267,7 +300,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
             dokumente.append(dok)
 
-        if detail.comment_deadline:
+        if self._beteiligungsfristen and detail.comment_deadline:
             _add_beteiligungsfrist(dokumente, detail.comment_deadline)
 
         gremium = Gremium(
@@ -374,5 +407,6 @@ def _print_beteiligung_summary(
 def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungDetail) -> str:
     """What shows progress on the portal (issue #104): status, title, ministry, PDFs, deadline (#148)."""
     pdfs = sorted([link["url"], link["title"]] for link in detail.pdf_links)
-    payload = [process.status, detail.title, detail.ministry, pdfs, detail.comment_deadline]
+    # "fristen": a one-time rebuild fills the calendar register for cached Vorgänge (DD-076).
+    payload = [process.status, detail.title, detail.ministry, pdfs, detail.comment_deadline, "fristen"]
     return sha256(json.dumps(payload, ensure_ascii=False, default=str).encode()).hexdigest()
