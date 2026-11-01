@@ -141,7 +141,8 @@ das Frontend Einzelpläne als „1./2. Lesung" zählt, ist dessen Anzeige.
 ## DD-057: Neue Spec-Werte bleiben bewusst ungemappt
 
 **Kontext:** Spec 0.2.5 brachte `preparl-formvs`, `parl-antragsst`, `parl-vermittas`,
-`parl-verfgstop` (seit 0.2.7 `postparl-vgstp`) und den Doktyp `eckpunktepapier`. In PARLIS
+`parl-verfgstop` (seit 0.2.7 `postparl-vgstp`) und den Doktyp `eckpunktepapier`, Spec 0.2.8
+`parl-anhoerung` und die Doktypen `beschlussprotokoll`/`inhaltsprotokoll`. In PARLIS
 WP 17/18 und im Beteiligungsportal kommt keiner vor (GitHub #43).
 
 **Entscheidung:** Keiner wird gemappt.
@@ -153,6 +154,8 @@ WP 17/18 und im Beteiligungsportal kommt keiner vor (GitHub #43).
 | `parl-vermittas` | Der Landtag hat keine zweite Kammer |
 | `postparl-vgstp` | PARLIS führt Verfassungsgerichtsstopps nicht als Station |
 | `eckpunktepapier` | Kommt nicht vor; bei Bedarf reicht ein Titel-Mapping im Beteiligungs-Scraper |
+| `parl-anhoerung` | PARLIS führt Anhörungen nicht als Fundstelle |
+| `beschlussprotokoll`, `inhaltsprotokoll` | PARLIS verlinkt keine Ausschussprotokolle, nur Plenarprotokolle (`redeprotokoll`) |
 
 **Konsequenz:** Der BW-Track hat für keinen der Stationstypen einen Buchstaben, eine solche
 Station gäbe HTTP 400. Ein Kanarienvogel-Test prüft `Stationstyp` auf Gleichheit
