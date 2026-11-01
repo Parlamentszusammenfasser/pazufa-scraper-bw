@@ -680,6 +680,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 self._drop(vorgang_id, fund, f"{station_typ_str or 'unlabeled'} → sonstig")
                 continue
 
+            # Buffered Anträge go to this reading, also when it continues a recorded one (DD-024, issue #60).
+            if station.typ == Stationstyp.PARL_VOLLVLSGN and pending_aenderungsantraege:
+                for _, docs in pending_aenderungsantraege:
+                    station.dokumente.extend(docs)
+                pending_aenderungsantraege.clear()
+
             if self._try_merge_station(stationen, station, station_typ_str, last_station_typ_str):
                 continue
 
@@ -691,12 +697,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
             if station.typ == Stationstyp.PARL_VOLLVLSGN:
                 seen_vollvlsgn = True
-
-            # Attach any buffered Änderungsanträge to this station if it's a vollvlsgn
-            if station.typ == Stationstyp.PARL_VOLLVLSGN and pending_aenderungsantraege:
-                for _, docs in pending_aenderungsantraege:
-                    station.dokumente.extend(docs)
-                pending_aenderungsantraege.clear()
 
         # What depends on a held-back reading waits for it too (DD-068): left-over Anträge
         # belong to it, and an ausschber before any reading fails track validation.
