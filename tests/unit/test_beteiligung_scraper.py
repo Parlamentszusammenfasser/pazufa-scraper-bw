@@ -465,6 +465,7 @@ class TestIssue148Beteiligungsfrist:
         )
         vorgang = await scraper._build_vorgang("effizienzgesetz", detail)
         assert [d.zusammenfassung for d in vorgang.stationen[0].dokumente] == expected
+        assert len(self.KI) == 2  # the enrichment's list is not changed in place
 
 
 class TestListingPageExtractor:
