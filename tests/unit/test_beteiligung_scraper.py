@@ -523,16 +523,22 @@ class TestIssue148FristenRegister:
     @pytest.mark.asyncio
     async def test_failed_upload_registers_nothing(self):
         """Only an uploaded draft has a row a TOP can link to (review of PR #164)."""
+        from bawue.upload_throttle import UploadOutcome
+
         scraper = self._scraper()
         scraper.config.api_obj_log = None
         scraper.items_done, scraper.item_count = 0, 1
-        scraper.send_result = AsyncMock(return_value=None)
+        scraper._fingerprints["a"] = "fingerprint"
         scraper._raw_cache["a"] = _make_process(slug="a")
         scraper._details["a"] = _make_detail(comment_deadline=date(2099, 12, 1))
 
-        assert await scraper.helper_extract_send_item("a", asyncio.Semaphore(1)) is None
-        scraper.send_result.assert_awaited_once()
+        failed = UploadOutcome(None, "HTTP 500")
+        with patch("bawue.bawue_beteiligung_scraper.upload_vorgang", return_value=failed) as upload:
+            assert await scraper.helper_extract_send_item("a", asyncio.Semaphore(1)) is None
+
+        upload.assert_called_once()
         assert scraper.config.cache.get_raw("beteiligungsfristen") is None
+        assert scraper.config.cache.get_raw("vg2:a") is None
 
     @pytest.mark.asyncio
     async def test_failed_register_write_leaves_the_vorgang_uncached(self):
