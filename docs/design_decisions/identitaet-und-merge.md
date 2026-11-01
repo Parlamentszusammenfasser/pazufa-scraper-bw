@@ -80,20 +80,22 @@ Initiativdrucksache in einen.
 - Identität (vorgnr, `api_id`, Titel, „Aktueller Stand") ist die des Vorgangs ohne
   „Einzelplan" im Titel: des Staatshaushaltsgesetzes.
 - Ein Einzelplan trägt nur Fundstellen bei, deren Drucksache oder Plenarprotokoll das
-  Staatshaushaltsgesetz nicht schon zitiert, also Beschlussempfehlung und Anträge. Seine
-  erneuten Zitate von Lesungen und Beschlüssen (mit Einzelplan-Seiten) landeten sonst hinter
-  dem Gesetzblatt und brächen den Track.
+  Staatshaushaltsgesetz nicht schon zitiert: vor allem Beschlussempfehlung und Anträge, auch
+  spätere Berichte. Seine erneuten Zitate von Lesungen und Beschlüssen (mit Einzelplan-Seiten)
+  landeten sonst hinter dem Gesetzblatt und brächen den Track.
 - Gemischt wird nach Datum, jeder Record in seiner PARLIS-Reihenfolge: Anträge hängen an der
-  folgenden Lesung.
+  folgenden oder laufenden Lesung (DD-001). Ein falsch datierter Antrag zieht die späteren
+  Fundstellen seines Records mit nach hinten.
 - Der `vg2:`-Fingerprint (DD-052) entsteht aus dem gefalteten Record, deckt also jeden
   Einzelplan ab.
 
 **Konsequenz:** Die Beschlussempfehlungen aller Einzelpläne bilden eine `parl-ausschber`-Station
 (DD-039). Debatten je Einzelplan erreicht man nur noch über die Protokoll-Fundstellen des
 Staatshaushaltsgesetzes. Bereits hochgeladene Einzelplan-Vorgänge (WP 17: 51) löscht nur ein
-Admin; ein Neulauf von WP 17 lässt zudem die alte `parl-ausschber` des Staatshaushaltsgesetzes
-stehen (neues Datum, neue `api_id`). Der Typ bleibt `gg-land-parl`, bis das Backend einen
-BW-Track für `gg-land-parl-haushalt` hat
+Admin, und zwar **vor** einem Neulauf von WP 17: Beim Station-Merge verknüpft das Backend nur
+neu eingefügte Dokumente, die der Einzelpläne blieben sonst ohne Verknüpfung. Die alte
+`parl-ausschber` findet das Backend über die geteilte Beschlussempfehlung und aktualisiert sie.
+Der Typ bleibt `gg-land-parl`, bis das Backend einen BW-Track für `gg-land-parl-haushalt` hat
 ([parlamentszusammenfasser#92](https://codeberg.org/PaZuFa/parlamentszusammenfasser/pulls/92)).
 
 <a id="dd-043"></a>
