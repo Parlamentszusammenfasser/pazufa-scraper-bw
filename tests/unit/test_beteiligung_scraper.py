@@ -446,8 +446,9 @@ class TestIssue148Beteiligungsfrist:
     @pytest.mark.parametrize(
         ("summaries", "expected"),
         [
-            # No AI summary anywhere: every document.
-            ({}, [[FRIST], [FRIST]]),
+            # No AI summary anywhere: one document is enough, the website skips those without parts.
+            # A deadline-only part on more would never be removed and could later hide a summary.
+            ({}, [[FRIST], UNSET]),
             # Only documents with a summary: a deadline-only part would hide B's summary.
             ({B: KI}, [UNSET, [*KI, FRIST]]),
             ({A: KI, B: KI}, [[*KI, FRIST], [*KI, FRIST]]),

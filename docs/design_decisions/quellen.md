@@ -62,15 +62,17 @@ kein Feld (Issue #148), `zp_start` ist der Veröffentlichungstag (DD-074).
 2. Sie geht als eigenes Tupel `beteiligungsfrist-extern` mit festem Text
    `Beteiligungsfrist: TT.MM.JJJJ` hinaus, nicht als Text in `full-llm`: Die Website markiert
    jeden Typ mit `llm` als KI-generiert.
-3. Das Tupel hängt an jedem Dokument mit `full-llm`, ohne solches an allen: Die Website zeigt
+3. Das Tupel hängt an jedem Dokument mit `full-llm`, ohne solches am ersten: Die Website zeigt
    das erste Dokument mit Zusammenfassung, und das Backend sortiert sie nach Link, nicht in
-   Portal-Reihenfolge.
+   Portal-Reihenfolge. Dokumente ohne Teile überspringt sie.
 4. Die Frist gehört zum Fingerprint (DD-052); eine verlängerte Frist wird neu hochgeladen.
 
 **Konsequenz:** Die Website zeigt den Abschnitt „Beteiligungsfrist" unter der
-KI-Zusammenfassung, nicht davor. Das Backend löscht keine Tupel: Wechselt das Dokument mit
-Zusammenfassung, bleibt die Frist auch am alten stehen. Mit der Einführung ändert sich jeder
-Beteiligungs-Fingerprint, alle Beteiligungs-Vorgänge werden einmal neu hochgeladen.
+KI-Zusammenfassung, nicht davor. Das Backend löscht keine Tupel: Eine Frist bleibt an einem
+Dokument, das sie nicht mehr bekäme. Sortiert es vor das Dokument mit Zusammenfassung, zeigt
+die Seite oben nur die Frist; daher ohne Zusammenfassung nur ein Dokument. Mit der Einführung
+ändert sich jeder Beteiligungs-Fingerprint, alle Beteiligungs-Vorgänge werden einmal neu
+hochgeladen.
 
 <a id="dd-047"></a>
 ## DD-047: Gesetzblatt als Datums-Lookup, nicht als eigene Vorgangsquelle
