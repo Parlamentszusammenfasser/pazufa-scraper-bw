@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 import pytest
 import pytest_asyncio
 
-from bawue.bawue_sitzungen_scraper import DEFAULT_ICS_URL, BawueSitzungenScraper
+from bawue.bawue_sitzungen_scraper import DEFAULT_ICS_URL, BawueSitzungenScraper, _fristen_by_date
 from bawue.types import Doktyp
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -802,12 +802,20 @@ class TestIssue148Beteiligungsfristen:
     @pytest.mark.asyncio
     async def test_only_days_the_backend_still_accepts(self):
         """A collector writes from yesterday on; older days would be refused anyway."""
-        today = datetime.datetime.now(ZoneInfo("Europe/Berlin")).date()
+        today = datetime.datetime.now(datetime.UTC).date()
         yesterday, older = (str(today - datetime.timedelta(days=n)) for n in (1, 2))
         keys, _ = await self._extract({"a": _frist(yesterday), "b": _frist(older)}, "")
 
         assert yesterday in keys
         assert older not in keys
+
+    def test_cutoff_is_the_backends_utc_yesterday(self):
+        """At 00:30 in Berlin, UTC still has the previous day. A Berlin cutoff dropped a deadline the
+        backend still accepted, and the day's re-upload deleted it for good (review of PR #164)."""
+        register = json.dumps({"a": _frist("2026-02-25"), "b": _frist("2026-02-24")})
+        now = datetime.datetime(2026, 2, 27, 0, 30, tzinfo=ZoneInfo("Europe/Berlin"))
+
+        assert list(_fristen_by_date(register, now)) == ["2026-02-25"]
 
     @pytest.mark.asyncio
     async def test_two_deadlines_on_one_day(self):

@@ -92,7 +92,8 @@ class BawueSitzungenScraper(SitzungsScraper):
         events = parse_ics_feed(ics_data)
         grouped = group_events_by_date(events)
         self._agendas = await self._fetch_agendas(grouped)
-        fristen = _fristen_by_date(self.config.cache.get_raw(BETEILIGUNGSFRISTEN_KEY, "Fristen"))
+        register = self.config.cache.get_raw(BETEILIGUNGSFRISTEN_KEY, "Fristen")
+        fristen = _fristen_by_date(register, datetime.datetime.now(datetime.UTC))
 
         date_keys = []
         for key in sorted({dt.isoformat() for dt in grouped} | fristen.keys()):
@@ -350,9 +351,10 @@ def _events_fingerprint(events: list[ParsedEvent], wahlperiode: int) -> str:
     return sha256(json.dumps([wahlperiode, rows], ensure_ascii=False).encode()).hexdigest()
 
 
-def _fristen_by_date(register: str | None) -> dict[str, list[dict]]:
-    """Registered Beteiligungsfristen by day, from yesterday on: a collector cannot write older days (DD-069)."""
-    yesterday = str(datetime.datetime.now(BERLIN_TZ).date() - datetime.timedelta(days=1))
+def _fristen_by_date(register: str | None, now: datetime.datetime) -> dict[str, list[dict]]:
+    """Registered Beteiligungsfristen by day, from yesterday on in UTC, as the backend lets a
+    collector write (DD-069): a day it still accepts must keep its deadline."""
+    yesterday = str(now.astimezone(datetime.UTC).date() - datetime.timedelta(days=1))
     by_date: dict[str, list[dict]] = {}
     for slug, eintrag in sorted(json.loads(register or "{}").items()):
         if eintrag["frist"] >= yesterday:

@@ -100,9 +100,10 @@ ihn geschrieben hat.
 1. Nach jedem Upload legt der Beteiligungs-Scraper Frist, Titel, Portal-Link und den Hash des
    ersten Entwurfs in `beteiligungsfristen` (Redis) ab, den Hash nur für ein gelesenes
    Dokument (wie DD-070).
-2. Der Sitzungen-Scraper nimmt jede Frist ab gestern in den PUT ihres Tages auf, auch an
-   Tagen ohne Landtagstermin: eine Sitzung von `regierung` um 23:59 Uhr (Berlin), Titel
-   `Beteiligungsfrist: <Titel>`, `link` aufs Portal, `nummer` 0, ein TOP mit dem Entwurf.
+2. Der Sitzungen-Scraper nimmt jede Frist ab gestern (UTC, wie das Backend) in den PUT ihres
+   Tages auf, auch an Tagen ohne Landtagstermin: eine Sitzung von `regierung` um 23:59 Uhr
+   (Berlin), Titel `Beteiligungsfrist: <Titel>`, `link` aufs Portal, `nummer` 0, ein TOP mit
+   dem Entwurf.
 3. `api_id` aus Slug und Datum. Der Fingerprint eines Tages mit Frist enthält die Einträge;
    Tage ohne Frist behalten ihren.
 4. Ein Marker `fristen` im Beteiligungs-Fingerprint baut gecachte Vorgänge einmal neu und
