@@ -10,10 +10,11 @@ Versionskonstante gibt es bewusst nicht; ein gezielter Neubau ändert den Finger
 | Präfix | Inhalt | DD |
 |---|---|---|
 | `vg2:` | Fingerprint je PARLIS-Vorgang bzw. Beteiligungsprozess | DD-052 |
-| `sz:` | Fingerprint der Termine (+ Tagesordnung) je Tag | DD-066, DD-070 |
+| `sz:` | Fingerprint der Termine (+ Fristen, + Tagesordnung) je Tag | DD-066, DD-070, DD-076 |
 | `llm-semantics:` | LLM-Ergebnis je Dokument und Prompt | DD-020 |
 | `vorgang-kurztitel:`, `vorgang-ressort:` | LLM-Ergebnis je Vorgang | DD-053, DD-055, DD-063 |
 | `drucks-hash:` | Hash hochgeladener Drucksachen für TOPs | DD-070 |
+| `beteiligungsfristen` | Frist, Titel, Links und Entwurf-Hash je hochgeladenem Beteiligungsprozess | DD-076 |
 | `wochenbericht` | letzte begonnene Station je Vorgang, Stand der Vorwoche | DD-072 |
 
 <a id="dd-073"></a>

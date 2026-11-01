@@ -120,7 +120,7 @@ Dashed arrows: the pre-parliamentary stages are optional.
 - Parliament code: `BW`, Wahlperiode: 18 (one setting for all scrapers, DD-062)
 - Authentication: `X-API-Key` header with `collector` scope (see `bawue.api`)
 - Caching: Redis `BawueCache`, no TTL; a Vorgang is skipped only while its PARLIS fingerprint is unchanged (DD-052),
-  a Sitzungen date only while its events and agenda are unchanged (DD-066, DD-070)
+  a Sitzungen date only while its events, Beteiligungsfristen and agenda are unchanged (DD-066, DD-070, DD-076)
 - Models: Generated from the OpenAPI spec by `pazufa-scraper-core` — no hand-written models
 - The PaZuFa backend handles deduplication/merging — the scraper does not need to
 
@@ -293,7 +293,7 @@ IDs. Items whose `Vorgangstyp` field doesn't match the enabled set are dropped d
 | Capability          | Provided by                                              |
 |---------------------|----------------------------------------------------------|
 | Scheduling          | Cloud Scheduler → Cloud Run Job; `bawue.__main__` runs one cycle and exits |
-| Redis caching       | `bawue.cache` — no TTL, `vg2:`/`sz:`/`llm-semantics:`/`drucks-hash:` keys (DD-052/066) |
+| Redis caching       | `bawue.cache` — no TTL, `vg2:`/`sz:`/`llm-semantics:`/`drucks-hash:`/`beteiligungsfristen` keys (DD-052/066/076) |
 | API client          | `pazufa-scraper-core` httpx client + `bawue.upload_throttle` retry |
 | Models              | `pazufa-scraper-core` models generated from OpenAPI spec |
 | Document processing | Kreuzberg/OCR + LLM pipeline (`bawue.pdf_text`, `bawue.bawue_dok`) |
@@ -362,6 +362,8 @@ other type are dropped defensively in `listing_page_extractor`, even if PARLIS r
 Subclass of `SitzungsScraper`. Fetches ICS calendar, parses and filters events, builds `Sitzung` models.
 The Plenarsitzung of the next session also gets its TOPs from the agenda PDF on
 `/de/aktuelles/tagesordnungen` (`bawue.tagesordnung`, DD-070).
+Each Beteiligungsfrist the Beteiligung scraper registered joins the PUT of its day, from yesterday (UTC) on,
+as a Sitzung of `regierung` at 23:59 Berlin linking the portal and the draft (DD-076).
 Overrides `send_result()` to use `Parlament.BW`. Uses `_events_by_date` to bridge listing/item phases.
 
 **Field mapping:**
@@ -379,6 +381,7 @@ Overrides `send_result()` to use `Parlament.BW`. Uses `_events_by_date` to bridg
 
 Subclass of `VorgangsScraper`. Fetches the [Beteiligungsportal BW](https://beteiligungsportal.baden-wuerttemberg.de)
 LP index, filters to legislative content (pages with Entwurf PDFs), builds `Vorgang` with `preparl-regent` station.
+After an upload it registers the comment deadline for the calendar (`beteiligungsfristen`, DD-076).
 Configuration from `[beteiligung]` section.
 
 **Vorgang / Station mapping:**

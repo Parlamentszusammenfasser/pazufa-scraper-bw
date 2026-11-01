@@ -109,8 +109,9 @@ ihn geschrieben hat.
 4. Ein Marker `fristen` im Beteiligungs-Fingerprint baut gecachte Vorgänge einmal neu und
    füllt so das Register.
 
-**Konsequenz:** Ohne LLM hat der TOP kein Dokument, die Sitzung also keinen Vorgang. Eine
-verlängerte Frist erscheint am neuen Tag; den alten leert nur ein anderer PUT dieses Tages
-(DD-069). Ändert sich die Frist an einem Plenartag, dessen Tagesordnung schon von der Seite
-verschwunden ist, gehen seine TOPs verloren (wie DD-070). Die Website zeigt den Kalender bisher
-nicht an.
+**Konsequenz:** Eine neue oder geänderte Frist erscheint einen Lauf später: Der
+Sitzungen-Scraper liest das Register, bevor die Uploads desselben Laufs es schreiben. Ohne LLM
+hat der TOP kein Dokument, die Sitzung also keinen Vorgang. Eine verlängerte Frist erscheint
+am neuen Tag; den alten leert nur ein anderer PUT dieses Tages (DD-069). Ändert sich die Frist
+an einem Plenartag, dessen Tagesordnung schon von der Seite verschwunden ist, gehen seine TOPs
+verloren (wie DD-070). Die Website zeigt den Kalender bisher nicht an.
