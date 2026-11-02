@@ -14,7 +14,7 @@ import aiohttp
 import pytest
 
 from bawue.bawue_dok import enrich_dokument, zusammenfassung_text
-from bawue.types import Autor, Doktyp, Dokument, Ressort
+from bawue.types import Autor, Doktyp, Dokument, HashStrategy, Ressort
 from bawue.vorgang_llm import KURZTITEL_MAX_LEN, vorgang_kurztitel, vorgang_ressort
 
 pytestmark = pytest.mark.integration
@@ -64,7 +64,11 @@ class TestEntwurfEnrichment:
 
         # Text extraction worked
         assert len(enriched.volltext) > 100, "volltext should contain substantial text"
-        assert len(enriched.hash_) == 64, "hash should be SHA256 hex digest"
+        # sha256 and sha1 of the file (issue #41)
+        assert [(h.strategy, len(h.value)) for h in enriched.hash_] == [
+            (HashStrategy.SHA256BYTES, 64),
+            (HashStrategy.SHA1BYTES, 40),
+        ]
 
         # LLM extraction worked
         assert enriched.zusammenfassung[0].typ == "full-llm"  # GitHub issue #42, DD-054

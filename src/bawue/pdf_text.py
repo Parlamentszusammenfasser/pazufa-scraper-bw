@@ -400,6 +400,12 @@ async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[
     return text, doc_hash
 
 
+def pdf_sha1(pdf_path: Path) -> str:
+    """SHA-1 of the PDF file: the backend cross-references documents by it (issue #41)."""
+    with open(pdf_path, "rb") as f:
+        return hashlib.file_digest(f, "sha1").hexdigest()
+
+
 _DRUCKSNR_RE = re.compile(r"(\d+)/(\d+)")
 # Landtag BW prints the issue date once, in the page-1 footer: "Ausgegeben: 10.12.2021",
 # on Entwürfe/Anträge "Eingegangen: 19.10.2021/Ausgegeben: 20.10.2021". Where the footer

@@ -42,6 +42,7 @@ from bawue.types import (
     Zusammenfassungstupel,
     placeholder_hash,
 )
+from tests.unit.test_bawue_dok import SAMPLE_HASH, SAMPLE_PDF_HASHES
 
 
 def _make_raw_vorgang(
@@ -5651,10 +5652,16 @@ class TestIssue66DrucksacheHashRegistry:
         return scraper.config.cache.data
 
     @pytest.mark.asyncio
-    async def test_read_drucksache_is_registered(self):
-        data = await self._store([MagicMock(dokumente=[self._dok("18/700")])])
+    @pytest.mark.parametrize(
+        "hash_",
+        [SAMPLE_HASH, SAMPLE_PDF_HASHES, SAMPLE_PDF_HASHES[::-1]],
+        ids=["plain", "structured", "sha1-first"],
+    )
+    async def test_read_drucksache_is_registered(self, hash_):
+        """A TOP sends the sha256 as plain string, which the backend reads as sha256+bytes (issue #41)."""
+        data = await self._store([MagicMock(dokumente=[self._dok("18/700", hash_=hash_)])])
 
-        assert data["drucks-hash:18/700"] == "a" * 64
+        assert data["drucks-hash:18/700"] == SAMPLE_HASH
 
     @pytest.mark.asyncio
     async def test_also_when_the_vorgang_is_retried(self):

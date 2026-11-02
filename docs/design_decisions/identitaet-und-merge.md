@@ -107,7 +107,19 @@ Deduplizierung nur über `drucksnr` verwarf den angenommenen Antrag; ein Hash ü
 Datei hätte beide im Backend verschmolzen.
 
 **Entscheidung:** Dedup über `(drucksnr, Anker)`. `hash_` faltet den Anker ein:
-`sha256("<datei-hash>#page=<n>")`. Seit DD-049 auch für Protokolle.
+`sha256("<datei-hash>#page=<n>")`. Seit DD-049 auch für Protokolle. Ohne Anker sendet
+`hash_` die echten Digests der Datei, `[sha256+bytes, sha1+bytes]`: Den sha1 nutzt das
+Backend für Querverweise (Issue #41). Ein Fenster bekommt keinen sha1 — das Backend
+matcht auf jeden gemeinsamen Hash und führte alle Fenster eines PDFs zusammen.
+
+**Konsequenz:** `subdoc_id` ersetzt den eingefalteten Anker erst, wenn das Backend (v0.3.5)
+zweierlei ändert: Der Merge schreibt `subdoc_id` nicht und überschreibt den Fenster-Hash mit
+dem Datei-Hash — der Row sähe aus wie der ankerlose der Datei. Und der Treffer über
+`drucksnr`/`typ`/`zp_referenz` ignoriert `subdoc_id`, trennt also die Fenster einer
+Drucksache nicht. Dazu kommt eine Bereinigung der Fenster-Rows ([Issue #41,
+Kommentar](https://github.com/Parlamentszusammenfasser/pazufa-scraper-bw/issues/41#issuecomment-6586875474)). Der Register-Eintrag eines TOP (DD-070) und die Beteiligungsfrist (DD-076)
+speichern nur den sha256 (`types.row_sha256`). Bestehende Vorgänge erhalten den sha1 erst,
+wenn sich ihre Quelle ändert: der PARLIS-Datensatz oder die Seite im Beteiligungsportal (DD-052).
 
 <a id="dd-048"></a>
 ## DD-048: Platzhalter-Hash statt geteiltem `TODO`

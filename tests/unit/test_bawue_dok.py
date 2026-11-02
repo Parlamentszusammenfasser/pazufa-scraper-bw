@@ -46,7 +46,16 @@ from bawue.pdf_text import (
     extract_pdf_text,
     normalize_volltext,
 )
-from bawue.types import UNSET, Autor, Doktyp, Dokument, Zusammenfassungstupel
+from bawue.types import (
+    UNSET,
+    Autor,
+    Doktyp,
+    Dokument,
+    DokumentHash,
+    HashStrategy,
+    Mime,
+    Zusammenfassungstupel,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -55,6 +64,11 @@ from bawue.types import UNSET, Autor, Doktyp, Dokument, Zusammenfassungstupel
 SAMPLE_PDF_BYTES = b"%PDF-1.4 fake content for testing"
 SAMPLE_FULL_TEXT = "Dies ist ein Testtext mit mehr als 64 Zeichen, der als Volltext eines Gesetzesentwurfs dienen soll."
 SAMPLE_HASH = hashlib.sha256(SAMPLE_PDF_BYTES).hexdigest()
+SAMPLE_SHA1 = hashlib.sha1(SAMPLE_PDF_BYTES).hexdigest()
+SAMPLE_PDF_HASHES = [
+    DokumentHash(value=SAMPLE_HASH, strategy=HashStrategy.SHA256BYTES, mime=Mime.APPLICATIONPDF),
+    DokumentHash(value=SAMPLE_SHA1, strategy=HashStrategy.SHA1BYTES, mime=Mime.APPLICATIONPDF),
+]
 
 SAMPLE_LLM_RESPONSE_ENTWURF = json.dumps(
     {
@@ -123,7 +137,7 @@ def _mock_extraction_result(content: str = SAMPLE_FULL_TEXT):
 
 
 def _patch_pdf_pipeline(text_and_hash=SAMPLE_TEXT_AND_HASH):
-    """Context manager that mocks download_pdf and extract_pdf_text."""
+    """Context manager that mocks download_pdf, extract_pdf_text and pdf_sha1."""
     from contextlib import contextmanager
 
     @contextmanager
@@ -139,6 +153,7 @@ def _patch_pdf_pipeline(text_and_hash=SAMPLE_TEXT_AND_HASH):
                 new_callable=AsyncMock,
                 return_value=text_and_hash,
             ),
+            patch("bawue.bawue_dok.pdf_sha1", return_value=SAMPLE_SHA1),
         ):
             yield
 
@@ -626,7 +641,7 @@ class TestEnrichDokument:
         assert mock_acomp.call_count == 1
         assert any("token" in r.message.lower() for r in caplog.records)
         assert result.dokument.volltext == SAMPLE_FULL_TEXT
-        assert result.dokument.hash_ == SAMPLE_HASH
+        assert result.dokument.hash_ == SAMPLE_PDF_HASHES
         assert zusammenfassung_text(result.dokument) == "Ein Gesetzentwurf zur Förderung erneuerbarer Energien."
         assert result.dokument.schlagworte == ["umwelt", "klimaschutz", "energie"]
         assert result.dokument.kurztitel == "Erneuerbare-Energien-Gesetz"
@@ -672,7 +687,7 @@ class TestEnrichDokument:
 
         # Text-only: volltext and hash populated
         assert result.dokument.volltext == SAMPLE_FULL_TEXT
-        assert result.dokument.hash_ == SAMPLE_HASH
+        assert result.dokument.hash_ == SAMPLE_PDF_HASHES
         # No LLM fields
         assert result.dokument.zusammenfassung is UNSET
         assert result.dokument.schlagworte is UNSET
@@ -1170,7 +1185,7 @@ class TestPerVorgangProtocolRows:
         assert r_a.dokument.hash_ == r_b.dokument.hash_
 
     @pytest.mark.asyncio
-    async def test_unanchored_protocol_keeps_plain_file_digest(self):
+    async def test_unanchored_protocol_keeps_the_file_digests(self):
         """Without a `#page=N` anchor there is nothing per-Vorgang to preserve.
 
         The „Beschluss des Landtags in Zweiter Beratung" Drucksachen map to
@@ -1184,7 +1199,50 @@ class TestPerVorgangProtocolRows:
         with _patch_pdf_pipeline(), _patch_llm(SAMPLE_LLM_RESPONSE_GENERIC):
             result = await enrich_dokument(session, llm, dok)
 
-        assert result.dokument.hash_ == SAMPLE_HASH
+        assert result.dokument.hash_ == SAMPLE_PDF_HASHES
+
+
+class TestIssue41StructuredHash:
+    """Issue #41: a PDF without anchor sends its real digests, sha256 and sha1 (DD-043).
+
+    An anchored window keeps its folded sha256 string: the backend merges on any shared
+    hash, so the file's sha1 would merge every window of one PDF into one row.
+    """
+
+    LINK = "https://www.landtag-bw.de/resource/blob/3/17_4495.pdf"
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _hash_cache.clear()
+        yield
+        _hash_cache.clear()
+
+    @staticmethod
+    async def _enrich(tmp_path: Path, link: str) -> Dokument:
+        pdf = tmp_path / "17_4495.pdf"
+        pdf.write_bytes(SAMPLE_PDF_BYTES)
+        with (
+            patch("bawue.bawue_dok.download_pdf", new_callable=AsyncMock, return_value=pdf),
+            patch("bawue.bawue_dok.extract_pdf_text", new_callable=AsyncMock, return_value=SAMPLE_TEXT_AND_HASH),
+            _patch_llm(SAMPLE_LLM_RESPONSE_ENTWURF),
+        ):
+            result = await enrich_dokument(MagicMock(), _make_llm_mock(), _make_plain_dokument(link=link))
+        return result.dokument
+
+    @pytest.mark.asyncio
+    async def test_unanchored_pdf_sends_sha256_and_sha1_of_the_file(self, tmp_path):
+        from pazufa_corelib.api_model import Dokument as SpecDokument
+
+        dok = await self._enrich(tmp_path, self.LINK)
+
+        assert dok.hash_ == SAMPLE_PDF_HASHES
+        SpecDokument.model_validate(dok.to_dict())  # the backend's mime/strategy/length rules (DD-051)
+
+    @pytest.mark.asyncio
+    async def test_anchored_window_keeps_its_folded_sha256(self, tmp_path):
+        dok = await self._enrich(tmp_path, f"{self.LINK}#page=5")
+
+        assert dok.hash_ == hashlib.sha256(f"{SAMPLE_HASH}#page=5".encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------

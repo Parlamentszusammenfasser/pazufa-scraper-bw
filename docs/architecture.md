@@ -461,7 +461,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 **PDF pipeline** (`pdf_text.py`):
 - Downloads PDF via `aiohttp` session to a temporary file
 - Extracts text via `kreuzberg` (normal extraction first; OCR fallback if result < 64 chars or garbled, DD-015)
-- Computes SHA256 hash for deduplication
+- Computes the file's SHA256 (and SHA1, `pdf_sha1`) for the document's row identity (DD-043)
 
 **LLM pipeline:**
 - Document-type-specific German prompts (5 variants: ENTWURF, STELLUNGNAHME, BESCHLUSSEMPF, REDEPROTOKOLL, GENERIC)
@@ -654,7 +654,7 @@ The community [Definition of Done](https://wiki.pazufa.de/books/scraper/page/def
 
 - `Sitzung.tops` / `nummer`: only for the next Plenarsitzung (DD-070); else `[]` / `0` (DD-064).
 - `Vorgang.schlagworte` reach the backend only for new Vorgänge; the merge drops them (DD-060).
-- Not sent: `lobbyregister`, `Dokument.subdoc_id`, structured `DokumentHash`.
+- Not sent: `lobbyregister`, `Dokument.subdoc_id`; a `#page=N` window sends no sha1 (DD-043).
 - Gesetzblatt before 2024 is paper only; those citations keep the PARLIS date (DD-047). The site's
   `robots.txt` blocks `/system/pdf/` and the search page; the detail pages are free.
 - No source for Kabinettsbeschlüsse (STM) as a signal for new Regierungsentwürfe.

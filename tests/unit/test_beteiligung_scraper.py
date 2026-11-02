@@ -1,7 +1,6 @@
 """Tests for the BawueBeteiligungScraper."""
 
 import asyncio
-import hashlib
 import json
 import logging
 from datetime import UTC, date, datetime
@@ -26,9 +25,9 @@ from bawue.types import (
     Zusammenfassungstupel,
     placeholder_hash,
 )
+from tests.unit.test_bawue_dok import SAMPLE_HASH, SAMPLE_PDF_HASHES
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
-ENTWURF_HASH = hashlib.sha256(b"Entwurf").hexdigest()
 
 
 def _make_scraper():
@@ -492,7 +491,9 @@ class TestIssue148FristenRegister:
         vorgang = await scraper.item_extractor(slug)
         if read:
             dok = vorgang.stationen[0].dokumente[0]
-            dok.volltext, dok.hash_ = "Volltext", ENTWURF_HASH
+            dok.volltext = "Volltext"
+            # A Beteiligung PDF has no #page anchor, so a read one carries both digests (issue #41).
+            dok.hash_ = SAMPLE_PDF_HASHES
         await scraper.store_extracted_result(slug, vorgang)
         return json.loads(scraper.config.cache.get_raw("beteiligungsfristen"))
 
@@ -505,7 +506,7 @@ class TestIssue148FristenRegister:
         return scraper
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(("read", "hash_"), [(True, ENTWURF_HASH), (False, None)], ids=["read", "unread"])
+    @pytest.mark.parametrize(("read", "hash_"), [(True, SAMPLE_HASH), (False, None)], ids=["read", "unread"])
     async def test_registers_the_deadline_with_the_uploaded_document(self, read, hash_):
         register = await self._upload(self._scraper(), "entbuerokratisierung", date(2025, 11, 13), read)
 

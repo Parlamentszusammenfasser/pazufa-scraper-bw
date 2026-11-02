@@ -43,6 +43,7 @@ from bawue.types import (
     canonicalize_organisation,
     is_verfassungsaendernd,
     placeholder_hash,
+    row_sha256,
     todo_if_blank,
 )
 from bawue.upload_throttle import upload_vorgang
@@ -204,7 +205,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
                 "portal": vorgang.links[0],
                 "pdf": dok.link,
                 # Only a read document: a placeholder row is replaced once the PDF is read (as DD-070).
-                "hash": dok.hash_ if dok.volltext != TODO_MARKER else None,
+                "hash": row_sha256(dok.hash_) if dok.volltext != TODO_MARKER else None,
             }
         return self.config.cache.store_raw(BETEILIGUNGSFRISTEN_KEY, json.dumps(fristen, ensure_ascii=False), "Fristen")
 

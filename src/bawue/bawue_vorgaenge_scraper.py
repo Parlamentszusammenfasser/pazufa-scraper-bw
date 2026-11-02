@@ -54,6 +54,7 @@ from bawue.types import (
     is_verfassungsaendernd,
     none_if_blank,
     placeholder_hash,
+    row_sha256,
     todo_if_blank,
 )
 from bawue.upload_throttle import upload_vorgang
@@ -417,7 +418,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         for station in result.stationen:
             for dok in station.dokumente:
                 if isinstance(dok.drucksnr, str) and dok.volltext != TODO_MARKER:
-                    self.config.cache.store_raw(drucksache_hash_key(dok.drucksnr), dok.hash_, "Dokument")
+                    self.config.cache.store_raw(drucksache_hash_key(dok.drucksnr), row_sha256(dok.hash_), "Dokument")
         vorgnr = next((i.id for i in result.ids or [] if i.typ == "vorgnr"), None)
         if vorgnr is not None and vorgnr in self._retry_next_cycle:
             self._retry_next_cycle.discard(vorgnr)
