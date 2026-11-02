@@ -25,7 +25,10 @@ from typing import TypedDict
 from pazufa_corelib.api_client.models.autor import Autor
 from pazufa_corelib.api_client.models.doktyp import Doktyp
 from pazufa_corelib.api_client.models.dokument import Dokument
+from pazufa_corelib.api_client.models.dokument_hash import DokumentHash
 from pazufa_corelib.api_client.models.gremium import Gremium
+from pazufa_corelib.api_client.models.hash_strategy import HashStrategy
+from pazufa_corelib.api_client.models.mime import Mime
 from pazufa_corelib.api_client.models.parlament import Parlament
 from pazufa_corelib.api_client.models.ressort import Ressort
 from pazufa_corelib.api_client.models.sachgebiet import Sachgebiet
@@ -46,7 +49,10 @@ __all__ = [
     "CanonicalOrganisation",
     "Doktyp",
     "Dokument",
+    "DokumentHash",
     "Gremium",
+    "HashStrategy",
+    "Mime",
     "Parlament",
     "RawFundstelle",
     "RawVorgang",
@@ -66,6 +72,7 @@ __all__ = [
     "is_verfassungsaendernd",
     "none_if_blank",
     "placeholder_hash",
+    "sha256_hash",
     "todo_if_blank",
 ]
 
@@ -174,6 +181,16 @@ def placeholder_hash(identity: str) -> str:
     content digest.
     """
     return hashlib.sha256(identity.encode()).hexdigest()
+
+
+def sha256_hash(hash_: list[DokumentHash] | str) -> str:
+    """The sha256 of a ``Dokument.hash_``, which a later Dokument sends to match its row.
+
+    A plain string is the spec's spelling of sha256+bytes; a list holds one (issue #41).
+    """
+    if isinstance(hash_, str):
+        return hash_
+    return next(h.value for h in hash_ if h.strategy == HashStrategy.SHA256BYTES)
 
 
 def none_if_blank(value: str | None) -> str | None:

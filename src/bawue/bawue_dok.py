@@ -30,8 +30,9 @@ from bawue.pdf_text import (
     download_pdf,
     extract_pdf_text,
     normalize_volltext,
+    pdf_sha1,
 )
-from bawue.types import Doktyp, Dokument, Zusammenfassungstupel
+from bawue.types import Doktyp, Dokument, DokumentHash, HashStrategy, Mime, Zusammenfassungstupel
 
 logger = logging.getLogger(__name__)
 
@@ -563,7 +564,7 @@ async def enrich_dokument(
     ``hash_`` is the document's row identity in the backend and always carries the
     ``#page=N`` anchor when the Fundstelle has one — one row per Fundstelle, so
     ``titel``, ``link`` and ``autoren`` stay with the Vorgang that produced them
-    (issue #25, DD-043).
+    (issue #25, DD-043). Without an anchor it is the file's sha256 and sha1 (issue #41).
 
     Uses an in-memory hash cache to skip LLM calls for duplicate PDFs within
     the same scraper run.
@@ -605,8 +606,16 @@ async def enrich_dokument(
         # of the *file*, which is what the semantics cache keys on for
         # REDEPROTOKOLL (DD-043).
         file_hash = doc_hash
+        hash_: list[DokumentHash] | str
         if page_hint is not None:
-            doc_hash = hashlib.sha256(f"{doc_hash}#page={page_hint}".encode()).hexdigest()
+            doc_hash = hash_ = hashlib.sha256(f"{doc_hash}#page={page_hint}".encode()).hexdigest()
+        else:
+            # The real digests; sha1 lets the backend cross-reference other sources (issue #41).
+            # Not for a window: the backend merges on any shared hash, the file's sha1 would join them.
+            hash_ = [
+                DokumentHash(value=file_hash, strategy=HashStrategy.SHA256BYTES, mime=Mime.APPLICATIONPDF),
+                DokumentHash(value=pdf_sha1(pdf_path), strategy=HashStrategy.SHA1BYTES, mime=Mime.APPLICATIONPDF),
+            ]
 
         if not full_text:
             # Empty volltext is rejected by the backend (required StrictStr).
@@ -657,7 +666,7 @@ async def enrich_dokument(
         text_fields = {
             "titel": dok.titel,
             "volltext": full_text,
-            "hash_": doc_hash,
+            "hash_": hash_,
             "typ": dok.typ,
             "zp_modifiziert": ausgegeben or dok.zp_modifiziert,
             "zp_referenz": dok.zp_referenz,

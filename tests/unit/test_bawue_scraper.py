@@ -34,6 +34,9 @@ from bawue.types import (
     UNSET,
     Doktyp,
     Dokument,
+    DokumentHash,
+    HashStrategy,
+    Mime,
     ReservedGremium,
     Ressort,
     Sachgebiet,
@@ -5651,8 +5654,20 @@ class TestIssue66DrucksacheHashRegistry:
         return scraper.config.cache.data
 
     @pytest.mark.asyncio
-    async def test_read_drucksache_is_registered(self):
-        data = await self._store([MagicMock(dokumente=[self._dok("18/700")])])
+    @pytest.mark.parametrize(
+        "hash_",
+        [
+            "a" * 64,
+            [
+                DokumentHash(value="a" * 64, strategy=HashStrategy.SHA256BYTES, mime=Mime.APPLICATIONPDF),
+                DokumentHash(value="b" * 40, strategy=HashStrategy.SHA1BYTES, mime=Mime.APPLICATIONPDF),
+            ],
+        ],
+        ids=["anchored", "structured"],
+    )
+    async def test_read_drucksache_is_registered(self, hash_):
+        """A TOP sends the sha256 as plain string, which the backend reads as sha256+bytes (issue #41)."""
+        data = await self._store([MagicMock(dokumente=[self._dok("18/700", hash_=hash_)])])
 
         assert data["drucks-hash:18/700"] == "a" * 64
 

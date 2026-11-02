@@ -107,7 +107,16 @@ Deduplizierung nur über `drucksnr` verwarf den angenommenen Antrag; ein Hash ü
 Datei hätte beide im Backend verschmolzen.
 
 **Entscheidung:** Dedup über `(drucksnr, Anker)`. `hash_` faltet den Anker ein:
-`sha256("<datei-hash>#page=<n>")`. Seit DD-049 auch für Protokolle.
+`sha256("<datei-hash>#page=<n>")`. Seit DD-049 auch für Protokolle. Ohne Anker sendet
+`hash_` die echten Digests der Datei, `[sha256+bytes, sha1+bytes]`: Den sha1 nutzt das
+Backend für Querverweise (Issue #41). Ein Fenster bekommt keinen sha1 — das Backend
+matcht auf jeden gemeinsamen Hash und führte alle Fenster eines PDFs zusammen.
+
+**Konsequenz:** `subdoc_id` ersetzt den eingefalteten Anker erst, wenn das Backend sie beim
+Merge schreibt (v0.3.5 tut es nicht); der Wechsel braucht dann eine Migration der
+Fenster-Rows. Der Register-Eintrag eines TOP (DD-070) und die Beteiligungsfrist (DD-076)
+speichern nur den sha256 (`types.sha256_hash`). Bestehende Vorgänge erhalten den sha1 erst,
+wenn sich ihr PARLIS-Datensatz ändert (DD-052).
 
 <a id="dd-048"></a>
 ## DD-048: Platzhalter-Hash statt geteiltem `TODO`

@@ -19,6 +19,9 @@ from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess
 from bawue.types import (
     UNSET,
     Doktyp,
+    DokumentHash,
+    HashStrategy,
+    Mime,
     Parlament,
     Ressort,
     Stationstyp,
@@ -492,7 +495,12 @@ class TestIssue148FristenRegister:
         vorgang = await scraper.item_extractor(slug)
         if read:
             dok = vorgang.stationen[0].dokumente[0]
-            dok.volltext, dok.hash_ = "Volltext", ENTWURF_HASH
+            dok.volltext = "Volltext"
+            # A Beteiligung PDF has no #page anchor, so a read one carries both digests (issue #41).
+            dok.hash_ = [
+                DokumentHash(value=ENTWURF_HASH, strategy=HashStrategy.SHA256BYTES, mime=Mime.APPLICATIONPDF),
+                DokumentHash(value="b" * 40, strategy=HashStrategy.SHA1BYTES, mime=Mime.APPLICATIONPDF),
+            ]
         await scraper.store_extracted_result(slug, vorgang)
         return json.loads(scraper.config.cache.get_raw("beteiligungsfristen"))
 
