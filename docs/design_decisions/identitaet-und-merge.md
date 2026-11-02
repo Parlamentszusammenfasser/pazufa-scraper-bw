@@ -115,7 +115,7 @@ matcht auf jeden gemeinsamen Hash und führte alle Fenster eines PDFs zusammen.
 **Konsequenz:** `subdoc_id` ersetzt den eingefalteten Anker erst, wenn das Backend sie beim
 Merge schreibt (v0.3.5 tut es nicht); der Wechsel braucht dann eine Migration der
 Fenster-Rows. Der Register-Eintrag eines TOP (DD-070) und die Beteiligungsfrist (DD-076)
-speichern nur den sha256 (`types.sha256_hash`). Bestehende Vorgänge erhalten den sha1 erst,
+speichern nur den sha256 (`types.row_sha256`). Bestehende Vorgänge erhalten den sha1 erst,
 wenn sich ihr PARLIS-Datensatz ändert (DD-052).
 
 <a id="dd-048"></a>

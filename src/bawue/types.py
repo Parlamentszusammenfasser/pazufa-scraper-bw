@@ -72,7 +72,7 @@ __all__ = [
     "is_verfassungsaendernd",
     "none_if_blank",
     "placeholder_hash",
-    "sha256_hash",
+    "row_sha256",
     "todo_if_blank",
 ]
 
@@ -183,8 +183,8 @@ def placeholder_hash(identity: str) -> str:
     return hashlib.sha256(identity.encode()).hexdigest()
 
 
-def sha256_hash(hash_: list[DokumentHash] | str) -> str:
-    """The sha256 of a ``Dokument.hash_``, which a later Dokument sends to match its row.
+def row_sha256(hash_: list[DokumentHash] | str) -> str:
+    """Pick the sha256 out of a ``Dokument.hash_``: a later Dokument sends it to match the row.
 
     A plain string is the spec's spelling of sha256+bytes; a list holds one (issue #41).
     """
