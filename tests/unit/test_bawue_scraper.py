@@ -5652,7 +5652,11 @@ class TestIssue66DrucksacheHashRegistry:
         return scraper.config.cache.data
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("hash_", [SAMPLE_HASH, SAMPLE_PDF_HASHES], ids=["plain", "structured"])
+    @pytest.mark.parametrize(
+        "hash_",
+        [SAMPLE_HASH, SAMPLE_PDF_HASHES, SAMPLE_PDF_HASHES[::-1]],
+        ids=["plain", "structured", "sha1-first"],
+    )
     async def test_read_drucksache_is_registered(self, hash_):
         """A TOP sends the sha256 as plain string, which the backend reads as sha256+bytes (issue #41)."""
         data = await self._store([MagicMock(dokumente=[self._dok("18/700", hash_=hash_)])])
