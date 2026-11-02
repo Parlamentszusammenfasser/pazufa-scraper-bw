@@ -461,7 +461,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 **PDF pipeline** (`pdf_text.py`):
 - Downloads PDF via `aiohttp` session to a temporary file
 - Extracts text via `kreuzberg` (normal extraction first; OCR fallback if result < 64 chars or garbled, DD-015)
-- Computes SHA256 hash for deduplication
+- Computes the file's SHA256 (and SHA1, `pdf_sha1`) for the document's row identity (DD-043)
 
 **LLM pipeline:**
 - Document-type-specific German prompts (5 variants: ENTWURF, STELLUNGNAHME, BESCHLUSSEMPF, REDEPROTOKOLL, GENERIC)
