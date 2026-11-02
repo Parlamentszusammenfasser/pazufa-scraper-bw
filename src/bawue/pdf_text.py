@@ -351,12 +351,6 @@ _OCR_CONFIG_PAGE_MARKERS = ExtractionConfig(
 )
 
 
-def pdf_sha1(pdf_path: Path) -> str:
-    """SHA-1 of the PDF file: the backend cross-references documents by it (issue #41)."""
-    with open(pdf_path, "rb") as f:
-        return hashlib.file_digest(f, "sha1").hexdigest()
-
-
 async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[str, str]:
     """Extract text and compute SHA256 hash from a PDF file.
 
@@ -404,6 +398,12 @@ async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[
             logger.warning("OCR retry failed (%s), keeping original garbled text", type(exc).__name__)
 
     return text, doc_hash
+
+
+def pdf_sha1(pdf_path: Path) -> str:
+    """SHA-1 of the PDF file: the backend cross-references documents by it (issue #41)."""
+    with open(pdf_path, "rb") as f:
+        return hashlib.file_digest(f, "sha1").hexdigest()
 
 
 _DRUCKSNR_RE = re.compile(r"(\d+)/(\d+)")
