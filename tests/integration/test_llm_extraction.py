@@ -64,7 +64,11 @@ class TestEntwurfEnrichment:
 
         # Text extraction worked
         assert len(enriched.volltext) > 100, "volltext should contain substantial text"
-        assert [h.strategy for h in enriched.hash_] == [HashStrategy.SHA256BYTES, HashStrategy.SHA1BYTES]  # issue #41
+        # sha256 and sha1 of the file (issue #41)
+        assert [(h.strategy, len(h.value)) for h in enriched.hash_] == [
+            (HashStrategy.SHA256BYTES, 64),
+            (HashStrategy.SHA1BYTES, 40),
+        ]
 
         # LLM extraction worked
         assert enriched.zusammenfassung[0].typ == "full-llm"  # GitHub issue #42, DD-054
