@@ -119,7 +119,7 @@ dem Datei-Hash — der Row sähe aus wie der ankerlose der Datei. Und der Treffe
 Drucksache nicht. Dazu kommt eine Bereinigung der Fenster-Rows ([Issue #41,
 Kommentar](https://github.com/Parlamentszusammenfasser/pazufa-scraper-bw/issues/41#issuecomment-6586875474)). Der Register-Eintrag eines TOP (DD-070) und die Beteiligungsfrist (DD-076)
 speichern nur den sha256 (`types.row_sha256`). Bestehende Vorgänge erhalten den sha1 erst,
-wenn sich ihr PARLIS-Datensatz ändert (DD-052).
+wenn sich ihre Quelle ändert: der PARLIS-Datensatz oder die Seite im Beteiligungsportal (DD-052).
 
 <a id="dd-048"></a>
 ## DD-048: Platzhalter-Hash statt geteiltem `TODO`
