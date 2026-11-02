@@ -137,7 +137,7 @@ def _mock_extraction_result(content: str = SAMPLE_FULL_TEXT):
 
 
 def _patch_pdf_pipeline(text_and_hash=SAMPLE_TEXT_AND_HASH):
-    """Context manager that mocks download_pdf and extract_pdf_text."""
+    """Context manager that mocks download_pdf, extract_pdf_text and pdf_sha1."""
     from contextlib import contextmanager
 
     @contextmanager
