@@ -6,14 +6,13 @@ from datetime import date, timedelta
 
 import requests
 
-from bawue.parlis_parser import parse_results
+from bawue.parlis_parser import BASE_URL, parse_results
 from bawue.rate_limiter import AdaptiveRateLimiter
 from bawue.types import RawVorgang
 from bawue.wahlperiode import CURRENT_WAHLPERIODE
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://parlis.landtag-bw.de/parlis/"
 BROWSE_URL = BASE_URL + "browse.tt.json"
 REPORT_URL = BASE_URL + "report.tt.html"
 CHUNKSIZE = 50

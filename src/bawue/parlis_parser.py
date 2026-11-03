@@ -40,12 +40,12 @@ _FIELD_SACHGEBIET = "WMV32"
 _FIELD_DESKRIPTOREN = "EWBV34"
 _FIELD_FUNDSTELLEN = "WMV35"
 
-_BASE_URL = "https://parlis.landtag-bw.de/parlis/"
+BASE_URL = "https://parlis.landtag-bw.de/parlis/"
 
 
 def vorgang_url(vorgangs_id: str) -> str:
     """The Vorgang's PARLIS detail page."""
-    return f"{_BASE_URL}vorgang/{vorgangs_id}"
+    return f"{BASE_URL}vorgang/{vorgangs_id}"
 
 
 def _safe_main(data: dict, key: str) -> str | None:
