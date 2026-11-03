@@ -178,8 +178,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
     _changed: int = 0
 
     # Emit the Initiativdrucksache as a cross-reference `vg_ident` (Issue #26 / GitHub #3,
-    # DD-041). Class-level default so tests and other manual-construction paths inherit
-    # it without setting it.
+    # DD-041). Class-level default so unit tests built via object.__new__ inherit it.
     _emit_initdrucks_ident: bool = True
 
     # Resolves a Gesetzblatt citation to its real Ausgabedatum (DD-047). Class-level
