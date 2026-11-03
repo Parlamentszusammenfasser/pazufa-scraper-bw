@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 MIN_TEXT_LENGTH = 64
 
 
-def _loop_semaphore(slot: dict, limit: int) -> asyncio.Semaphore:
+def loop_semaphore(slot: dict, limit: int) -> asyncio.Semaphore:
     """The current event loop's semaphore, shared by all scrapers of a cycle.
 
     A semaphore binds to the first loop that waits on it, and one process can run
@@ -47,7 +47,7 @@ def _loop_semaphore(slot: dict, limit: int) -> asyncio.Semaphore:
 _LINEBREAK_HYPHEN_RE = re.compile(r"(?<=[a-zäöüß])-\n?(?=[a-zäöüß])")
 
 
-def _paragraph_quality_score(text: str) -> float:
+def paragraph_quality_score(text: str) -> float:
     """Score a paragraph's text quality from 0.0 (garbled) to 1.0 (clean).
 
     Detects broken PDF font encoding via three signals:
@@ -66,7 +66,7 @@ def _paragraph_quality_score(text: str) -> float:
     # Signal 1: C1 control characters — never in properly extracted German text
     c1_count = sum(1 for c in text if 0x80 <= ord(c) <= 0x9F)
 
-    # Signal 2: Latin Extended-A+B (0x0100-0x024F, same range as _is_garbled)
+    # Signal 2: Latin Extended-A+B (0x0100-0x024F, same range as is_garbled)
     ext_count = sum(1 for c in text if 0x0100 <= ord(c) <= 0x024F)
 
     # Signal 3: long words without German vowels (German is vowel-rich)
@@ -101,7 +101,7 @@ def normalize_volltext(text: str) -> str:
     of the logic lives in one place. Two BaWue-specific passes are layered on
     top of it:
 
-    1. A second garbled-paragraph filter using :func:`_paragraph_quality_score`.
+    1. A second garbled-paragraph filter using :func:`paragraph_quality_score`.
        corelib gates its uppercase penalty behind a ≥4-word minimum, so a
        broken-font paragraph that collapses to a single token after control-char
        stripping (the ASCII-shift pattern in BW PDFs) slips through corelib's
@@ -119,7 +119,7 @@ def normalize_volltext(text: str) -> str:
 
     # Pass 1: drop garbled paragraphs corelib's word-gated scorer misses.
     paragraphs = text.split("\n\n")
-    text = "\n\n".join(p for p in paragraphs if _paragraph_quality_score(p) >= 0.5)
+    text = "\n\n".join(p for p in paragraphs if paragraph_quality_score(p) >= 0.5)
 
     # Pass 2 (issue #20): reassemble words the extractor left hyphenated.
     return _LINEBREAK_HYPHEN_RE.sub("", text)
@@ -136,7 +136,7 @@ _GARBLED_LATIN_EXT_THRESHOLD = 0.05  # 5% of alpha chars in Latin Extended → g
 _GARBLED_C1_THRESHOLD = 0.005
 
 
-def _is_garbled(text: str) -> bool:
+def is_garbled(text: str) -> bool:
     """Detect garbled PDF text from broken font encodings (DD-015).
 
     Flags both patterns DD-015 documents, because both are recoverable by the
@@ -147,7 +147,7 @@ def _is_garbled(text: str) -> bool:
       ToUnicode CMap and kreuzberg maps glyph IDs to wrong Unicode code points.
     * *Muster 2* — C1 control characters (0x80-0x9F) above 0.5%, the by-product
       of the constant ASCII shift (``bQGHUXQJVDQWUDJ`` → ``Änderungsantrag``).
-      Mirrors ``_paragraph_quality_score``'s signal 1, but one layer earlier:
+      Mirrors ``paragraph_quality_score``'s signal 1, but one layer earlier:
       that scorer only *strips* such paragraphs, leaving the document empty
       (GitHub issue #20).
 
@@ -181,7 +181,7 @@ def _is_garbled(text: str) -> bool:
 def _usable_length(text: str) -> int:
     """How many characters of *text* survive :func:`normalize_volltext`.
 
-    ``_is_garbled`` measures the whole document, so it also fires on PDFs where
+    ``is_garbled`` measures the whole document, so it also fires on PDFs where
     only part of the text is broken (measured: ~15 % of the affected corpus keeps
     40-97 % of its content). OCR replaces *everything*, including the pages that
     extracted cleanly, and is itself lossy on tables — so "not garbled" alone is
@@ -212,7 +212,7 @@ _WINDOW_PAGES = 30
 _MIN_AGENDA_PAGE_CHARS = 500
 
 
-def _parse_page_hint(url: str) -> int | None:
+def parse_page_hint(url: str) -> int | None:
     """Extract page number from a URL's ``#page=N`` fragment."""
     fragment = urlparse(url).fragment
     match = re.match(r"^page=(\d+)$", fragment)
@@ -226,7 +226,7 @@ def _page_map(text: str) -> dict[int, str]:
     return {int(parts[i]): parts[i + 1] for i in range(1, len(parts) - 1, 2)}
 
 
-def _agenda_text(text: str, page_hint: int | None, druckseiten: list[int] | None) -> tuple[str, list[int]] | None:
+def agenda_text(text: str, page_hint: int | None, druckseiten: list[int] | None) -> tuple[str, list[int]] | None:
     """The agenda item's pages of a marked protocol text, normalized, with their PDF numbers.
 
     The anchor is the item's first printed page (verified on 489 WP17/18 Fundstellen), so
@@ -247,7 +247,7 @@ def _agenda_text(text: str, page_hint: int | None, druckseiten: list[int] | None
     return (agenda, pages) if len(agenda) >= _MIN_AGENDA_PAGE_CHARS * len(pages) else None
 
 
-def _extract_relevant_pages(text: str, start_page: int, max_pages: int = _WINDOW_PAGES) -> str:
+def extract_relevant_pages(text: str, start_page: int, max_pages: int = _WINDOW_PAGES) -> str:
     """Extract text from *start_page* through *start_page + max_pages* using page markers.
 
     Falls back to the full text when no markers are found or when the
@@ -331,7 +331,7 @@ _OCR_SLOT: dict = {}
 
 
 def _ocr_semaphore() -> asyncio.Semaphore:
-    return _loop_semaphore(_OCR_SLOT, _OCR_LIMIT)
+    return loop_semaphore(_OCR_SLOT, _OCR_LIMIT)
 
 
 _OCR_CONFIG = ExtractionConfig(
@@ -340,7 +340,7 @@ _OCR_CONFIG = ExtractionConfig(
     concurrency=ConcurrencyConfig(max_threads=_OCR_MAX_THREADS),
 )
 # OCR replaces the whole extracted text, so it has to carry the page markers too
-# when a ``#page=N`` hint is in play — otherwise _extract_relevant_pages finds
+# when a ``#page=N`` hint is in play — otherwise extract_relevant_pages finds
 # none and silently returns the entire document, giving every Antrag of a
 # Sammeldrucksache the same volltext (GitHub issue #20).
 _OCR_CONFIG_PAGE_MARKERS = ExtractionConfig(
@@ -357,8 +357,8 @@ async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[
     Args:
         pdf_path: Path to the PDF file.
         page_markers: Insert kreuzberg's page markers, also on the OCR retry, so the
-            caller can cut a ``#page=N`` window (``_extract_relevant_pages``) or a
-            protocol's agenda pages (``_agenda_text``, issue #74).
+            caller can cut a ``#page=N`` window (``extract_relevant_pages``) or a
+            protocol's agenda pages (``agenda_text``, issue #74).
 
     Returns (full_text, hash).  Falls back to OCR when:
     1. Normal extraction yields fewer than 64 characters, or
@@ -384,13 +384,13 @@ async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[
         async with _ocr_semaphore():
             ocr_result = await extract_file(pdf_path, config=ocr_config)
         text = ocr_result.content or ""
-    elif _is_garbled(text):
+    elif is_garbled(text):
         logger.warning("Garbled text detected (broken font encoding), retrying with OCR")
         try:
             async with _ocr_semaphore():
                 ocr_result = await extract_file(pdf_path, config=ocr_config)
             ocr_text = ocr_result.content or ""
-            if ocr_text and not _is_garbled(ocr_text) and _usable_length(ocr_text) > _usable_length(text):
+            if ocr_text and not is_garbled(ocr_text) and _usable_length(ocr_text) > _usable_length(text):
                 text = ocr_text
             else:
                 logger.warning("OCR did not improve garbled text, keeping original")

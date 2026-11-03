@@ -95,7 +95,7 @@ gehört nicht zum Schlüssel (DD-063).
 (V-243670, 229 Läufe HTTP 400).
 
 **Entscheidung:** Jeder LLM-String (Zusammenfassung, Abschnitte, Kurztitel, Vorwort,
-Schlagworte) geht durch `_sanitize_llm_text`: HTML-Tags (`</?[a-zA-Z][^<>]{0,80}>`)
+Schlagworte) geht durch `sanitize_llm_text`: HTML-Tags (`</?[a-zA-Z][^<>]{0,80}>`)
 entfernen, übrige Klammern zu `‹`/`›`, leer → `None`. Das passiert **nach** dem Cache-Lesen,
 so werden auch alte Einträge gereinigt.
 

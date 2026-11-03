@@ -147,7 +147,7 @@ def _json_comment_to_raw_vorgang(data: dict) -> RawVorgang | None:
     return result
 
 
-_GERMAN_MONTHS = {
+GERMAN_MONTHS = {
     "Januar": "01",
     "Februar": "02",
     "März": "03",
@@ -161,7 +161,7 @@ _GERMAN_MONTHS = {
     "November": "11",
     "Dezember": "12",
 }
-_GERMAN_DATE_RE = re.compile(
+GERMAN_DATE_RE = re.compile(
     r"(\d{1,2})\.\s*(Januar|Februar|März|April|Mai|Juni|Juli|August|"
     r"September|Oktober|November|Dezember)\s+(\d{4})"
 )
@@ -195,10 +195,10 @@ def parse_fundstelle_text(text: str) -> dict:
 
     if "datum" not in result:
         # Fallback: written-out German month names, e.g. "3. März 2024"
-        de_match = _GERMAN_DATE_RE.search(text)
+        de_match = GERMAN_DATE_RE.search(text)
         if de_match:
             day = de_match.group(1).zfill(2)
-            month = _GERMAN_MONTHS[de_match.group(2)]
+            month = GERMAN_MONTHS[de_match.group(2)]
             year = de_match.group(3)
             result["datum"] = f"{day}.{month}.{year}"
 

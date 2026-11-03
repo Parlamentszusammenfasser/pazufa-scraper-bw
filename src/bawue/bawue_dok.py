@@ -22,14 +22,14 @@ from pazufa_corelib.llm import LLMConnector
 from bawue.cache import BawueCache, RedisUnavailableError
 from bawue.pdf_text import (
     PdfNotAvailableError,
-    _agenda_text,
-    _extract_relevant_pages,
-    _loop_semaphore,
-    _parse_page_hint,
+    agenda_text,
     ausgegeben_datum,
     download_pdf,
     extract_pdf_text,
+    extract_relevant_pages,
+    loop_semaphore,
     normalize_volltext,
+    parse_page_hint,
     pdf_sha1,
 )
 from bawue.types import Doktyp, Dokument, DokumentHash, HashStrategy, Mime, Zusammenfassungstupel
@@ -101,7 +101,7 @@ _LLM_SLOT: dict = {}
 
 
 def _llm_semaphore() -> asyncio.Semaphore:
-    return _loop_semaphore(_LLM_SLOT, _LLM_LIMIT)
+    return loop_semaphore(_LLM_SLOT, _LLM_LIMIT)
 
 
 # Two-tier LLM semantics cache, keyed by (doc_hash, prompt_hash):
@@ -125,7 +125,7 @@ def clear_hash_cache() -> None:
 # LLM Prompts — one per Doktyp group, German, body-only (no header extraction)
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = (
+SYSTEM_PROMPT = (
     "Du bist ein präziser Assistent für politische und juristische Texte. "
     "Antworte klar, faktenorientiert. "
     "Füge keine Formatierungen oder Hervorhebungen hinzu. "
@@ -267,7 +267,7 @@ def _prompt_fingerprint(
     body = body_prompt or _prompt_for_doktyp(doktyp)
     prefix = _context_prefix(titel, drucksnr)
     vnr_part = f"\n\nVORGANG-VNR:{vorgang_vnr}" if vorgang_vnr else ""
-    return hashlib.sha256(f"{_SYSTEM_PROMPT}\n\n{prefix}{body}{vnr_part}".encode()).hexdigest()
+    return hashlib.sha256(f"{SYSTEM_PROMPT}\n\n{prefix}{body}{vnr_part}".encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -312,7 +312,7 @@ def _validate_scores(data: dict) -> dict:
 _HTML_LIKE_TAG_RE = re.compile(r"</?[a-zA-Z][^<>]{0,80}>")
 
 
-def _sanitize_llm_text(text: object) -> str | None:
+def sanitize_llm_text(text: object) -> str | None:
     """Strip HTML-like tag artefacts and neutralise stray angle brackets in LLM output (DD-027).
 
     The backend's XSS validator rejects payloads containing ``<``/``>``. The
@@ -352,11 +352,11 @@ def _llm_zusammenfassung(semantics: dict) -> list[Zusammenfassungstupel] | None:
     """Sanitised LLM summary as typed tuples — ``full-llm`` first, then any non-empty
     partial summary from :data:`ZUSAMMENFASSUNG_TEILE`. None without a ``full-llm``
     text: as in BB, the sections never go out on their own (DD-056)."""
-    if not (full := _sanitize_llm_text(semantics.get("zusammenfassung"))):
+    if not (full := sanitize_llm_text(semantics.get("zusammenfassung"))):
         return None
     tupel = [Zusammenfassungstupel(typ=ZUSAMMENFASSUNG_TYP, inhalt=full)]
     for key, typ in ZUSAMMENFASSUNG_TEILE.items():
-        if text := _sanitize_llm_text(semantics.get(key)):
+        if text := sanitize_llm_text(semantics.get(key)):
             tupel.append(Zusammenfassungstupel(typ=typ, inhalt=text))
     return tupel
 
@@ -369,10 +369,10 @@ def zusammenfassung_text(dok: Dokument) -> str | None:
 
 
 def _sanitize_llm_strings(values: list[str] | None) -> list[str] | None:
-    """Apply :func:`_sanitize_llm_text` to each list item, dropping empty results."""
+    """Apply :func:`sanitize_llm_text` to each list item, dropping empty results."""
     if not values:
         return values
-    cleaned = [_sanitize_llm_text(v) for v in values]
+    cleaned = [sanitize_llm_text(v) for v in values]
     return [v for v in cleaned if v]
 
 
@@ -402,7 +402,7 @@ def _parse_llm_response(content: str) -> dict:
         return repaired
 
 
-async def _llm_json(llm: LLMConnector, model: str, messages: list[dict]) -> dict:
+async def llm_json(llm: LLMConnector, model: str, messages: list[dict]) -> dict:
     """Run one JSON-mode chat completion and return the parsed object."""
     async with _llm_semaphore():
         response = await litellm.acompletion(
@@ -448,11 +448,11 @@ async def extract_semantics(
     logger.info("LLM call: %d input tokens, model=%s", input_tokens, model)
 
     messages = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_message},
     ]
 
-    return _validate_scores(await _llm_json(llm, model, messages))
+    return _validate_scores(await llm_json(llm, model, messages))
 
 
 async def narrow_to_relevant_section(
@@ -505,7 +505,7 @@ def _cache_key(doc_hash: str, prompt_hash: str) -> str:
     return f"{doc_hash}:{prompt_hash}"
 
 
-def _redis_get(
+def redis_get(
     cache: BawueCache | None, key: str, prefix: str = _REDIS_CACHE_PREFIX, typehint: str = "LLM Semantics"
 ) -> str | None:
     """Look up an LLM result in Redis under *prefix*. Returns the stored string or None."""
@@ -514,7 +514,7 @@ def _redis_get(
     return cache.get_raw(f"{prefix}{key}", typehint=typehint)
 
 
-def _redis_set(
+def redis_set(
     cache: BawueCache | None, key: str, value: str, prefix: str = _REDIS_CACHE_PREFIX, typehint: str = "LLM Semantics"
 ) -> None:
     """Store an LLM result in Redis under *prefix*."""
@@ -577,7 +577,7 @@ async def enrich_dokument(
     pdf_path: Path | None = None
     try:
         # Download PDF
-        page_hint = _parse_page_hint(dok.link)
+        page_hint = parse_page_hint(dok.link)
         try:
             pdf_path = await download_pdf(session, dok.link)
         except PdfNotAvailableError as exc:
@@ -591,7 +591,7 @@ async def enrich_dokument(
         # window is cut, so a protocol can still pick its agenda pages (issue #74).
         marked_text, file_hash = await extract_pdf_text(pdf_path, page_markers=page_hint is not None)
         full_text = normalize_volltext(
-            marked_text if page_hint is None else _extract_relevant_pages(marked_text, page_hint)
+            marked_text if page_hint is None else extract_relevant_pages(marked_text, page_hint)
         )
 
         # A #page=N anchor marks one Fundstelle's window into a PDF that several
@@ -639,7 +639,7 @@ async def enrich_dokument(
             context_vorgang_vnr = None
             context_drucksnr = None
             cache_hash = file_hash
-            if (agenda := _agenda_text(marked_text, page_hint, druckseiten)) is not None:
+            if (agenda := agenda_text(marked_text, page_hint, druckseiten)) is not None:
                 summary_text, pages = agenda
                 body_prompt = BODY_PROMPT_REDEPROTOKOLL_TOP
                 cache_hash = hashlib.sha256(f"{file_hash}#pages={pages}".encode()).hexdigest()
@@ -685,7 +685,7 @@ async def enrich_dokument(
                 semantics = _hash_cache[cache_key]
                 if metrics is not None:
                     metrics.cache_hits += 1
-            elif (cached_json := _redis_get(cache, cache_key)) is not None:
+            elif (cached_json := redis_get(cache, cache_key)) is not None:
                 logger.info(
                     "Redis cache hit for %s/%s, skipping LLM call",
                     cache_hash[:12],
@@ -715,7 +715,7 @@ async def enrich_dokument(
                     body_prompt=body_prompt,
                 )
                 _hash_cache[cache_key] = semantics
-                _redis_set(cache, cache_key, json.dumps(semantics))
+                redis_set(cache, cache_key, json.dumps(semantics))
                 if metrics is not None:
                     metrics.success += 1
 
@@ -724,9 +724,9 @@ async def enrich_dokument(
                     **text_fields,
                     zusammenfassung=_llm_zusammenfassung(semantics),
                     schlagworte=_sanitize_llm_strings(semantics.get("schlagworte")),
-                    kurztitel=_sanitize_llm_text(semantics.get("kurztitel")),
+                    kurztitel=sanitize_llm_text(semantics.get("kurztitel")),
                     meinung=semantics.get("meinung"),
-                    vorwort=_sanitize_llm_text(semantics.get("vorwort")),
+                    vorwort=sanitize_llm_text(semantics.get("vorwort")),
                 ),
             )
         except RedisUnavailableError:

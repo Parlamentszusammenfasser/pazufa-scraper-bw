@@ -44,7 +44,7 @@ import pytest
 
 from bawue.bawue_dok import _hash_cache, enrich_dokument
 from bawue.parlis_client import ParlisClient
-from bawue.pdf_text import _extract_relevant_pages, download_pdf, extract_pdf_text, normalize_volltext
+from bawue.pdf_text import download_pdf, extract_pdf_text, extract_relevant_pages, normalize_volltext
 from bawue.types import Autor, Doktyp, Dokument
 
 pytestmark = pytest.mark.integration
@@ -132,7 +132,7 @@ async def test_pdf_windows_confirm_the_anchors():
         try:
             for vid, (_reading, page, _keyword) in CASES.items():
                 text, _hash = await extract_pdf_text(path, page_markers=True)
-                text = _extract_relevant_pages(text, page)
+                text = extract_relevant_pages(text, page)
                 windows[vid] = normalize_volltext(text)
         finally:
             path.unlink(missing_ok=True)

@@ -26,25 +26,25 @@ from bawue.bawue_dok import (
     _prompt_fingerprint,
     _prompt_for_doktyp,
     _sanitize_llm_strings,
-    _sanitize_llm_text,
     _validate_scores,
     clear_hash_cache,
     enrich_dokument,
     extract_semantics,
     narrow_to_relevant_section,
+    sanitize_llm_text,
     zusammenfassung_text,
 )
 from bawue.pdf_text import (
     PdfNotAvailableError,
-    _agenda_text,
-    _extract_relevant_pages,
-    _is_garbled,
-    _paragraph_quality_score,
-    _parse_page_hint,
+    agenda_text,
     ausgegeben_datum,
     download_pdf,
     extract_pdf_text,
+    extract_relevant_pages,
+    is_garbled,
     normalize_volltext,
+    paragraph_quality_score,
+    parse_page_hint,
 )
 from bawue.types import (
     UNSET,
@@ -1363,7 +1363,7 @@ class TestParagraphQualityScore:
         ],
     )
     def test_clean_german_scores_high(self, text):
-        assert _paragraph_quality_score(text) > 0.9
+        assert paragraph_quality_score(text) > 0.9
 
     @pytest.mark.parametrize(
         "text",
@@ -1379,11 +1379,11 @@ class TestParagraphQualityScore:
         ],
     )
     def test_garbled_text_scores_low(self, text):
-        assert _paragraph_quality_score(text) < 0.5
+        assert paragraph_quality_score(text) < 0.5
 
     @pytest.mark.parametrize("text", ["", "   \n  "])
     def test_empty_text_scores_high(self, text):
-        assert _paragraph_quality_score(text) == 1.0
+        assert paragraph_quality_score(text) == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -1466,43 +1466,43 @@ class TestSanitizeLlmText:
     @pytest.mark.parametrize("value", [None, ["Kurz", "Titel"], 42, {"a": 1}, True])
     def test_non_string_yields_none(self, value):
         # The LLM's JSON is untyped; a non-string must not raise (DD-027).
-        assert _sanitize_llm_text(value) is None
+        assert sanitize_llm_text(value) is None
 
     def test_non_string_list_items_are_dropped(self):
         assert _sanitize_llm_strings(["umwelt", 42, ["x"], "energie"]) == ["umwelt", "energie"]
 
     def test_strips_trailing_narrow_artefact(self):
         text = "Der Landtag hat das Gesetz beschlossen.</narrow>"
-        assert _sanitize_llm_text(text) == "Der Landtag hat das Gesetz beschlossen."
+        assert sanitize_llm_text(text) == "Der Landtag hat das Gesetz beschlossen."
 
     def test_strips_inline_html_like_tags(self):
         text = "Foo <strong>bar</strong> baz"
-        assert _sanitize_llm_text(text) == "Foo bar baz"
+        assert sanitize_llm_text(text) == "Foo bar baz"
 
     def test_strips_self_closing_tag(self):
-        assert _sanitize_llm_text("Zeile<br/>Umbruch") == "ZeileUmbruch"
+        assert sanitize_llm_text("Zeile<br/>Umbruch") == "ZeileUmbruch"
 
     def test_clean_text_unchanged(self):
         text = "Eine Zusammenfassung ohne jede Formatierung."
-        assert _sanitize_llm_text(text) == text
+        assert sanitize_llm_text(text) == text
 
     def test_lone_brackets_replaced_with_guillemets(self):
         # Defense in depth: stray < or > that didn't form a tag still get
         # neutralised so the backend XSS validator never sees raw brackets.
-        assert _sanitize_llm_text("x < 5 und y > 3") == "x \u2039 5 und y \u203a 3"
+        assert sanitize_llm_text("x < 5 und y > 3") == "x \u2039 5 und y \u203a 3"
 
     def test_empty_input_returns_none(self):
         # An all-tag input becomes empty after stripping \u2192 return None so the
         # API client omits the field rather than sending an empty string.
-        assert _sanitize_llm_text("<narrow></narrow>") is None
-        assert _sanitize_llm_text("   ") is None
-        assert _sanitize_llm_text("") is None
+        assert sanitize_llm_text("<narrow></narrow>") is None
+        assert sanitize_llm_text("   ") is None
+        assert sanitize_llm_text("") is None
 
     def test_pathological_long_tag_left_alone(self):
         # Tags longer than the 80-char regex cap fall through to the
         # bracket-substitution path, still neutralising the danger.
         text = "ok <" + "a" * 200 + "> done"
-        result = _sanitize_llm_text(text)
+        result = sanitize_llm_text(text)
         assert "<" not in result
         assert ">" not in result
 
@@ -1592,7 +1592,7 @@ class TestIsGarbled:
         ],
     )
     def test_not_garbled(self, text):
-        assert _is_garbled(text) is False
+        assert is_garbled(text) is False
 
     @pytest.mark.parametrize(
         "text",
@@ -1623,7 +1623,7 @@ class TestIsGarbled:
         ],
     )
     def test_garbled(self, text):
-        assert _is_garbled(text) is True
+        assert is_garbled(text) is True
 
 
 # ---------------------------------------------------------------------------
@@ -1695,7 +1695,7 @@ class TestLLMMetrics:
         clean = "a" * 80
         garbled = "ůĂƐŝĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂ"  # 20 Latin Extended chars
         text = clean + garbled
-        assert _is_garbled(text) is True
+        assert is_garbled(text) is True
 
 
 # ---------------------------------------------------------------------------
@@ -1758,7 +1758,7 @@ class TestExtractPdfTextOcrRetry:
     async def test_ocr_retry_keeps_page_markers(self, tmp_path):
         """With a #page=N hint the OCR retry must insert page markers too.
 
-        OCR replaces the whole text; without markers _extract_relevant_pages
+        OCR replaces the whole text; without markers extract_relevant_pages
         falls back to the full document, so every Antrag of a Sammeldrucksache
         would share one volltext (GitHub issue #20).
         """
@@ -1780,7 +1780,7 @@ class TestExtractPdfTextOcrRetry:
         assert ocr_call_config.force_ocr is True
         assert ocr_call_config.pages.insert_page_markers is True
         # The hint window survives: page 2 only, not the whole OCR output.
-        assert _extract_relevant_pages(text, 2).strip() == clean_page_2
+        assert extract_relevant_pages(text, 2).strip() == clean_page_2
 
     @pytest.mark.asyncio
     async def test_ocr_failure_keeps_original_text(self, tmp_path):
@@ -1807,22 +1807,22 @@ class TestExtractPdfTextOcrRetry:
     async def test_ocr_rejected_when_it_yields_less_usable_text(self, tmp_path):
         """A clean-but-shorter OCR result must not replace a partly garbled original.
 
-        `_is_garbled` measures the whole document, so it also fires on PDFs whose
+        `is_garbled` measures the whole document, so it also fires on PDFs whose
         text is only partly broken. OCR replaces everything — including the pages
         that extracted cleanly — so "not garbled" alone is too weak a bar.
         """
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_bytes(SAMPLE_PDF_BYTES)
 
-        # Mostly clean German prose, with a garbled tail that trips _is_garbled.
+        # Mostly clean German prose, with a garbled tail that trips is_garbled.
         clean_body = "Der Landtag wolle beschließen, den Gesetzentwurf unverändert anzunehmen. " * 10
         garbled_tail = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 3
         partly_garbled = f"{clean_body}\n\n{garbled_tail}"
         # OCR came back clean but recovered far less of the document.
         sparse_ocr = "Der Landtag wolle beschließen, den Gesetzentwurf anzunehmen."
 
-        assert _is_garbled(partly_garbled) is True
-        assert _is_garbled(sparse_ocr) is False
+        assert is_garbled(partly_garbled) is True
+        assert is_garbled(sparse_ocr) is False
 
         with patch(
             "bawue.pdf_text.extract_file",
@@ -1895,7 +1895,7 @@ class TestPageHintExtraction:
         ],
     )
     def test_parse_page_hint(self, url, page):
-        assert _parse_page_hint(url) == page
+        assert parse_page_hint(url) == page
 
     def test_extract_relevant_pages_finds_correct_section(self):
         """Pages outside start..start+max_pages should be excluded."""
@@ -1904,7 +1904,7 @@ class TestPageHintExtraction:
             pages.append(f"\n\n<!-- PAGE {i} -->\n\nContent of page {i}")
         text = "Preamble" + "".join(pages)
 
-        result = _extract_relevant_pages(text, start_page=33, max_pages=5)
+        result = extract_relevant_pages(text, start_page=33, max_pages=5)
         assert "Content of page 33" in result
         assert "Content of page 37" in result
         assert "Content of page 1" not in result
@@ -1941,7 +1941,7 @@ class TestPageHintExtraction:
         ],
     )
     def test_extract_relevant_pages_falls_back_to_full_text(self, text, start_page):
-        assert _extract_relevant_pages(text, start_page=start_page) == text
+        assert extract_relevant_pages(text, start_page=start_page) == text
 
     def test_extract_relevant_pages_first_marker_at_string_start_issue27(self):
         """Issue #27: a #page=1 anchor must return page 1, not silently substitute
@@ -1950,7 +1950,7 @@ class TestPageHintExtraction:
         Real-world regression: GBl2026012.pdf (V-244180) has no preamble before the
         page-1 marker (kreuzberg emits it as the very first thing in the extracted
         text), so the marker's required leading "\\n\\n" never existed. The old regex
-        failed to match it, `_extract_relevant_pages` treated the whole of page 1 as
+        failed to match it, `extract_relevant_pages` treated the whole of page 1 as
         unlabeled "text before the first marker" and discarded it outright — leaving
         only the page 2 signature block, which was then persisted as `volltext` and
         summarized by the LLM as if it were the law's content.
@@ -1961,7 +1961,7 @@ class TestPageHintExtraction:
             "\n\n<!-- PAGE 2 -->\n\n"
             "Stuttgart, den 10. Februar 2026\nDie Regierung des Landes Baden-Württemberg:"
         )
-        result = _extract_relevant_pages(text, start_page=1, max_pages=1)
+        result = extract_relevant_pages(text, start_page=1, max_pages=1)
         assert "Artikel 1" in result
         assert "Die Regierung des Landes" not in result
 
@@ -1972,7 +1972,7 @@ class TestPageHintExtraction:
         """
         page_one = "Seite eins mit ausreichend langem Inhalt, damit der MIN_TEXT_LENGTH-Rückfall nicht greift."
         text = f"\n\n<!-- PAGE 1 -->\n\n{page_one}\n\n<!-- PAGE 2 -->"
-        result = _extract_relevant_pages(text, start_page=1, max_pages=1)
+        result = extract_relevant_pages(text, start_page=1, max_pages=1)
         assert "<!-- PAGE 2 -->" not in result
         assert result.strip() == page_one
 
@@ -2287,7 +2287,7 @@ class TestIssue42PartialSummaries:
         ("field", "value"), [("kurztitel", ["Kurz", "Titel"]), ("vorwort", 42), ("schlagworte", ["x", 7])]
     )
     async def test_malformed_field_keeps_the_other_llm_fields(self, field, value):
-        # A non-string used to raise in _sanitize_llm_text, and the text-only
+        # A non-string used to raise in sanitize_llm_text, and the text-only
         # fallback then dropped every LLM field; now only the bad value is dropped.
         response = self._response(**{"kurztitel": "Kurz", "vorwort": "Vorwort.", field: value})
         with _patch_pdf_pipeline(), _patch_llm(response):
@@ -2300,7 +2300,7 @@ class TestIssue42PartialSummaries:
 
     @pytest.mark.asyncio
     async def test_malformed_full_summary_keeps_the_other_llm_fields(self):
-        # A non-string zusammenfassung used to raise in _sanitize_llm_text and drop
+        # A non-string zusammenfassung used to raise in sanitize_llm_text and drop
         # every LLM field via the text-only fallback; now only the summary is dropped
         # (with its sections, which never go out on their own).
         response = self._response(zusammenfassung=["kein", "string"], kurztitel="Kurz", intention="Problem X.")
@@ -2479,20 +2479,20 @@ class TestIssue74RealProtocol:
 
     def test_glücksspiel_item_without_the_palantir_debate(self):
         """V-247045 Erste Beratung: S. 287-291, #page=31; the window ran into Palantir."""
-        agenda, pages = _agenda_text(self.TEXT, 31, list(range(287, 292)))
+        agenda, pages = agenda_text(self.TEXT, 31, list(range(287, 292)))
 
         assert pages == [31, 32, 33, 34, 35]
         assert agenda.startswith("287\nLandtag von Baden-Württemberg")
         assert "Drucksache\n18/191" in agenda and "Glücksspiel" in agenda
         assert "Palantir" not in agenda
-        assert "Palantir" in _extract_relevant_pages(self.TEXT, 31)
+        assert "Palantir" in extract_relevant_pages(self.TEXT, 31)
 
     def test_a_shifted_anchor_falls_back(self):
         """#page=30 for S. 287-291 would drop page 35 with the referral of 18/191."""
-        assert _agenda_text(self.TEXT, 30, list(range(287, 292))) is None
+        assert agenda_text(self.TEXT, 30, list(range(287, 292))) is None
 
     def test_an_item_past_the_last_page_falls_back(self):
         """The PDF has 49 pages (printed 257-305): a range beyond them means a wrong offset."""
-        assert _agenda_text(self.TEXT, 31, list(range(287, 306)))[1] == list(range(31, 50))
-        assert _agenda_text(self.TEXT, 31, list(range(287, 307))) is None
-        assert _agenda_text(self.TEXT, 60, list(range(287, 292))) is None
+        assert agenda_text(self.TEXT, 31, list(range(287, 306)))[1] == list(range(31, 50))
+        assert agenda_text(self.TEXT, 31, list(range(287, 307))) is None
+        assert agenda_text(self.TEXT, 60, list(range(287, 292))) is None
