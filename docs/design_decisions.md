@@ -39,7 +39,7 @@ Die Entscheidungen stehen nach Thema gebündelt; jede behält ihre Nummer als An
 > **Code-Spalte:** Symbole ohne Datei-Präfix liegen in `bawue_vorgaenge_scraper.py`;
 > `map_*` in `enum_mapper.py`; `ReservedGremium`/`CanonicalOrganisation`/`canonicalize_*`/`is_verfassungsaendernd` in
 `types.py`;
-> `enrich_*`/`extract_semantics`/`_sanitize_*`/`narrow_*`/`_prompt_fingerprint` in `bawue_dok.py`;
+> `enrich_*`/`extract_semantics`/`*sanitize_llm_*`/`narrow_*`/`_prompt_fingerprint` in `bawue_dok.py`;
 > `download_pdf`/`extract_pdf_text`/`normalize_volltext`/`is_garbled`/`extract_relevant_pages`/`agenda_text`/`_PAGE_MARKER_RE`/`ausgegeben_datum` in
 `pdf_text.py`.
 
