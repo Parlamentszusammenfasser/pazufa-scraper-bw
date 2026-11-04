@@ -7,7 +7,7 @@ from bawue.pipeline import Scraper
 
 
 def make_scraper[S: Scraper](cls: type[S]) -> S:
-    """*cls* with the state its __init__ sets that needs no config; tests set the rest."""
+    """*cls* with the attributes the shared pipeline reads (the former class defaults); tests set the rest."""
     scraper = object.__new__(cls)
     state = {
         "listing_urls": [],
