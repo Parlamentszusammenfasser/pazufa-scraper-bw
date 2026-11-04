@@ -431,6 +431,7 @@ class TestIssue148Beteiligungsfrist:
         vorgang = await _make_scraper()._build_vorgang("effizienzgesetz", detail)
         [dok] = vorgang.stationen[0].dokumente
         assert dok.zusammenfassung == [self.FRIST]
+        assert "zusammenfassung" not in vorgang.to_dict()  # the deadline alone is no Vorgang summary (#161)
 
     @pytest.mark.asyncio
     async def test_switched_off_sends_no_deadline(self):
@@ -469,6 +470,14 @@ class TestIssue148Beteiligungsfrist:
         vorgang = await scraper._build_vorgang("effizienzgesetz", detail)
         assert [d.zusammenfassung for d in vorgang.stationen[0].dokumente] == expected
         assert len(self.KI) == 2  # the enrichment's list is not changed in place
+
+    @pytest.mark.asyncio
+    async def test_vorgang_summary_carries_the_deadline(self, monkeypatch):
+        """GitHub issue #161: the Vorgang reuses the draft's summary as the website shows it."""
+        scraper = self._llm_scraper(monkeypatch, {self.A: self.KI})
+        detail = _make_detail(pdf_links=[{"title": "A (PDF)", "url": self.A}], comment_deadline=date(2026, 9, 9))
+        vorgang = await scraper._build_vorgang("effizienzgesetz", detail)
+        assert vorgang.zusammenfassung == [*self.KI, self.FRIST]
 
 
 class TestIssue148FristenRegister:

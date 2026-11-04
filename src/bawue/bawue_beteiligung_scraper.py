@@ -12,7 +12,7 @@ from uuid import NAMESPACE_URL, uuid5
 import aiohttp
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, zusammenfassung_text
+from bawue.bawue_dok import LLMMetrics, vorgang_zusammenfassung, zusammenfassung_text
 from bawue.beteiligung_client import BASE_URL, BeteiligungClient
 from bawue.beteiligung_parser import (
     RawBeteiligungDetail,
@@ -357,6 +357,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             stationen=[station],
             links=[beteiligung_url],
             ressort=ressort,
+            zusammenfassung=vorgang_zusammenfassung(dokumente),
         )
 
     async def _release_date(self, pdf_url: str) -> date | None:
