@@ -68,12 +68,12 @@ Two backend behaviors drive most bugs — keep both in mind:
    document hash. Identical PDFs recur across Vorgänge (every Haushalt-Einzelplan cites the
    shared Staatshaushaltsgesetz Drucksache 17/1000), so hash-based matching collides across
    Vorgänge → **HTTP 500 duplicate key `rel_station_dokument_pkey`**. Every Station gets a
-   Vorgang-scoped stable `api_id` (`_assign_stable_station_ids`, DD-028/DD-034, issue #47).
+   Vorgang-scoped stable `api_id` (`assign_stable_station_ids`, DD-028/DD-034, issue #47).
 
-Related machinery in `bawue_vorgaenge_scraper.py`: synthetic Stationen (`parl-initiativ`
+Related machinery in `bawue_vorgaenge_scraper.py` and `stationen.py`: synthetic Stationen (`parl-initiativ`
 after `preparl-regbsl` DD-012; `parl-ablehnung` from "Aktueller Stand" DD-010), reading-round
 consolidation (DD-024/DD-026), out-of-order ausschber retiming (DD-025), and
-`_enforce_total_ordering` (bumps colliding `zp_start`s so different-typed Stationen never tie).
+`enforce_total_ordering` (bumps colliding `zp_start`s so different-typed Stationen never tie).
 
 ## Design decisions — read these first
 
@@ -158,8 +158,8 @@ real PaZuFa backend.
 
 ## Key files (`src/bawue/`)
 
-`bawue_vorgaenge_scraper.py` (PARLIS → Vorgang; station building, ordering, synthetic
-stations, stable ids) · `parlis_client.py` / `parlis_parser.py` (PARLIS fetch + parse) ·
+`bawue_vorgaenge_scraper.py` (PARLIS → Vorgang; station building, synthetic
+stations) · `stationen.py` (station rules: merge, ordering, stable ids) · `parlis_client.py` / `parlis_parser.py` (PARLIS fetch + parse) ·
 `enum_mapper.py` (PARLIS terms → PaZuFa enums, context-aware) · `bawue_dok.py` (LLM
 enrichment) · `pdf_text.py` (PDF download, text, OCR) · `vorgang_llm.py` (Kurztitel, Ressort) · `pipeline.py` (scraper base classes, run loop, `log_item`) ·
 `bawue_beteiligung_scraper.py` / `bawue_sitzungen_scraper.py` / `ics_parser.py` ·

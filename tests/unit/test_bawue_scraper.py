@@ -15,19 +15,22 @@ from bawue.bawue_dok import LLMMetrics, _hash_cache
 from bawue.bawue_vorgaenge_scraper import (
     DEFAULT_ENABLED_VORGANGSTYPEN,
     BawueVorgaengeScraper,
-    _assign_stable_station_ids,
     _initiativ_drucksnr_from_fundstellen,
     _initiativ_zusammenfassung,
     _map_fundstelle_stationstyp,
     _parse_autoren,
     _parse_fundstelle_date,
-    _reading_round,
-    _same_round_label,
     _vorgang_fingerprint,
     construct_drucksache_pdf_url,
 )
 from bawue.gesetzblatt_lookup import GesetzblattUnavailable
 from bawue.parlis_parser import parse_fundstelle_text
+from bawue.stationen import (
+    _reading_round,
+    _same_round_label,
+    assign_stable_station_ids,
+    ensure_ausschber_after_vollvlsgn,
+)
 from bawue.types import (
     TODO_MARKER,
     UNSET,
@@ -493,7 +496,7 @@ class TestBuildVorgang:
             typ=Stationstyp.PARL_INITIATIV,
             zp_start=datetime(2026, 6, 3, tzinfo=UTC),
         )
-        _assign_stable_station_ids([doc_station, preset_station, bare_station], "V-1")
+        assign_stable_station_ids([doc_station, preset_station, bare_station], "V-1")
 
         assert doc_station.api_id is not UNSET
         assert preset_station.api_id == "preset"
@@ -516,7 +519,7 @@ class TestBuildVorgang:
             typ=Stationstyp.PARL_INITIATIV,
             zp_start=datetime(2026, 6, 3, tzinfo=UTC),
         )
-        _assign_stable_station_ids([station], "V-246637")
+        assign_stable_station_ids([station], "V-246637")
 
         docless_key = "bawue-station-V-246637-parl-initiativ-2026-06-03T00:00:00+00:00"
         assert station.api_id == str(uuid5(NAMESPACE_URL, docless_key))
@@ -542,7 +545,7 @@ class TestBuildVorgang:
                 typ=Stationstyp.PARL_VOLLVLSGN,
                 zp_start=zp,
             )
-            _assign_stable_station_ids([first, second], "V-1")
+            assign_stable_station_ids([first, second], "V-1")
             return first.api_id, second.api_id
 
         run1 = _pair(None, "https://example.com/zweite.pdf")
@@ -3177,7 +3180,7 @@ class TestEnsureAusschberAfterVollvlsgn:
             )
 
     def test_unit_retimes_ausschber_in_place(self):
-        """Direct unit test on the static method, without the rest of _build_vorgang."""
+        """Only ausschber stations move; zp_modifiziert is raised to the new start, never lowered."""
         from bawue.types import Gremium, Parlament, Station
 
         def _station(typ: Stationstyp, zp_start: datetime, zp_modifiziert: datetime | None = None) -> Station:
@@ -3191,76 +3194,27 @@ class TestEnsureAusschberAfterVollvlsgn:
 
         anchor = datetime(2021, 12, 16, tzinfo=UTC)
         ausschber_zp = datetime(2021, 11, 18, tzinfo=UTC)
+        late_end = datetime(2022, 1, 5, tzinfo=UTC)
         stationen = [
             _station(Stationstyp.PREPARL_REGBSL, datetime(2021, 10, 26, tzinfo=UTC)),
             _station(Stationstyp.PARL_INITIATIV, ausschber_zp),
-            _station(Stationstyp.PARL_AUSSCHBER, ausschber_zp),
+            _station(Stationstyp.PARL_AUSSCHBER, ausschber_zp, zp_modifiziert=ausschber_zp),
+            _station(Stationstyp.PARL_AUSSCHBER, ausschber_zp, zp_modifiziert=late_end),
             _station(Stationstyp.PARL_VOLLVLSGN, anchor),
         ]
 
-        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+        ensure_ausschber_after_vollvlsgn(stationen)
 
-        assert stationen[2].zp_start == anchor + timedelta(hours=1)
-        # Other stations untouched.
-        assert stationen[0].zp_start == datetime(2021, 10, 26, tzinfo=UTC)
-        assert stationen[1].zp_start == ausschber_zp
-        assert stationen[3].zp_start == anchor
-
-    def test_unit_zp_modifiziert_invariant_maintained(self):
-        """If the ausschber has zp_modifiziert set, retiming must keep it >= zp_start."""
-        from bawue.types import Gremium, Parlament, Station
-
-        anchor = datetime(2021, 12, 16, tzinfo=UTC)
-        gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
-
-        # zp_modifiziert was originally at the early ausschber date — it is now
-        # before the bumped zp_start, so it must be advanced to match.
-        early_zp = datetime(2021, 11, 18, tzinfo=UTC)
-        ausschber = Station(
-            typ=Stationstyp.PARL_AUSSCHBER,
-            dokumente=[],
-            zp_start=early_zp,
-            zp_modifiziert=early_zp,
-            gremium=gremium,
-        )
-        vollvlsgn = Station(
-            typ=Stationstyp.PARL_VOLLVLSGN,
-            dokumente=[],
-            zp_start=anchor,
-            gremium=gremium,
-        )
-
-        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn([ausschber, vollvlsgn])
-
-        assert ausschber.zp_start == anchor + timedelta(hours=1)
-        assert ausschber.zp_modifiziert == anchor + timedelta(hours=1)
-
-    def test_unit_zp_modifiziert_only_advanced_when_below_new_start(self):
-        """A zp_modifiziert that is already past the bump target must NOT be lowered."""
-        from bawue.types import Gremium, Parlament, Station
-
-        anchor = datetime(2021, 12, 16, tzinfo=UTC)
-        gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
-
-        # An ausschber spanning multiple weeks: modifier is past the future bump.
-        ausschber = Station(
-            typ=Stationstyp.PARL_AUSSCHBER,
-            dokumente=[],
-            zp_start=datetime(2021, 11, 18, tzinfo=UTC),
-            zp_modifiziert=datetime(2022, 1, 5, tzinfo=UTC),
-            gremium=gremium,
-        )
-        vollvlsgn = Station(
-            typ=Stationstyp.PARL_VOLLVLSGN,
-            dokumente=[],
-            zp_start=anchor,
-            gremium=gremium,
-        )
-
-        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn([ausschber, vollvlsgn])
-
-        assert ausschber.zp_start == anchor + timedelta(hours=1)
-        assert ausschber.zp_modifiziert == datetime(2022, 1, 5, tzinfo=UTC), "must not be reduced"
+        bumped = anchor + timedelta(hours=1)
+        assert [s.zp_start for s in stationen] == [
+            datetime(2021, 10, 26, tzinfo=UTC),
+            ausschber_zp,
+            bumped,
+            bumped,
+            anchor,
+        ]
+        assert stationen[2].zp_modifiziert == bumped  # kept >= zp_start
+        assert stationen[3].zp_modifiziert == late_end  # must not be reduced
 
 
 # Authoritative station→letter mapping and BW track, copied verbatim from the
@@ -3358,7 +3312,7 @@ class TestIssue48OrderByZpStartNotListPosition:
             s(Stationstyp.PARL_AUSSCHBER, datetime(2021, 11, 19, tzinfo=UTC)),
             s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 22, tzinfo=UTC)),
         ]
-        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+        ensure_ausschber_after_vollvlsgn(stationen)
         assert stationen[2].zp_start == datetime(2021, 12, 17, 1, tzinfo=UTC)
 
     def test_ausschber_anchor_is_earliest_vollvlsgn_by_date_not_first_in_list(self):
@@ -3370,7 +3324,7 @@ class TestIssue48OrderByZpStartNotListPosition:
             s(Stationstyp.PARL_AUSSCHBER, datetime(2021, 11, 19, tzinfo=UTC)),
             s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 17, tzinfo=UTC)),  # earliest reading
         ]
-        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+        ensure_ausschber_after_vollvlsgn(stationen)
         assert stationen[1].zp_start == datetime(2021, 12, 17, 1, tzinfo=UTC)
 
     def test_ausschber_on_the_same_day_as_first_reading_is_still_bumped(self):
@@ -3382,7 +3336,7 @@ class TestIssue48OrderByZpStartNotListPosition:
             s(Stationstyp.PARL_AUSSCHBER, datetime(2021, 12, 17, tzinfo=UTC)),
             s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 17, tzinfo=UTC)),
         ]
-        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+        ensure_ausschber_after_vollvlsgn(stationen)
         assert stationen[0].zp_start == datetime(2021, 12, 17, 1, tzinfo=UTC)
 
     def test_ausschber_after_earliest_reading_is_left_untouched(self):
@@ -3395,7 +3349,7 @@ class TestIssue48OrderByZpStartNotListPosition:
             s(Stationstyp.PARL_AUSSCHBER, between),
             s(Stationstyp.PARL_VOLLVLSGN, datetime(2021, 12, 22, tzinfo=UTC)),
         ]
-        BawueVorgaengeScraper._ensure_ausschber_after_vollvlsgn(stationen)
+        ensure_ausschber_after_vollvlsgn(stationen)
         assert stationen[1].zp_start == between
 
     def test_synthetic_initiativ_dated_from_first_reading_not_list_next(self):
@@ -3418,7 +3372,7 @@ class TestIssue48OrderByZpStartNotListPosition:
     def test_synthetic_initiativ_falls_back_to_regbsl_date_when_nothing_follows(self):
         """Fallback: with no station following the regbsl (no reading to anchor
         on), the synthetic initiativ inherits the regbsl's date. _build_vorgang's
-        later _enforce_total_ordering then separates the tie."""
+        later enforce_total_ordering then separates the tie."""
         s = self._station
         scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
@@ -3453,7 +3407,7 @@ class TestIssue48OrderByZpStartNotListPosition:
           backend would accept the Vorgang (DD-036);
         * no two *different-typed* stations share a ``zp_start`` — the backend
           sorts by ``zp_start``, so a tie between different types leaves the order
-          ambiguous. ``_enforce_total_ordering`` guarantees this (issue #48 root).
+          ambiguous. ``enforce_total_ordering`` guarantees this (issue #48 root).
         """
         track = cls._track_string(stationen)
         assert track == expected, f"track {track!r} != expected {expected!r}"
@@ -3553,7 +3507,7 @@ class TestAblehnungAnchorsAfterAusschberRetiming:
     und Bericht (Ausschuss) → Zweite Beratung, i.e. the ausschber's Fundstelle
     arrives, and is appended to ``stationen``, before the vollvlsgn's — even
     though the committee report is chronologically earlier than the reading.
-    ``_ensure_ausschber_after_vollvlsgn`` retimes the ausschber to one hour past
+    ``ensure_ausschber_after_vollvlsgn`` retimes the ausschber to one hour past
     vollvlsgn, but previously ``_ensure_ablehnung_station`` ran first and
     anchored on ``stationen[-1]`` (list-position-last, i.e. vollvlsgn) instead
     of the true chronological last station. That produced the order
@@ -3780,17 +3734,15 @@ class TestReadingRoundEquivalence:
             ("Beschluss des Landtags in Erster Beratung", 1),
             ("Beschluss des Landtags in Zweiter Beratung", 2),
             ("Beschluss des Landtags in Dritter Beratung", 3),
+            # No 'Beratung' → not a round indicator.
+            ("Überweisung", None),
+            ("Schlussabstimmung", None),
+            ("Gesetzesbeschluss des Landtags", None),
+            ("", None),
         ],
     )
     def test_unit_reading_round(self, label, round_):
         assert _reading_round(label) == round_
-
-    def test_unit_reading_round_returns_none_for_non_round_labels(self):
-        # No 'Beratung' substring → not a round indicator.
-        assert _reading_round("Überweisung") is None
-        assert _reading_round("Schlussabstimmung") is None
-        assert _reading_round("Gesetzesbeschluss des Landtags") is None
-        assert _reading_round("") is None
 
     @pytest.mark.parametrize(
         ("a", "b", "same"),
@@ -3799,16 +3751,14 @@ class TestReadingRoundEquivalence:
             ("Beschluss des Landtags in Dritter Beratung", "Dritte Beratung", True),
             ("Erste Beratung", "Zweite Beratung", False),
             ("Beschluss des Landtags in Zweiter Beratung", "Beschluss des Landtags in Dritter Beratung", False),
+            # An empty label is never a round signal (DD-024 defensive default).
+            ("", "Zweite Beratung", False),
+            ("Zweite Beratung", "", False),
+            ("", "", False),
         ],
     )
     def test_unit_same_round_label(self, a, b, same):
         assert _same_round_label(a, b) is same
-
-    def test_unit_same_round_label_empty_label_is_defensive_false(self):
-        # Defensive default from DD-024 must be preserved even after DD-026.
-        assert not _same_round_label("", "Zweite Beratung")
-        assert not _same_round_label("Zweite Beratung", "")
-        assert not _same_round_label("", "")
 
 
 class TestParseFundstelleDateNone:
