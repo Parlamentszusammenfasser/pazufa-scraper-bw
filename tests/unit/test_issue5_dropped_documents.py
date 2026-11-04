@@ -53,17 +53,14 @@ class TestV244180Juristenausbildungsgesetz:
         assert station.zp_start.date().isoformat() == "2026-02-04"
         assert dok.typ == Doktyp.ANTRAG
         assert [str(a.organisation) for a in dok.autoren] == ["Fraktion der SPD"]
-
-    @pytest.mark.asyncio
-    async def test_entschliessungsantrag_adds_no_station(self):
-        vorgang = await _scraper()._build_vorgang(_raw())
-
+        # Attached, not a station of its own.
         assert [s.typ for s in vorgang.stationen].count(Stationstyp.PARL_VOLLVLSGN) == 2
 
     @pytest.mark.asyncio
-    async def test_mitteilung_dropped_with_info_log(self, caplog):
+    async def test_mitteilung_dropped_with_info_log_and_counted(self, caplog):
+        scraper = _scraper()
         with caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"):
-            vorgang = await _scraper()._build_vorgang(_raw())
+            vorgang = await scraper._build_vorgang(_raw())
 
         assert all(d.drucksnr != "17/10130" for s in vorgang.stationen for d in s.dokumente)
         drops = [r for r in caplog.records if r.levelno == logging.INFO and "Dropping" in r.message]
@@ -71,14 +68,6 @@ class TestV244180Juristenausbildungsgesetz:
         assert "17/10130" in drops[0].message
         assert "V-244180" in drops[0].message
         assert "sonstig" in drops[0].message
-
-    @pytest.mark.asyncio
-    async def test_dropped_fundstellen_counted_per_vorgang(self):
-        scraper = _scraper()
-        scraper._dropped_fundstellen = {}
-
-        await scraper._build_vorgang(_raw())
-
         assert scraper._dropped_fundstellen == {"V-244180": ["Mitteilung → sonstig"]}
 
 
@@ -152,7 +141,6 @@ class TestEveryDropIsCounted:
     )
     async def test_drop_is_counted(self, fund, reason):
         scraper = _scraper()
-        scraper._dropped_fundstellen = {}
         raw = {"vorgangs_id": "V-9", "titel": "T", "Vorgangstyp": "Gesetzgebung", "fundstellen_parsed": [fund]}
 
         await scraper._build_vorgang(raw)

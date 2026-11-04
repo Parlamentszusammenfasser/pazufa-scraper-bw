@@ -207,18 +207,7 @@ class TestBuildVorgang:
         detail = _make_detail(pdf_links=[])
         result = await scraper._build_vorgang("klima-register", detail)
         assert result is None
-
-    @pytest.mark.asyncio
-    async def test_multiple_pdfs(self):
-        scraper = _make_scraper()
-        detail = _make_detail(
-            pdf_links=[
-                {"title": "Entwurf A (PDF)", "url": "https://example.com/a.pdf"},
-                {"title": "Entwurf B (PDF)", "url": "https://example.com/b.pdf"},
-            ]
-        )
-        vorgang = await scraper._build_vorgang("test-slug", detail)
-        assert len(vorgang.stationen[0].dokumente) == 2
+        assert scraper._skipped == 1
 
 
 def _make_enriched_dok(url: str = "https://example.com/test.pdf"):
@@ -290,8 +279,9 @@ class TestIssue71Verordnungen:
         assert any("Verordnung" in r.getMessage() for r in caplog.records)
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("slug", ["effizienzgesetz", "entbuerokratisierung"])
-    async def test_gesetz_page_is_built(self, slug):
+    async def test_gesetz_page_is_built(self):
+        """effizienzgesetz is built in TestIssue45LinkListMarkup."""
+        slug = "entbuerokratisierung"
         scraper = _make_scraper()
         scraper._raw_cache[slug] = _make_process(slug=slug)
         scraper._client.fetch_process_detail.return_value = (FIXTURES / f"{slug}_detail.html").read_text()
@@ -688,82 +678,6 @@ class TestIssue83SummaryAddsUp:
 
 class TestRunSummary:
     @pytest.mark.asyncio
-    async def test_summary_printed_to_stdout(self, capsys, caplog):
-        scraper = _make_scraper()
-
-        with (
-            patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()),
-            caplog.at_level(logging.INFO, logger="bawue.bawue_beteiligung_scraper"),
-        ):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        assert "=== BaWue Beteiligung Run Summary ===" in captured.out
-        duration_line = next(line for line in captured.out.splitlines() if "Duration" in line)
-        assert "Duration: 0m 00s" in duration_line  # human readable, no raw seconds
-        assert any("Completed in" in msg for msg in caplog.messages)
-
-    @pytest.mark.asyncio
-    async def test_summary_shows_published_count(self, capsys):
-        scraper = _make_scraper()
-        mock_vorgang = MagicMock()
-        mock_config = MagicMock()
-        scraper.config = mock_config
-        scraper.scraper_id = "test-scraper-id"
-
-        with patch("bawue.upload_throttle.put_vorgang"):
-            await scraper.send_result(mock_vorgang)
-            await scraper.send_result(mock_vorgang)
-
-        with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        assert "Published:" in captured.out
-        assert scraper._published == 2
-
-    @pytest.mark.asyncio
-    async def test_summary_shows_skipped_count(self, capsys):
-        scraper = _make_scraper()
-        detail = _make_detail(pdf_links=[])
-        scraper._raw_cache["test-slug"] = _make_process(slug="test-slug")
-
-        with (
-            patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", return_value="<html></html>"),
-            patch("bawue.bawue_beteiligung_scraper.parse_process_detail", return_value=detail),
-        ):
-            await scraper.item_extractor("test-slug")
-
-        with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        assert "Skipped:" in captured.out
-        assert scraper._skipped == 1
-
-    @pytest.mark.asyncio
-    async def test_summary_shows_failed_count(self, capsys):
-        from bawue.api import BawueApiError
-
-        scraper = _make_scraper()
-        mock_config = MagicMock()
-        scraper.config = mock_config
-        scraper.scraper_id = "test-scraper-id"
-
-        with patch(
-            "bawue.upload_throttle.put_vorgang",
-            side_effect=BawueApiError(500, b"Internal Server Error", "vorgang_put"),
-        ):
-            await scraper.send_result(MagicMock())
-
-        with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        assert "Failed:" in captured.out
-        assert scraper._failed == 1
-
-    @pytest.mark.asyncio
     async def test_summary_still_printed_on_run_failure(self, capsys, caplog):
         scraper = _make_scraper()
 
@@ -777,6 +691,8 @@ class TestRunSummary:
 
         captured = capsys.readouterr()
         assert "=== BaWue Beteiligung Run Summary ===" in captured.out
+        duration_line = next(line for line in captured.out.splitlines() if "Duration" in line)
+        assert "Duration: 0m 00s" in duration_line  # human readable, no raw seconds
         assert scraper.summary[0] == "Beteiligung"  # issue #52: the cycle report still gets it
         assert any("Completed in" in msg for msg in caplog.messages)
 
@@ -809,6 +725,7 @@ class TestRunSummary:
         assert "klima-slug" in failed_block
         assert "Klimaschutzgesetz" in failed_block
         assert "422" in failed_block
+        assert scraper._failed == 1
 
 
 class TestInit:

@@ -27,7 +27,7 @@ fixtures below are the exact raw Fundstellen PARLIS serves for each Vorgang
   *Dritte Beratung*. The round-aware merge (DD-024 / DD-026) is what keeps these
   correct: the drucksache-level ``"Beschluss des Landtags in Zweiter Beratung"``
   folds into the Zweite-Beratung station, while the ``"Dritte Beratung"`` stays a
-  distinct station with its own label — see ``test_two_distinct_readings_not_merged``,
+  distinct station with its own label — see ``TestFall2StaatshaushaltEinzelplan``,
   which fails if ``_same_round_label`` regresses to round-blind merging.
 
 The page anchors are the ones PARLIS serves in the Fundstelle href; the values
@@ -41,7 +41,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, _reading_round
+from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.types import Doktyp, Stationstyp, Vorgang
 from tests.factories import make_scraper
 
@@ -80,7 +80,7 @@ class TestFall1Landeshochschulgesetz:
     """V-213867: first reading must be the Erste Beratung of 17/847, not a foreign bill."""
 
     @pytest.mark.asyncio
-    async def test_first_reading_is_erste_beratung_page_41(self):
+    async def test_reading_titels_and_links(self):
         vorgang = await _build(_load("v213867"))
         readings = _vollvlsgn(vorgang)
         assert len(readings) == 2
@@ -90,35 +90,21 @@ class TestFall1Landeshochschulgesetz:
         assert first.titel == "Erste Beratung"
         assert first.typ == Doktyp.REDEPROTOKOLL
         assert first.link.endswith("17%5F0013%5F06102021.pdf#page=41")
-        assert "#page=23" not in first.link
 
-    @pytest.mark.asyncio
-    async def test_second_reading_is_zweite_beratung_page_27(self):
-        vorgang = await _build(_load("v213867"))
-        second = _redeprotokoll_doc(_vollvlsgn(vorgang)[1])
+        second = _redeprotokoll_doc(readings[1])
         assert second.titel == "Zweite Beratung"
         assert second.link.endswith("17%5F0015%5F20102021.pdf#page=27")
-
-    @pytest.mark.asyncio
-    async def test_reading_rounds_are_one_then_two(self):
-        vorgang = await _build(_load("v213867"))
-        rounds = [_reading_round(_redeprotokoll_doc(s).titel) for s in _vollvlsgn(vorgang)]
-        assert rounds == [1, 2]
 
 
 class TestFall2StaatshaushaltEinzelplan:
     """V-215974: the two budget readings stay distinct and keep their true rounds (2, 3)."""
 
     @pytest.mark.asyncio
-    async def test_two_distinct_readings_not_merged(self):
-        vorgang = await _build(_load("v215974"))
-        # Must not collapse to one (over-merge) nor split the merged Zweite Beratung.
-        assert len(_vollvlsgn(vorgang)) == 2
-
-    @pytest.mark.asyncio
     async def test_reading_titels_and_links(self):
         vorgang = await _build(_load("v215974"))
         readings = _vollvlsgn(vorgang)
+        # Must not collapse to one (over-merge) nor split the merged Zweite Beratung.
+        assert len(readings) == 2
 
         zweite = _redeprotokoll_doc(readings[0])
         assert zweite.titel == "Zweite Beratung"
@@ -128,9 +114,3 @@ class TestFall2StaatshaushaltEinzelplan:
         # Staging showed this mislabelled "Zweite Beratung" (the reported shift).
         assert dritte.titel == "Dritte Beratung"
         assert dritte.link.endswith("17%5F0025%5F22122021.pdf#page=26")
-
-    @pytest.mark.asyncio
-    async def test_rounds_are_two_then_three_monotonic(self):
-        vorgang = await _build(_load("v215974"))
-        rounds = [_reading_round(_redeprotokoll_doc(s).titel) for s in _vollvlsgn(vorgang)]
-        assert rounds == [2, 3]

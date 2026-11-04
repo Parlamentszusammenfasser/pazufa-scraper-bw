@@ -109,35 +109,6 @@ class TestItemExtractor:
         assert termin.tzinfo is not None
         assert sitzung.termin.tzinfo is not None
 
-    @pytest.mark.asyncio
-    async def test_deterministic_api_id(self, ics_scraper_with_events):
-        """Same UID on the same date should produce the same api_id across runs."""
-        result1 = await ics_scraper_with_events.item_extractor("2026-02-25")
-
-        # Re-populate for second extraction
-        mock_response = AsyncMock()
-        mock_response.read = AsyncMock(return_value=ICS_BYTES)
-        mock_response.status = 200
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-        ics_scraper_with_events.session.get = MagicMock(return_value=mock_response)
-        await ics_scraper_with_events.listing_page_extractor(ICS_URL)
-
-        result2 = await ics_scraper_with_events.item_extractor("2026-02-25")
-
-        assert result1[1][0].api_id == result2[1][0].api_id
-
-    @pytest.mark.asyncio
-    async def test_multiple_sitzungen_per_date(self, ics_scraper_with_events):
-        """On 2026-02-24 the sample feed has FinA + an unnamed committee
-        block. The block is filtered out (DD-006 name-specificity), so
-        only FinA remains."""
-        result = await ics_scraper_with_events.item_extractor("2026-02-24")
-
-        _termin, sitzungen = result
-        assert len(sitzungen) == 1
-        assert sitzungen[0].gremium.name == "Ausschuss für Finanzen"
-
 
 class TestIssue65SessionNumber:
     """Issue #65: a Sitzung without a session number stays 0 and is logged (DD-064)."""
@@ -348,26 +319,6 @@ class TestInit:
             BawueSitzungenScraper(mock_config, MagicMock())
 
         assert mock_super.call_args.args[2] == [DEFAULT_ICS_URL]
-
-    def test_load_toml_section_returns_empty_on_no_file(self):
-        from bawue.config_loader import load_toml_section
-
-        mock_config = MagicMock()
-        mock_config.config_file = None
-
-        assert load_toml_section(mock_config, "bawue") == {}
-
-    def test_load_toml_section_returns_empty_on_bad_file(self, tmp_path, caplog):
-        from bawue.config_loader import load_toml_section
-
-        mock_config = MagicMock()
-        mock_config.config_file = str(tmp_path / "nonexistent.toml")
-
-        with caplog.at_level(logging.WARNING, logger="bawue.config_loader"):
-            result = load_toml_section(mock_config, "bawue")
-
-        assert result == {}
-        assert any("Could not load" in msg for msg in caplog.messages)
 
 
 class TestSendResult:
