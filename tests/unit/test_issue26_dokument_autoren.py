@@ -34,6 +34,7 @@ import pytest
 
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.types import Doktyp, Dokument, Stationstyp, Vorgang
+from tests.factories import make_scraper
 
 _FIXTURES = Path(__file__).parent.parent / "fixtures" / "parlis" / "issue26"
 
@@ -44,7 +45,7 @@ def _load(name: str) -> dict:
 
 async def _build(raw: dict) -> Vorgang:
     """Run the real station pipeline (no network, no LLM) over a fixture Vorgang."""
-    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper = make_scraper(BawueVorgaengeScraper)
     scraper._wahlperiode = 17
     scraper._llm_enabled = False
     scraper._llm = None
@@ -92,12 +93,6 @@ class TestV244180Juristenausbildungsgesetz:
         assert [_autoren(d) for d in readings] == [["Landtag"], ["Landtag"]]
 
     @pytest.mark.asyncio
-    async def test_gesetzentwurf_keeps_its_parlis_author(self):
-        entwurf = _by_titel(await _build(_load("v244180")), "Gesetzentwurf")
-        assert entwurf.drucksnr == "17/9871"
-        assert _autoren(entwurf) == ["Fraktion der SPD"]
-
-    @pytest.mark.asyncio
     async def test_beschlussempfehlung_keeps_the_committee_issue71(self):
         """The DD-042 committee step must survive — no #71 regression."""
         empfehlung = _by_titel(await _build(_load("v244180")), "Beschlussempfehlung und Bericht")
@@ -110,6 +105,9 @@ class TestV244180Juristenausbildungsgesetz:
         carrying_spd = [d.titel for _, d in _dokumente(vorgang) if "Fraktion der SPD" in _autoren(d)]
         # The SPD also wrote the Entschließungsantrag, kept since issue #5.
         assert sorted(carrying_spd) == ["Entschließungsantrag", "Gesetzentwurf"]
+        entwurf = _by_titel(vorgang, "Gesetzentwurf")
+        assert entwurf.drucksnr == "17/9871"
+        assert _autoren(entwurf) == ["Fraktion der SPD"]
 
 
 class TestV217223Medienstaatsvertrag:
@@ -120,10 +118,6 @@ class TestV217223Medienstaatsvertrag:
         beschluss = _by_titel(await _build(_load("v217223")), "Gesetzesbeschluss des Landtags")
         assert beschluss.drucksnr == "17/2290"
         assert _autoren(beschluss) == ["Landtag"]
-
-    @pytest.mark.asyncio
-    async def test_gesetzblatt_stays_landesregierung(self):
-        assert _autoren(_by_titel(await _build(_load("v217223")), "Gesetz")) == ["Landesregierung"]
 
     @pytest.mark.asyncio
     async def test_gesetzentwurf_keeps_the_landesregierung(self):

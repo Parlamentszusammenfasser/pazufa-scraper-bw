@@ -14,7 +14,7 @@ import logging
 from abc import ABC, abstractmethod
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 from uuid import UUID
 
 import aiohttp
@@ -26,20 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 class Scraper(ABC):
-    # Class-level defaults so tests that build a scraper via object.__new__()
-    # (bypassing __init__ to isolate unit-under-test) still have these attrs.
-    listing_urls: ClassVar[list[str]] = []
-    scraper_id: UUID | None = None
-    config: BawueConfig | None = None
-    session: aiohttp.ClientSession | None = None
-    item_count: int = 0
-    # Items skipped this cycle because their cache entry is current.
-    cached_count: int = 0
-    # Items skipped this cycle because Redis failed on their lookup (issue #105).
-    cache_errors: int = 0
-    # (title, lines) set by run(); __main__ sends a cycle's summaries as one message (issue #52).
-    summary: tuple[str, list[str]] | None = None
-
     def __init__(
         self,
         config: BawueConfig,
@@ -55,6 +41,12 @@ class Scraper(ABC):
         self.session = session
         self.item_count = 0
         self.items_done = 0
+        # Items skipped this cycle because their cache entry is current.
+        self.cached_count = 0
+        # Items skipped this cycle because Redis failed on their lookup (issue #105).
+        self.cache_errors = 0
+        # (title, lines) set by run(); __main__ sends a cycle's summaries as one message (issue #52).
+        self.summary: tuple[str, list[str]] | None = None
         logger.info("Initialized %s with %d listing urls", self.__class__.__name__, len(self.listing_urls))
 
     async def process_lpurls(self, lpurls: list[str]) -> set[Any]:

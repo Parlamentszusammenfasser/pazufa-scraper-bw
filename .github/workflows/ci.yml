@@ -106,8 +106,9 @@ jobs:
       # PR diff. CI-only plugin — kept out of pyproject to leave the lockfile alone.
       - name: Enable PR annotations for failures
         run: poetry run pip install --quiet pytest-github-actions-annotate-failures
+      # Fails the job below 90% line coverage.
       - name: Run tests with coverage
-        run: poetry run pytest -m 'not integration' --cov=bawue --cov-report=xml --cov-report=term-missing
+        run: poetry run pytest -m 'not integration' --cov=bawue --cov-report=xml --cov-report=term-missing --cov-fail-under=90
       - name: Coverage summary
         if: always()
         run: |

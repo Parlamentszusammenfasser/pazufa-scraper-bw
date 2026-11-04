@@ -16,6 +16,7 @@ from bawue.cache import BawueCache
 from bawue.config import BawueConfig
 from bawue.parlis_client import BASE_URL, BROWSE_URL, REPORT_URL, ParlisClient
 from bawue.rate_limiter import create_upload_limiter
+from tests.factories import make_scraper
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "parlis"
 FIXED_COLLECTOR_ID = "00000000-0000-0000-0000-000000000099"
@@ -139,14 +140,14 @@ def bawue_config(mock_backend, httpserver):
 def scraper(bawue_config):
     """Create a BawueVorgaengeScraper wired to mock infrastructure.
 
-    The scraper is created via __new__ to bypass __init__ (which loads a TOML
+    make_scraper bypasses __init__ (which loads a TOML
     config file and builds an aiohttp session). We set exactly the instance
     attributes BawueVorgaengeScraper.__init__ would, LLM enrichment disabled.
     """
 
     async def _make_scraper(listing_urls: list[str], *, filter_sonstig: bool = True) -> BawueVorgaengeScraper:
         session = aiohttp.ClientSession()
-        s = object.__new__(BawueVorgaengeScraper)
+        s = make_scraper(BawueVorgaengeScraper)
 
         # Scraper base class attributes (Scraper.__init__)
         s.config = bawue_config

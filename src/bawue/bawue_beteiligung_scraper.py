@@ -64,14 +64,12 @@ class BawueBeteiligungScraper(VorgangsScraper):
     Auto-discovered by the framework when placed in the scrapers directory.
     """
 
-    # Kill switch `[bawue] beteiligungsfristen` (DD-076).
-    _beteiligungsfristen: bool = True
-
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         beteiligung_config = load_toml_section(config, "beteiligung")
         bawue_config = load_toml_section(config, "bawue")
         # One Wahlperiode for all scrapers (issue #6).
         self._wahlperiode = bawue_config.get("wahlperiode", CURRENT_WAHLPERIODE)
+        # Kill switch `[bawue] beteiligungsfristen` (DD-076).
         self._beteiligungsfristen = bawue_config.get("beteiligungsfristen", True)
         if "wahlperiode" in beteiligung_config:
             logger.warning("[beteiligung] wahlperiode is ignored; set [bawue] wahlperiode instead (issue #6)")
