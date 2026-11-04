@@ -1,6 +1,6 @@
 """Station rules: merge, order and identify the Stationen of one Vorgang (issue #100).
 
-Plain functions over ``list[Station]`` with no scraper state; the DDs are cited where each rule lives.
+Plain functions over ``list[Station]`` with no scraper state.
 """
 
 from datetime import datetime, timedelta
