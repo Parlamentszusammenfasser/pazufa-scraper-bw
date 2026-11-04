@@ -13,7 +13,7 @@ submits them to the [Parlamentszusammenfasser](https://codeberg.org/PaZuFa/parla
 (PaZuFa) platform via its Write-API v2 (`PUT /api/v2/vorgang`, `PUT /api/v2/kalender`).
 
 - Parliament code `BW`, Wahlperiode **18** (since 2026-05-01; set once in `[bawue] wahlperiode`, DD-062). 
-  Python **3.13**. Package `bawue` under `src/`.
+  Python **3.14**. Package `bawue` under `src/`.
 - Owns its entry point (`bawue.__main__`), config loader, Redis cache, and scraping loop.
   Depends only on [pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core)
   ("corelib" — httpx API client, generated OpenAPI models, LLM enrichment), pinned to a git tag.
