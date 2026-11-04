@@ -8,7 +8,6 @@ from collections.abc import Sequence
 import requests
 
 from bawue.config import BawueConfig
-from bawue.config_loader import load_toml_section
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +55,7 @@ def send_alert(config: BawueConfig, message: str) -> None:
 
 
 def _post(config: BawueConfig, text: str) -> None:
-    notif = load_toml_section(config, "notifications")
+    notif = config.section("notifications")
     hook = notif.get("mattermost-hook", "").strip()
     if not hook:
         return

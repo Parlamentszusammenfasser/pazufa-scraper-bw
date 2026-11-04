@@ -1,7 +1,7 @@
 """Tests for Mattermost notifications."""
 
 import logging
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import responses as responses_lib
@@ -11,26 +11,12 @@ from bawue.notifications import _extract_environment, send_alert, send_run_repor
 HOOK_URL = "https://chat.pazufa.de/hooks/testhook"
 
 
-def _make_config(hook: str = HOOK_URL, username: str = "bawue-scraper", config_file: str = "config.staging.toml"):
-    config = MagicMock()
-    config.config_file = config_file
-    notif_section = {"mattermost-hook": hook, "mattermost-username": username}
-    with patch("bawue.notifications.load_toml_section", return_value=notif_section):
-        yield config, notif_section
-
-
 @pytest.fixture()
 def mock_config():
     config = MagicMock()
     config.config_file = "config.staging.toml"
+    config.section.return_value = {"mattermost-hook": HOOK_URL, "mattermost-username": "bawue-scraper"}
     return config
-
-
-def _patch_notif(hook: str = HOOK_URL, username: str = "bawue-scraper"):
-    return patch(
-        "bawue.notifications.load_toml_section",
-        return_value={"mattermost-hook": hook, "mattermost-username": username},
-    )
 
 
 class TestExtractEnvironment:
@@ -59,8 +45,8 @@ class TestSendRunReport:
     @responses_lib.activate
     @pytest.mark.parametrize("hook", ["", "   "])
     def test_skips_post_without_hook(self, mock_config, hook):
-        with _patch_notif(hook=hook):
-            send_run_report(mock_config, [("Vorgänge Run", ["Published: 5"])])
+        mock_config.section.return_value["mattermost-hook"] = hook
+        send_run_report(mock_config, [("Vorgänge Run", ["Published: 5"])])
         assert len(responses_lib.calls) == 0
 
     @responses_lib.activate
@@ -69,7 +55,7 @@ class TestSendRunReport:
     )
     def test_does_not_raise_on_failure(self, mock_config, caplog, failure):
         responses_lib.add(responses_lib.POST, HOOK_URL, **failure)
-        with _patch_notif(), caplog.at_level(logging.WARNING, logger="bawue.notifications"):
+        with caplog.at_level(logging.WARNING, logger="bawue.notifications"):
             send_run_report(mock_config, [("Run", ["line"])])
         assert "Failed to send Mattermost notification" in caplog.text
         assert "testhook" not in caplog.text  # the hook URL is the secret
@@ -79,11 +65,11 @@ class TestSendRunReport:
         """Issue #52: one message per cycle and environment, not one per scraper."""
         mock_config.config_file = "config.prod.toml"
         responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
-        with _patch_notif(username="my-bot"):
-            send_run_report(
-                mock_config,
-                [("Vorgänge", ["Found: 3"]), ("Beteiligung", ["Found: 1"]), ("Sitzungen", ["Dates found: 50"])],
-            )
+        mock_config.section.return_value["mattermost-username"] = "my-bot"
+        send_run_report(
+            mock_config,
+            [("Vorgänge", ["Found: 3"]), ("Beteiligung", ["Found: 1"]), ("Sitzungen", ["Dates found: 50"])],
+        )
         import json
 
         assert len(responses_lib.calls) == 1
@@ -101,10 +87,9 @@ class TestSendRunReport:
     def test_issue128_plain_section_keeps_links_clickable(self, mock_config):
         """Issue #128: links inside a code block are not clickable, so this section has none."""
         responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
-        with _patch_notif():
-            send_run_report(
-                mock_config, [("Vorgänge", ["Found: 3"])], plain_sections=[("Fehlende Dokumente", ["- [a](b)"])]
-            )
+        send_run_report(
+            mock_config, [("Vorgänge", ["Found: 3"])], plain_sections=[("Fehlende Dokumente", ["- [a](b)"])]
+        )
         import json
 
         assert json.loads(responses_lib.calls[0].request.body)["text"] == (
@@ -114,8 +99,7 @@ class TestSendRunReport:
     @responses_lib.activate
     def test_issue52_no_post_without_sections(self, mock_config):
         """No scraper enabled or none reported: nothing to say."""
-        with _patch_notif():
-            send_run_report(mock_config, [])
+        send_run_report(mock_config, [])
         assert len(responses_lib.calls) == 0
 
 
@@ -125,14 +109,13 @@ class TestSendAlert:
         import json
 
         responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
-        with _patch_notif():
-            send_alert(mock_config, "Redis unreachable")
+        send_alert(mock_config, "Redis unreachable")
         payload = json.loads(responses_lib.calls[0].request.body)
         assert "[staging]" in payload["text"]
         assert "Redis unreachable" in payload["text"]
 
     @responses_lib.activate
     def test_skips_post_when_hook_empty(self, mock_config):
-        with _patch_notif(hook=""):
-            send_alert(mock_config, "Redis unreachable")
+        mock_config.section.return_value["mattermost-hook"] = ""
+        send_alert(mock_config, "Redis unreachable")
         assert len(responses_lib.calls) == 0

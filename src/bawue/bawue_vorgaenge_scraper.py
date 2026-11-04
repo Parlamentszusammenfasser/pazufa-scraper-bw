@@ -23,7 +23,6 @@ from bawue.api import build_client
 from bawue.bawue_dok import LLMMetrics, zusammenfassung_text
 from bawue.cache import drucksache_hash_key
 from bawue.config import BawueConfig
-from bawue.config_loader import load_toml_section
 from bawue.enum_mapper import map_dokumententyp, map_sachgebiete, map_schlagworte, map_stationstyp, map_vorgangstyp
 from bawue.gesetzblatt_client import GesetzblattClient
 from bawue.gesetzblatt_lookup import GesetzblattDateLookup, GesetzblattUnavailable
@@ -181,7 +180,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         # Load BaWue-specific config from TOML
-        bawue_config = load_toml_section(config, "bawue")
+        bawue_config = config.section("bawue")
         self._wahlperiode = bawue_config.get("wahlperiode", CURRENT_WAHLPERIODE)
         self._wahlperiode_start_date = wahlperiode_start(self._wahlperiode, bawue_config.get("wahlperiode-start-date"))
         parlis_delay = bawue_config.get("parlis-request-delay-s", DEFAULT_PARLIS_DELAY)
@@ -214,7 +213,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         # DD-047: PARLIS dates a Gesetzblatt Fundstelle by the Ausfertigung, so the
         # postparl-gsblt station needs the Ausgabedatum from the Gesetzblatt itself.
-        gsblt_config = load_toml_section(config, "gesetzblatt")
+        gsblt_config = config.section("gesetzblatt")
         # None (tests) keeps the PARLIS date and never reaches the network.
         self._gsblt_dates: GesetzblattDateLookup | None = GesetzblattDateLookup(
             GesetzblattClient(request_delay_s=gsblt_config.get("request-delay-s", DEFAULT_GSBLT_DELAY))

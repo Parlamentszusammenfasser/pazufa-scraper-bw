@@ -25,7 +25,7 @@ from bawue.types import (
     Zusammenfassungstupel,
     placeholder_hash,
 )
-from tests.factories import make_scraper
+from tests.factories import make_scraper, mock_config
 from tests.unit.test_bawue_dok import SAMPLE_HASH, SAMPLE_PDF_HASHES
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
@@ -616,10 +616,10 @@ class TestIssue52RunReport:
         scraper = _make_scraper()
         scraper.cached_count = 3
         scraper.item_count = 1
+        scraper.config.section.return_value = {"mattermost-hook": "https://hook.example"}
 
         with (
             patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()),
-            patch("bawue.notifications.load_toml_section", return_value={"mattermost-hook": "https://hook.example"}),
             patch("bawue.notifications.requests.post") as post,
         ):
             await scraper.run()
@@ -732,28 +732,19 @@ class TestInit:
     @pytest.mark.parametrize(
         ("toml", "wp", "warns"),
         [
-            (None, 18, False),
+            ("", 18, False),
             ("[bawue]\nwahlperiode = 16\n", 16, False),
             ("[bawue]\nwahlperiode = 16\n\n[beteiligung]\nwahlperiode = 17\n", 16, True),
         ],
     )
-    def test_issue6_wahlperiode_comes_from_bawue_section(self, tmp_path, caplog, toml, wp, warns):
+    def test_issue6_wahlperiode_comes_from_bawue_section(self, caplog, toml, wp, warns):
         """One Wahlperiode for all scrapers; a leftover [beteiligung] key is ignored, loudly."""
-        mock_config = MagicMock()
-        mock_config.config_file = None
-        mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
-        mock_config.llm_provider_key = None
-        if toml is not None:
-            config_file = tmp_path / "config.toml"
-            config_file.write_text(toml)
-            mock_config.config_file = str(config_file)
-
         with (
             patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.__init__", return_value=None),
             patch("bawue.bawue_beteiligung_scraper.BeteiligungClient"),
             caplog.at_level(logging.WARNING, logger="bawue.bawue_beteiligung_scraper"),
         ):
-            scraper = BawueBeteiligungScraper(mock_config, MagicMock())
+            scraper = BawueBeteiligungScraper(mock_config(toml), MagicMock())
 
         assert scraper._wahlperiode == wp
         assert ("[beteiligung] wahlperiode is ignored" in caplog.text) is warns

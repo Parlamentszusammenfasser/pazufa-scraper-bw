@@ -1,18 +1,20 @@
 """BawueConfig: local replacement for the removed collector.config.CollectorConfiguration.
 
-Reads config.toml (path via --config-file), environment variables and CLI
+Reads config.toml (path via --config-file) once, environment variables and CLI
 args, with precedence CLI > env > config file > default — same as the
-removed collector. Only the fields BaWue's scrapers, config_loader and
-notifications actually read are ported; `scrapers_dir` (replaced by the
-static registry in bawue.__main__) and `oapiconfig` (replaced by
-bawue.api.build_client) are dropped.
+removed collector. The scraper sections ([bawue], [notifications], …) come
+from `section()`; their keys have env overrides only, no CLI. `scrapers_dir`
+(replaced by the static registry in bawue.__main__) and `oapiconfig`
+(replaced by bawue.api.build_client) are dropped.
 """
 
 import logging
 import os
 import sys
 from argparse import SUPPRESS, ArgumentParser
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import toml
 
@@ -21,7 +23,31 @@ from bawue.cache import BawueCache
 logger = logging.getLogger(__name__)
 
 # Redacted by --dump-config. REDIS_URL carries the Upstash token in its userinfo.
-_SECRET_ATTRS = frozenset({"api_key", "llm_provider_key", "redis_url"})
+_SECRETS = frozenset({"api_key", "llm_provider_key", "redis_url", "mattermost-hook"})
+
+
+def _flag(raw: str) -> bool:
+    """true/1 or false/0; bool("false") would be True."""
+    if raw.lower() in ("true", "1"):
+        return True
+    if raw.lower() in ("false", "0"):
+        return False
+    raise ValueError(raw)
+
+
+# Section keys that differ per environment: their env override lets a cloud
+# deployment run the image's default config.toml instead of baking its own.
+_ENV_OVERRIDES: dict[str, dict[str, tuple[str, Callable[[str], Any]]]] = {
+    "bawue": {
+        "wahlperiode": ("WAHLPERIODE", int),
+        "wahlperiode-start-date": ("WAHLPERIODE_START_DATE", str),
+        "parlis-request-delay-s": ("PARLIS_REQUEST_DELAY_S", float),
+        "beteiligungsfristen": ("BETEILIGUNGSFRISTEN", _flag),
+    },
+    "notifications": {
+        "mattermost-hook": ("MATTERMOST_HOOK", str),
+    },
+}
 
 
 class ConfigProp:
@@ -95,16 +121,13 @@ class BawueConfig:
             ),
             # logging
             ConfigProp("api_obj_log", "logging.api-obj-log", "API_OBJ_LOG", None),
-            ConfigProp("logfile", "logging.logfile"),
-            ConfigProp("parsewarn", "logging.parsewarn"),
-            ConfigProp("errorfile", "logging.errorfile"),
             # llm — provider_key enables LLM enrichment (see bawue_vorgaenge_scraper /
             # bawue_beteiligung_scraper).
             ConfigProp("llm_provider_key", "llm.provider-key", "LLM_PROVIDER_KEY"),
             ConfigProp("llm_model", "llm.model", "LLM_MODEL", None, "gpt-5-nano"),
         ]
         self.config_file = None
-        self.dump_config = False
+        self.file_config: dict = {}  # the parsed TOML file
         self.configurations = configurations
 
     def _apply_env(self) -> None:
@@ -151,17 +174,13 @@ class BawueConfig:
 
         if config_file:
             with open(config_file) as f:
-                loaded = toml.load(f)
-                for config in self.configurations:
-                    if not config.cfg:
-                        continue
-                    cfg_path = config.cfg.split(".")
-                    if cfg_path[0] not in loaded or cfg_path[1] not in loaded[cfg_path[0]]:
-                        continue
-                    cfg_prop = loaded[cfg_path[0]][cfg_path[1]]
-                    if cfg_prop:
-                        config.value = cfg_prop
-                        config.value_set_by = "cfg"
+                self.file_config = toml.load(f)
+        # A file value counts as written, also false/0 (DD-078).
+        for config in self.configurations:
+            section, key = config.cfg.split(".")
+            if key in self.file_config.get(section, {}):
+                config.value = self.file_config[section][key]
+                config.value_set_by = "cfg"
 
         self._apply_env()
 
@@ -179,7 +198,7 @@ class BawueConfig:
 
         missing_required = []
         for config in self.configurations:
-            if config.required and config.value is None:
+            if config.required and not config.value:
                 missing_required.append(config)
             setattr(self, config.attr, config.value)
         if missing_required:
@@ -189,14 +208,33 @@ class BawueConfig:
 
         self._init_secondary_objects()
 
+    def section(self, name: str) -> dict:
+        """The TOML section *name* with its env overrides applied; {} if absent."""
+        values = dict(self.file_config.get(name, {}))
+        for key, (env_name, cast) in _ENV_OVERRIDES.get(name, {}).items():
+            raw = os.getenv(env_name)
+            if not raw:
+                continue
+            try:
+                values[key] = cast(raw)
+            except ValueError:
+                logger.critical("%s=%r is not a valid %s", env_name, raw, cast.__name__)
+                raise
+        return values
+
     def __str__(self) -> str:
         output = "Configuration of BaWue Scraper\n"
         output += f"Config File: {self.config_file}\n"
         output += "dft=default|env=environment var|cli=command line argument\n"
         for config in self.configurations:
-            name = config.cfg or config.attr
-            missing = config.required and config.value is None
-            value = "***" if config.value and config.attr in _SECRET_ATTRS else config.value
-            output += f"{config.value_set_by}{name:.>25}: {value}"
+            name = config.cfg
+            missing = config.required and not config.value
+            value = "***" if config.value and config.attr in _SECRETS else config.value
+            output += f"{config.value_set_by}{name:.>36}: {value}"
             output += " MISSING\n" if missing else "\n"
+        prop_sections = {config.cfg.split(".")[0] for config in self.configurations}
+        for section in sorted((set(self.file_config) | set(_ENV_OVERRIDES)) - prop_sections):
+            for key, value in self.section(section).items():
+                value = "***" if value and key in _SECRETS else value
+                output += f"   {f'{section}.{key}':.>36}: {value}\n"
         return output

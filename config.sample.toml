@@ -14,7 +14,6 @@ max-concurrency = 5
 ltzf-api-key = "SET_VIA_ENV"
 
 [scrapers]
-scraper-dir = "./src/bawue"
 # scrapers = []
 
 [logging]
