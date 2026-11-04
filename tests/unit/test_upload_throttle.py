@@ -104,6 +104,14 @@ class TestSuccessOnFirstTry:
 class TestUploadVorgang:
     """A failed upload is reported for the run summary; it never stops the run."""
 
+    def test_success_returns_the_item(self, limiter):
+        """Only a returned item counts as Published and gets cached; None would re-upload it every cycle."""
+        item = MagicMock(titel="T")
+        with patch("bawue.upload_throttle.put_vorgang"):
+            outcome = upload_vorgang(MagicMock(), "scraper-id", limiter, item)
+
+        assert outcome == UploadOutcome(vorgang=item)
+
     @pytest.mark.parametrize(
         ("error", "reason"),
         [
