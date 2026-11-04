@@ -21,11 +21,33 @@ from tests.factories import make_scraper
 
 _PARLIS = Path(__file__).parent.parent / "fixtures" / "parlis"
 _GOLDEN = _PARLIS / "issue100" / "built_vorgaenge.json"
+# Listed, not globbed: a fixture added for another issue must not change the golden file.
+_RESULT_PAGES = [
+    "antrag_results.html",
+    "antrag_results_with_json.html",
+    "gesetzgebung_backlink_real_results.html",
+    "gesetzgebung_landesregierung_results.html",
+    "gesetzgebung_results.html",
+    "gesetzgebung_results_with_json.html",
+    "gesetzgebung_shared_amendment_results.html",
+    "gesetzgebung_unlabeled_erste_beratung_results.html",
+    "gesetzgebung_wp18_complete_results.html",
+    "gesetzgebung_wp18_young_results.html",
+    "kleine_anfrage_results.html",
+    "kleine_anfrage_results_with_json.html",
+]
+_RAW_VORGAENGE = [
+    "issue26/v217223.json",
+    "issue26/v237492.json",
+    "issue26/v244180.json",
+    "issue33/v213867.json",
+    "issue33/v215974.json",
+]
 
 
 def _raws() -> list[dict]:
-    raws = [r for f in sorted(_PARLIS.glob("*_results*.html")) for r in parse_results(f.read_text())]
-    raws += [json.loads(f.read_text(encoding="utf-8")) for f in sorted(_PARLIS.glob("issue[23]*/*.json"))]
+    raws = [r for name in _RESULT_PAGES for r in parse_results((_PARLIS / name).read_text())]
+    raws += [json.loads((_PARLIS / name).read_text(encoding="utf-8")) for name in _RAW_VORGAENGE]
     return raws + _fold_einzelplaene(json.loads((_PARLIS / "issue60" / "haushalt_2025_26.json").read_text()))
 
 
