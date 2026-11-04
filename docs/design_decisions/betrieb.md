@@ -54,7 +54,7 @@ als HTTP 422 auf.
 5. **v0.3.2** / Spec 0.2.8: nur Pin-Wechsel; ungesetzte neue Felder fehlen im Payload. Prod
    läuft noch auf Spec 0.2.6 (Stand 2026-11-01) und kennt keinen neuen Wert, daher bleibt
    alles Neue ungenutzt: `gg-land-parl-haushalt` erst mit #60 und Track-Regex;
-   `Station.meta_tiebreaker` statt Stunden-Bumps (`_enforce_total_ordering`) ändert `zp_start`
+   `Station.meta_tiebreaker` statt Stunden-Bumps (`enforce_total_ordering`) ändert `zp_start`
    und damit die Stations-`api_id` (DD-028), braucht also eine Migration; `Vorgang.zusammenfassung`
    wäre ein zusätzlicher LLM-Call; `if_none_match` lohnt für den wöchentlichen Abruf (DD-072) nicht.
 

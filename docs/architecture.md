@@ -352,6 +352,8 @@ sequenceDiagram
 
 Subclass of `VorgangsScraper`. Searches PARLIS by Vorgangstyp, converts raw HTML data into API `Vorgang` models.
 Uses `_raw_cache` to bridge the listing/item phases. Configuration from `[bawue]` section.
+The station rules that need no scraper state (merging, ordering, stable `api_id`s) are plain functions
+in `stationen.py`.
 
 Only the Vorgangstypen listed under `enabled-vorgangstypen` in `config.toml` are scraped (default: `Gesetzgebung`,
 `Haushaltsgesetzgebung`, `Volksantrag`). These are the only types with full PaZuFa model support. Results with any
