@@ -96,6 +96,12 @@ def test_config_forwards_redis_url_to_cache(load, redis_mock, argv):
     redis_mock.from_url.assert_called_once_with(UPSTASH_URL, decode_responses=True, retry=ANY)
 
 
+def test_falsy_file_value_counts_as_written(load):
+    """DD-078: `0`/`false` from the file replace the default."""
+    config = load(toml=COLLECTOR + "max-concurrency = 0\n", LTZF_API_KEY="k")
+    assert config.max_concurrency == 0
+
+
 def test_empty_required_setting_counts_as_missing(load):
     with pytest.raises(SystemExit) as exc:
         load(toml=COLLECTOR + '[backend]\nltzf-api-key = ""\n')
