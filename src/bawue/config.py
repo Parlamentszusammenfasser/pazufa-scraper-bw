@@ -95,16 +95,12 @@ class BawueConfig:
             ),
             # logging
             ConfigProp("api_obj_log", "logging.api-obj-log", "API_OBJ_LOG", None),
-            ConfigProp("logfile", "logging.logfile"),
-            ConfigProp("parsewarn", "logging.parsewarn"),
-            ConfigProp("errorfile", "logging.errorfile"),
             # llm — provider_key enables LLM enrichment (see bawue_vorgaenge_scraper /
             # bawue_beteiligung_scraper).
             ConfigProp("llm_provider_key", "llm.provider-key", "LLM_PROVIDER_KEY"),
             ConfigProp("llm_model", "llm.model", "LLM_MODEL", None, "gpt-5-nano"),
         ]
         self.config_file = None
-        self.dump_config = False
         self.configurations = configurations
 
     def _apply_env(self) -> None:
