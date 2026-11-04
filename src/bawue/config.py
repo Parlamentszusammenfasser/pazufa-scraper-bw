@@ -227,7 +227,7 @@ class BawueConfig:
         output += f"Config File: {self.config_file}\n"
         output += "dft=default|env=environment var|cli=command line argument\n"
         for config in self.configurations:
-            name = config.cfg or config.attr
+            name = config.cfg
             missing = config.required and not config.value
             value = "***" if config.value and config.attr in _SECRETS else config.value
             output += f"{config.value_set_by}{name:.>36}: {value}"
