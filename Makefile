@@ -1,9 +1,9 @@
 VENV := .venv/bin
-# Bootstrap interpreter for `make install`. Resolve a python3.13 that is NOT the
+# Bootstrap interpreter for `make install`. Resolve a python3.14 that is NOT the
 # one inside .venv: make evaluates this at parse time, so with the venv active
 # `command -v` would point into .venv — which `make clean` then deletes, breaking
 # `install` on a combined `make clean package`. Strip .venv from PATH first.
-PYTHON := $(shell PATH="$$(printf '%s' "$$PATH" | tr ':' '\n' | grep -v "$(CURDIR)/.venv" | paste -sd ':' -)" command -v python3.13 2>/dev/null || echo /opt/homebrew/bin/python3.13)
+PYTHON := $(shell PATH="$$(printf '%s' "$$PATH" | tr ':' '\n' | grep -v "$(CURDIR)/.venv" | paste -sd ':' -)" command -v python3.14 2>/dev/null || echo /opt/homebrew/bin/python3.14)
 
 .PHONY: help install test test-cov test-all test-integration lint lint-fix format run package clean
 

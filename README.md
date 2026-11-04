@@ -11,7 +11,7 @@ Python packages.
 
 ## Prerequisites
 
-- Python 3.13
+- Python 3.14
 - Redis (for local dev: `docker-compose up -d`)
 - Tesseract OCR with German language pack (for PDF text extraction)
 
@@ -21,7 +21,7 @@ Python packages.
 git clone <repo-url> pazufa-bawue-scraper
 
 cd pazufa-bawue-scraper
-python3.13 -m venv .venv
+python3.14 -m venv .venv
 make install
 
 cp config.sample.toml config.toml
@@ -60,7 +60,7 @@ To build the Docker image directly (skipping lint/test):
 docker build -t bawue-scraper .
 ```
 
-The image uses a multi-stage build (Python 3.13-slim) — the builder stage installs dependencies (fetching
+The image uses a multi-stage build (Python 3.14-slim) — the builder stage installs dependencies (fetching
 `pazufa-scraper-core` from git), and the runtime stage copies only the installed packages and source code.
 
 ## Usage
