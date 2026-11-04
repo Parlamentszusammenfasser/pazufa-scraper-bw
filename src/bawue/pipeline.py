@@ -202,20 +202,6 @@ class Scraper(ABC):
     @abstractmethod
     async def make_cache_key(self, item: Any) -> str | None: ...
 
-    @abstractmethod
-    def log_item(self, item: Any) -> None: ...
-
-    @abstractmethod
-    async def send_result(self, item: Any) -> Any | None: ...
-
-    @abstractmethod
-    async def listing_page_extractor(self, url: str) -> list[Any]: ...
-
-    @abstractmethod
-    async def item_extractor(self, listing_item: Any) -> Any: ...
-
-
-class VorgangsScraper(Scraper):
     def log_item(self, item: Any) -> None:
         logdir = self.config.api_obj_log
         if not logdir:
@@ -231,6 +217,17 @@ class VorgangsScraper(Scraper):
         except Exception as e:
             logger.error("Failed to write to API object log: %s", e)
 
+    @abstractmethod
+    async def send_result(self, item: Any) -> Any | None: ...
+
+    @abstractmethod
+    async def listing_page_extractor(self, url: str) -> list[Any]: ...
+
+    @abstractmethod
+    async def item_extractor(self, listing_item: Any) -> Any: ...
+
+
+class VorgangsScraper(Scraper):
     async def make_cache_key(self, item: Any) -> str:
         return str(item)
 
@@ -241,21 +238,6 @@ class VorgangsScraper(Scraper):
 
 
 class SitzungsScraper(Scraper):
-    def log_item(self, item: Any) -> None:
-        logdir = self.config.api_obj_log
-        if not logdir:
-            return
-        logger.info("Logging Item to %s", logdir)
-        try:
-            filepath = Path(logdir) / f"{self.scraper_id}.jsonl"
-            if not filepath.parent.exists():
-                logger.info("Creating Filepath: %s", filepath.parent)
-                filepath.parent.mkdir(parents=True)
-            with filepath.open("a", encoding="utf-8") as file:
-                file.write(json.dumps(item, default=str) + ",\n")
-        except Exception as e:
-            logger.error("Failed to write to API object log: %s", e)
-
     async def store_extracted_result(self, item_key: str, result: Any) -> None:
         self.config.cache.store_raw(item_key, str(result))
 

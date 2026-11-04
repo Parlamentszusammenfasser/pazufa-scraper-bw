@@ -15,7 +15,7 @@ ASCII-Verschiebung um +29 mit C1-Steuerzeichen. Falsche `<`/`>` und E-Mail-Heade
 XSS-Prüfung des Backends aus (HTTP 400).
 
 **Entscheidung:** Drei Stufen:
-1. **Erkennen und OCR:** `_is_garbled()` schlägt an bei > 5 % Latin-Extended- oder > 0,5 %
+1. **Erkennen und OCR:** `is_garbled()` schlägt an bei > 5 % Latin-Extended- oder > 0,5 %
    C1-Zeichen (bezogen auf Buchstaben, ganzes Dokument). Dann Tesseract-OCR (`deu`). Das
    Ergebnis gilt nur, wenn mehr nutzbarer Text übrig bleibt als beim Original
    (`_usable_length`), denn OCR ersetzt den ganzen Text, auch saubere Seiten.

@@ -7,7 +7,7 @@ import re
 
 from pazufa_corelib.llm import LLMConnector
 
-from bawue.bawue_dok import _SYSTEM_PROMPT, LLMMetrics, _llm_json, _redis_get, _redis_set, _sanitize_llm_text
+from bawue.bawue_dok import SYSTEM_PROMPT, LLMMetrics, llm_json, redis_get, redis_set, sanitize_llm_text
 from bawue.cache import BawueCache
 from bawue.types import TODO_MARKER, Ressort
 
@@ -19,7 +19,7 @@ def _prompt_cache_key(user_message: str, model: str) -> str:
 
     The model is part of it, so switching models asks the new one (issue #57, DD-063).
     """
-    return hashlib.sha256(f"{model}\n{_SYSTEM_PROMPT}\n{user_message}".encode()).hexdigest()
+    return hashlib.sha256(f"{model}\n{SYSTEM_PROMPT}\n{user_message}".encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ _TRAILING_PERIOD_RE = re.compile(r"(?<=[^\W\d_]{2})\.$")
 
 def _clean_kurztitel(raw: object) -> str:
     """Sanitize (DD-027) and strip wrapping quotes / a trailing period."""
-    text = _sanitize_llm_text(raw)
+    text = sanitize_llm_text(raw)
     text = (text or "").strip(_KURZTITEL_QUOTES)
     return _TRAILING_PERIOD_RE.sub("", text).strip(_KURZTITEL_QUOTES)
 
@@ -105,22 +105,22 @@ async def vorgang_kurztitel(
     user_message = f"{KURZTITEL_PROMPT}\n\nOffizieller Titel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
     cache_key = _prompt_cache_key(user_message, model)
     # A Redis error propagates: a fallback cached with the Vorgang would stick (issue #105).
-    cached = _redis_get(cache, cache_key, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
+    cached = redis_get(cache, cache_key, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
     if cached is not None:
         if metrics is not None:
             metrics.kurztitel_generated += 1
         return cached
 
     messages = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_message},
     ]
     try:
         for attempt in range(2):
-            kurztitel = _clean_kurztitel((await _llm_json(llm, model, messages)).get("kurztitel"))
+            kurztitel = _clean_kurztitel((await llm_json(llm, model, messages)).get("kurztitel"))
             problem = _kurztitel_problem(kurztitel)
             if problem is None:
-                _redis_set(cache, cache_key, kurztitel, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
+                redis_set(cache, cache_key, kurztitel, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
                 if metrics is not None:
                     metrics.kurztitel_generated += 1
                 return kurztitel
@@ -192,16 +192,16 @@ async def vorgang_ressort(
     user_message = f"{RESSORT_PROMPT}\n\nTitel: {titel}\n\nZusammenfassung: {zusammenfassung or 'keine'}"
     cache_key = _prompt_cache_key(user_message, model)
     # A Redis error propagates: a fallback cached with the Vorgang would stick (issue #105).
-    cached = _redis_get(cache, cache_key, prefix=_RESSORT_CACHE_PREFIX, typehint="Vorgang Ressort")
+    cached = redis_get(cache, cache_key, prefix=_RESSORT_CACHE_PREFIX, typehint="Vorgang Ressort")
     if cached is not None:
         raw = _cached_ressort(cached)
     else:
         messages = [
-            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ]
         try:
-            answer = await _llm_json(llm, model, messages)
+            answer = await llm_json(llm, model, messages)
             raw = answer.get("ressort")  # inside: valid JSON need not be an object
         except Exception:
             logger.warning("Ressort classification failed for %r", titel[:60], exc_info=True)
@@ -213,7 +213,7 @@ async def vorgang_ressort(
         # The raw answer travels with its begründung: a wrong classification can be
         # examined later without re-calling the model, and a rejected one stays
         # rejected instead of reading back as null (issue #56).
-        _redis_set(
+        redis_set(
             cache,
             cache_key,
             json.dumps({"ressort": raw, "begruendung": answer.get("begruendung")}),

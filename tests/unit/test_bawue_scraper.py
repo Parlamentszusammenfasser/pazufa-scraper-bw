@@ -16,7 +16,6 @@ from bawue.bawue_vorgaenge_scraper import (
     DEFAULT_ENABLED_VORGANGSTYPEN,
     BawueVorgaengeScraper,
     _assign_stable_station_ids,
-    _construct_drucksache_pdf_url,
     _fallback_date_from_year,
     _initiativ_drucksnr_from_fundstellen,
     _initiativ_zusammenfassung,
@@ -26,6 +25,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _reading_round,
     _same_round_label,
     _vorgang_fingerprint,
+    construct_drucksache_pdf_url,
 )
 from bawue.gesetzblatt_lookup import GesetzblattUnavailable
 from bawue.parlis_parser import parse_fundstelle_text
@@ -4947,13 +4947,13 @@ class TestConstructDrucksachePdfUrl:
         ],
     )
     def test_builds_predictable_url(self, drucksache, expected_suffix):
-        url = _construct_drucksache_pdf_url(drucksache)
+        url = construct_drucksache_pdf_url(drucksache)
         assert url is not None
         assert url.endswith(expected_suffix)
 
     @pytest.mark.parametrize("drucksache", [None, "", "garbage", "18-75"])
     def test_returns_none_for_missing_or_malformed(self, drucksache):
-        assert _construct_drucksache_pdf_url(drucksache) is None
+        assert construct_drucksache_pdf_url(drucksache) is None
 
 
 def _head_session(status: int) -> MagicMock:

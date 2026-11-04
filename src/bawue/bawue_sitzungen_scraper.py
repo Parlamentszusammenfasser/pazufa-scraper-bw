@@ -16,7 +16,7 @@ import aiohttp
 import certifi
 
 from bawue.api import BawueApiError, build_client, put_kalender
-from bawue.bawue_vorgaenge_scraper import _construct_drucksache_pdf_url
+from bawue.bawue_vorgaenge_scraper import construct_drucksache_pdf_url
 from bawue.cache import BETEILIGUNGSFRISTEN_KEY, RedisUnavailableError, drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.config_loader import load_toml_section
@@ -210,7 +210,7 @@ class BawueSitzungenScraper(SitzungsScraper):
             typ=Doktyp.SONSTIG,
             zp_modifiziert=termin,
             zp_referenz=termin,
-            link=_construct_drucksache_pdf_url(drucksnr),
+            link=construct_drucksache_pdf_url(drucksnr),
             autoren=[],
             drucksnr=drucksnr,
         )

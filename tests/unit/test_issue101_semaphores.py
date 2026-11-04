@@ -26,7 +26,7 @@ async def _slow_completion(*args, **kwargs):
 
 def test_llm_calls_contend_in_two_cycles():
     async def cycle():
-        return await asyncio.gather(*(bawue_dok._llm_json(MagicMock(), "m", []) for _ in range(5)))
+        return await asyncio.gather(*(bawue_dok.llm_json(MagicMock(), "m", []) for _ in range(5)))
 
     with patch("bawue.bawue_dok.litellm.acompletion", new=AsyncMock(side_effect=_slow_completion)):
         assert asyncio.run(cycle()) == [{"ok": True}] * 5

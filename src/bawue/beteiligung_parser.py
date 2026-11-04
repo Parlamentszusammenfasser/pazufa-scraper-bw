@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from lxml import html
 
-from bawue.parlis_parser import _GERMAN_DATE_RE, _GERMAN_MONTHS
+from bawue.parlis_parser import GERMAN_DATE_RE, GERMAN_MONTHS
 
 
 @dataclass
@@ -28,7 +28,7 @@ BERLIN_TZ = ZoneInfo("Europe/Berlin")
 _DRAFT_PHASES = {"Online-Kommentierung", "Gesetzentwurf"}
 
 # "bis zum 30. Oktober 2026": anchored on "bis", the block may name a start date too (issue #148).
-_DEADLINE_RE = re.compile(r"\bbis(?:\s+zum)?\s+" + _GERMAN_DATE_RE.pattern)
+_DEADLINE_RE = re.compile(r"\bbis(?:\s+zum)?\s+" + GERMAN_DATE_RE.pattern)
 
 
 @dataclass
@@ -140,7 +140,7 @@ def _comment_deadline(tree: html.HtmlElement) -> date | None:
         return None
     day, month, year = match.groups()
     try:
-        return date(int(year), int(_GERMAN_MONTHS[month]), int(day))
+        return date(int(year), int(GERMAN_MONTHS[month]), int(day))
     except ValueError:  # 31. Februar
         return None
 

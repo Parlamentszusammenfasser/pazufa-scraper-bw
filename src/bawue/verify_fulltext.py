@@ -24,10 +24,10 @@ import aiohttp
 
 from bawue.parlis_client import ParlisClient
 from bawue.pdf_text import (
-    _is_garbled,
-    _paragraph_quality_score,
     extract_pdf_text,
+    is_garbled,
     normalize_volltext,
+    paragraph_quality_score,
 )
 from bawue.wahlperiode import CURRENT_WAHLPERIODE, wahlperiode_start
 
@@ -67,7 +67,7 @@ def _trailing_ws_lines(text: str) -> int:
 def _paragraph_stats(text: str) -> dict:
     """Compute paragraph quality stats from raw text."""
     paragraphs = re.split(r"\n\n+", text)
-    scores = [(p[:80], _paragraph_quality_score(p)) for p in paragraphs if p.strip()]
+    scores = [(p[:80], paragraph_quality_score(p)) for p in paragraphs if p.strip()]
     removed = [(snippet, s) for snippet, s in scores if s < 0.5]
     return {
         "total": len(scores),
@@ -87,7 +87,7 @@ def _analyze_pdf(url: str, raw_text: str, normalized_text: str, doc_hash: str) -
         "raw_len": len(raw_text),
         "normalized_len": len(normalized_text),
         "delta_len": len(raw_text) - len(normalized_text),
-        "is_garbled": _is_garbled(raw_text),
+        "is_garbled": is_garbled(raw_text),
         "raw_c1_chars": _count_c1(raw_text),
         "norm_c1_chars": _count_c1(normalized_text),
         "raw_cr_count": _count_cr(raw_text),

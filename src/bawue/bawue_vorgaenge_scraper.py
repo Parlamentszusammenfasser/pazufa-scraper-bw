@@ -178,8 +178,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
     _changed: int = 0
 
     # Emit the Initiativdrucksache as a cross-reference `vg_ident` (Issue #26 / GitHub #3,
-    # DD-041). Class-level default so tests and other manual-construction paths inherit
-    # it without setting it.
+    # DD-041). Class-level default so unit tests built via object.__new__ inherit it.
     _emit_initdrucks_ident: bool = True
 
     # Resolves a Gesetzblatt citation to its real Ausgabedatum (DD-047). Class-level
@@ -1308,7 +1307,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         after the website's 303 redirect to the blob store); otherwise None, so
         we never attach a broken link.
         """
-        candidate = _construct_drucksache_pdf_url(drucksache)
+        candidate = construct_drucksache_pdf_url(drucksache)
         if candidate is None:
             return None
         ssl_ctx = ssl.create_default_context(cafile=certifi.where())
@@ -1337,7 +1336,7 @@ _LANDTAG_PDF_BASE = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokum
 _DRUCKSACHE_RE = re.compile(r"(\d+)/(\d+)")
 
 
-def _construct_drucksache_pdf_url(drucksache: str | None) -> str | None:
+def construct_drucksache_pdf_url(drucksache: str | None) -> str | None:
     """Build the deterministic Landtag-BW PDF URL for a ``WP/Nummer`` Drucksache.
 
     The public website hosts every Drucksache at a predictable path that

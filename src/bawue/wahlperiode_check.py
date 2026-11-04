@@ -4,9 +4,9 @@ import logging
 
 import requests
 
-logger = logging.getLogger(__name__)
+from bawue.beteiligung_client import BASE_URL
 
-BASE_URL = "https://beteiligungsportal.baden-wuerttemberg.de"
+logger = logging.getLogger(__name__)
 
 
 def check_for_newer_wahlperiode(current_wahlperiode: int) -> None:
