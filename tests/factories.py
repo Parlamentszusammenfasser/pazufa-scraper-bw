@@ -1,9 +1,23 @@
 """Scrapers for tests, built without __init__ (no TOML, network or Redis)."""
 
+from unittest.mock import MagicMock
+
+import toml
+
 from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
 from bawue.bawue_sitzungen_scraper import BawueSitzungenScraper
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.pipeline import Scraper
+
+
+def mock_config(toml_text: str = "") -> MagicMock:
+    """A config whose `section()` reads *toml_text*, for scraper __init__ tests."""
+    config = MagicMock()
+    config.collector_id = "00000000-0000-0000-0000-000000000001"
+    config.llm_provider_key = None
+    sections = toml.loads(toml_text)
+    config.section.side_effect = lambda name: dict(sections.get(name, {}))
+    return config
 
 
 def make_scraper[S: Scraper](cls: type[S]) -> S:

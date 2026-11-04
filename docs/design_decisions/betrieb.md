@@ -85,3 +85,19 @@ neu gebaut (DD-067).
 **Konsequenz:** Der erste Lauf und ein geleertes Redis liefern keinen Bericht. Eine zweite
 Station gleichen Typs gilt nicht als Änderung. Ohne LLM-Anreicherung lädt der Scraper keine
 PDFs, die Liste bleibt dann leer.
+
+<a id="dd-078"></a>
+## DD-078: Ein Config-Loader, ein Wert gilt wie geschrieben
+
+**Kontext:** Zwei Loader lasen die TOML-Datei mit verschiedenen Regeln: `BawueConfig`
+überging `false`, `0` und `""`, `load_toml_section` behielt sie und las die Datei bei jedem
+Aufruf neu. `--dump-config` zeigte die Abschnitte `[bawue]` usw. nicht (GitHub Issue #102).
+
+**Entscheidung:** `BawueConfig.load()` liest die Datei einmal; `config.section(name)` liefert
+einen Abschnitt mit seinen env-Overrides (`_ENV_OVERRIDES`, Namen unverändert). Ein Wert aus
+der Datei gilt wie geschrieben, auch `false`/`0` — nötig für Notschalter wie
+`beteiligungsfristen = false`. Eine leere Pflichtangabe (`ltzf-api-key = ""`) gilt weiter als
+fehlend. `--dump-config` zeigt auch die Abschnitte, Secrets als `***`.
+
+**Konsequenz:** `max-concurrency = 0` o. ä. in der Datei wird jetzt übernommen statt durch den
+Default ersetzt. Keine der Repo-Configs enthält einen solchen Wert.

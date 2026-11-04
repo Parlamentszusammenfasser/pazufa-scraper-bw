@@ -22,7 +22,6 @@ from bawue.beteiligung_parser import (
 )
 from bawue.cache import BETEILIGUNGSFRISTEN_KEY
 from bawue.config import BawueConfig
-from bawue.config_loader import load_toml_section
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
@@ -65,8 +64,8 @@ class BawueBeteiligungScraper(VorgangsScraper):
     """
 
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
-        beteiligung_config = load_toml_section(config, "beteiligung")
-        bawue_config = load_toml_section(config, "bawue")
+        beteiligung_config = config.section("beteiligung")
+        bawue_config = config.section("bawue")
         # One Wahlperiode for all scrapers (issue #6).
         self._wahlperiode = bawue_config.get("wahlperiode", CURRENT_WAHLPERIODE)
         # Kill switch `[bawue] beteiligungsfristen` (DD-076).

@@ -123,6 +123,7 @@ def bawue_config(mock_backend, httpserver):
     config.linearize = True
     config.max_concurrency = 3
     config.config_file = None
+    config.file_config = {}
     config.api_obj_log = None
     config.cache = BawueCache(redis_host=None, redis_port=None)
 

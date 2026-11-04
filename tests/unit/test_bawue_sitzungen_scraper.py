@@ -14,7 +14,7 @@ import pytest_asyncio
 
 from bawue.bawue_sitzungen_scraper import DEFAULT_ICS_URL, BawueSitzungenScraper, _fristen_by_date
 from bawue.types import Doktyp
-from tests.factories import make_scraper
+from tests.factories import make_scraper, mock_config
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 ICS_BYTES = (FIXTURES_DIR / "sample_calendar.ics").read_bytes()
@@ -296,27 +296,17 @@ class TestIssue117NamedCommittees:
 
 
 class TestInit:
-    def test_init_reads_ics_url_from_config(self, tmp_path):
-        config_file = tmp_path / "config.toml"
-        config_file.write_text('[bawue]\nics-url = "https://custom.example.com/cal.ics"\n')
-
-        mock_config = MagicMock()
-        mock_config.config_file = str(config_file)
-        mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
-
+    def test_init_reads_ics_url_from_config(self):
+        config = mock_config('[bawue]\nics-url = "https://custom.example.com/cal.ics"\n')
         with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.__init__", return_value=None) as mock_super:
-            BawueSitzungenScraper(mock_config, MagicMock())
+            BawueSitzungenScraper(config, MagicMock())
 
         # super().__init__(config, collector_id, [ics_url], session) → args[2] is listing_urls
         assert mock_super.call_args.args[2] == ["https://custom.example.com/cal.ics"]
 
     def test_init_uses_default_ics_url(self):
-        mock_config = MagicMock()
-        mock_config.config_file = None
-        mock_config.collector_id = "00000000-0000-0000-0000-000000000001"
-
         with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.__init__", return_value=None) as mock_super:
-            BawueSitzungenScraper(mock_config, MagicMock())
+            BawueSitzungenScraper(mock_config(), MagicMock())
 
         assert mock_super.call_args.args[2] == [DEFAULT_ICS_URL]
 
@@ -437,7 +427,6 @@ class TestIssue52RunReport:
 
         with (
             patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()),
-            patch("bawue.notifications.load_toml_section", return_value={"mattermost-hook": "https://hook.example"}),
             patch("bawue.notifications.requests.post") as post,
         ):
             await scraper.run()

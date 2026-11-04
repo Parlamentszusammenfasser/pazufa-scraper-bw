@@ -163,4 +163,4 @@ stations) · `stationen.py` (station rules: merge, ordering, stable ids) · `par
 `enum_mapper.py` (PARLIS terms → PaZuFa enums, context-aware) · `bawue_dok.py` (LLM
 enrichment) · `pdf_text.py` (PDF download, text, OCR) · `vorgang_llm.py` (Kurztitel, Ressort) · `pipeline.py` (scraper base classes, run loop, `log_item`) ·
 `bawue_beteiligung_scraper.py` / `bawue_sitzungen_scraper.py` / `ics_parser.py` ·
-`config.py` / `config_loader.py` · `cache.py` (Redis) · `upload_throttle.py` (retry/429).
+`config.py` (config loader, `section()`) · `cache.py` (Redis) · `upload_throttle.py` (retry/429).

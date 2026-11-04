@@ -19,7 +19,6 @@ from bawue.api import BawueApiError, build_client, put_kalender
 from bawue.bawue_vorgaenge_scraper import construct_drucksache_pdf_url
 from bawue.cache import BETEILIGUNGSFRISTEN_KEY, RedisUnavailableError, drucksache_hash_key
 from bawue.config import BawueConfig
-from bawue.config_loader import load_toml_section
 from bawue.ics_parser import ParsedEvent, group_events_by_date, parse_ics_feed
 from bawue.pdf_text import download_pdf, extract_pdf_text
 from bawue.pipeline import SitzungsScraper
@@ -43,7 +42,7 @@ class BawueSitzungenScraper(SitzungsScraper):
     """
 
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
-        bawue_config = load_toml_section(config, "bawue")
+        bawue_config = config.section("bawue")
         self._wahlperiode = bawue_config.get("wahlperiode", CURRENT_WAHLPERIODE)
         # Kill switch `[bawue] beteiligungsfristen` (DD-076).
         self._beteiligungsfristen = bawue_config.get("beteiligungsfristen", True)

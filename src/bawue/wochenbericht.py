@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 
 from bawue.api import build_client, get_vorgaenge
 from bawue.config import BawueConfig
-from bawue.config_loader import load_toml_section
 from bawue.wahlperiode import CURRENT_WAHLPERIODE
 
 logger = logging.getLogger(__name__)
@@ -69,7 +68,7 @@ def weekly_section(config: BawueConfig, now: datetime | None = None) -> tuple[st
         stored = json.loads(config.cache.redis_client.get(_KEY) or "{}")
         if stored.get("woche") == woche:
             return None
-        wahlperiode = load_toml_section(config, "bawue").get("wahlperiode", CURRENT_WAHLPERIODE)
+        wahlperiode = config.section("bawue").get("wahlperiode", CURRENT_WAHLPERIODE)
         current = stages(get_vorgaenge(build_client(config.database_url, config.api_key), wahlperiode), now)
     except Exception as e:
         logger.warning("Wochenbericht skipped, retried next run: %s", e)
