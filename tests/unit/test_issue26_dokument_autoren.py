@@ -34,6 +34,7 @@ import pytest
 
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.types import Doktyp, Dokument, Stationstyp, Vorgang
+from tests.factories import make_scraper
 
 _FIXTURES = Path(__file__).parent.parent / "fixtures" / "parlis" / "issue26"
 
@@ -44,7 +45,7 @@ def _load(name: str) -> dict:
 
 async def _build(raw: dict) -> Vorgang:
     """Run the real station pipeline (no network, no LLM) over a fixture Vorgang."""
-    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper = make_scraper(BawueVorgaengeScraper)
     scraper._wahlperiode = 17
     scraper._llm_enabled = False
     scraper._llm = None

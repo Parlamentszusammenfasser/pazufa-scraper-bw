@@ -42,6 +42,7 @@ from bawue.types import (
     Zusammenfassungstupel,
     placeholder_hash,
 )
+from tests.factories import make_scraper
 from tests.unit.test_bawue_dok import SAMPLE_HASH, SAMPLE_PDF_HASHES
 
 
@@ -85,7 +86,7 @@ def scraper_build_vorgang():
     """Return the _build_vorgang method without needing full scraper initialization."""
     # We test _build_vorgang directly since it's the core domain conversion logic.
     # Creating the full scraper requires aiohttp session and CollectorConfiguration.
-    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper = make_scraper(BawueVorgaengeScraper)
     scraper._wahlperiode = 17
     scraper._llm_enabled = False
     scraper._llm = None
@@ -100,7 +101,7 @@ def scraper_failed_downloads(monkeypatch):
     """LLM-enabled scraper whose every PDF download fails (issue #66, DD-067)."""
     from bawue.bawue_dok import EnrichmentResult
 
-    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper = make_scraper(BawueVorgaengeScraper)
     scraper._wahlperiode = 18
     scraper._filter_sonstig = True
     scraper.session = MagicMock()
@@ -197,7 +198,7 @@ class TestBuildVorgang:
         """
         from bawue.bawue_dok import EnrichmentResult
 
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
         scraper._filter_sonstig = True
         scraper.session = MagicMock()
@@ -245,7 +246,7 @@ class TestBuildVorgang:
         so a cached entry would keep the volltext missing forever."""
         from bawue.types import VgIdent
 
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper.config = MagicMock()
         scraper._retry_next_cycle = {"V-246637"}
         scraper._fingerprints = {"V-246637": "fp-pending", "V-247045": "fp-clean"}
@@ -1097,7 +1098,7 @@ class TestIssue75FutureFundstellen:
 
     @staticmethod
     async def _build(today: date, vid: str = "V-248237", fundstellen: list[dict] = _ISSUE_75_FUNDSTELLEN):
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 18
         scraper._llm_enabled = False
         scraper._llm = None
@@ -1235,7 +1236,7 @@ class TestDetermineGremiumRouting:
 
     @pytest.fixture()
     def scraper(self):
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
         return scraper
 
@@ -1291,7 +1292,7 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
     """Create a minimal BawueVorgaengeScraper without full init, with a mock ParlisClient."""
     from bawue.rate_limiter import AdaptiveRateLimiter
 
-    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper = make_scraper(BawueVorgaengeScraper)
     scraper._wahlperiode = 17
     scraper._wahlperiode_start_date = wahlperiode_start
     scraper._raw_cache = {}
@@ -1679,7 +1680,7 @@ class TestPlaceholderDate:
 
     @pytest.mark.asyncio
     async def test_zero_day_month_logs_warning(self, scraper_build_vorgang, caplog):
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
@@ -2566,7 +2567,7 @@ class TestStellungnahmenAsChildren:
 
     @pytest.mark.asyncio
     async def test_stellungnahme_without_preceding_station_discarded_with_warning(self, scraper_build_vorgang, caplog):
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
@@ -2801,7 +2802,7 @@ class TestEnabledVorgangstypen:
 
     @pytest.mark.asyncio
     async def test_listing_page_extractor_drops_unsupported_vorgangstypen(self):
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode_start_date = date(2021, 4, 26)
         scraper._enabled_vorgangstypen = frozenset(["Gesetzgebung"])
         scraper._raw_cache = {}
@@ -2969,7 +2970,7 @@ class TestAenderungsantragHandling:
     @pytest.mark.asyncio
     async def test_aenderungsantrag_without_vollversammlung_logs_warning(self, scraper_build_vorgang, caplog):
         """If no vollvlsgn station exists at all, discard with a warning."""
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
@@ -3945,7 +3946,7 @@ class TestIssue48OrderByZpStartNotListPosition:
         later-dated reading, the old code pushed the introduction *after* an
         earlier first reading."""
         s = self._station
-        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
         stationen = [
             s(Stationstyp.PREPARL_REGBSL, datetime(2021, 10, 26, tzinfo=UTC)),
@@ -3961,7 +3962,7 @@ class TestIssue48OrderByZpStartNotListPosition:
         on), the synthetic initiativ inherits the regbsl's date. _build_vorgang's
         later _enforce_total_ordering then separates the tie."""
         s = self._station
-        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
         regbsl_zp = datetime(2021, 10, 26, tzinfo=UTC)
         stationen = [s(Stationstyp.PREPARL_REGBSL, regbsl_zp)]
@@ -4606,7 +4607,7 @@ class TestFilterSonstigStations:
     @pytest.mark.asyncio
     async def test_sonstig_station_kept_when_disabled(self):
         """When filter-sonstig-stations=false, sonstig stations pass through."""
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
@@ -4971,7 +4972,7 @@ def _head_session(status: int) -> MagicMock:
 @pytest.fixture()
 def fallback_scraper():
     """A bare scraper instance exposing _fallback_pdf_url without full init."""
-    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper = make_scraper(BawueVorgaengeScraper)
     scraper.session = _head_session(200)
     return scraper
 
@@ -5007,7 +5008,7 @@ class TestBuildVorgangPdfFallback:
 
     @pytest.mark.asyncio
     async def test_empty_pdf_url_reconstructed_from_drucksache(self):
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 18
         scraper._llm_enabled = False
         scraper._llm = None
@@ -5156,7 +5157,7 @@ class TestIssue9GesetzblattAusgabedatum:
     """
 
     def _scraper(self, lookup=None):
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
         scraper._llm_enabled = False
         scraper._llm = None
@@ -5508,7 +5509,7 @@ class TestIssue39Ressort:
         monkeypatch.setattr("bawue.bawue_dok.enrich_dokument", _fake_enrich)
         monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.vorgang_ressort", ressort_mock)
         monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.vorgang_kurztitel", kurztitel_mock)
-        scraper = BawueVorgaengeScraper.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 17
         scraper._llm_enabled = True
         scraper._llm = MagicMock()
@@ -5642,7 +5643,7 @@ class TestIssue66DrucksacheHashRegistry:
     async def _store(stationen, retry=False):
         from bawue.types import VgIdent
 
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper.config = MagicMock(cache=_InMemoryCache())
         scraper._retry_next_cycle = {"V-1"} if retry else set()
         scraper._fingerprints = {"V-1": "fp"}
@@ -5687,7 +5688,7 @@ class TestIssue128MissingDocuments:
     def _scraper(monkeypatch, today: date, status: int | None) -> BawueVorgaengeScraper:
         from bawue.bawue_dok import EnrichmentResult
 
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 18
         scraper._filter_sonstig = True
         scraper.session = MagicMock()
@@ -5788,7 +5789,7 @@ class TestIssue74ProtocolPagesReachEnrichment:
     async def test_druckseiten_reach_enrich_dokument(self, monkeypatch):
         from bawue.bawue_dok import EnrichmentResult
 
-        scraper = object.__new__(BawueVorgaengeScraper)
+        scraper = make_scraper(BawueVorgaengeScraper)
         scraper._wahlperiode = 18
         scraper._filter_sonstig = True
         scraper.session = MagicMock()

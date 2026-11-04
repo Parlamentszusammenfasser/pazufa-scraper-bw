@@ -21,12 +21,13 @@ import pytest
 
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, _print_vorgaenge_summary
 from bawue.types import Doktyp, Stationstyp
+from tests.factories import make_scraper
 
 _FIXTURE = Path(__file__).parent.parent / "fixtures" / "parlis" / "issue26" / "v244180.json"
 
 
 def _scraper() -> BawueVorgaengeScraper:
-    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper = make_scraper(BawueVorgaengeScraper)
     scraper._wahlperiode = 17
     scraper._llm_enabled = False
     scraper._llm = None

@@ -14,6 +14,7 @@ import pytest_asyncio
 
 from bawue.bawue_sitzungen_scraper import DEFAULT_ICS_URL, BawueSitzungenScraper, _fristen_by_date
 from bawue.types import Doktyp
+from tests.factories import make_scraper
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 ICS_BYTES = (FIXTURES_DIR / "sample_calendar.ics").read_bytes()
@@ -25,7 +26,7 @@ def _make_scraper() -> BawueSitzungenScraper:
     """Create a BawueSitzungenScraper without calling __init__."""
     from bawue.rate_limiter import AdaptiveRateLimiter
 
-    scraper = object.__new__(BawueSitzungenScraper)
+    scraper = make_scraper(BawueSitzungenScraper)
     scraper._wahlperiode = 17
     scraper._events_by_date = {}
     scraper._fingerprints = {}

@@ -18,6 +18,7 @@ import pytest
 
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, _fold_einzelplaene
 from bawue.types import Stationstyp
+from tests.factories import make_scraper
 
 _FIXTURE = Path(__file__).parent.parent / "fixtures" / "parlis" / "issue60" / "haushalt_2025_26.json"
 _STHG = "V-236470"
@@ -30,7 +31,7 @@ def _records() -> list[dict]:
 
 def _scraper() -> BawueVorgaengeScraper:
     """Listing and station pipeline without network or LLM."""
-    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper = make_scraper(BawueVorgaengeScraper)
     scraper._wahlperiode = 17
     scraper._wahlperiode_start_date = None
     scraper._enabled_vorgangstypen = frozenset({"Haushaltsgesetzgebung"})

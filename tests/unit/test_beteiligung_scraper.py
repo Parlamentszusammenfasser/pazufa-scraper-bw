@@ -25,6 +25,7 @@ from bawue.types import (
     Zusammenfassungstupel,
     placeholder_hash,
 )
+from tests.factories import make_scraper
 from tests.unit.test_bawue_dok import SAMPLE_HASH, SAMPLE_PDF_HASHES
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
@@ -34,7 +35,7 @@ def _make_scraper():
     """Create a minimal BawueBeteiligungScraper without full init."""
     from bawue.rate_limiter import AdaptiveRateLimiter
 
-    scraper = object.__new__(BawueBeteiligungScraper)
+    scraper = make_scraper(BawueBeteiligungScraper)
     scraper._wahlperiode = 17
     scraper._raw_cache = {}
     scraper._details = {}

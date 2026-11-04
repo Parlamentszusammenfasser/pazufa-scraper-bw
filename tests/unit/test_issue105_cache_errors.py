@@ -7,11 +7,12 @@ import pytest
 from bawue.__main__ import _report_sections
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.cache import RedisUnavailableError
+from tests.factories import make_scraper
 
 
 @pytest.mark.asyncio
 async def test_lookup_error_skips_the_item_and_counts_it():
-    scraper = object.__new__(BawueVorgaengeScraper)
+    scraper = make_scraper(BawueVorgaengeScraper)
     scraper.config = MagicMock(max_concurrency=1, linearize=True)
     scraper.get_cached_result = AsyncMock(side_effect=[RedisUnavailableError("redis down"), None])
     scraper.helper_extract_send_item = AsyncMock(return_value=None)
