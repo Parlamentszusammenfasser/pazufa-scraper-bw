@@ -42,12 +42,10 @@ class BawueSitzungenScraper(SitzungsScraper):
     Auto-discovered by the framework when placed in the scrapers directory.
     """
 
-    # Kill switch `[bawue] beteiligungsfristen` (DD-076).
-    _beteiligungsfristen: bool = True
-
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         bawue_config = load_toml_section(config, "bawue")
         self._wahlperiode = bawue_config.get("wahlperiode", CURRENT_WAHLPERIODE)
+        # Kill switch `[bawue] beteiligungsfristen` (DD-076).
         self._beteiligungsfristen = bawue_config.get("beteiligungsfristen", True)
         ics_url = bawue_config.get("ics-url", DEFAULT_ICS_URL)
 

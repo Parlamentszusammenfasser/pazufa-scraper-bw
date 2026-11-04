@@ -174,26 +174,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
     wrapped in the async framework contract.
     """
 
-    # Cache misses whose PARLIS record changed since its last upload (issue #52).
-    _changed: int = 0
-
-    # Emit the Initiativdrucksache as a cross-reference `vg_ident` (Issue #26 / GitHub #3,
-    # DD-041). Class-level default so unit tests built via object.__new__ inherit it.
-    _emit_initdrucks_ident: bool = True
-
-    # Resolves a Gesetzblatt citation to its real Ausgabedatum (DD-047). Class-level
-    # default of None so manual-construction paths (unit tests) simply keep
-    # the PARLIS date instead of reaching for the network.
-    _gsblt_dates: "GesetzblattDateLookup | None" = None
-
-    # Dropped Fundstellen per vorgnr, for the run summary (issue #5). None on
-    # manual-construction paths (unit tests): drops are only logged there.
-    _dropped_fundstellen: dict[str, list[str]] | None = None
-
-    # vorgnrs not to cache this cycle, so the next cycle retries them (see
-    # store_extracted_result). None on manual-construction paths (unit tests).
-    _retry_next_cycle: set[str] | None = None
-
     @staticmethod
     def _today() -> date:
         """Today in Berlin: PARLIS dates are Landtag calendar days (DD-068)."""
@@ -235,21 +215,26 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # DD-047: PARLIS dates a Gesetzblatt Fundstelle by the Ausfertigung, so the
         # postparl-gsblt station needs the Ausgabedatum from the Gesetzblatt itself.
         gsblt_config = load_toml_section(config, "gesetzblatt")
-        self._gsblt_dates = GesetzblattDateLookup(
+        # None (tests) keeps the PARLIS date and never reaches the network.
+        self._gsblt_dates: GesetzblattDateLookup | None = GesetzblattDateLookup(
             GesetzblattClient(request_delay_s=gsblt_config.get("request-delay-s", DEFAULT_GSBLT_DELAY))
         )
 
-        self._retry_next_cycle = set()
+        # vorgnrs not to cache this cycle, so the next cycle retries them (see store_extracted_result).
+        self._retry_next_cycle: set[str] = set()
         # Unpublished PDF link → (label, Fundstelle day, vorgnrs), for the weekly report (issue #128).
         self._missing: dict[str, tuple[str, date, set[str]]] = {}
 
         self._published: int = 0
         self._failed: int = 0
         self._skipped: int = 0
+        # Cache misses whose PARLIS record changed since its last upload (issue #52).
+        self._changed: int = 0
         self._by_type: dict[str, int] = {}
         self._failed_items: list[FailedItem] = []
         self._parlis_errors: list[str] = []
-        self._dropped_fundstellen = {}
+        # Dropped Fundstellen per vorgnr, for the run summary (issue #5).
+        self._dropped_fundstellen: dict[str, list[str]] = {}
 
         # LLM document enrichment (optional, requires LLM_PROVIDER_KEY)
         llm_key = getattr(config, "llm_provider_key", None)
@@ -617,8 +602,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             if zp_start.date() > today:
                 logger.info("Holding back Fundstelle '%s' in %s until its date", fund.get("raw", "?"), vorgang_id)
                 held_back = True
-                if self._retry_next_cycle is not None:
-                    self._retry_next_cycle.add(vorgang_id)
+                self._retry_next_cycle.add(vorgang_id)
                 continue
             station = await self._build_station(fund, zp_start, initiative, vorgang_id, vorgang_titel, vorgang_vnr)
             station_typ_str = fund.get("station_typ", "")
@@ -782,8 +766,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             kraft = await self._gsblt_dates.inkrafttreten(fund["gesetzblatt_jahr"], fund["gesetzblatt_nr"])
         except GesetzblattUnavailable as exc:
             logger.warning("%s for %s, retrying next cycle", exc, vorgang_id)
-            if self._retry_next_cycle is not None:
-                self._retry_next_cycle.add(vorgang_id)
+            self._retry_next_cycle.add(vorgang_id)
             return
         if kraft is None:
             return
@@ -792,8 +775,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return
         if kraft.date() > self._today():
             logger.info("Holding back postparl-kraft of %s until %s", vorgang_id, kraft.date())
-            if self._retry_next_cycle is not None:
-                self._retry_next_cycle.add(vorgang_id)
+            self._retry_next_cycle.add(vorgang_id)
             return
         stationen.append(
             Station(
@@ -962,8 +944,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
     def _drop(self, vorgang_id: str, fund: RawFundstelle, reason: str, level: int = logging.INFO) -> None:
         """Log a dropped Fundstelle with its reason and count it for the run summary (issue #5)."""
         logger.log(level, "Dropping Fundstelle '%s' in %s: %s", fund.get("raw", "?"), vorgang_id, reason)
-        if self._dropped_fundstellen is not None:
-            self._dropped_fundstellen.setdefault(vorgang_id, []).append(reason)
+        self._dropped_fundstellen.setdefault(vorgang_id, []).append(reason)
 
     @staticmethod
     def _try_merge_station(
