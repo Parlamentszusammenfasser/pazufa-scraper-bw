@@ -3180,7 +3180,7 @@ class TestEnsureAusschberAfterVollvlsgn:
             )
 
     def test_unit_retimes_ausschber_in_place(self):
-        """Only the early ausschber moves; zp_modifiziert is raised to the new start, never lowered."""
+        """Only ausschber stations move; zp_modifiziert is raised to the new start, never lowered."""
         from bawue.types import Gremium, Parlament, Station
 
         def _station(typ: Stationstyp, zp_start: datetime, zp_modifiziert: datetime | None = None) -> Station:
