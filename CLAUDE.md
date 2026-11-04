@@ -12,20 +12,14 @@ A **self-contained** scraper for the Baden-Württemberg state parliament
 submits them to the [Parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser)
 (PaZuFa) platform via its Write-API v2 (`PUT /api/v2/vorgang`, `PUT /api/v2/kalender`).
 
-- Parliament code `BW`, Wahlperiode **18** (since 2026-05-01; set once in `[bawue] wahlperiode`, DD-062). Python **3.13**. Package `bawue` under `src/`.
+- Parliament code `BW`, Wahlperiode **18** (since 2026-05-01; set once in `[bawue] wahlperiode`, DD-062). 
+  Python **3.13**. Package `bawue` under `src/`.
 - Owns its entry point (`bawue.__main__`), config loader, Redis cache, and scraping loop.
   Depends only on [pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core)
   ("corelib" — httpx API client, generated OpenAPI models, LLM enrichment), pinned to a git tag.
 - **Hosted on GitHub**: https://github.com/Parlamentszusammenfasser/pazufa-scraper-bw.
   Issues and PRs live there; use the `gh` CLI. Everything else in the PaZuFa
   ecosystem (backend, spec, corelib) is still on **Codeberg** — see the links above.
-
-  **Issue numbers are ambiguous across the migration** — the old Codeberg repo
-  ([PaZuFa/pazufa-scraper-bw](https://codeberg.org/PaZuFa/pazufa-scraper-bw)) still
-  exists and its issues were *not* renumbered into GitHub. GitHub restarted at 1 and
-  now overlaps the Codeberg range. New issues live on GitHub; a pre-migration
-  reference in a DD or old commit may point to Codeberg. Never resolve a number by
-  guessing — check the DD or commit that introduced the reference.
 - **In production**: staging and prod run on GCP Cloud Run (`deploy/gcp/`,
   workflows `deploy-staging.yml` / `deploy-prod.yml`).
 
@@ -45,8 +39,10 @@ The scraper is **productive**; every merge to `main` ships. Therefore:
   existing tests. Name the implications (Station ordering, stable `api_id`s, cache
   fingerprint, backend merge) before writing code.
 - **Test-driven, always.** Failing test first, then the fix. `make test` and `make lint` green.
+  Cleanup Tests after changes: no duplicate tests, similar tests should be merged, no bloat, 
+  no tests for standard features.
 - **Surgical.** Smallest diff that solves the problem; no side features.
-- **Refactor what you touch — only that.** With each change, check whether the touched
+- **Refactor what you touch / continuous improvement** With each change, check whether the touched
   code gets cleaner by refactoring. Do it only under green tests (before and after), in a
   separate `refactor:` commit. Broader refactorings: propose, don't do.
 - **Comments:** short, precise, easy to read. Say *why* (cite DD/issue), not *what*.
@@ -96,13 +92,13 @@ Other docs: `docs/architecture.md` (full component/data-flow reference, principl
 
 TDD is the norm here, and each fixed issue leaves a **regression test**:
 
-0. Review the code and implications (see *Maintenance mode*).
-1. Reproduce with a failing test — unit tests in `tests/unit/` (fixtures in `tests/fixtures/`),
+1. Review the code and implications (see *Maintenance mode*).
+2. Reproduce with a failing test — unit tests in `tests/unit/` (fixtures in `tests/fixtures/`),
    integration in `tests/integration/`. Use existing helpers like `_make_raw_vorgang` /
    `scraper_build_vorgang` (see `tests/unit/test_bawue_scraper.py`).
-2. Make a **surgical** fix; update/add the relevant DD if behavior rules change. Then check
+3. Make a **surgical** fix; update/add the relevant DD if behavior rules change. Then check
    whether a refactoring makes the touched code cleaner (separate commit, tests green).
-3. Keep the regression test named for the issue/Drucksache so it pins the fix.
+4. Keep the regression test named for the issue/Drucksache so it pins the fix.
 
 Git workflow: branch `fix/issue-<N>-<slug>` off `main`, conventional commit (see below),
 PR into `main` on GitHub (`gh pr create --base main`). Work that doesn't trace to an
@@ -127,16 +123,6 @@ enrichment (`bawue_dok.py`) is **off by default** (needs `LLM_PROVIDER_KEY`).
 ## Git Commit
 
 This repo uses semantic-releases and requires "conventional commit" messages.
-Syntax:
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-```
-
 Types: `feat`, `fix`, `build`, `chore`, `ci`, `docs`, `style`, `refactor`, `perf`, `test`  
 Scope is optional, e.g. `fix: …` or `fix(issue-46): …`.  
 Breaking changes: `!` after type/scope (`feat!: …`, `feat(api)!: …`) or a footer `BREAKING CHANGE:`
