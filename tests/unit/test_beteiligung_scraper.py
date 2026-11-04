@@ -616,6 +616,7 @@ class TestIssue52RunReport:
         scraper = _make_scraper()
         scraper.cached_count = 3
         scraper.item_count = 1
+        scraper.config.section.return_value = {"mattermost-hook": "https://hook.example"}
 
         with (
             patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()),

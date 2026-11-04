@@ -424,6 +424,7 @@ class TestIssue52RunReport:
         scraper._total_dates = 50
         scraper.cached_count = 48
         scraper.item_count = 2
+        scraper.config.section.return_value = {"mattermost-hook": "https://hook.example"}
 
         with (
             patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()),

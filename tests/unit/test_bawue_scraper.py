@@ -1346,6 +1346,7 @@ class TestIssue52RunReport:
 
     @staticmethod
     async def _run(scraper, raws):
+        scraper.config.section.return_value = {"mattermost-hook": "https://hook.example"}
         with (
             patch("bawue.bawue_vorgaenge_scraper.asyncio.to_thread", return_value=raws),
             patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
