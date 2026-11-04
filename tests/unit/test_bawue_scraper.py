@@ -3180,7 +3180,7 @@ class TestEnsureAusschberAfterVollvlsgn:
             )
 
     def test_unit_retimes_ausschber_in_place(self):
-        """Direct unit test on the static method, without the rest of _build_vorgang."""
+        """Only the early ausschber moves; zp_modifiziert is raised to the new start, never lowered."""
         from bawue.types import Gremium, Parlament, Station
 
         def _station(typ: Stationstyp, zp_start: datetime, zp_modifiziert: datetime | None = None) -> Station:
@@ -3194,76 +3194,27 @@ class TestEnsureAusschberAfterVollvlsgn:
 
         anchor = datetime(2021, 12, 16, tzinfo=UTC)
         ausschber_zp = datetime(2021, 11, 18, tzinfo=UTC)
+        late_end = datetime(2022, 1, 5, tzinfo=UTC)
         stationen = [
             _station(Stationstyp.PREPARL_REGBSL, datetime(2021, 10, 26, tzinfo=UTC)),
             _station(Stationstyp.PARL_INITIATIV, ausschber_zp),
-            _station(Stationstyp.PARL_AUSSCHBER, ausschber_zp),
+            _station(Stationstyp.PARL_AUSSCHBER, ausschber_zp, zp_modifiziert=ausschber_zp),
+            _station(Stationstyp.PARL_AUSSCHBER, ausschber_zp, zp_modifiziert=late_end),
             _station(Stationstyp.PARL_VOLLVLSGN, anchor),
         ]
 
         ensure_ausschber_after_vollvlsgn(stationen)
 
-        assert stationen[2].zp_start == anchor + timedelta(hours=1)
-        # Other stations untouched.
-        assert stationen[0].zp_start == datetime(2021, 10, 26, tzinfo=UTC)
-        assert stationen[1].zp_start == ausschber_zp
-        assert stationen[3].zp_start == anchor
-
-    def test_unit_zp_modifiziert_invariant_maintained(self):
-        """If the ausschber has zp_modifiziert set, retiming must keep it >= zp_start."""
-        from bawue.types import Gremium, Parlament, Station
-
-        anchor = datetime(2021, 12, 16, tzinfo=UTC)
-        gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
-
-        # zp_modifiziert was originally at the early ausschber date — it is now
-        # before the bumped zp_start, so it must be advanced to match.
-        early_zp = datetime(2021, 11, 18, tzinfo=UTC)
-        ausschber = Station(
-            typ=Stationstyp.PARL_AUSSCHBER,
-            dokumente=[],
-            zp_start=early_zp,
-            zp_modifiziert=early_zp,
-            gremium=gremium,
-        )
-        vollvlsgn = Station(
-            typ=Stationstyp.PARL_VOLLVLSGN,
-            dokumente=[],
-            zp_start=anchor,
-            gremium=gremium,
-        )
-
-        ensure_ausschber_after_vollvlsgn([ausschber, vollvlsgn])
-
-        assert ausschber.zp_start == anchor + timedelta(hours=1)
-        assert ausschber.zp_modifiziert == anchor + timedelta(hours=1)
-
-    def test_unit_zp_modifiziert_only_advanced_when_below_new_start(self):
-        """A zp_modifiziert that is already past the bump target must NOT be lowered."""
-        from bawue.types import Gremium, Parlament, Station
-
-        anchor = datetime(2021, 12, 16, tzinfo=UTC)
-        gremium = Gremium(parlament=Parlament.BW, name="plenum", wahlperiode=17)
-
-        # An ausschber spanning multiple weeks: modifier is past the future bump.
-        ausschber = Station(
-            typ=Stationstyp.PARL_AUSSCHBER,
-            dokumente=[],
-            zp_start=datetime(2021, 11, 18, tzinfo=UTC),
-            zp_modifiziert=datetime(2022, 1, 5, tzinfo=UTC),
-            gremium=gremium,
-        )
-        vollvlsgn = Station(
-            typ=Stationstyp.PARL_VOLLVLSGN,
-            dokumente=[],
-            zp_start=anchor,
-            gremium=gremium,
-        )
-
-        ensure_ausschber_after_vollvlsgn([ausschber, vollvlsgn])
-
-        assert ausschber.zp_start == anchor + timedelta(hours=1)
-        assert ausschber.zp_modifiziert == datetime(2022, 1, 5, tzinfo=UTC), "must not be reduced"
+        bumped = anchor + timedelta(hours=1)
+        assert [s.zp_start for s in stationen] == [
+            datetime(2021, 10, 26, tzinfo=UTC),
+            ausschber_zp,
+            bumped,
+            bumped,
+            anchor,
+        ]
+        assert stationen[2].zp_modifiziert == bumped  # kept >= zp_start
+        assert stationen[3].zp_modifiziert == late_end  # must not be reduced
 
 
 # Authoritative station→letter mapping and BW track, copied verbatim from the
@@ -3783,17 +3734,15 @@ class TestReadingRoundEquivalence:
             ("Beschluss des Landtags in Erster Beratung", 1),
             ("Beschluss des Landtags in Zweiter Beratung", 2),
             ("Beschluss des Landtags in Dritter Beratung", 3),
+            # No 'Beratung' → not a round indicator.
+            ("Überweisung", None),
+            ("Schlussabstimmung", None),
+            ("Gesetzesbeschluss des Landtags", None),
+            ("", None),
         ],
     )
     def test_unit_reading_round(self, label, round_):
         assert _reading_round(label) == round_
-
-    def test_unit_reading_round_returns_none_for_non_round_labels(self):
-        # No 'Beratung' substring → not a round indicator.
-        assert _reading_round("Überweisung") is None
-        assert _reading_round("Schlussabstimmung") is None
-        assert _reading_round("Gesetzesbeschluss des Landtags") is None
-        assert _reading_round("") is None
 
     @pytest.mark.parametrize(
         ("a", "b", "same"),
@@ -3802,16 +3751,14 @@ class TestReadingRoundEquivalence:
             ("Beschluss des Landtags in Dritter Beratung", "Dritte Beratung", True),
             ("Erste Beratung", "Zweite Beratung", False),
             ("Beschluss des Landtags in Zweiter Beratung", "Beschluss des Landtags in Dritter Beratung", False),
+            # An empty label is never a round signal (DD-024 defensive default).
+            ("", "Zweite Beratung", False),
+            ("Zweite Beratung", "", False),
+            ("", "", False),
         ],
     )
     def test_unit_same_round_label(self, a, b, same):
         assert _same_round_label(a, b) is same
-
-    def test_unit_same_round_label_empty_label_is_defensive_false(self):
-        # Defensive default from DD-024 must be preserved even after DD-026.
-        assert not _same_round_label("", "Zweite Beratung")
-        assert not _same_round_label("Zweite Beratung", "")
-        assert not _same_round_label("", "")
 
 
 class TestParseFundstelleDateNone:
