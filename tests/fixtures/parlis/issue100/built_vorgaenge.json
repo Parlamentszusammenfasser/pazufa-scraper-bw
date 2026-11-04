@@ -1,0 +1,4672 @@
+[
+ {
+  "api_id": "b48222cf-0570-5128-b697-d2dec21b2711",
+  "initiatoren": [
+   {
+    "organisation": "Fraktion SPD"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion SPD"
+       }
+      ],
+      "hash": "36626df2f5a3b17e5a4f046c9320030330102abc04f74322a660effca841004b",
+      "link": "https://www.landtag-bw.de/files/an1-antrag.pdf",
+      "titel": "Antrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-12T00:00:00+00:00",
+      "zp_referenz": "2026-01-12T00:00:00+00:00",
+      "drucksnr": "17/12300"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2026-01-12T00:00:00+00:00",
+    "api_id": "f6a8a2cb-1326-5c56-878f-e94078da75f3"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Ländlichen Raum"
+       }
+      ],
+      "hash": "633cb776fc34af09d110499342af54a1ae9e7f82036228f34165fd491fdf42e2",
+      "link": "https://www.landtag-bw.de/files/an1-ausschuss.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-28T00:00:00+00:00",
+      "zp_referenz": "2026-01-28T00:00:00+00:00",
+      "drucksnr": "17/12350"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss für Ländlichen Raum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2026-01-28T00:00:00+00:00",
+    "api_id": "b32e2d5d-ddeb-5756-b513-647fabdb4341",
+    "gremium_federf": true
+   }
+  ],
+  "titel": "Stärkung des ländlichen Raums",
+  "typ": "sonstig",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-98003",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/12300",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Stärkung des ländlichen Raums",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-98003"
+  ]
+ },
+ {
+  "api_id": "b48222cf-0570-5128-b697-d2dec21b2711",
+  "initiatoren": [
+   {
+    "organisation": "Fraktion SPD"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion SPD"
+       }
+      ],
+      "hash": "36626df2f5a3b17e5a4f046c9320030330102abc04f74322a660effca841004b",
+      "link": "https://www.landtag-bw.de/files/an1-antrag.pdf",
+      "titel": "Antrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-12T00:00:00+00:00",
+      "zp_referenz": "2026-01-12T00:00:00+00:00",
+      "drucksnr": "17/12300"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2026-01-12T00:00:00+00:00",
+    "api_id": "f6a8a2cb-1326-5c56-878f-e94078da75f3"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Ländlichen Raum"
+       }
+      ],
+      "hash": "633cb776fc34af09d110499342af54a1ae9e7f82036228f34165fd491fdf42e2",
+      "link": "https://www.landtag-bw.de/files/an1-ausschuss.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-28T00:00:00+00:00",
+      "zp_referenz": "2026-01-28T00:00:00+00:00",
+      "drucksnr": "17/12350"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss für Ländlichen Raum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2026-01-28T00:00:00+00:00",
+    "api_id": "b32e2d5d-ddeb-5756-b513-647fabdb4341",
+    "gremium_federf": true
+   }
+  ],
+  "titel": "Stärkung des ländlichen Raums",
+  "typ": "sonstig",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-98003",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/12300",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Stärkung des ländlichen Raums",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-98003"
+  ]
+ },
+ {
+  "api_id": "f36e0430-71af-5f82-b64b-83d50a25e3b8",
+  "initiatoren": [
+   {
+    "organisation": "Landesregierung"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "7c169a89c6d53c40d5caa547e71904371a630e7680d431253eade38d79bc22d7",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/2000/17%5F2488%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-05-03T00:00:00+00:00",
+      "zp_referenz": "2022-05-03T00:00:00+00:00",
+      "drucksnr": "17/2488"
+     }
+    ],
+    "gremium": {
+     "name": "regierung",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "preparl-regbsl",
+    "zp_start": "2022-05-03T00:00:00+00:00",
+    "api_id": "0cd5f9e7-b79f-508d-8eaf-4129d4af4dec"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "7c169a89c6d53c40d5caa547e71904371a630e7680d431253eade38d79bc22d7",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/2000/17%5F2488%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-05-03T00:00:00+00:00",
+      "zp_referenz": "2022-05-03T00:00:00+00:00",
+      "drucksnr": "17/2488"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2022-05-12T00:00:00+00:00",
+    "api_id": "d7386b05-80ce-5f1b-8fcc-fe4441bda2d8"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "be24b0e66f924fb01766f1377b7c16be153de56a7554bcb0a46461eda0fb83a6",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0038%5F12052022.pdf#page=48",
+      "titel": "Erste Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-05-12T00:00:00+00:00",
+      "zp_referenz": "2022-05-12T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2022-05-12T01:00:00+00:00",
+    "api_id": "eb175817-d019-5557-8bf9-a22c0d7da999"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss des Inneren, für Digitalisierung und Kommunen"
+       }
+      ],
+      "hash": "0168e52bee7797c7416ad77d0c494d9988f18ff8a7103596714e2c717e9f92ca",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/2000/17%5F2586%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-05-18T00:00:00+00:00",
+      "zp_referenz": "2022-05-18T00:00:00+00:00",
+      "drucksnr": "17/2586"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss des Inneren, für Digitalisierung und Kommunen",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2022-05-18T00:00:00+00:00",
+    "api_id": "188bd415-3301-5cbd-a195-00fe9fe58868",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "025bb1077853e7366a8e2e1ed53b799e85fc21ca7d3e02a157a4e34c1d449b1c",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0040%5F22062022.pdf#page=38",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-06-22T00:00:00+00:00",
+      "zp_referenz": "2022-06-22T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2022-06-22T00:00:00+00:00",
+    "api_id": "25cc5b45-0280-5bcb-9d5e-26328578a309"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "e00b1ba362b4d54ab5e8aacee31be5281982cd5daf32719c315956cd4ca93c87",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/2000/17%5F2691%5FD.pdf",
+      "titel": "Gesetzesbeschluss des Landtags",
+      "typ": "mitteilung",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-06-22T00:00:00+00:00",
+      "zp_referenz": "2022-06-22T00:00:00+00:00",
+      "drucksnr": "17/2691"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-akzeptanz",
+    "zp_start": "2022-06-22T01:00:00+00:00",
+    "api_id": "c9f727cb-39fa-563c-ae30-4b091acec1e6"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "3edd29087d15e1910013483c3e85549d89cb5a78829d8ad814845226a43f3eec",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/gesetzblaetter/2022/GBl202223.pdf#page=1",
+      "titel": "Gesetz",
+      "typ": "gesetz",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-06-28T00:00:00+00:00",
+      "zp_referenz": "2022-06-28T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "gesetzesblatt",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "postparl-gsblt",
+    "zp_start": "2022-06-28T00:00:00+00:00",
+    "api_id": "e9e36375-3149-5f63-b1d7-6e0839781d54"
+   }
+  ],
+  "titel": "Gesetz zur Änderung des baden-württembergischen Ausführungsgesetzes zum Bundesmeldegesetz",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-218907",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/2488",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Gesetz zur Änderung des baden-württembergischen Ausführungsgesetzes zum Bundesmeldegesetz",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-218907"
+  ],
+  "sachgebiete": [
+   7740,
+   1330
+  ],
+  "schlagworte": [
+   "Baden-württembergisches Ausführungsgesetz zum Bundesmeldegesetz",
+   "Bundesmeldegesetz",
+   "Datenaustausch",
+   "E-Government",
+   "Meldewesen",
+   "Personenbezogene Daten"
+  ]
+ },
+ {
+  "api_id": "7a132250-5101-53ef-9032-ce742e0217e0",
+  "initiatoren": [
+   {
+    "organisation": "Landesregierung"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "dab5b907d00a1a60324be55125729457521a6c4e6ccb16d14074131caad309a3",
+      "link": "https://www.landtag-bw.de/files/gg-lr-entwurf.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-05T00:00:00+00:00",
+      "zp_referenz": "2026-01-05T00:00:00+00:00",
+      "drucksnr": "17/12100"
+     }
+    ],
+    "gremium": {
+     "name": "regierung",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "preparl-regbsl",
+    "zp_start": "2026-01-05T00:00:00+00:00",
+    "api_id": "6e393012-b1ea-5912-99af-1502642244ec"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "dab5b907d00a1a60324be55125729457521a6c4e6ccb16d14074131caad309a3",
+      "link": "https://www.landtag-bw.de/files/gg-lr-entwurf.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-05T00:00:00+00:00",
+      "zp_referenz": "2026-01-05T00:00:00+00:00",
+      "drucksnr": "17/12100"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2026-01-05T01:00:00+00:00",
+    "api_id": "4e4d5a04-4b72-59a0-a18c-5d1b99ac2c76"
+   }
+  ],
+  "titel": "Gesetz zur Digitalisierung der Verwaltung",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-98010",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/12100",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Gesetz zur Digitalisierung der Verwaltung",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-98010"
+  ]
+ },
+ {
+  "api_id": "af2157a5-7c1c-5fd1-865a-97b4388ae49d",
+  "initiatoren": [
+   {
+    "organisation": "Fraktion GRÜNE"
+   },
+   {
+    "organisation": "Fraktion CDU"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion GRÜNE"
+       },
+       {
+        "organisation": "Fraktion CDU"
+       }
+      ],
+      "hash": "1b3020159bb81cf4cf238e31f4998d15f561f8a88acc671557b4b8997dcb7f21",
+      "link": "https://www.landtag-bw.de/files/gg1-entwurf.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-10T00:00:00+00:00",
+      "zp_referenz": "2026-01-10T00:00:00+00:00",
+      "drucksnr": "17/12001"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2026-01-10T00:00:00+00:00",
+    "api_id": "24960fb2-223b-5843-b6e5-b1c560ccd773"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "f853dcf677a8d293b4e46fb7a689fd2dbc11aaa910b360e7fbc91ecb0a3916d7",
+      "link": "https://www.landtag-bw.de/files/plp/17_150.pdf",
+      "titel": "Erste Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-15T00:00:00+00:00",
+      "zp_referenz": "2026-01-15T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2026-01-15T00:00:00+00:00",
+    "api_id": "5acf3030-0122-566e-9021-05d3c4c1bccf"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Umwelt"
+       }
+      ],
+      "hash": "6961c9fa561292cdb82c36e25537607f2030585716409c86abe49bf9fb92492e",
+      "link": "https://www.landtag-bw.de/files/gg1-ausschuss.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-20T00:00:00+00:00",
+      "zp_referenz": "2026-01-20T00:00:00+00:00",
+      "drucksnr": "17/12050"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss für Umwelt",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2026-01-20T00:00:00+00:00",
+    "api_id": "1b316bc3-a728-5abb-9c2c-cf41a12cb87b",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "442454090e5cda5a7042002a80a1cdf5a916eaf96cedf060ea175734bf9e60a8",
+      "link": "https://www.landtag-bw.de/files/plp/17_155.pdf",
+      "titel": "Zustimmung",
+      "typ": "mitteilung",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-25T00:00:00+00:00",
+      "zp_referenz": "2026-01-25T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-akzeptanz",
+    "zp_start": "2026-01-25T00:00:00+00:00",
+    "api_id": "82427d22-f1b8-5bdd-9088-b74ce3ad8742"
+   }
+  ],
+  "titel": "Gesetz zur Förderung erneuerbarer Energien",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-98001",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/12001",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Gesetz zur Förderung erneuerbarer Energien",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-98001"
+  ]
+ },
+ {
+  "api_id": "af2157a5-7c1c-5fd1-865a-97b4388ae49d",
+  "initiatoren": [
+   {
+    "organisation": "Fraktion GRÜNE"
+   },
+   {
+    "organisation": "Fraktion CDU"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion GRÜNE"
+       },
+       {
+        "organisation": "Fraktion CDU"
+       }
+      ],
+      "hash": "1b3020159bb81cf4cf238e31f4998d15f561f8a88acc671557b4b8997dcb7f21",
+      "link": "https://www.landtag-bw.de/files/gg1-entwurf.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-10T00:00:00+00:00",
+      "zp_referenz": "2026-01-10T00:00:00+00:00",
+      "drucksnr": "17/12001"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2026-01-10T00:00:00+00:00",
+    "api_id": "24960fb2-223b-5843-b6e5-b1c560ccd773"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "f853dcf677a8d293b4e46fb7a689fd2dbc11aaa910b360e7fbc91ecb0a3916d7",
+      "link": "https://www.landtag-bw.de/files/plp/17_150.pdf",
+      "titel": "Erste Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-15T00:00:00+00:00",
+      "zp_referenz": "2026-01-15T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2026-01-15T00:00:00+00:00",
+    "api_id": "5acf3030-0122-566e-9021-05d3c4c1bccf"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Umwelt"
+       }
+      ],
+      "hash": "6961c9fa561292cdb82c36e25537607f2030585716409c86abe49bf9fb92492e",
+      "link": "https://www.landtag-bw.de/files/gg1-ausschuss.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-20T00:00:00+00:00",
+      "zp_referenz": "2026-01-20T00:00:00+00:00",
+      "drucksnr": "17/12050"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss für Umwelt",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2026-01-20T00:00:00+00:00",
+    "api_id": "1b316bc3-a728-5abb-9c2c-cf41a12cb87b",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "442454090e5cda5a7042002a80a1cdf5a916eaf96cedf060ea175734bf9e60a8",
+      "link": "https://www.landtag-bw.de/files/plp/17_155.pdf",
+      "titel": "Zustimmung",
+      "typ": "mitteilung",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-25T00:00:00+00:00",
+      "zp_referenz": "2026-01-25T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-akzeptanz",
+    "zp_start": "2026-01-25T00:00:00+00:00",
+    "api_id": "82427d22-f1b8-5bdd-9088-b74ce3ad8742"
+   }
+  ],
+  "titel": "Gesetz zur Förderung erneuerbarer Energien",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-98001",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/12001",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Gesetz zur Förderung erneuerbarer Energien",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-98001"
+  ]
+ },
+ {
+  "api_id": "21c89407-158a-5e3f-9026-ac6279d56c0a",
+  "initiatoren": [
+   {
+    "organisation": "Fraktion GRÜNE"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion GRÜNE"
+       }
+      ],
+      "hash": "0e682bbfb13ae0ad4f9733a44d2b0c3e01c9e4ad81190430c92dd3333619ac27",
+      "link": "https://www.landtag-bw.de/files/17_4000.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2023-03-01T00:00:00+00:00",
+      "zp_referenz": "2023-03-01T00:00:00+00:00",
+      "drucksnr": "17/4000"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2023-03-01T00:00:00+00:00",
+    "api_id": "16d3bca7-d5f9-5eba-9c5d-11e3c28f0312"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "f15bc37b8383e9e3f472ad9a387f95e7141ca13b282c7735a7e3a4c8759e29f3",
+      "link": "https://www.landtag-bw.de/files/plp/17_45.pdf",
+      "titel": "Erste Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2023-03-10T00:00:00+00:00",
+      "zp_referenz": "2023-03-10T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2023-03-10T00:00:00+00:00",
+    "api_id": "adcb306a-e2af-5330-9bd3-02c1455626fb"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Inneres"
+       }
+      ],
+      "hash": "3285bbcec7582ed2c9947b67bd9bef6fe9b7687463a049b8cdf99b97794cfd39",
+      "link": "https://www.landtag-bw.de/files/17_4400.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2023-03-20T00:00:00+00:00",
+      "zp_referenz": "2023-03-20T00:00:00+00:00",
+      "drucksnr": "17/4400"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss für Inneres",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2023-03-20T00:00:00+00:00",
+    "api_id": "5455656d-6e28-53cb-bfdb-65d06c395bb2",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "6e7db08f841bc8117c346c67ce5965b834e24c892982ceb165c168e2e85b0c1a",
+      "link": "https://www.landtag-bw.de/files/plp/17_50.pdf",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2023-03-29T00:00:00+00:00",
+      "zp_referenz": "2023-03-29T00:00:00+00:00",
+      "drucksnr": null
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion SPD"
+       }
+      ],
+      "hash": "88d5e56db122f3647e9d2b7fafe8a59fe869002e865d2ddfbd72afd034434ef5",
+      "link": "https://www.landtag-bw.de/files/17_4495.pdf#page=1",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2023-03-29T00:00:00+00:00",
+      "zp_referenz": "2023-03-29T00:00:00+00:00",
+      "drucksnr": "17/4495"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion GRÜNE und Fraktion CDU und Fraktion SPD"
+       }
+      ],
+      "hash": "b12ef2604d88319f4fa74b08da78366353e4af44dfb760618551d88ea4c772ea",
+      "link": "https://www.landtag-bw.de/files/17_4495.pdf#page=5",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2023-03-29T00:00:00+00:00",
+      "zp_referenz": "2023-03-29T00:00:00+00:00",
+      "drucksnr": "17/4495"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2023-03-29T00:00:00+00:00",
+    "api_id": "300f0a16-c346-5655-8564-b02531c3cee4"
+   }
+  ],
+  "titel": "Gesetz zur Änderung des Kommunalwahlrechts",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-170962",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/4000",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Gesetz zur Änderung des Kommunalwahlrechts",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-170962"
+  ]
+ },
+ {
+  "api_id": "ca960eec-0617-58f5-aa5e-d8bb1710f25a",
+  "initiatoren": [
+   {
+    "organisation": "Fraktion der AfD"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "23e19be3e83773a03b5e431826c1d8d71068281ab954fadd8c63ad2e885581b3",
+      "link": "https://www.landtag-bw.de/files/gg2-entwurf.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-06-03T00:00:00+00:00",
+      "zp_referenz": "2026-06-03T00:00:00+00:00",
+      "drucksnr": "18/1000"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2026-06-03T00:00:00+00:00",
+    "api_id": "c65767f1-1fb7-5870-b9a0-25c7146e91b7"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "8b4b0834a08b1ad1e9412372224c50b2b3d181bf7e47a5cfcdcd83009e212428",
+      "link": "https://www.landtag-bw.de/files/plp/18_6.pdf",
+      "titel": "Dokument",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-06-10T00:00:00+00:00",
+      "zp_referenz": "2026-06-10T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2026-06-10T00:00:00+00:00",
+    "api_id": "542566d7-43a7-5c08-9a1b-c8253f1e857f"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ständiger Ausschuss"
+       }
+      ],
+      "hash": "5b2ac48b3e4aca1048e592a2a727310468421321f0c2321248b1a56c62c38315",
+      "link": "https://www.landtag-bw.de/files/gg2-ausschuss.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-06-24T00:00:00+00:00",
+      "zp_referenz": "2026-06-24T00:00:00+00:00",
+      "drucksnr": "18/1100"
+     }
+    ],
+    "gremium": {
+     "name": "Ständiger Ausschuss",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2026-06-24T00:00:00+00:00",
+    "api_id": "1d5b9dbb-c332-52f6-9c74-9a1201533132",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "3963051a0a0051acd29f14583a5d682bcc232df1d804798b0852a4b944e86b33",
+      "link": "https://www.landtag-bw.de/files/plp/18_10.pdf",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-07-01T00:00:00+00:00",
+      "zp_referenz": "2026-07-01T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2026-07-01T00:00:00+00:00",
+    "api_id": "5b72ed80-35d3-5185-ae9a-aeaaf1a9f532"
+   },
+   {
+    "dokumente": [],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ablehnung",
+    "zp_start": "2026-07-01T01:00:00+00:00",
+    "api_id": "47d825f3-0226-5c5e-8f09-1ef499793b6e"
+   }
+  ],
+  "titel": "Gesetz zur Änderung des Abgeordnetengesetzes",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-246637",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "18/1000",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Gesetz zur Änderung des Abgeordnetengesetzes",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-246637"
+  ]
+ },
+ {
+  "api_id": "ca960eec-0617-58f5-aa5e-d8bb1710f25a",
+  "initiatoren": [
+   {
+    "organisation": "Fraktion der AfD"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "023223d67739ffbd9499123cd84cdfbe63d6ab7ae1ef6225a59ce2af621d6e08",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Drs/18%5F0075%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-06-03T00:00:00+00:00",
+      "zp_referenz": "2026-06-03T00:00:00+00:00",
+      "drucksnr": "18/75"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2026-06-03T00:00:00+00:00",
+    "api_id": "c65767f1-1fb7-5870-b9a0-25c7146e91b7"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "028c0b71e36e46fa13474b68cdb51e9310c695bea7556647bca4e2185e028b89",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Plp/18%5F0006%5F10062026.pdf",
+      "titel": "Erste Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-06-10T00:00:00+00:00",
+      "zp_referenz": "2026-06-10T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2026-06-10T00:00:00+00:00",
+    "api_id": "542566d7-43a7-5c08-9a1b-c8253f1e857f"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "700510b03bd3262f0b4b79e1da1b9a1d35b43edc6c81e3cab6d08a0ac9d90745",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Drs/18%5F0141.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-06-24T00:00:00+00:00",
+      "zp_referenz": "2026-06-24T00:00:00+00:00",
+      "drucksnr": "18/141"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss für Finanzen",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2026-06-24T00:00:00+00:00",
+    "api_id": "1d5b9dbb-c332-52f6-9c74-9a1201533132",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "428eca93bccbcf135da783734231f1dc41664820b428946015a580988555ef9a",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Plp/18%5F0007%5F01072026.pdf",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-07-01T00:00:00+00:00",
+      "zp_referenz": "2026-07-01T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2026-07-01T00:00:00+00:00",
+    "api_id": "5b72ed80-35d3-5185-ae9a-aeaaf1a9f532"
+   }
+  ],
+  "titel": "Gesetz zur Änderung des Abgeordnetengesetzes",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-246637",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "18/75",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Gesetz zur Änderung des Abgeordnetengesetzes",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-246637"
+  ]
+ },
+ {
+  "api_id": "ca960eec-0617-58f5-aa5e-d8bb1710f25a",
+  "initiatoren": [
+   {
+    "organisation": "Fraktion der AfD"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2026-06-03T00:00:00+00:00",
+    "api_id": "c65767f1-1fb7-5870-b9a0-25c7146e91b7"
+   }
+  ],
+  "titel": "Gesetz zur Änderung des Abgeordnetengesetzes",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-246637",
+    "typ": "vorgnr"
+   }
+  ],
+  "kurztitel": "Gesetz zur Änderung des Abgeordnetengesetzes",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-246637"
+  ]
+ },
+ {
+  "api_id": "744ab52c-2f69-5d90-bbe3-74ba0fbdb622",
+  "initiatoren": [
+   {
+    "organisation": "Abg. Max Mustermann FDP/DVP"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Abg. Max Mustermann FDP/DVP"
+       }
+      ],
+      "hash": "b0901e4d1b61202b0aa70611815400e568dd89fd76b1febe61eaf323f73cc1bf",
+      "link": "https://www.landtag-bw.de/files/ka1-anfrage.pdf",
+      "titel": "Kleine Anfrage",
+      "typ": "anfrage",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-08T00:00:00+00:00",
+      "zp_referenz": "2026-01-08T00:00:00+00:00",
+      "drucksnr": "17/12200"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2026-01-08T00:00:00+00:00",
+    "api_id": "7f6f52f0-da26-553c-8adf-b3304632f262"
+   }
+  ],
+  "titel": "Zustand der Brücken an der B27",
+  "typ": "sonstig",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-98002",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/12200",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Zustand der Brücken an der B27",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-98002"
+  ]
+ },
+ {
+  "api_id": "744ab52c-2f69-5d90-bbe3-74ba0fbdb622",
+  "initiatoren": [
+   {
+    "organisation": "Abg. Max Mustermann FDP/DVP"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Abg. Max Mustermann FDP/DVP"
+       }
+      ],
+      "hash": "b0901e4d1b61202b0aa70611815400e568dd89fd76b1febe61eaf323f73cc1bf",
+      "link": "https://www.landtag-bw.de/files/ka1-anfrage.pdf",
+      "titel": "Kleine Anfrage",
+      "typ": "anfrage",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-08T00:00:00+00:00",
+      "zp_referenz": "2026-01-08T00:00:00+00:00",
+      "drucksnr": "17/12200"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2026-01-08T00:00:00+00:00",
+    "api_id": "7f6f52f0-da26-553c-8adf-b3304632f262"
+   }
+  ],
+  "titel": "Zustand der Brücken an der B27",
+  "typ": "sonstig",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-98002",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/12200",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Zustand der Brücken an der B27",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-98002"
+  ]
+ },
+ {
+  "api_id": "89655a8c-86a8-54be-9f3e-d79c03ac68d5",
+  "initiatoren": [
+   {
+    "organisation": "Landesregierung"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "e1f8f396b986ded725156762aba217050fda52f4ee49fc927a05de4c12daad88",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1984%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-02-22T00:00:00+00:00",
+      "zp_referenz": "2022-02-22T00:00:00+00:00",
+      "drucksnr": "17/1984"
+     }
+    ],
+    "gremium": {
+     "name": "regierung",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "preparl-regbsl",
+    "zp_start": "2022-02-22T00:00:00+00:00",
+    "api_id": "73945653-38fe-5e75-8ea0-9c4f1b57d147"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "e1f8f396b986ded725156762aba217050fda52f4ee49fc927a05de4c12daad88",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1984%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-02-22T00:00:00+00:00",
+      "zp_referenz": "2022-02-22T00:00:00+00:00",
+      "drucksnr": "17/1984"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2022-03-09T00:00:00+00:00",
+    "api_id": "2d67b398-9d14-5414-bae3-5d4be748f2c0"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "5ac87c1764ae523634f97a8d0a1dae16b257d05c6bb8384c7219e8bc8b1aa0f7",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0031%5F09032022.pdf#page=48",
+      "titel": "Erste Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-03-09T00:00:00+00:00",
+      "zp_referenz": "2022-03-09T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2022-03-09T01:00:00+00:00",
+    "api_id": "88694850-1709-56ca-a5c7-48e438566e21"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ständiger Ausschuss"
+       }
+      ],
+      "hash": "2ab67c40208dd64b5ad7d9eee619a9f5b7ccdbbe831de32651818b2c526f1092",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/2000/17%5F2205%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-03-24T00:00:00+00:00",
+      "zp_referenz": "2022-03-24T00:00:00+00:00",
+      "drucksnr": "17/2205"
+     }
+    ],
+    "gremium": {
+     "name": "Ständiger Ausschuss",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2022-03-24T00:00:00+00:00",
+    "api_id": "d90d543b-0ae8-534c-b0af-9b31ee4bedd0",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "8f4cb7d46d9c01937f5ade96909fa9f6df67ed5d3a6d1beb3925b70ea2a2105b",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0034%5F06042022.pdf#page=70",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-04-06T00:00:00+00:00",
+      "zp_referenz": "2022-04-06T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2022-04-06T00:00:00+00:00",
+    "api_id": "8dbfe8eb-40ad-5d4b-ae0f-9a62ad7e7586"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "15bec9e0e4789e4c718088b54c67c356ed486af9d9150e03dda6d3b0a15145fb",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/2000/17%5F2290%5FD.pdf",
+      "titel": "Gesetzesbeschluss des Landtags",
+      "typ": "mitteilung",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-04-06T00:00:00+00:00",
+      "zp_referenz": "2022-04-06T00:00:00+00:00",
+      "drucksnr": "17/2290"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-akzeptanz",
+    "zp_start": "2022-04-06T01:00:00+00:00",
+    "api_id": "e949d903-2b69-5559-8ac9-801ac56a0c3a"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "c124b558dd09d32b9a2e3a559973527c647c25a59ce44c70e46957e65ec98bfe",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/gesetzblaetter/2022/GBl202215.pdf#page=8",
+      "titel": "Gesetz",
+      "typ": "gesetz",
+      "volltext": "TODO",
+      "zp_modifiziert": "2022-04-26T00:00:00+00:00",
+      "zp_referenz": "2022-04-26T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "gesetzesblatt",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "postparl-gsblt",
+    "zp_start": "2022-04-26T00:00:00+00:00",
+    "api_id": "250c2fc6-7cc1-571f-be57-627d8afd517a"
+   }
+  ],
+  "titel": "Gesetz zu dem Zweiten Staatsvertrag zur Änderung medienrechtlicher Staatsverträge",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-217223",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/1984",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Gesetz zu dem Zweiten Staatsvertrag zur Änderung medienrechtlicher Staatsverträge",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-217223"
+  ],
+  "sachgebiete": [
+   7700,
+   5050,
+   7720
+  ]
+ },
+ {
+  "api_id": "5ae1b025-c5ed-5f00-9d26-6f47ddcadf83",
+  "initiatoren": [
+   {
+    "organisation": "Landesregierung"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "0d69731d88c43c3e6375fdc80412328eef3579d238153632643cd0bcc939c452",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8000%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-10-22T00:00:00+00:00",
+      "zp_referenz": "2024-10-22T00:00:00+00:00",
+      "drucksnr": "17/8000"
+     }
+    ],
+    "gremium": {
+     "name": "regierung",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "preparl-regbsl",
+    "zp_start": "2024-10-22T00:00:00+00:00",
+    "api_id": "6c98d19f-31a4-5b84-b8be-7c3b30a0352e"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "0d69731d88c43c3e6375fdc80412328eef3579d238153632643cd0bcc939c452",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8000%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-10-22T00:00:00+00:00",
+      "zp_referenz": "2024-10-22T00:00:00+00:00",
+      "drucksnr": "17/8000"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2024-11-14T00:00:00+00:00",
+    "api_id": "2bcffa3a-7e55-596e-9747-7077b8a1061d"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "71f85a0ec0faf2a64084d6bde9e3e4611c2f634e472d0e67b90383260b4b8d1f",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8311%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-14T00:00:00+00:00",
+      "zp_referenz": "2024-11-14T00:00:00+00:00",
+      "drucksnr": "17/8311"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss für Finanzen",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2024-12-11T01:00:00+00:00",
+    "api_id": "1619f250-a706-53d2-bfba-732f0e17e550",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "46bc1135d1695decee5216ca280275fdeedcbf84f5eb43ace39d3008d3db80ad",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0109%5F11122024.pdf#page=72",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-11T00:00:00+00:00",
+      "zp_referenz": "2024-12-11T00:00:00+00:00",
+      "drucksnr": null
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "54698bbf09ed6fc248c25218e072fe5c5d74d755e2e074db8bf8fc9b5ed7392f",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8420%5FD.pdf#page=118",
+      "titel": "Beschluss des Landtags in Zweiter Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-12T00:00:00+00:00",
+      "zp_referenz": "2024-12-12T00:00:00+00:00",
+      "drucksnr": "17/8420"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2024-12-11T00:00:00+00:00",
+    "api_id": "8d98cd0e-1d1c-5a6e-a20a-7fe136f4f105",
+    "zp_modifiziert": "2024-12-12T00:00:00+00:00"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "64f1a3f92da6d9c5f51c70a705f37c6c236bb467cc5ee7d6dc931dd41eff338d",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0112%5F18122024.pdf#page=16",
+      "titel": "Dritte Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-18T00:00:00+00:00",
+      "zp_referenz": "2024-12-18T00:00:00+00:00",
+      "drucksnr": null
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "cee3c43909b32d3cabd384cfb1f883ef3678d10eef5f2c8a538ca78f97893385",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8443%5FD.pdf#page=118",
+      "titel": "Beschluss des Landtags in Dritter Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-18T00:00:00+00:00",
+      "zp_referenz": "2024-12-18T00:00:00+00:00",
+      "drucksnr": "17/8443"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2024-12-18T00:00:00+00:00",
+    "api_id": "1f939e37-2981-56b6-bef8-e1e8f65a9e49"
+   }
+  ],
+  "titel": "Staatshaushaltsplan 2025/2026 – Einzelplan 11: Rechnungshof",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-237492",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/8000",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Staatshaushaltsplan 2025/2026 – Einzelplan 11: Rechnungshof",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-237492"
+  ],
+  "sachgebiete": [
+   8300
+  ]
+ },
+ {
+  "api_id": "109d5c38-5bba-5067-8b48-ec594c542ba9",
+  "initiatoren": [
+   {
+    "organisation": "Fraktion der SPD"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "1b6fcb14c49e68a2bb4e4a36001b8f6fa4a99e8b297b3f39b1e5b93287dadc51",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/9000/17%5F9871.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2025-11-13T00:00:00+00:00",
+      "zp_referenz": "2025-11-13T00:00:00+00:00",
+      "drucksnr": "17/9871"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2025-11-13T00:00:00+00:00",
+    "api_id": "5846148a-c7c2-5c62-ad2f-f123e44c59f9"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "4a2701ae80ba0bb72350648daf3a1462c66db788d02120beb0b95e14c435c605",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0137%5F10122025.pdf#page=70",
+      "titel": "Erste Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2025-12-10T00:00:00+00:00",
+      "zp_referenz": "2025-12-10T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2025-12-10T00:00:00+00:00",
+    "api_id": "d94e76aa-cd48-58b1-b101-dcd8a43a4a30"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ständiger Ausschuss"
+       }
+      ],
+      "hash": "c6f5c23316fe673b273fc391b0e65e41fc3f07745277a0b12360c7f3f55dcc8c",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/10000/17%5F10218.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-01-29T00:00:00+00:00",
+      "zp_referenz": "2026-01-29T00:00:00+00:00",
+      "drucksnr": "17/10218"
+     }
+    ],
+    "gremium": {
+     "name": "Ständiger Ausschuss",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2026-01-29T00:00:00+00:00",
+    "api_id": "13a7c42a-bb51-585b-83dd-8b910dd7de5a",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "1e5bb9ce60a92de4cc397233c671281172f741e1ad184bf4152270d2c370ea02",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0140%5F04022026.pdf#page=34",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-02-04T00:00:00+00:00",
+      "zp_referenz": "2026-02-04T00:00:00+00:00",
+      "drucksnr": null
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "d280e63489abc2fa70421023420e3d88d39bcce26b78c187adaefd74a11f5e0d",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/10000/17%5F10262%5FD.pdf",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-02-04T00:00:00+00:00",
+      "zp_referenz": "2026-02-04T00:00:00+00:00",
+      "drucksnr": "17/10262"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2026-02-04T00:00:00+00:00",
+    "api_id": "e415a30c-7eaf-571b-91f3-f7e5beecde03"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "cf4984bfa71bdf243fd8157d33cf8103a9d653ba514749256e605638ee5b19df",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/10000/17%5F10246%5FD.pdf",
+      "titel": "Gesetzesbeschluss des Landtags",
+      "typ": "mitteilung",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-02-04T00:00:00+00:00",
+      "zp_referenz": "2026-02-04T00:00:00+00:00",
+      "drucksnr": "17/10246"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-akzeptanz",
+    "zp_start": "2026-02-04T01:00:00+00:00",
+    "api_id": "9bbd21cb-b4d3-5360-aab8-ecc8b93bf173"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "1a131d711517cc902ea5555459ebcfdbb085499fa9c8dabaa9a62fc67521ce82",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/gesetzblaetter/2026/GBl2026012.pdf#page=1",
+      "titel": "Gesetz",
+      "typ": "gesetz",
+      "volltext": "TODO",
+      "zp_modifiziert": "2026-02-10T00:00:00+00:00",
+      "zp_referenz": "2026-02-10T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "gesetzesblatt",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "postparl-gsblt",
+    "zp_start": "2026-02-10T00:00:00+00:00",
+    "api_id": "dd8c1e8b-b3dc-59d5-b277-c9b3c4135a52"
+   }
+  ],
+  "titel": "Gesetz zur Änderung des Juristenausbildungsgesetzes",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-244180",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/9871",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Gesetz zur Änderung des Juristenausbildungsgesetzes",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-244180"
+  ],
+  "sachgebiete": [
+   3400,
+   1240
+  ]
+ },
+ {
+  "api_id": "f3e56e5a-80ff-56c0-99e3-618cbad6e693",
+  "initiatoren": [
+   {
+    "organisation": "Fraktion GRÜNE"
+   },
+   {
+    "organisation": "Fraktion der CDU"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion GRÜNE"
+       },
+       {
+        "organisation": "Fraktion der CDU"
+       }
+      ],
+      "hash": "337aa596622e5c1919f866a71bdf1fa56680c185575780d0a3cfe0e37b5557db",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/0000/17%5F0847%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-09-21T00:00:00+00:00",
+      "zp_referenz": "2021-09-21T00:00:00+00:00",
+      "drucksnr": "17/847"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2021-09-21T00:00:00+00:00",
+    "api_id": "4ffe6ab4-bb01-551a-84e1-821912db1499"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "ae259f0aa239309ce3fe0b2a33b80d60077eb0cf6ab47801991a22ac2045c3fc",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0013%5F06102021.pdf#page=41",
+      "titel": "Erste Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-10-06T00:00:00+00:00",
+      "zp_referenz": "2021-10-06T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2021-10-06T00:00:00+00:00",
+    "api_id": "ae94a9ac-4da0-5388-8097-8102845490d6"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Wissenschaft, Forschung und Kunst"
+       }
+      ],
+      "hash": "4e96ea96068e92a89c4bd2ce550dfa0b73cca69a76f259bb2da1077deb03b661",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/0000/17%5F0945%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-10-07T00:00:00+00:00",
+      "zp_referenz": "2021-10-07T00:00:00+00:00",
+      "drucksnr": "17/945"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss für Wissenschaft, Forschung und Kunst",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2021-10-07T00:00:00+00:00",
+    "api_id": "ab7352ec-a7d5-5766-99d4-7136074f0c4b",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "66ffe878bc2af1dde8f43d3f0c8b523e7fdf9bdb2846b4a778fff849c96a60df",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0015%5F20102021.pdf#page=27",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-10-20T00:00:00+00:00",
+      "zp_referenz": "2021-10-20T00:00:00+00:00",
+      "drucksnr": null
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "43a2db52f05f385bf23d7a9bdf2ec349d4766339885b68061c21548023beb507",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1026%5FD.pdf",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-10-19T00:00:00+00:00",
+      "zp_referenz": "2021-10-19T00:00:00+00:00",
+      "drucksnr": "17/1026"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2021-10-20T00:00:00+00:00",
+    "api_id": "e00a91ba-35f2-5957-815d-3a456e8666f9"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "29f36eaeef8d0c2a38eacd804d2903f6ca13e51a949c658833d56ca46e4b21ad",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1008%5FD.pdf",
+      "titel": "Gesetzesbeschluss des Landtags",
+      "typ": "mitteilung",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-10-20T00:00:00+00:00",
+      "zp_referenz": "2021-10-20T00:00:00+00:00",
+      "drucksnr": "17/1008"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-akzeptanz",
+    "zp_start": "2021-10-20T01:00:00+00:00",
+    "api_id": "87eacbae-23fc-5472-9386-8b323a1916dd"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "673ce02d27e22d715f64ff6385dd81c5763ecd214f54cf3bf213bb7b09495d97",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/gesetzblaetter/2021/GBl202136.pdf#page=1",
+      "titel": "Gesetz",
+      "typ": "gesetz",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-10-26T00:00:00+00:00",
+      "zp_referenz": "2021-10-26T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "gesetzesblatt",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "postparl-gsblt",
+    "zp_start": "2021-10-26T00:00:00+00:00",
+    "api_id": "e38899fb-2304-5565-8511-5b24f8e1315b"
+   }
+  ],
+  "titel": "Gesetz zur Änderung des Landeshochschulgesetzes und anderer Gesetze",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-213867",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/847",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Gesetz zur Änderung des Landeshochschulgesetzes und anderer Gesetze",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-213867"
+  ]
+ },
+ {
+  "api_id": "4cec8e87-a98d-50d0-987c-03ed896b9ddf",
+  "initiatoren": [
+   {
+    "organisation": "Landesregierung"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "3c560089dfce39f7bc0711776691db403c6cb526c0e99c9eadf3bcae76ae1774",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1000%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-10-26T00:00:00+00:00",
+      "zp_referenz": "2021-10-26T00:00:00+00:00",
+      "drucksnr": "17/1000"
+     }
+    ],
+    "gremium": {
+     "name": "regierung",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "preparl-regbsl",
+    "zp_start": "2021-10-26T00:00:00+00:00",
+    "api_id": "fe5a60af-21f3-5c37-8440-c43d8edab504"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "3c560089dfce39f7bc0711776691db403c6cb526c0e99c9eadf3bcae76ae1774",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1000%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-10-26T00:00:00+00:00",
+      "zp_referenz": "2021-10-26T00:00:00+00:00",
+      "drucksnr": "17/1000"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2021-11-19T00:00:00+00:00",
+    "api_id": "28eba4d9-70ce-56d6-8983-53a45e6b32e4"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "d8d2f6e5796a4f65e923186360d7eb0a09b1a7e1ce2e79c2109d35849ad0c8a9",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1103%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-11-19T00:00:00+00:00",
+      "zp_referenz": "2021-11-19T00:00:00+00:00",
+      "drucksnr": "17/1103"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss für Finanzen",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2021-12-15T01:00:00+00:00",
+    "api_id": "ce7c8d89-c270-58e0-bed5-52d191d86c33",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "026eca0bf15db5cdadf8e3f8964dd68466f6b7f9fadc9025d2abee3c8e1d5387",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0022%5F15122021.pdf#page=49",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-12-15T00:00:00+00:00",
+      "zp_referenz": "2021-12-15T00:00:00+00:00",
+      "drucksnr": null
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "862b380e566fd062595bd1e5e35f760b70cd9943cde1f32333acfaa46a06fe1f",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=2",
+      "titel": "Änderungsanträge",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-12-13T00:00:00+00:00",
+      "zp_referenz": "2021-12-13T00:00:00+00:00",
+      "drucksnr": "17/1203"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "dcc4569dc7b7a423187d7225b8370285c4aba84e050701eddcfe917d659f3587",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=11",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-12-14T00:00:00+00:00",
+      "zp_referenz": "2021-12-14T00:00:00+00:00",
+      "drucksnr": "17/1203"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion GRÜNE"
+       },
+       {
+        "organisation": "Fraktion der CDU"
+       }
+      ],
+      "hash": "594401ddec2ee185bdf30d5e66dbd3fc965ba041db079dee7aa3b5f236c272f0",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=12",
+      "titel": "Änderungsanträge",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-12-14T00:00:00+00:00",
+      "zp_referenz": "2021-12-14T00:00:00+00:00",
+      "drucksnr": "17/1203"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "a056b38cc60e3c5a15708d31092e590411d5c9f0c73f6f9bfe5ee3964f325393",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=18",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-12-14T00:00:00+00:00",
+      "zp_referenz": "2021-12-14T00:00:00+00:00",
+      "drucksnr": "17/1203"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "08039bb232b21cc21463f28745fc4010d70588036f9488b63e0b63a58610ed92",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=21",
+      "titel": "Änderungsanträge",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-12-14T00:00:00+00:00",
+      "zp_referenz": "2021-12-14T00:00:00+00:00",
+      "drucksnr": "17/1203"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "c5c950e782a0c20a894d62ef86db3520e63cf6078a0f13d11fae3dd5e0912323",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1203%5FD.pdf#page=23",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-11-16T00:00:00+00:00",
+      "zp_referenz": "2021-11-16T00:00:00+00:00",
+      "drucksnr": "17/1203"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "cde620d8f75aba87ebb50270c8e419f51ee46a6c70edb56e40243bdf6e77daad",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/1000/17%5F1220%5FD.pdf#page=14",
+      "titel": "Beschluss des Landtags in Zweiter Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-12-17T00:00:00+00:00",
+      "zp_referenz": "2021-12-17T00:00:00+00:00",
+      "drucksnr": "17/1220"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2021-12-15T00:00:00+00:00",
+    "api_id": "42695bbe-dbe7-5789-8b99-5934735cb654",
+    "zp_modifiziert": "2021-12-17T00:00:00+00:00"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "58cd6140e3cdd27dc6d1c15d00ed1dc5c138f5e6c8f1a228739a4fdf32be1c4f",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0025%5F22122021.pdf#page=26",
+      "titel": "Dritte Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2021-12-22T00:00:00+00:00",
+      "zp_referenz": "2021-12-22T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2021-12-22T00:00:00+00:00",
+    "api_id": "1bab5549-c547-5476-afc7-f291a50a5b83"
+   }
+  ],
+  "titel": "Staatshaushaltsplan 2022 – Einzelplan 03: Ministerium des Inneren, für Digitalisierung und Kommunen",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-215974",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/1000",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Staatshaushaltsplan 2022 – Einzelplan 03: Ministerium des Inneren, für Digitalisierung und Kommunen",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-215974"
+  ]
+ },
+ {
+  "api_id": "7023a601-77d6-5433-95b8-6ef909dd0fdc",
+  "initiatoren": [
+   {
+    "organisation": "Landesregierung"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "c4fcb31ee95e8c24e14e00ea9fc4fa412d77412e0e03f97641980a3dbf69b55f",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8000%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-10-22T00:00:00+00:00",
+      "zp_referenz": "2024-10-22T00:00:00+00:00",
+      "drucksnr": "17/8000"
+     }
+    ],
+    "gremium": {
+     "name": "regierung",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "preparl-regbsl",
+    "zp_start": "2024-10-22T00:00:00+00:00",
+    "api_id": "95c296d8-5d1c-55c5-9f94-bda43483e62d"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "c4fcb31ee95e8c24e14e00ea9fc4fa412d77412e0e03f97641980a3dbf69b55f",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8000%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-10-22T00:00:00+00:00",
+      "zp_referenz": "2024-10-22T00:00:00+00:00",
+      "drucksnr": "17/8000"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2024-10-23T00:00:00+00:00",
+    "api_id": "72db6f46-cb17-5520-bcda-ba5233745634"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "ce4bf0dc5cdce9f8da34d8edc085b0f1317201eb44870875fcddac0d3647039c",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0106%5F23102024.pdf#page=17",
+      "titel": "Erste Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-10-23T00:00:00+00:00",
+      "zp_referenz": "2024-10-23T00:00:00+00:00",
+      "drucksnr": null
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "70e039c5db72accc8af857b145d67e171144d709d7aa46e1cfb2970a37e5e48a",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0107%5F06112024.pdf#page=3",
+      "titel": "Erste Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-06T00:00:00+00:00",
+      "zp_referenz": "2024-11-06T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2024-10-23T01:00:00+00:00",
+    "api_id": "2705233e-7362-5aca-affc-13045f4630b1",
+    "zp_modifiziert": "2024-11-06T00:00:00+00:00"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "7848b07c2a0d5deaab8f54a3fade1dafe669e4b8a09ee82e01c3aed8c24d4296",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8318%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-14T00:00:00+00:00",
+      "zp_referenz": "2024-11-14T00:00:00+00:00",
+      "drucksnr": "17/8318"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "f59c80da27d1508ead1ca0d3c1128f29573dbb274ddddf3424b8487eeeb899ad",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8317%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-14T00:00:00+00:00",
+      "zp_referenz": "2024-11-14T00:00:00+00:00",
+      "drucksnr": "17/8317"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "c1718d63ede73cd02ff5d2572e2f6f801e5d67892a212b65aa7f565b3f2e3017",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8313%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-14T00:00:00+00:00",
+      "zp_referenz": "2024-11-14T00:00:00+00:00",
+      "drucksnr": "17/8313"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "2e1e29b111203322431fa6c76314aef168938935aa1af285687ff52dc0383de8",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8311%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-14T00:00:00+00:00",
+      "zp_referenz": "2024-11-14T00:00:00+00:00",
+      "drucksnr": "17/8311"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "d027319509a4502eea59c1fea4f4084e8c11813b06806b563d19a8cd45bbff3e",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8301%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-14T00:00:00+00:00",
+      "zp_referenz": "2024-11-14T00:00:00+00:00",
+      "drucksnr": "17/8301"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "785214648007e138e790c3754b63d0fb3d2bc8a8c331b22ca3d2bfe85d7033b1",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8314%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-15T00:00:00+00:00",
+      "zp_referenz": "2024-11-15T00:00:00+00:00",
+      "drucksnr": "17/8314"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "78f647f50f363a44268540f1f1949029f911aa4bd9869415f69734119b4e4373",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8308%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-15T00:00:00+00:00",
+      "zp_referenz": "2024-11-15T00:00:00+00:00",
+      "drucksnr": "17/8308"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "192be90c3446f798689345b77e44df62d58a6ab276e8b65ac625695fa025a038",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8302%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-15T00:00:00+00:00",
+      "zp_referenz": "2024-11-15T00:00:00+00:00",
+      "drucksnr": "17/8302"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "a138839c7518bc5263b0ada15a1745679cc21d5c817cb600d32d087ab581f2c1",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8316%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-21T00:00:00+00:00",
+      "zp_referenz": "2024-11-21T00:00:00+00:00",
+      "drucksnr": "17/8316"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "f9ffd76a294a8c32f4fa1ac89853f4489bdd499891b4203735c1781f0e1f2786",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8310%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-21T00:00:00+00:00",
+      "zp_referenz": "2024-11-21T00:00:00+00:00",
+      "drucksnr": "17/8310"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "28c079da5fdd1b98abc4ecba5783de91e9746efa3aec59ce54ac1528ab68e1eb",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8305%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-21T00:00:00+00:00",
+      "zp_referenz": "2024-11-21T00:00:00+00:00",
+      "drucksnr": "17/8305"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "b14300206373fe7cdfdad5d75df53651eb420f0c81f8740eb43c2cf8f514799e",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8304%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-21T00:00:00+00:00",
+      "zp_referenz": "2024-11-21T00:00:00+00:00",
+      "drucksnr": "17/8304"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "33750e810be933c6bb9550a24696228aecb9a06b1d44be151ffc8a3194752e0e",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8309%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-22T00:00:00+00:00",
+      "zp_referenz": "2024-11-22T00:00:00+00:00",
+      "drucksnr": "17/8309"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "819d29b3c2e2641d68ac907d51bc34415e236a80b4791098e5e6717b453b3a20",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8303%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-22T00:00:00+00:00",
+      "zp_referenz": "2024-11-22T00:00:00+00:00",
+      "drucksnr": "17/8303"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "b945b9ec1290445b67765a001f85b4619887dcce68f412ed9472fbf5883fe73f",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8312%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-28T00:00:00+00:00",
+      "zp_referenz": "2024-11-28T00:00:00+00:00",
+      "drucksnr": "17/8312"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "53d45886a353184319a564c5256fa2b3caf7340221bd7b897e84a432befc7924",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8307%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-28T00:00:00+00:00",
+      "zp_referenz": "2024-11-28T00:00:00+00:00",
+      "drucksnr": "17/8307"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "9160936f08d37c8fc1dd6d895bb3b25ad45cf8af0356d48cba1ed5f6af2a925b",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8306%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-28T00:00:00+00:00",
+      "zp_referenz": "2024-11-28T00:00:00+00:00",
+      "drucksnr": "17/8306"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "d7cbb5a4e0668a7b590e2124ac1b9c7916168f8fe31cd9ad77d753fc4e9d3e5b",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8300%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-29T00:00:00+00:00",
+      "zp_referenz": "2024-11-29T00:00:00+00:00",
+      "drucksnr": "17/8300"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss für Finanzen",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2024-11-14T00:00:00+00:00",
+    "api_id": "8d4efd2c-f951-53ee-9d51-a560aed6a6d8",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "2cbadb08c2bc57d556a6160d597af8cf90fde29bf23e5ebc0bbeaef299e4ce37",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0109%5F11122024.pdf#page=16",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-11T00:00:00+00:00",
+      "zp_referenz": "2024-12-11T00:00:00+00:00",
+      "drucksnr": null
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "2fdb6034b6a108c191f5b5ebba9a7257860733c606413300b523289fc45c867e",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8406%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-10T00:00:00+00:00",
+      "zp_referenz": "2024-11-10T00:00:00+00:00",
+      "drucksnr": "17/8406"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "2699648b9561b37a9023c10bec3620e81ca51bb82097175dd1c4349116fc3e06",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8406%5FD.pdf#page=5",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-10T00:00:00+00:00",
+      "zp_referenz": "2024-11-10T00:00:00+00:00",
+      "drucksnr": "17/8406"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "8747c3b7ec53ecf2600e72774a30e8cc38551694048775856a5aa138fec7268e",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8406%5FD.pdf#page=6",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-10T00:00:00+00:00",
+      "zp_referenz": "2024-11-10T00:00:00+00:00",
+      "drucksnr": "17/8406"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "79d465d53047e1b96ee245b0e642c7704fc1f47948129c42873cc303f87bac37",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8402%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-07T00:00:00+00:00",
+      "zp_referenz": "2024-12-07T00:00:00+00:00",
+      "drucksnr": "17/8402"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "f1505cbdbe243226548eea6a4b231648030f26569611d5a99650afebb0f40a2f",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8403%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-08T00:00:00+00:00",
+      "zp_referenz": "2024-12-08T00:00:00+00:00",
+      "drucksnr": "17/8403"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "58e804999ddcb2f171654ca5873cfd11c517c663a8c603d6f97ae87c1c9152bb",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8407%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-09T00:00:00+00:00",
+      "zp_referenz": "2024-12-09T00:00:00+00:00",
+      "drucksnr": "17/8407"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "c28e5f269d182b9f849e16a3572b62fd36cada1949564c8529fd63b7f021c81b",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8407%5FD.pdf#page=13",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-09T00:00:00+00:00",
+      "zp_referenz": "2024-12-09T00:00:00+00:00",
+      "drucksnr": "17/8407"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "c74a6cdce82da6479df1eae1299314cda7ce2582ebfd1f37a2608d394383b910",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8405%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-09T00:00:00+00:00",
+      "zp_referenz": "2024-12-09T00:00:00+00:00",
+      "drucksnr": "17/8405"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "601817d3540e961929c2c4a68183567092462ad7b99f7c52faf113d5b44368a2",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8405%5FD.pdf#page=3",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-09T00:00:00+00:00",
+      "zp_referenz": "2024-12-09T00:00:00+00:00",
+      "drucksnr": "17/8405"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "9363b6c79bf39ccdb9cd6feb233a3522906278791f1998ee7305631a851529c5",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8401%5FD.pdf#page=2",
+      "titel": "Änderungsanträge",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-09T00:00:00+00:00",
+      "zp_referenz": "2024-12-09T00:00:00+00:00",
+      "drucksnr": "17/8401"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "572ce4a21f27e2d541940b283ea6a4c89e77da8a60f4571c101c13d0974d8855",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8400%5FD.pdf#page=1",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8400"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion GRÜNE"
+       },
+       {
+        "organisation": "Fraktion der CDU"
+       }
+      ],
+      "hash": "6b20cb1b054a6dd33dbc957b9a2c5069b1ecd01d5a4117925cfa1806ac9c1a59",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8400%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8400"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "dc9dd48fcfedc4c0053faf661898650a7057fff6cdfbf1b6ae60b521bb212101",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8418%5FD.pdf#page=2",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8418"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "0e1a6d5b16c7f964a9a01819434107d6544e84d7f5414bc158946ba1f2190778",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8418%5FD.pdf#page=3",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8418"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "b22e08f409d3301f8d1b9f4f8d934f06bc4cd8c9be6b4bece779fe96ab90b0ef",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8418%5FD.pdf#page=8",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8418"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "09f735e8c98007bb56eb5afd7791bd1d14b4b329c933a4a2439383b4aabb940c",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8418%5FD.pdf#page=9",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8418"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "6c438d0f2d27ec2a2ced80bded60dec2c7979f58cddcc085b0eecc4f2e52e256",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8414%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8414"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "45a10e76a2c952eef45ce91bdc67b606a7df91e704aa33bcd0026fd886132f88",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8414%5FD.pdf#page=5",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8414"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "d88cd3063e8abc63d4080a1dfd3b903faf0456f2652b7d151a858de642f47bae",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8414%5FD.pdf#page=6",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8414"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       },
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "01c495da72e8662144ba52cb41746b483168eeec78b36b388b2f3fc333287e1d",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8414%5FD.pdf#page=13",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8414"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "5758ad47c5e69fbb42fd3778f584a99557d25f6da43eff8fa15916b5c59416ba",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8414%5FD.pdf#page=14",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8414"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "2f63fd46c42873b6097d08a4bb180e05e495126a6b129eb836b07f4fdf9b1d4b",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8414%5FD.pdf#page=16",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8414"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "3694624e02a2b380ab3f26ec0ce55513aeb2163459d289394beab07c722fee8a",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8414%5FD.pdf#page=19",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8414"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "03c076f0e3018f5bd6f1c281e6d6af23113015e8d8ede20ad381b0174f30ffb6",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8413%5FD.pdf#page=2",
+      "titel": "Änderungsanträge",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8413"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "b196c79c11f6afff05708a74baaf45776cb8fd656eae7411050583738cea6ac2",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8413%5FD.pdf#page=16",
+      "titel": "Änderungsanträge",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8413"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "0975af20b151ff05d32780b82a8012255510a36ed434dcd5dfcae8a3dd8445b3",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8413%5FD.pdf#page=19",
+      "titel": "Änderungsanträge",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8413"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "4724de41336803b7d6d1e6ac5ef0b7a35180c52a9b47d2de957b712d3c5440e9",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8412%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8412"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "ce964a7a0234431673f1d4c3e238ab2edfb4cda174a594a238fe53efc362fa35",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8412%5FD.pdf#page=5",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8412"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "03caf3c998d9d89feab3e4634602ff02a2c0621ea5566549e099c20e6a89e1cf",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8412%5FD.pdf#page=6",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8412"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "b0b4cbdcd9b34399d75aac2fb2110f3390ac56ab2da004df7aee15e0620729e6",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8412%5FD.pdf#page=9",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8412"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion GRÜNE"
+       },
+       {
+        "organisation": "Fraktion der CDU"
+       }
+      ],
+      "hash": "597061ec1b35bfdb86fb45dbb8302bbf0794f7a92ca164b815c5745a20131256",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8412%5FD.pdf#page=10",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8412"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "f735afde0d8cc56f920871493e44248c092a39b304c3380d6145bfbf61ede34b",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8410%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8410"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "f30ed324b56cf71805c74ee3746baed7729dd74afb691dde34a03eec8a65fc01",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8410%5FD.pdf#page=12",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8410"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "ab17f2f9ae6b52018576eed88b7d7e87eefbd9f05ca04de9577ced54895d5cd0",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8410%5FD.pdf#page=14",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8410"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "dd1afb8eb8cbbb62ae66e2a38466b5d232560a7ebd114d1c127fe89fe154880a",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8410%5FD.pdf#page=15",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8410"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "2308be02f07f66094113e358a2796c5d956d5c8694e0cf1e3410c3d854a356e2",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8410%5FD.pdf#page=17",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8410"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "2bdd2ed5647f5ac6d1e43e1ad117decbf46102bbf509b35466b59ecc0f376dcf",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8409%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8409"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "5fccfedca446bb9319127185cff48305c780ef2feae61c2d41ce2cc3f2727f6a",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8409%5FD.pdf#page=3",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8409"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "e113a180a8cef4be60f635dbfcc372f6c370c0a47dc0a1824e906b985138484e",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8409%5FD.pdf#page=5",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8409"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "f9d74963269456494bade0fd95842197ee15de4a4261e947a8863dc66827127e",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8409%5FD.pdf#page=8",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8409"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "cabedaf6b433565c9fd44b1730844b64cd1f1df2e29279c9108184247a55e88d",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8409%5FD.pdf#page=9",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8409"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion GRÜNE"
+       },
+       {
+        "organisation": "Fraktion der CDU"
+       }
+      ],
+      "hash": "14133f4b3f6e73824c28eb1583d75b839a7c637e9041c8826b51d82af48ff339",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8409%5FD.pdf#page=13",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8409"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "f6aa2d0840da5f70e8c6c172a64626639d3ee7bb366efbababb88f7e0b330266",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8409%5FD.pdf#page=16",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8409"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "1f270d6d71665e1004ebfa8b572f05a8aae4a68f5dc7caa0b50366b209e31b5e",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8408%5FD.pdf#page=2",
+      "titel": "Änderungsanträge",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8408"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "d9c615f1c92f2f965bdfebd5c23d1935b5dc3152c89de8c4c8ee8e77b3d65fcf",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8408%5FD.pdf#page=7",
+      "titel": "Änderungsanträge",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8408"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "8c2a57595ee562d04bda8e19976af8d0002abbb08a410a73f6da65042fe6c3bf",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8408%5FD.pdf#page=9",
+      "titel": "Änderungsanträge",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8408"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion GRÜNE"
+       },
+       {
+        "organisation": "Fraktion der CDU"
+       }
+      ],
+      "hash": "ec57d2f82ad62ecfd605e0fd12d81c78bf71ca8c632aa83495e5ca6f12c51618",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8407%5FD.pdf#page=14",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8407"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "e052216793d97fd76cb06c7d1e1b006ffe72cdc50b3a7ca6d8a314e82ac33d59",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8407%5FD.pdf#page=16",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8407"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       },
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "ab86d4857d824a258e80a8c8c2d6869f4f00bc3dabe24f784c9dd81e53bf98f6",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8407%5FD.pdf#page=25",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8407"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "2aaae2915b39223af3d101a01ce5ddc783af673a84a2c6bc37d760c442af6274",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8407%5FD.pdf#page=28",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8407"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "664f5e6037d1482df73572f936c33fce79616d6b6eb5866d9ce17b82d1526e9e",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8407%5FD.pdf#page=37",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8407"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "d27f2139067ede45ec79e760ef72759da5b6d494b78a8c55188a2b2bcaf71b12",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8405%5FD.pdf#page=4",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8405"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       },
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "01c3b339509893e9c4647a16c140ccb075c17ed315b430dd1dfb422c42bf8972",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8405%5FD.pdf#page=6",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8405"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "9d2c2f7152a4efe55521d4159ab2ca7b0c200f1d8bc6deb795858a4f6909f1d9",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8405%5FD.pdf#page=7",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8405"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "b76342d0159218e655326166b4bbe26f350919d2bfe1a34a53c787c95d7ca79e",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8405%5FD.pdf#page=9",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8405"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "99d7093612ccbbbee92ede9285d26ea177776aeb8ccdf41e4d27aff0740b1970",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8405%5FD.pdf#page=11",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8405"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "827373c848b81aacc176c49370f0f567f13c0923f822b94ce88519c7bd132170",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8405%5FD.pdf#page=13",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8405"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "f5612f067e8fad89cdabbba6f148ef5c1564bb540b9108ed1ed08d4864da4bec",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8405%5FD.pdf#page=15",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8405"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "c8a474011e1aea9eb1ba3424be8a4a58ea57ac1d482065065206277f6614e69d",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "2b59dc52904a3e0f04c0981a34cd9b7580f655e4a795b8197d16f089372b61f5",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=6",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "1528ce3d50bd4a254ca9027a0391113a201d0917a99e1cc4240c3bf53b35f2d7",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=7",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "3d294c1ccba83e4cc6cc16ec8e6ddb8b56d572804fca4524e3fee3657854b98d",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=29",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "41e9dc8e2e0c392c66937d2e59f443fb3aa9faea9dfe65d900478387f674404a",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=33",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "51e4211ecf2be9ae140e2ca65bd0c2367a1b0185249fcc729f4909469b1b1c78",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=35",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "9035cd442caa4ba0ed6df2de8a07ade26ecf84c5b85e5e14ddcfe1ffeddf8bd5",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=41",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "1e10142262ebc0195a7dcb129a5941efbb963dccc0a0369cee6d72960caa0d41",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=45",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "0b1e7c3e9231fd7364f9ae91ff8faa4f688be3a2cbc0bb8e72c09c8e3b06da41",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=61",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "514bb25c13cd633920ad54025f15297ae1601cce568f0def0a7e5f5768db7628",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=66",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "4ce456f2af4eeac1bfcf870db7a147ecefc2eaeb57bfbb6aaff5098946ec2cd9",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=71",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "f4fbd91b4ed24b7716fa2745692a3ffd8258b8ad17ae0df0aa0e4f51296645ef",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=73",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "f71bbc36ad144deda2c69ed04a7385b973a48439e66853b7d12b8410389a1bca",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=76",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "6b893cf2f743ca715923b651b634e3c04cbfc5981e6827115994142726cae5a6",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8403%5FD.pdf#page=7",
+      "titel": "Antrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8403"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "95ef571acb4019481fa79f85efd5255a1b5872c1826cb965e932caa34924200f",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8403%5FD.pdf#page=9",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8403"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "b9a911b3c8f200e02e6d480e9dae37a89797477aca4c18cc5214a77601907355",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8403%5FD.pdf#page=10",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8403"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "bd3b7d8778e8488a0d105e9b16503c0589d62c4ebaa11e008c0b27fa9e6cce82",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8403%5FD.pdf#page=11",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8403"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "ec3c14e9429f68223cfef5443c2cb47bd80b8565a075a5db6ada4ccb462cba9c",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8403%5FD.pdf#page=12",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8403"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "a5091723df622bb045cbf038f9c0c7a5e93c60fd3e69fda0fbaa3b1354b864e1",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8402%5FD.pdf#page=11",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8402"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "95b93d731d17ca5a19d4a4dc21335b8fdfff9b9d55270f9eeddf62e1ea9d6c68",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8402%5FD.pdf#page=15",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8402"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "25c1b8fa768ece5bcb0f4d827418a71a6f00c73c43b82718e0b3ebc0f916b82e",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8402%5FD.pdf#page=17",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8402"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "a413d5501a558301000b0d9ab6af1bbe122aebcfa32e7136f767872a830d3d0c",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8402%5FD.pdf#page=24",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-10T00:00:00+00:00",
+      "zp_referenz": "2024-12-10T00:00:00+00:00",
+      "drucksnr": "17/8402"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "af4dfe74a76115d52608d8b42dd8fe6565697fc84455f84533c3fbf40671583f",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8400%5FD.pdf#page=4",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-11T00:00:00+00:00",
+      "zp_referenz": "2024-12-11T00:00:00+00:00",
+      "drucksnr": "17/8400"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "d8749c1296c7e2c353898d8d3406aa1d46810ec478d51ab006766791f246a4de",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8416%5FD.pdf#page=2",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-11T00:00:00+00:00",
+      "zp_referenz": "2024-12-11T00:00:00+00:00",
+      "drucksnr": "17/8416"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "df7ed92465e3b8f4d050dc8b2a5cf4f37e219050272414811a870bb0ff5012bc",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8412%5FD.pdf#page=11",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-11T00:00:00+00:00",
+      "zp_referenz": "2024-12-11T00:00:00+00:00",
+      "drucksnr": "17/8412"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "3844492568278d640bee514a1e193c447bdcacf7977715f865edfb663929846c",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8406%5FD.pdf#page=8",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-11T00:00:00+00:00",
+      "zp_referenz": "2024-12-11T00:00:00+00:00",
+      "drucksnr": "17/8406"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der AfD"
+       }
+      ],
+      "hash": "cf65496d92ebc0a77510d5765e6d9124f113f9782bac04bf424c0a2dcfb6398c",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8404%5FD.pdf#page=78",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-11T00:00:00+00:00",
+      "zp_referenz": "2024-12-11T00:00:00+00:00",
+      "drucksnr": "17/8404"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "e1aaf0abdf8c34e4cb90a9e8e1886298b2bc5a4aef8b983085bbfa123c06bc16",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8400%5FD.pdf#page=5",
+      "titel": "Änderungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-12T00:00:00+00:00",
+      "zp_referenz": "2024-12-12T00:00:00+00:00",
+      "drucksnr": "17/8400"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "83e9de2f521ee4b13330c3eb1fe77e7c0366b5d3053849dfc2822c26b5630307",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0110%5F12122024.pdf#page=16",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-12T00:00:00+00:00",
+      "zp_referenz": "2024-12-12T00:00:00+00:00",
+      "drucksnr": null
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "bd0487796034300efe4fe60227435e3d8ec755df8861e6ec138913d0d6026830",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0111%5F13122024.pdf#page=15",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-13T00:00:00+00:00",
+      "zp_referenz": "2024-12-13T00:00:00+00:00",
+      "drucksnr": null
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "e76ea40394b12d717613059d5ed98bbf3095f4111af0536175fe9d82e0e376f8",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8420%5FD.pdf",
+      "titel": "Beschluss des Landtags in Zweiter Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-12T00:00:00+00:00",
+      "zp_referenz": "2024-12-12T00:00:00+00:00",
+      "drucksnr": "17/8420"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "e5e5d5592685118c56faca31900e80c6f530fa1e946705369f102d80138cf826",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8421%5FD.pdf",
+      "titel": "Beschluss des Landtags in Zweiter Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-12T00:00:00+00:00",
+      "zp_referenz": "2024-12-12T00:00:00+00:00",
+      "drucksnr": "17/8421"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2024-12-11T00:00:00+00:00",
+    "api_id": "452b31a7-d62c-5811-9bf2-919adb945b03",
+    "zp_modifiziert": "2024-12-13T00:00:00+00:00"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "a2a9ae7bf9f41f4b1b2bae60375d9297d6e34202b4d2518a15d4235406e8fd77",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0112%5F18122024.pdf#page=16",
+      "titel": "Dritte Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-18T00:00:00+00:00",
+      "zp_referenz": "2024-12-18T00:00:00+00:00",
+      "drucksnr": null
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion GRÜNE"
+       },
+       {
+        "organisation": "Fraktion der CDU"
+       },
+       {
+        "organisation": "Fraktion der SPD"
+       },
+       {
+        "organisation": "Fraktion der FDP/DVP"
+       }
+      ],
+      "hash": "6734331861a52aca9e63d41e493d37f5a49f31509369643b66f533443e894ded",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8440%5FD.pdf",
+      "titel": "Antrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-17T00:00:00+00:00",
+      "zp_referenz": "2024-12-17T00:00:00+00:00",
+      "drucksnr": "17/8440"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Fraktion der SPD"
+       }
+      ],
+      "hash": "0a842201ce3c14ee03db3e11707a2e3b51a59ecc0dd726c8c945b0a5fb80aba6",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8441%5FD.pdf",
+      "titel": "Entschließungsantrag",
+      "typ": "antrag",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-17T00:00:00+00:00",
+      "zp_referenz": "2024-12-17T00:00:00+00:00",
+      "drucksnr": "17/8441"
+     },
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "bd9acee9d8edb65a2ff7741ec78ce5571f8a01140da949e86fc2642ac4d93ad4",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8443%5FD.pdf",
+      "titel": "Beschluss des Landtags in Dritter Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-18T00:00:00+00:00",
+      "zp_referenz": "2024-12-18T00:00:00+00:00",
+      "drucksnr": "17/8443"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2024-12-18T00:00:00+00:00",
+    "api_id": "d32c9d72-24c3-5b5f-9d5b-59c702b02d0a"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "341cc6365ccbe4f8e4cc4a88a72645f295698eaef6a1f58e8370d4f2a92b2ccb",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8444%5FD.pdf",
+      "titel": "Gesetzesbeschluss des Landtags",
+      "typ": "mitteilung",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-18T00:00:00+00:00",
+      "zp_referenz": "2024-12-18T00:00:00+00:00",
+      "drucksnr": "17/8444"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-akzeptanz",
+    "zp_start": "2024-12-18T01:00:00+00:00",
+    "api_id": "a3928bbc-7dc1-599b-be2a-5f695eb2d7d9"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "f837b7eee6e27034edb272575bcf69e24f6b27ba4c40d49c717be3ae58bc2a87",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/gesetzblaetter/2024/GBl2024116.pdf#page=1",
+      "titel": "Gesetz",
+      "typ": "gesetz",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-18T00:00:00+00:00",
+      "zp_referenz": "2024-12-18T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "gesetzesblatt",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "postparl-gsblt",
+    "zp_start": "2024-12-18T02:00:00+00:00",
+    "api_id": "9a33d700-ede5-51b8-9917-1f77e12bb8f1"
+   }
+  ],
+  "titel": "Gesetz über die Feststellung des Staatshaushaltsplans von Baden-Württemberg für die Haushaltsjahre 2025/2026 (Staatshaushaltsgesetz 2025/2026 − StHG 2025/2026)",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-236470",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/8000",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Gesetz über die Feststellung des Staatshaushaltsplans von Baden-Württemberg für die Haushaltsjahre 2025/2026 (Staatshaushaltsgesetz 2025/2026 − StHG 2025/2026)",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-236470"
+  ],
+  "sachgebiete": [
+   8300
+  ],
+  "schlagworte": [
+   "Haushalt 2025/2026",
+   "Landeshaushalt"
+  ]
+ },
+ {
+  "api_id": "a10c6870-7e4a-5d59-ac5a-9c65a8c28ef3",
+  "initiatoren": [
+   {
+    "organisation": "Landesregierung"
+   }
+  ],
+  "stationen": [
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "e4e8c66ee9becb38bff46bf6b9456725d35aaf83a0f9c6daf18ba05730f78823",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8001%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-10-22T00:00:00+00:00",
+      "zp_referenz": "2024-10-22T00:00:00+00:00",
+      "drucksnr": "17/8001"
+     }
+    ],
+    "gremium": {
+     "name": "regierung",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "preparl-regbsl",
+    "zp_start": "2024-10-22T00:00:00+00:00",
+    "api_id": "76d2fe39-eba3-5dde-bb13-ce51b4f2980b"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "e4e8c66ee9becb38bff46bf6b9456725d35aaf83a0f9c6daf18ba05730f78823",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8001%5FD.pdf",
+      "titel": "Gesetzentwurf",
+      "typ": "preparl-entwurf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-10-22T00:00:00+00:00",
+      "zp_referenz": "2024-10-22T00:00:00+00:00",
+      "drucksnr": "17/8001"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-initiativ",
+    "zp_start": "2024-11-06T00:00:00+00:00",
+    "api_id": "286d8a93-6ad5-5c32-960e-122c6e977b90"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "5d92a3787a0f6c38b5099fbeced46ab271083f3583227f74c1e9fc9c675a2e9b",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0107%5F06112024.pdf#page=3",
+      "titel": "Erste Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-06T00:00:00+00:00",
+      "zp_referenz": "2024-11-06T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2024-11-06T01:00:00+00:00",
+    "api_id": "899f8b08-e4e9-5122-af92-f4164bb8c411"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Ausschuss für Finanzen"
+       }
+      ],
+      "hash": "97bf13ab00d9c6a58edd3f4453f06dabce169596e62cc5c1ec9f32b535c380a9",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8319%5FD.pdf",
+      "titel": "Beschlussempfehlung und Bericht",
+      "typ": "beschlussempf",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-11-29T00:00:00+00:00",
+      "zp_referenz": "2024-11-29T00:00:00+00:00",
+      "drucksnr": "17/8319"
+     }
+    ],
+    "gremium": {
+     "name": "Ausschuss für Finanzen",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-ausschber",
+    "zp_start": "2024-11-29T00:00:00+00:00",
+    "api_id": "391971b4-3358-53a2-a490-9740839d7a45",
+    "gremium_federf": true
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "704dbda747fc9506a7d4046da649e165360aa54596cbdc3fad4fda4c52f382e9",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Plp/17%5F0111%5F13122024.pdf#page=71",
+      "titel": "Zweite Beratung",
+      "typ": "redeprotokoll",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-13T00:00:00+00:00",
+      "zp_referenz": "2024-12-13T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-vollvlsgn",
+    "zp_start": "2024-12-13T00:00:00+00:00",
+    "api_id": "2238df5c-46d9-5376-ac64-b3401964f81b"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landtag"
+       }
+      ],
+      "hash": "bc493e0bf0f556629c9ac68666dbe47094819940e7de7a1d78ca79d86e5e9f1c",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP17/Drucksachen/8000/17%5F8422%5FD.pdf",
+      "titel": "Gesetzesbeschluss des Landtags",
+      "typ": "mitteilung",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-13T00:00:00+00:00",
+      "zp_referenz": "2024-12-13T00:00:00+00:00",
+      "drucksnr": "17/8422"
+     }
+    ],
+    "gremium": {
+     "name": "plenum",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "parl-akzeptanz",
+    "zp_start": "2024-12-13T01:00:00+00:00",
+    "api_id": "03d8c748-851a-5b76-bd17-6864716cc5c2"
+   },
+   {
+    "dokumente": [
+     {
+      "autoren": [
+       {
+        "organisation": "Landesregierung"
+       }
+      ],
+      "hash": "a7b4c4ed7bdf6bd2fa31f71e58076aa539bc9dd2ded052a2d1c16afce9eea926",
+      "link": "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/gesetzblaetter/2024/GBl2024114.pdf#page=1",
+      "titel": "Gesetz",
+      "typ": "gesetz",
+      "volltext": "TODO",
+      "zp_modifiziert": "2024-12-17T00:00:00+00:00",
+      "zp_referenz": "2024-12-17T00:00:00+00:00",
+      "drucksnr": null
+     }
+    ],
+    "gremium": {
+     "name": "gesetzesblatt",
+     "parlament": "BW",
+     "wahlperiode": 17
+    },
+    "typ": "postparl-gsblt",
+    "zp_start": "2024-12-17T00:00:00+00:00",
+    "api_id": "81128d64-e3d0-5371-ba67-458d0bb5848a"
+   }
+  ],
+  "titel": "Haushaltsbegleitgesetz 2025/2026",
+  "typ": "gg-land-parl",
+  "verfassungsaendernd": false,
+  "wahlperiode": 17,
+  "ids": [
+   {
+    "id": "V-236465",
+    "typ": "vorgnr"
+   },
+   {
+    "id": "17/8001",
+    "typ": "initdrucks"
+   }
+  ],
+  "kurztitel": "Haushaltsbegleitgesetz 2025/2026",
+  "links": [
+   "https://parlis.landtag-bw.de/parlis/vorgang/V-236465"
+  ],
+  "sachgebiete": [
+   8300
+  ],
+  "schlagworte": [
+   "Beihilfeverordnung",
+   "Besoldungsrecht",
+   "Finanzausgleichsgesetz (Baden-Württemberg)",
+   "Gesetz über die Planung, Organisation und Gestaltung des öffentlichen Personennahverkehrs",
+   "Gesetz über einen Versorgungsfonds des Landes Baden-Württemberg",
+   "Gesetz zur Feststellung einer Naturkatastrophe, der Höhe der Ausnahmekomponente und zur Festlegung eines Tilgungsplans nach § 18 Absatz 6 der Landeshaushaltsordnung für Baden-Württemberg",
+   "Haushaltsbegleitgesetz 2025/2026",
+   "Kindertagesbetreuungsgesetz",
+   "Kindertagesstättenverordnung",
+   "Landesbeamtengesetz",
+   "Landesbeamtenversorgungsgesetz Baden-Württemberg",
+   "Landesbesoldungsgesetz Baden-Württemberg",
+   "Landesglücksspielgesetz",
+   "Landeshaushalt",
+   "Landeshaushaltsordnung für Baden-Württemberg",
+   "Landeshochschulgebührengesetz",
+   "Landesinformationsfreiheitsgesetz",
+   "Landesjustizkostengesetz",
+   "Landeskrankenhausgesetz Baden-Württemberg",
+   "Landesverwaltungsgesetz",
+   "Universitätsklinika-Gesetz"
+  ]
+ }
+]
