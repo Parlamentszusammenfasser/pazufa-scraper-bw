@@ -4811,6 +4811,33 @@ class TestIssue39Ressort:
         assert "ressort" not in vorgang.to_dict()
 
 
+class TestIssue161VorgangZusammenfassung:
+    """GitHub issue #161: the Vorgang's summary is its initiating document's, never a protocol's."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("protocol_only", "expected"),
+        [
+            (False, [{"typ": "full-llm", "inhalt": "Das Land wird klimaneutral."}]),
+            (True, None),
+        ],
+        ids=["initiating-document", "protocol-only"],
+    )
+    async def test_summary_of_the_initiating_document(self, monkeypatch, protocol_only, expected):
+        def summary_for(dok):
+            if dok.drucksnr is None:
+                return "Debatte im Plenum."
+            return None if protocol_only else "Das Land wird klimaneutral."
+
+        scraper, _, _ = TestIssue39Ressort._llm_scraper(monkeypatch, None, summary_for)
+        raw = _make_raw_vorgang("V-004")
+        raw["fundstellen_parsed"][1]["pdf_url"] = "https://www.landtag-bw.de/resource/blob/999/plenarprotokoll.pdf"
+
+        vorgang = await scraper._build_vorgang(raw)
+
+        assert vorgang.to_dict().get("zusammenfassung") == expected
+
+
 class TestIssue63WahlperiodeConfig:
     """Issues #6/#63: [bawue] wahlperiode is the one setting; the PARLIS search start
     follows from it unless wahlperiode-start-date narrows it."""

@@ -20,7 +20,7 @@ import aiohttp
 import certifi
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, zusammenfassung_text
+from bawue.bawue_dok import LLMMetrics, vorgang_zusammenfassung, zusammenfassung_text
 from bawue.cache import drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.enum_mapper import map_dokumententyp, map_sachgebiete, map_schlagworte, map_stationstyp, map_vorgangstyp
@@ -538,6 +538,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
             sachgebiete=map_sachgebiete(raw.get("Sachgebiet")) or UNSET,
             # PARLIS' curated Deskriptoren (issue #33, DD-060).
             schlagworte=map_schlagworte(raw.get("Deskriptoren")) or UNSET,
+            # Initiating documents only: a protocol's summary describes the debate (DD-055).
+            zusammenfassung=vorgang_zusammenfassung(
+                d for s in stationen if s.typ in _INITIATIV_TYPEN for d in s.dokumente
+            ),
         )
 
     _POSTPARL_TYPEN: frozenset[Stationstyp] = frozenset(
