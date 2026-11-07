@@ -5,14 +5,16 @@ import json
 import logging
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime
+from functools import partial
 from hashlib import sha256
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, vorgang_zusammenfassung, zusammenfassung_text
+from bawue.bawue_dok import EnrichmentResult, LLMMetrics, vorgang_zusammenfassung, zusammenfassung_text
 from bawue.beteiligung_client import BASE_URL, BeteiligungClient
 from bawue.beteiligung_parser import (
     RawBeteiligungDetail,
@@ -272,8 +274,6 @@ class BawueBeteiligungScraper(VorgangsScraper):
             logger.warning("Skipping '%s' — a PDF has no publication date", slug)
             self._skipped += 1
             return None
-        zp_start = _midnight_utc(min(released))
-
         api_id = uuid5(NAMESPACE_URL, f"beteiligung-{slug}")
 
         # An empty ministry yields no Autor — the new backend rejects
@@ -285,44 +285,24 @@ class BawueBeteiligungScraper(VorgangsScraper):
             else []
         )
 
-        # Build documents
-        dokumente: list[Dokument] = []
-        for pdf, pdf_released in zip(detail.pdf_links, released, strict=True):
-            dok = entwurf_dokument(pdf["url"], pdf["title"], pdf_released, ministry_autoren)
+        enrich = None
+        if self._llm_enabled and self._llm is not None:
+            from bawue.bawue_dok import enrich_dokument
 
-            if self._llm_enabled and self._llm is not None:
-                try:
-                    from bawue.bawue_dok import enrich_dokument
-
-                    result = await enrich_dokument(
-                        self.session,
-                        self._llm,
-                        dok,
-                        model=self._llm_model,
-                        metrics=self._llm_metrics,
-                        cache=self.config.cache,
-                    )
-                    dok = result.dokument
-                except Exception:
-                    logger.warning("Document enrichment failed for %s", pdf["url"])
-
-            dokumente.append(dok)
+            enrich = partial(
+                enrich_dokument,
+                self.session,
+                self._llm,
+                model=self._llm_model,
+                metrics=self._llm_metrics,
+                cache=self.config.cache,
+            )
+        pdfs = [(pdf["url"], pdf["title"], day) for pdf, day in zip(detail.pdf_links, released, strict=True)]
+        station = await entwurf_station(pdfs, ministry_autoren, self._wahlperiode, enrich)
+        dokumente = station.dokumente
 
         if self._beteiligungsfristen and detail.comment_deadline:
             _add_beteiligungsfrist(dokumente, detail.comment_deadline)
-
-        gremium = Gremium(
-            parlament=Parlament.BW,
-            name=ReservedGremium.REGIERUNG,
-            wahlperiode=self._wahlperiode,
-        )
-
-        station = Station(
-            typ=Stationstyp.PREPARL_REGENT,
-            dokumente=dokumente,
-            zp_start=zp_start,
-            gremium=gremium,
-        )
 
         # Pre-parliamentary drafts have no Vorgangsnummer yet. Expose the source
         # page as a backlink (Issue #24) rather than mislabeling the URL as a
@@ -379,18 +359,38 @@ def _midnight_utc(day: date) -> datetime:
     return datetime(day.year, day.month, day.day, tzinfo=UTC)
 
 
-def entwurf_dokument(url: str, titel: str, released: date, autoren: list[Autor]) -> Dokument:
-    """A draft PDF before enrichment. The PARLIS scraper builds it alike for a bill that gains the
-    draft's station, so the backend finds the same row (DD-079)."""
-    return Dokument(
-        titel=todo_if_blank(titel),
-        volltext=TODO_MARKER,
-        hash_=placeholder_hash(url),
-        typ=Doktyp.PREPARL_ENTWURF,
-        zp_modifiziert=_midnight_utc(released),
-        zp_referenz=_midnight_utc(released),
-        link=url,
-        autoren=autoren,
+async def entwurf_station(
+    pdfs: list[tuple[str, str, date]],
+    autoren: list[Autor],
+    wahlperiode: int,
+    enrich: Callable[[Dokument], Awaitable[EnrichmentResult]] | None,
+) -> Station:
+    """The draft's preparl-regent station from its PDFs (url, title, release day), dated by the
+    earliest (DD-074). The PARLIS scraper builds it alike for a bill that gains the station, so the
+    backend finds the same document rows (DD-079)."""
+    dokumente = []
+    for url, titel, released in pdfs:
+        dok = Dokument(
+            titel=todo_if_blank(titel),
+            volltext=TODO_MARKER,
+            hash_=placeholder_hash(url),
+            typ=Doktyp.PREPARL_ENTWURF,
+            zp_modifiziert=_midnight_utc(released),
+            zp_referenz=_midnight_utc(released),
+            link=url,
+            autoren=autoren,
+        )
+        if enrich is not None:
+            try:
+                dok = (await enrich(dok)).dokument
+            except Exception:
+                logger.warning("Document enrichment failed for %s", url)
+        dokumente.append(dok)
+    return Station(
+        typ=Stationstyp.PREPARL_REGENT,
+        dokumente=dokumente,
+        zp_start=min(dok.zp_referenz for dok in dokumente),
+        gremium=Gremium(parlament=Parlament.BW, name=ReservedGremium.REGIERUNG, wahlperiode=wahlperiode),
     )
 
 

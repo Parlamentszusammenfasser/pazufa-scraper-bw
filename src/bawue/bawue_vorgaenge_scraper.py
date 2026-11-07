@@ -11,6 +11,7 @@ import uuid
 from collections import Counter
 from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from hashlib import sha256
 from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
@@ -20,7 +21,7 @@ import aiohttp
 import certifi
 
 from bawue.api import build_client, vorgang_exists
-from bawue.bawue_beteiligung_scraper import entwurf_dokument
+from bawue.bawue_beteiligung_scraper import entwurf_station
 from bawue.bawue_dok import LLMMetrics, vorgang_zusammenfassung, zusammenfassung_text
 from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY, drucksache_hash_key
 from bawue.config import BawueConfig
@@ -596,38 +597,50 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if not kandidaten:
             return api_id, None
         uebernahmen = self._uebernahmen()
-        slug = next((s for s in kandidaten if uebernahmen.get(s, {}).get("vorgnr") == vorgang_id), None)
+        slug, upload_as = next(
+            ((s, uebernahmen[s]["api_id"]) for s in kandidaten if uebernahmen.get(s, {}).get("vorgnr") == vorgang_id),
+            (None, None),
+        )
         if slug is None:
             slug = await self._match_entwurf(vorgang_id, stationen, [s for s in kandidaten if s not in uebernahmen])
-            if slug is None:
+            upload_as = self._uebernehmen(slug, vorgang_id, api_id) if slug else None
+            if upload_as is None:
                 return api_id, None
-            # Re-read after the awaits; no await from here to the write.
-            uebernahmen = self._uebernahmen()
-            if slug in uebernahmen:
-                return api_id, None
-            entwurf_api_id = self._entwuerfe[slug]["api_id"]
-            uebernahmen[slug] = {
-                "vorgnr": vorgang_id,
-                "api_id": api_id if vorgang_exists(self._client, api_id) else entwurf_api_id,
-            }
-            if not self.config.cache.store_raw(UEBERNAHMEN_KEY, json.dumps(uebernahmen), "Übernahmen"):
-                self._retry_next_cycle.add(vorgang_id)
-            if uebernahmen[slug]["api_id"] == api_id:
-                logger.warning("%s gains draft %s; its portal Vorgang %s is stale", vorgang_id, slug, entwurf_api_id)
-                self._stale_entwuerfe.append(f"{entwurf_api_id} ({slug}) → {vorgang_id}")
-        if uebernahmen[slug]["api_id"] == api_id:
+        if upload_as == api_id:
             stationen.insert(0, await self._entwurf_station(self._entwuerfe[slug]))
-        return uebernahmen[slug]["api_id"], self._entwuerfe[slug]["portal"]
+        return upload_as, self._entwuerfe[slug]["portal"]
 
     def _uebernahmen(self) -> dict[str, dict]:
         return json.loads(self.config.cache.get_raw(UEBERNAHMEN_KEY, "Übernahmen") or "{}")
+
+    def _uebernehmen(self, slug: str, vorgang_id: str, api_id: str) -> str | None:
+        """Record the api_id the bill uploads under; None if another bill took the draft meanwhile.
+
+        No await between read and write, so two bills of one cycle cannot both take it.
+        """
+        uebernahmen = self._uebernahmen()
+        if slug in uebernahmen:
+            return None
+        entwurf_api_id = self._entwuerfe[slug]["api_id"]
+        upload_as = api_id if vorgang_exists(self._client, api_id) else entwurf_api_id
+        uebernahmen[slug] = {"vorgnr": vorgang_id, "api_id": upload_as}
+        if not self.config.cache.store_raw(UEBERNAHMEN_KEY, json.dumps(uebernahmen), "Übernahmen"):
+            self._retry_next_cycle.add(vorgang_id)
+        if upload_as == api_id:
+            logger.warning("%s gains draft %s; its portal Vorgang %s is stale", vorgang_id, slug, entwurf_api_id)
+            self._stale_entwuerfe.append(f"{entwurf_api_id} ({slug}) → {vorgang_id}")
+        return upload_as
 
     async def _match_entwurf(self, vorgang_id: str, stationen: list[Station], slugs: list[str]) -> str | None:
         """The candidate draft whose text the bill's Drucksache contains (DD-079)."""
         if not slugs:
             return None
         drucksache = await self._drucksache_shingles(stationen)
-        entwuerfe = {slug: await self._entwurf_shingles_of(slug) for slug in slugs}
+        for slug in slugs:
+            if slug not in self._entwurf_shingles:  # once per cycle
+                urls = [pdf["url"] for pdf in self._entwuerfe[slug]["pdfs"]]
+                self._entwurf_shingles[slug] = await self._pdf_shingles(urls)
+        entwuerfe = {slug: self._entwurf_shingles[slug] for slug in slugs}
         if drucksache is None or None in entwuerfe.values():
             # Unread is not "no draft": deciding now would keep the bill apart for good.
             self._retry_next_cycle.add(vorgang_id)
@@ -645,11 +658,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return shingles(dok.volltext)
         return await self._pdf_shingles([dok.link])
 
-    async def _entwurf_shingles_of(self, slug: str) -> frozenset[int] | None:
-        if slug not in self._entwurf_shingles:
-            self._entwurf_shingles[slug] = await self._pdf_shingles([p["url"] for p in self._entwuerfe[slug]["pdfs"]])
-        return self._entwurf_shingles[slug]
-
     async def _pdf_shingles(self, urls: list[str]) -> frozenset[int] | None:
         try:
             return frozenset().union(*[shingles(await read_pdf(self.session, url)) for url in urls])
@@ -658,33 +666,22 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return None
 
     async def _entwurf_station(self, entwurf: dict) -> Station:
-        """The draft's preparl-regent station, with the documents the Beteiligung scraper uploaded (DD-079)."""
-        autoren = [Autor.from_dict(autor) for autor in entwurf["autoren"]]
-        dokumente = []
-        for pdf in entwurf["pdfs"]:
-            dok = entwurf_dokument(pdf["url"], pdf["titel"], date.fromisoformat(pdf["datum"]), autoren)
-            if self._llm_enabled and self._llm is not None:
-                try:
-                    from bawue.bawue_dok import enrich_dokument
+        """The draft's preparl-regent station as the Beteiligung scraper uploaded it (DD-079)."""
+        enrich = None
+        if self._llm_enabled and self._llm is not None:
+            from bawue.bawue_dok import enrich_dokument
 
-                    result = await enrich_dokument(
-                        self.session,
-                        self._llm,
-                        dok,
-                        model=self._llm_model,
-                        metrics=self._llm_metrics,
-                        cache=self.config.cache,
-                    )
-                    dok = result.dokument
-                except Exception:
-                    logger.warning("Document enrichment failed for %s", pdf["url"])
-            dokumente.append(dok)
-        return Station(
-            typ=Stationstyp.PREPARL_REGENT,
-            dokumente=dokumente,
-            zp_start=min(dok.zp_referenz for dok in dokumente),
-            gremium=Gremium(parlament=Parlament.BW, name=ReservedGremium.REGIERUNG, wahlperiode=self._wahlperiode),
-        )
+            enrich = partial(
+                enrich_dokument,
+                self.session,
+                self._llm,
+                model=self._llm_model,
+                metrics=self._llm_metrics,
+                cache=self.config.cache,
+            )
+        pdfs = [(pdf["url"], pdf["titel"], date.fromisoformat(pdf["datum"])) for pdf in entwurf["pdfs"]]
+        autoren = [Autor.from_dict(autor) for autor in entwurf["autoren"]]
+        return await entwurf_station(pdfs, autoren, self._wahlperiode, enrich)
 
     _POSTPARL_TYPEN: frozenset[Stationstyp] = frozenset(
         {
