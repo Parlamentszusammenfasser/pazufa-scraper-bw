@@ -1208,6 +1208,7 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
         initial_delay=0.2, min_delay=0.05, backoff_multiplier=10.0, recovery_factor=0.5
     )
     mock_config = MagicMock()
+    mock_config.cache.get_raw.return_value = None  # nothing cached, no Beteiligung draft registered
     scraper.config = mock_config
     scraper.scraper_id = "test-scraper-id"
     scraper._llm_enabled = False

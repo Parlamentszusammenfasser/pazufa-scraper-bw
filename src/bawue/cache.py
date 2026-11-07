@@ -22,6 +22,9 @@ def drucksache_hash_key(drucksnr: str) -> str:
 
 # Deadlines of uploaded Beteiligung drafts, by slug, for the calendar (DD-076).
 BETEILIGUNGSFRISTEN_KEY = "beteiligungsfristen"
+# Uploaded Beteiligung drafts by slug, and which PARLIS bill took each over (DD-079).
+ENTWUERFE_KEY = "beteiligung-entwuerfe"
+UEBERNAHMEN_KEY = "entwurf-uebernahmen"
 
 
 def _redact(redis_url: str) -> str:

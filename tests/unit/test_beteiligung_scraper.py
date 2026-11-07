@@ -15,6 +15,7 @@ from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
 from bawue.bawue_dok import LLMMetrics, _hash_cache
 from bawue.beteiligung_client import BASE_URL
 from bawue.beteiligung_parser import RawBeteiligungDetail, RawBeteiligungProcess, parse_process_detail
+from bawue.cache import ENTWUERFE_KEY
 from bawue.types import (
     UNSET,
     Doktyp,
@@ -550,12 +551,13 @@ class TestIssue148FristenRegister:
         assert scraper.config.cache.get_raw("vg2:a") is None
 
     @pytest.mark.asyncio
-    async def test_failed_register_write_leaves_the_vorgang_uncached(self):
-        """A cache hit would never write the register again (review of PR #164)."""
+    @pytest.mark.parametrize("register", ["beteiligungsfristen", ENTWUERFE_KEY])
+    async def test_failed_register_write_leaves_the_vorgang_uncached(self, register):
+        """A cache hit would never write the register again (review of PR #164, DD-079)."""
         scraper = self._scraper()
         cache = scraper.config.cache
         store_raw = cache.store_raw
-        cache.store_raw = lambda key, value, typehint="": key != "beteiligungsfristen" and store_raw(key, value)
+        cache.store_raw = lambda key, value, typehint="": key != register and store_raw(key, value)
         scraper._fingerprints["a"] = "fingerprint"
         scraper._raw_cache["a"] = _make_process(slug="a")
         scraper._details["a"] = _make_detail(comment_deadline=date(2099, 12, 1))
@@ -858,7 +860,7 @@ class TestIssue104RefreshOnChange:
         [slug] = await self._list(scraper, process, detail)
         hit = await scraper.get_cached_result(slug) is not None
         if not hit:
-            await scraper.store_extracted_result(slug, MagicMock())
+            await scraper.store_extracted_result(slug, await scraper.item_extractor(slug))
         return hit
 
     @pytest.mark.asyncio
@@ -866,7 +868,7 @@ class TestIssue104RefreshOnChange:
         scraper, store = self._scraper_with_dict_cache()
         assert not await self._cycle(scraper, _make_process(), _make_detail())
         assert await self._cycle(scraper, _make_process(), _make_detail())
-        assert list(store) == ["vg2:entbuerokratisierung"]
+        assert set(store) == {"vg2:entbuerokratisierung", ENTWUERFE_KEY}
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -918,5 +920,5 @@ class TestIssue104RefreshOnChange:
         with patch("bawue.bawue_beteiligung_scraper.asyncio.to_thread", side_effect=_to_thread):
             [slug] = await scraper.listing_page_extractor("lp-18")
         assert await scraper.get_cached_result(slug) is None
-        await scraper.store_extracted_result(slug, MagicMock())
-        assert store == {}
+        await scraper.store_extracted_result(slug, await scraper._build_vorgang(slug, _make_detail()))
+        assert f"vg2:{slug}" not in store

@@ -20,7 +20,7 @@ from bawue.beteiligung_parser import (
     parse_process_detail,
     release_date,
 )
-from bawue.cache import BETEILIGUNGSFRISTEN_KEY
+from bawue.cache import BETEILIGUNGSFRISTEN_KEY, ENTWUERFE_KEY, UEBERNAHMEN_KEY
 from bawue.config import BawueConfig
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
@@ -170,15 +170,18 @@ class BawueBeteiligungScraper(VorgangsScraper):
         return slugs
 
     async def get_cached_result(self, item_key: str) -> str | None:
-        """A cache hit only while the portal page is unchanged (issue #104, DD-052)."""
+        """A cache hit only while the portal page is unchanged (issue #104, DD-052), and for good
+        once a PARLIS bill took the draft over: PARLIS writes that Vorgang from then on (DD-079)."""
+        if item_key in json.loads(self.config.cache.get_raw(UEBERNAHMEN_KEY, "Übernahmen") or "{}"):
+            return "übernommen"
         cached = await super().get_cached_result(item_key)
         if cached is not None and cached == self._fingerprints.get(item_key):
             return cached
         return None
 
     async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
-        if not self._register_frist(item_key, result):
-            return  # uncached, so the next cycle writes the register again (DD-076)
+        if not (self._register_frist(item_key, result) and self._register_entwurf(item_key, result)):
+            return  # uncached, so the next cycle writes the registers again (DD-076, DD-079)
         fingerprint = self._fingerprints.get(item_key)
         if fingerprint is not None:  # without one, the next cycle simply rebuilds
             self.config.cache.store_raw(f"vg2:{item_key}", fingerprint, "Vorgang")
@@ -205,6 +208,22 @@ class BawueBeteiligungScraper(VorgangsScraper):
                 "hash": row_sha256(dok.hash_) if dok.volltext != TODO_MARKER else None,
             }
         return self.config.cache.store_raw(BETEILIGUNGSFRISTEN_KEY, json.dumps(fristen, ensure_ascii=False), "Fristen")
+
+    def _register_entwurf(self, slug: str, vorgang: Vorgang) -> bool:
+        """Offer the just uploaded draft to the PARLIS scraper (DD-079); False if the register
+        could not be written. No await between read and write, as in `_register_frist`."""
+        entwuerfe = json.loads(self.config.cache.get_raw(ENTWUERFE_KEY, "Entwürfe") or "{}")
+        entwuerfe[slug] = {
+            "api_id": vorgang.api_id,
+            "wahlperiode": vorgang.wahlperiode,
+            "portal": vorgang.links[0],
+            "autoren": [autor.to_dict() for autor in vorgang.initiatoren],
+            "pdfs": [
+                {"url": dok.link, "titel": dok.titel, "datum": dok.zp_referenz.date().isoformat()}
+                for dok in vorgang.stationen[0].dokumente
+            ],
+        }
+        return self.config.cache.store_raw(ENTWUERFE_KEY, json.dumps(entwuerfe, ensure_ascii=False), "Entwürfe")
 
     async def item_extractor(self, slug: str) -> Vorgang | None:
         """Fetch detail page and build a Vorgang with preparl-regent station."""
@@ -269,16 +288,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         # Build documents
         dokumente: list[Dokument] = []
         for pdf, pdf_released in zip(detail.pdf_links, released, strict=True):
-            dok = Dokument(
-                titel=todo_if_blank(pdf["title"]),
-                volltext=TODO_MARKER,
-                hash_=placeholder_hash(pdf["url"]),
-                typ=Doktyp.PREPARL_ENTWURF,
-                zp_modifiziert=_midnight_utc(pdf_released),
-                zp_referenz=_midnight_utc(pdf_released),
-                link=pdf["url"],
-                autoren=ministry_autoren,
-            )
+            dok = entwurf_dokument(pdf["url"], pdf["title"], pdf_released, ministry_autoren)
 
             if self._llm_enabled and self._llm is not None:
                 try:
@@ -369,6 +379,21 @@ def _midnight_utc(day: date) -> datetime:
     return datetime(day.year, day.month, day.day, tzinfo=UTC)
 
 
+def entwurf_dokument(url: str, titel: str, released: date, autoren: list[Autor]) -> Dokument:
+    """A draft PDF before enrichment. The PARLIS scraper builds it alike for a bill that gains the
+    draft's station, so the backend finds the same row (DD-079)."""
+    return Dokument(
+        titel=todo_if_blank(titel),
+        volltext=TODO_MARKER,
+        hash_=placeholder_hash(url),
+        typ=Doktyp.PREPARL_ENTWURF,
+        zp_modifiziert=_midnight_utc(released),
+        zp_referenz=_midnight_utc(released),
+        link=url,
+        autoren=autoren,
+    )
+
+
 def _add_beteiligungsfrist(dokumente: list[Dokument], deadline: date) -> None:
     """Add the deadline to every document with an AI summary, else to the first (DD-075): the
     website shows the first one with a summary in the backend's order, which is by link."""
@@ -406,6 +431,6 @@ def _print_beteiligung_summary(
 def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungDetail) -> str:
     """What shows progress on the portal (issue #104): status, title, ministry, PDFs, deadline (#148)."""
     pdfs = sorted([link["url"], link["title"]] for link in detail.pdf_links)
-    # "fristen": a one-time rebuild fills the calendar register for cached Vorgänge (DD-076).
-    payload = [process.status, detail.title, detail.ministry, pdfs, detail.comment_deadline, "fristen"]
+    # One-time rebuilds fill the registers for cached Vorgänge: "fristen" (DD-076), "entwuerfe" (DD-079).
+    payload = [process.status, detail.title, detail.ministry, pdfs, detail.comment_deadline, "fristen", "entwuerfe"]
     return sha256(json.dumps(payload, ensure_ascii=False, default=str).encode()).hexdigest()

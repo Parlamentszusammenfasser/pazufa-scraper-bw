@@ -98,6 +98,39 @@ neu eingefügte Dokumente, die der Einzelpläne blieben sonst ohne Verknüpfung.
 Der Typ bleibt `gg-land-parl`, bis das Backend einen BW-Track für `gg-land-parl-haushalt` hat
 ([parlamentszusammenfasser#92](https://codeberg.org/PaZuFa/parlamentszusammenfasser/pulls/92)).
 
+<a id="dd-079"></a>
+## DD-079: Referentenentwurf und Gesetzentwurf sind ein Vorgang
+
+**Kontext:** Ein Entwurf vom Beteiligungsportal (`preparl-regent`, DD-007) und der spätere
+Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legte zwei Vorgänge an
+(Issue #180). Keine Quelle nennt die andere, und Titel ändern sich auf dem Weg.
+
+**Entscheidung:**
+1. Nach jedem Upload legt der Beteiligungs-Scraper den Entwurf in `beteiligung-entwuerfe` ab
+   (`api_id`, Wahlperiode, Portal-Link, Ministerium, PDFs mit Datum). Scheitert das, bleibt er
+   ungecacht. Der Marker `entwuerfe` im Fingerprint füllt das Register einmal.
+2. Kandidaten eines Gesetzentwurfs der Landesregierung (`gg-land-parl`): Entwürfe derselben
+   Wahlperiode aus dem Jahr vor der Drucksache, nicht am selben Tag (`R` vor `S`), noch von keinem
+   Vorgang übernommen. Sie gehören zum `vg2:`-Fingerprint (DD-052): Ein später registrierter
+   Entwurf baut den Vorgang einmal neu.
+3. Der Text entscheidet: Mindestens 0,4 der Wort-5-Gramme des Entwurfs stehen in der Drucksache,
+   beim Zweitbesten weniger als 0,2 (WP 17/18: Paare 0,51 bis 0,96, fremde höchstens 0,16). Ist ein
+   PDF nicht lesbar, entscheidet der nächste Lauf.
+4. Kennt das Backend den Vorgang noch nicht (`GET vorgang`), übernimmt er die `api_id` des
+   Entwurfs; das Backend führt beide zusammen und behält die `preparl-regent`-Station. Sonst
+   behält er seine `api_id` (zwei Kandidaten: `AmbiguousMatch`) und bekommt die Station mit
+   denselben Dokumenten; den Portal-Vorgang löscht ein Admin (Laufbericht).
+5. Die Entscheidung steht in `entwurf-uebernahmen`. Danach lädt der Beteiligungs-Scraper den
+   Entwurf nicht mehr hoch: PARLIS schreibt den Vorgang, sonst wechselten Titel und Kurztitel.
+
+**Verworfen:** Titelvergleich (WP 17: ein falsches Paar), gemeinsamer `vg_ident` (die Website
+zeigt `ids[0]`, Titel wechseln), Abgleich im Backend (träfe alle Länder).
+
+**Konsequenz:** Ein verpasster Treffer lässt zwei Vorgänge wie bisher, nie einen falsch
+verschmolzenen. `initiatoren` = Ministerium und Landesregierung. Für einen neuen Gesetzentwurf mit
+Kandidaten werden deren PDFs einmal je Lauf gelesen. Ändert sich die Portalseite im Lauf der
+Übernahme, überschreibt der Entwurf den Titel bis zum nächsten PARLIS-Upload.
+
 <a id="dd-043"></a>
 ## DD-043: Der `#page=N`-Anker gehört zur Dokumentidentität
 

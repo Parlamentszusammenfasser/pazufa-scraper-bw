@@ -41,7 +41,7 @@ DD-017 erscheinen diese Stationen derzeit nicht.
 **Entscheidung:** Initiator enthält „Landesregierung" → `preparl-regbsl` (Dokument
 `preparl-entwurf`); sonst `parl-initiativ` (Dokument `entwurf`). PARLIS zeigt den
 Regierungsentwurf erst **nach** dem Kabinettsbeschluss, daher S und nicht R. Die
-Entwurfsphase (`preparl-regent`) liefert das Beteiligungsportal (DD-007).
+Entwurfsphase (`preparl-regent`) liefert das Beteiligungsportal (DD-007), im selben Vorgang (DD-079).
 
 **Konsequenz:** Das einzige Mapping mit externem Kontext. Es erlaubt den BY-Track ohne
 BW-Präfix (DD-016). Nach `preparl-regbsl` fehlt das `I`; DD-012 ergänzt es.

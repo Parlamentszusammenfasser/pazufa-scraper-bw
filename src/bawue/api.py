@@ -18,6 +18,7 @@ from uuid import UUID
 from pazufa_corelib.api_client import AuthenticatedClient
 from pazufa_corelib.api_client.api.sitzung import kal_date_put as _kal_date_put
 from pazufa_corelib.api_client.api.vorgang import vorgang_get as _vorgang_get
+from pazufa_corelib.api_client.api.vorgang import vorgang_get_by_id as _vorgang_get_by_id
 from pazufa_corelib.api_client.api.vorgang import vorgang_put as _vorgang_put
 
 from bawue.types import Parlament, Sitzung, Vorgang
@@ -71,6 +72,16 @@ def get_vorgaenge(client: AuthenticatedClient, wahlperiode: int) -> list[dict]:
         if len(r.parsed) < _PER_PAGE:
             return vorgaenge
     raise AssertionError("itertools.count never ends")
+
+
+def vorgang_exists(client: AuthenticatedClient, api_id: str) -> bool:
+    """Whether the backend has a Vorgang under *api_id* (DD-079)."""
+    r = _vorgang_get_by_id.sync_detailed(UUID(api_id), client=client)
+    if r.status_code == 404:
+        return False
+    if r.status_code not in (200, 304):
+        raise BawueApiError(int(r.status_code), r.content, "vorgang_get_by_id")
+    return True
 
 
 def put_vorgang(client: AuthenticatedClient, scraper_id: UUID, item: Vorgang) -> None:
