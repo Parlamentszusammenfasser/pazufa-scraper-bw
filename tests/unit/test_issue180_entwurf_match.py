@@ -26,8 +26,8 @@ DRUCKSACHE_OF = {
     "entwurf_gewhag": "drucksache_18_692",
     "entwurf_hbeglg_2027": "drucksache_18_701",
 }
-# The yearly salary laws share most of their wording: the hardest wrong candidates.
-FAMILY = ["entwurf_bvanpg_2022", "entwurf_bvanpg_2024"]
+# Last salary law: shares most of its wording with the 2026 one, the hardest wrong candidate.
+FAMILY = ["entwurf_bvanpg_2024"]
 
 
 def _scores(drucksache: str, entwuerfe: list[str]) -> dict[str, float]:
