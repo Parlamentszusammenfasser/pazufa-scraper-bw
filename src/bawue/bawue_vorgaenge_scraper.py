@@ -618,7 +618,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
     def _entwurf_kandidaten(self, raw: RawVorgang) -> list[str]:
         """Registered drafts a Landesregierung bill may have grown from (DD-079)."""
-        if not self._entwuerfe or map_vorgangstyp(raw.get("Vorgangstyp", "")) != Vorgangstyp.GG_LAND_PARL:
+        # Haushaltsbegleitgesetze have portal drafts too (18/701).
+        typ = map_vorgangstyp(raw.get("Vorgangstyp", ""))
+        if not self._entwuerfe or typ not in (Vorgangstyp.GG_LAND_PARL, Vorgangstyp.GG_LAND_PARL_HAUSHALT):
             return []
         regbsl = _regbsl_datum(raw)
         if regbsl is None:

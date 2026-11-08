@@ -1766,7 +1766,7 @@
    }
   ],
   "titel": "Staatshaushaltsplan 2025/2026 – Einzelplan 11: Rechnungshof",
-  "typ": "gg-land-parl",
+  "typ": "gg-land-parl-haushalt",
   "verfassungsaendernd": false,
   "wahlperiode": 17,
   "ids": [
@@ -2464,7 +2464,7 @@
    }
   ],
   "titel": "Staatshaushaltsplan 2022 – Einzelplan 03: Ministerium des Inneren, für Digitalisierung und Kommunen",
-  "typ": "gg-land-parl",
+  "typ": "gg-land-parl-haushalt",
   "verfassungsaendernd": false,
   "wahlperiode": 17,
   "ids": [
@@ -4406,7 +4406,7 @@
    }
   ],
   "titel": "Gesetz über die Feststellung des Staatshaushaltsplans von Baden-Württemberg für die Haushaltsjahre 2025/2026 (Staatshaushaltsgesetz 2025/2026 − StHG 2025/2026)",
-  "typ": "gg-land-parl",
+  "typ": "gg-land-parl-haushalt",
   "verfassungsaendernd": false,
   "wahlperiode": 17,
   "ids": [
@@ -4631,7 +4631,7 @@
    }
   ],
   "titel": "Haushaltsbegleitgesetz 2025/2026",
-  "typ": "gg-land-parl",
+  "typ": "gg-land-parl-haushalt",
   "verfassungsaendernd": false,
   "wahlperiode": 17,
   "ids": [

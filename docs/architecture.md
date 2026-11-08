@@ -573,7 +573,7 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | PARLIS Vorgangstyp                        | PaZuFa `typ`   |
 |-------------------------------------------|----------------|
 | Gesetzgebung                              | `gg-land-parl` |
-| Haushaltsgesetzgebung                     | `gg-land-parl` |
+| Haushaltsgesetzgebung                     | `gg-land-parl-haushalt` |
 | Volksantrag                               | `gg-land-volk` |
 | Antrag                                    | `sonstig`      |
 | Kleine Anfrage                            | `sonstig`      |
