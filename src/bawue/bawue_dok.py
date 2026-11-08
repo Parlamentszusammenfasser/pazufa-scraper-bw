@@ -133,10 +133,11 @@ SYSTEM_PROMPT = (
     "Die Antwort darf nur die direkt angeforderten Informationen enthalten. "
     "Spekulationen oder Annahmen sind zu vermeiden. "
     # Issue #179: the model copied each source's own number format.
-    "Geldbeträge gerundet mit höchstens zwei Nachkommastellen in Tsd., Mio. oder "
-    "Mrd. Euro angeben (z. B. 1,32 Mrd. Euro statt 1.322.962.200 Euro oder 1,3229 Milliarden Euro): "
-    "ab einer Milliarde in Mrd., ab einer Million in Mio. Euro, deutsches Zahlenformat mit Komma, "
-    "denselben Betrag nicht mehrfach in verschiedenen Schreibweisen nennen."
+    "Geldbeträge ab einer Milliarde in Mrd. Euro, ab einer Million in Mio. Euro mit zwei "
+    "Nachkommastellen angeben (z. B. 1,32 Mrd. Euro statt 1.322.962.200 Euro oder 1,3229 Milliarden "
+    "Euro), kleinere Beträge ausgeschrieben mit Tausenderpunkt (z. B. 491.600 Euro). Die Einheit "
+    "der Vorlage beachten (Tabellen oft in Tsd. Euro). Dezimalkomma; denselben Betrag nicht "
+    "mehrfach in verschiedenen Schreibweisen nennen."
 )
 
 # Closes the JSON template of the single-topic prompts below: Brandenburg's three
