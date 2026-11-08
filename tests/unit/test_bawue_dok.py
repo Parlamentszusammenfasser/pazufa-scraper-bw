@@ -17,7 +17,6 @@ from bawue.bawue_dok import (
     BODY_PROMPT_ENTWURF,
     BODY_PROMPT_REDEPROTOKOLL,
     BODY_PROMPT_REDEPROTOKOLL_TOP,
-    SYSTEM_PROMPT,
     ZUSAMMENFASSUNG_TEILE,
     EnrichmentResult,
     LLMMetrics,
@@ -2221,9 +2220,13 @@ class TestIssue42PartialSummaries:
         assert "Keine Aufzählung der Artikelstruktur" in prompt
         assert "Die Zusammenfassung ist immer zu füllen." in prompt
 
-    def test_system_prompt_sets_one_money_format_issue_179(self):
+    @pytest.mark.asyncio
+    async def test_summary_call_sets_one_money_format_issue_179(self):
         # Drucksache 18/700 mixed "1.322.962.200 Euro", "1,3229 Milliarden" and "491.6 Tsd.".
-        assert "1,32 Mrd. Euro statt 1.322.962.200 Euro" in SYSTEM_PROMPT
+        messages = await _capture_llm_messages(
+            lambda: extract_semantics(_make_llm_mock(), SAMPLE_FULL_TEXT, Doktyp.ENTWURF)
+        )
+        assert "1,32 Mrd. Euro statt 1.322.962.200 Euro" in messages[0]["content"]
 
     @pytest.mark.parametrize(
         ("doktyp", "fingerprint"),
