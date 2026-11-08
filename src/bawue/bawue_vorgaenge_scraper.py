@@ -289,10 +289,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
     async def run(self) -> None:
         check_for_newer_wahlperiode(self._wahlperiode)
-        # Before any await, so every bill of the cycle sees the same drafts (DD-079).
-        self._entwuerfe = json.loads(self.config.cache.get_raw(ENTWUERFE_KEY, "Entwürfe") or "{}")
         start = time.monotonic()
         try:
+            # Before any await, so every bill of the cycle sees the same drafts (DD-079).
+            self._entwuerfe = json.loads(self.config.cache.get_raw(ENTWUERFE_KEY, "Entwürfe") or "{}")
             await super().run()
         finally:
             duration = time.monotonic() - start

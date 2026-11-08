@@ -79,7 +79,7 @@ def vorgang_exists(client: AuthenticatedClient, api_id: str) -> bool:
     r = _vorgang_get_by_id.sync_detailed(UUID(api_id), client=client)
     if r.status_code == 404:
         return False
-    if r.status_code not in (200, 304):
+    if r.status_code != 200:
         raise BawueApiError(int(r.status_code), r.content, "vorgang_get_by_id")
     return True
 

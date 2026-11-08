@@ -43,7 +43,7 @@ class TestPutVorgang:
 class TestVorgangExists:
     """DD-079: a bill the backend already has must keep its api_id."""
 
-    @pytest.mark.parametrize(("status", "exists"), [(200, True), (304, True), (404, False)])
+    @pytest.mark.parametrize(("status", "exists"), [(200, True), (404, False)])
     def test_status(self, status, exists):
         with patch("bawue.api._vorgang_get_by_id.sync_detailed", return_value=_resp(status)):
             assert vorgang_exists(MagicMock(), str(uuid4())) is exists
