@@ -22,7 +22,7 @@ import certifi
 
 from bawue.api import build_client, vorgang_exists
 from bawue.bawue_beteiligung_scraper import entwurf_station
-from bawue.bawue_dok import LLMMetrics, vorgang_zusammenfassung, zusammenfassung_text
+from bawue.bawue_dok import LLMMetrics, zusammenfassung_text
 from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY, RedisUnavailableError, drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.entwurf_match import containment, in_window, pick, shingles
@@ -62,6 +62,7 @@ from bawue.types import (
     VgIdent,
     Vorgang,
     Vorgangstyp,
+    Zusammenfassungstupel,
     canonicalize_organisation,
     is_verfassungsaendernd,
     none_if_blank,
@@ -170,6 +171,9 @@ def _vorgang_fingerprint(raw: RawVorgang, entwuerfe: list[str] | None = None) ->
         payload.append("tagesordnungspunkt")
     if entwuerfe:
         payload.append(["entwuerfe", *entwuerfe])
+    # Rebuild cached Vorgänge once, so they send their Kurzreferat (DD-080).
+    if raw.get("Kurzreferat", "").strip():
+        payload.append("kurzreferat")
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 
@@ -526,6 +530,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         detail_url = raw.get("detail_url")
 
         vorgang_titel = todo_if_blank(titel)
+        kurzreferat = " ".join(raw.get("Kurzreferat", "").split())
         kurztitel = vorgang_titel
         ressort = UNSET
         if self._llm_enabled and self._llm is not None:
@@ -568,10 +573,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
             sachgebiete=map_sachgebiete(raw.get("Sachgebiet")) or UNSET,
             # PARLIS' curated Deskriptoren (issue #33, DD-060).
             schlagworte=map_schlagworte(raw.get("Deskriptoren")) or UNSET,
-            # Initiating documents only: a protocol's summary describes the debate (DD-055).
-            zusammenfassung=vorgang_zusammenfassung(
-                d for s in stationen if s.typ in _INITIATIV_TYPEN for d in s.dokumente
-            ),
+            # The Landtag's own Kurzreferat, not a copy of a document summary (issue #161, DD-080).
+            zusammenfassung=[Zusammenfassungstupel(typ="full-extern", inhalt=kurzreferat)] if kurzreferat else UNSET,
         )
 
     def _entwurf_kandidaten(self, raw: RawVorgang) -> list[str]:

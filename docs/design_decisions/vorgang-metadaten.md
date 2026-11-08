@@ -91,3 +91,22 @@ anderen wörtlich (strikt blieben 32 von 986). Die LLM-Schlagworte je Dokument b
 Umschreibungen. Neue Begriffe kann Fuzzy falsch ziehen („Schulden" → „Schulen"); ein höherer
 Schwellwert hilft nicht. Das Backend (v0.3.3) speichert Schlagworte nur beim Anlegen, beim
 Merge fallen sie still weg, und es entfernt nie einen Begriff.
+
+<a id="dd-080"></a>
+## DD-080: `Vorgang.zusammenfassung` aus dem PARLIS-Kurzreferat
+
+**Kontext:** Spec 0.2.8 bringt `Vorgang.zusammenfassung` für einen Text des Parlaments über
+den ganzen Vorgang ([parlamentszusammenfasser#55](https://codeberg.org/PaZuFa/parlamentszusammenfasser/issues/55)).
+Eine Kopie der Initiativ-Zusammenfassung wiederholte nur, was die Website schon über den
+Stationen zeigt (GitHub #161). PARLIS führt je Vorgang ein Kurzreferat (`WMV43`), einen Satz
+der Landtagsdokumentation.
+
+**Entscheidung:**
+1. Das Kurzreferat geht als `full-extern` hinaus, Leerraum zusammengefasst. Ohne Kurzreferat
+   bleibt das Feld leer, ebenso im Beteiligungsportal. Kein LLM.
+2. Der Marker `kurzreferat` im `vg2:`-Fingerprint baut gecachte Vorgänge mit Kurzreferat einmal
+   neu (DD-052).
+
+**Konsequenz:** WP 17/18: 112 von 193 Vorgängen (ohne Einzelpläne) haben eins, über alle Jahre
+und Stände verteilt. Das Backend ersetzt beim Merge je `typ`, löscht aber nie einen: Entfällt
+das Kurzreferat in PARLIS, bleibt das alte stehen. Die Website liest das Feld noch nicht.

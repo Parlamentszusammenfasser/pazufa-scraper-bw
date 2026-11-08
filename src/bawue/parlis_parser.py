@@ -39,6 +39,7 @@ _FIELD_SACHGEBIET = "WMV32"
 # Structured Deskriptoren; WMV33 has the same terms as one string, truncated for long lists.
 _FIELD_DESKRIPTOREN = "EWBV34"
 _FIELD_FUNDSTELLEN = "WMV35"
+_FIELD_KURZREFERAT = "WMV43"
 
 BASE_URL = "https://parlis.landtag-bw.de/parlis/"
 
@@ -139,6 +140,10 @@ def _json_comment_to_raw_vorgang(data: dict) -> RawVorgang | None:
     deskriptoren = _deskriptoren(data)
     if deskriptoren:
         result["Deskriptoren"] = deskriptoren
+
+    kurzreferat = _safe_main(data, _FIELD_KURZREFERAT)
+    if kurzreferat:
+        result["Kurzreferat"] = kurzreferat
 
     wmv35 = _safe_main(data, _FIELD_FUNDSTELLEN)
     if wmv35:

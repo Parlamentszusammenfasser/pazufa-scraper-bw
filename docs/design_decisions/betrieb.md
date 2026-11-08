@@ -52,11 +52,12 @@ als HTTP 422 auf.
    corelib-Keys verbieten `:` — alle BW-Keys (`vg2:`, `sz:`, `llm-semantics:` …) müssten
    umbenannt werden, der Cache samt bezahlter LLM-Ergebnisse liefe leer.
 5. **v0.3.2** / Spec 0.2.8 (GitHub #161; Prod kennt die neuen Werte seit spätestens 2026-11-04):
-   - `Vorgang.zusammenfassung` wird gesendet (DD-056).
+   - `Vorgang.zusammenfassung` kommt aus dem PARLIS-Kurzreferat (DD-080).
    - `Station.meta_tiebreaker` bleibt ungenutzt: Das Backend schreibt ihn nur beim Anlegen
-     einer Station, nicht beim Merge. Bestehende Stationen behielten `NULL`, Stationen ohne
-     Stunden-Bump (`enforce_total_ordering`) lägen dann gleichauf, und der Track-Check des
-     gemergten Vorgangs gäbe HTTP 400. Zudem änderte das neue `zp_start` die
+     einer Station, nicht beim Merge. Der Track-Check sortiert schon nach
+     `(zp_start, meta_tiebreaker)`, bestehende Stationen behielten aber `NULL`: Ohne Stunden-Bump
+     (`enforce_total_ordering`) lägen sie gleichauf, die Reihenfolge käme aus der Datenbank, und
+     der Track-Check des gemergten Vorgangs kann HTTP 400 geben. Zudem änderte das neue `zp_start` die
      Stations-`api_id` (DD-028). Erst mit Backend-Fix und Migration.
    - `gg-land-parl-haushalt` erst mit einem BW-Track dafür (DD-077).
    - `parl-anhoerung`, `beschlussprotokoll`, `inhaltsprotokoll` gibt es in BW nicht (DD-057).

@@ -300,3 +300,4 @@ class RawVorgang(TypedDict, total=False):
     Vorgangstyp: str
     Initiative: str
     Deskriptoren: list[str]
+    Kurzreferat: str

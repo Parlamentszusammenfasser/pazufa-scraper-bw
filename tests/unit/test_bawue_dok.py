@@ -7,7 +7,6 @@ import re
 import ssl
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -33,7 +32,6 @@ from bawue.bawue_dok import (
     extract_semantics,
     narrow_to_relevant_section,
     sanitize_llm_text,
-    vorgang_zusammenfassung,
     zusammenfassung_text,
 )
 from bawue.pdf_text import (
@@ -2498,36 +2496,3 @@ class TestIssue74RealProtocol:
         assert agenda_text(self.TEXT, 31, list(range(287, 306)))[1] == list(range(31, 50))
         assert agenda_text(self.TEXT, 31, list(range(287, 307))) is None
         assert agenda_text(self.TEXT, 60, list(range(287, 292))) is None
-
-
-class TestIssue161VorgangZusammenfassung:
-    """GitHub issue #161: the Vorgang reuses the first AI summary of its documents, all parts."""
-
-    KI: ClassVar[list[Zusammenfassungstupel]] = [
-        Zusammenfassungstupel(typ="full-llm", inhalt="Das Land wird klimaneutral."),
-        Zusammenfassungstupel(typ="kosten-llm", inhalt="Keine."),
-    ]
-
-    @staticmethod
-    def _dok(zusammenfassung) -> Dokument:
-        dok = _make_plain_dokument(typ=Doktyp.ENTWURF)
-        dok.zusammenfassung = zusammenfassung
-        return dok
-
-    @pytest.mark.parametrize(
-        ("summaries", "expected"),
-        [
-            ([], UNSET),
-            ([UNSET, None], UNSET),
-            # A part without full-llm (the Beteiligungsfrist alone) is no summary.
-            ([[Zusammenfassungstupel(typ="beteiligungsfrist-extern", inhalt="Frist")]], UNSET),
-            ([UNSET, KI, [KI[0]]], KI),
-        ],
-        ids=["no-documents", "no-summary", "frist-only", "first-summary-with-parts"],
-    )
-    def test_first_summarised_document(self, summaries, expected):
-        dokumente = [self._dok(z) for z in summaries]
-        result = vorgang_zusammenfassung(dokumente)
-        assert result == expected
-        if dokumente and result is not UNSET:
-            assert result is not dokumente[1].zusammenfassung  # a copy, not the document's list
