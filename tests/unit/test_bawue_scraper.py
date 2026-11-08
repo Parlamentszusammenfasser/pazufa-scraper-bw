@@ -4651,6 +4651,14 @@ class TestIssue98OneTimeRebuild:
         assert _vorgang_fingerprint(raw) != self._dd052_fingerprint(raw)
 
 
+class TestIssue179OneTimeRebuild:
+    """Issue #179: every cached Vorgang re-runs its document summaries once, for the money format."""
+
+    def test_plain_vorgang_gets_a_new_fingerprint(self):
+        raw = _make_raw_vorgang("V-1", fundstellen=[_GBL_GESETZENTWURF])
+        assert _vorgang_fingerprint(raw) != TestIssue98OneTimeRebuild._dd052_fingerprint(raw)
+
+
 class TestPlaceholderHash:
     """DD-048: an unreadable document must still carry a unique, valid hash.
 
@@ -4856,13 +4864,14 @@ class TestIssue161OneTimeRebuild:
 
     @staticmethod
     def _before(raw):
-        """_vorgang_fingerprint as on main before issue #161, for a Vorgang without draft candidates."""
+        """_vorgang_fingerprint without the kurzreferat marker, for a Vorgang without draft candidates."""
         fundstellen = sorted([f.get("raw", ""), f.get("pdf_url") or ""] for f in raw["fundstellen_parsed"])
         payload = [raw.get("Aktueller Stand", ""), fundstellen]
         if any(f.get("gesetzblatt_nr") for f in raw["fundstellen_parsed"]):
             payload.append("postparl-kraft")
         if any(f.get("druckseiten") for f in raw["fundstellen_parsed"]):
             payload.append("tagesordnungspunkt")
+        payload.append("zahlenformat")
         return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
     @pytest.mark.parametrize(
@@ -5126,11 +5135,12 @@ class TestIssue74OneTimeRebuild:
 
     @staticmethod
     def _before(raw):
-        """_vorgang_fingerprint as on main before issue #74."""
+        """_vorgang_fingerprint without the tagesordnungspunkt marker, for a Vorgang without Kurzreferat."""
         fundstellen = sorted([f.get("raw", ""), f.get("pdf_url") or ""] for f in raw["fundstellen_parsed"])
         payload = [raw.get("Aktueller Stand", ""), fundstellen]
         if any(f.get("gesetzblatt_nr") for f in raw["fundstellen_parsed"]):
             payload.append("postparl-kraft")
+        payload.append("zahlenformat")
         return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
     def test_vorgang_with_protocol_pages_gets_a_new_fingerprint(self):

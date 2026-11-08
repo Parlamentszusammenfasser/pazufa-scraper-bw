@@ -441,6 +441,15 @@ def _print_beteiligung_summary(
 def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungDetail) -> str:
     """What shows progress on the portal (issue #104): status, title, ministry, PDFs, deadline (#148)."""
     pdfs = sorted([link["url"], link["title"]] for link in detail.pdf_links)
-    # One-time rebuilds fill the registers for cached Vorgänge: "fristen" (DD-076), "entwuerfe" (DD-079).
-    payload = [process.status, detail.title, detail.ministry, pdfs, detail.comment_deadline, "fristen", "entwuerfe"]
+    # One-time rebuilds: registers "fristen" (DD-076), "entwuerfe" (DD-079); money format (issue #179).
+    payload = [
+        process.status,
+        detail.title,
+        detail.ministry,
+        pdfs,
+        detail.comment_deadline,
+        "fristen",
+        "entwuerfe",
+        "zahlenformat",
+    ]
     return sha256(json.dumps(payload, ensure_ascii=False, default=str).encode()).hexdigest()
