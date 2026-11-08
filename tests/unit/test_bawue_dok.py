@@ -17,6 +17,7 @@ from bawue.bawue_dok import (
     BODY_PROMPT_ENTWURF,
     BODY_PROMPT_REDEPROTOKOLL,
     BODY_PROMPT_REDEPROTOKOLL_TOP,
+    DOK_SYSTEM_PROMPT,
     ZUSAMMENFASSUNG_TEILE,
     EnrichmentResult,
     LLMMetrics,
@@ -2220,29 +2221,24 @@ class TestIssue42PartialSummaries:
         assert "Keine Aufzählung der Artikelstruktur" in prompt
         assert "Die Zusammenfassung ist immer zu füllen." in prompt
 
-    @pytest.mark.parametrize(
-        ("doktyp", "fingerprint"),
-        [
-            (Doktyp.ENTWURF, "46d34e16fc98edffbffcbe28aa0223a397b04544f8e0bc9861cce955b207e5a1"),
-            (Doktyp.PREPARL_ENTWURF, "46d34e16fc98edffbffcbe28aa0223a397b04544f8e0bc9861cce955b207e5a1"),
-            (Doktyp.BESCHLUSSEMPF, "27d1504f83e7e9cc2e801b93afa8ebcbd239f6fafa0b4d4da5fe7b7947a5680c"),
-        ],
-    )
-    def test_section_prompts_fingerprint_is_pinned(self, doktyp, fingerprint):
-        # Re-pin only on a deliberate prompt change: it re-summarises every
-        # document of these doktypes once (DD-056).
-        assert _prompt_fingerprint(doktyp, drucksnr="17/1", titel="T") == fingerprint
+    def test_system_prompt_sets_one_money_format_issue_179(self):
+        # Drucksache 18/700 mixed "1.322.962.200 Euro", "1,3229 Milliarden" and "491.6 Tsd.".
+        assert "1,32 Mrd. Euro statt 1.322.962.200 Euro" in DOK_SYSTEM_PROMPT
 
     @pytest.mark.parametrize(
         ("doktyp", "fingerprint"),
         [
-            (Doktyp.STELLUNGNAHME, "a8e05f21f5348e8db35ff22b09bcc4aaefca779a48d35afc96e42c500fd8bb2a"),
-            (Doktyp.REDEPROTOKOLL, "ebd3db4b183641dc7c57985b6c9d039204fd42d93c1fa44a70e5d1fde092ada4"),
-            (Doktyp.SONSTIG, "73a906dc649ce1c1a7e1a0acb8fabc94030ac2319f0b236bbb19c712d529d4d1"),  # GENERIC
+            (Doktyp.ENTWURF, "b2683404c5a8b0c2962f233e93b35fe2865b940f47ef44f01513334864f799b1"),
+            (Doktyp.PREPARL_ENTWURF, "b2683404c5a8b0c2962f233e93b35fe2865b940f47ef44f01513334864f799b1"),
+            (Doktyp.BESCHLUSSEMPF, "a44597d89cbfa8d625f22641888410a5c5326a2e0e2d01755c996abe8f47ce2c"),
+            (Doktyp.STELLUNGNAHME, "6e85129415c25d0bfeafae44b99bef9b51b03a68c8187032d362b41aca3173fa"),
+            (Doktyp.REDEPROTOKOLL, "5eb0afa725b97731c30505479ea60ebd3244d87c8cfeb5903ce30e0048b3907a"),
+            (Doktyp.SONSTIG, "cfe4f0cfceec6e7ac0ca8270125e3b0d613d01e0152b29402a8c91f603b706da"),  # GENERIC
         ],
     )
-    def test_other_doktypes_keep_their_cache_fingerprint(self, doktyp, fingerprint):
-        # Values from main before DD-056: their llm-semantics: entries must stay valid.
+    def test_prompt_fingerprint_is_pinned(self, doktyp, fingerprint):
+        # Re-pin only on a deliberate prompt change: it invalidates the doktype's
+        # llm-semantics: entries (DD-056, issue #179).
         assert _prompt_fingerprint(doktyp, drucksnr="17/1", titel="T") == fingerprint
 
     @pytest.mark.asyncio
