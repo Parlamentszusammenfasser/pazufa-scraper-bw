@@ -181,6 +181,9 @@ def _vorgang_fingerprint(raw: RawVorgang, entwuerfe: list[str] | None = None) ->
     # merges initiatoren and autoren as a union, so the old names stay otherwise (#219, #220).
     # `-2`: the first marker ran before the delete, so it was used up.
     payload.append("landesregierung-bw-2")
+    # Rebuild cached budgets once, so they switch to gg-land-parl-haushalt (DD-077).
+    if raw.get("Vorgangstyp") == _HAUSHALT_VORGANGSTYP:
+        payload.append("haushalt")
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 
