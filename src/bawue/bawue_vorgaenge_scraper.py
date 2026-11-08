@@ -32,7 +32,7 @@ from bawue.gesetzblatt_lookup import GesetzblattDateLookup, GesetzblattUnavailab
 from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.parlis_client import ParlisClient
 from bawue.parlis_parser import vorgang_url
-from bawue.pdf_text import read_pdf
+from bawue.pdf_text import PdfNotAvailableError, read_pdf
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
@@ -636,11 +636,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if not slugs:
             return None
         drucksache = await self._drucksache_shingles(stationen)
-        for slug in slugs:
-            if slug not in self._entwurf_shingles:  # once per cycle
-                urls = [pdf["url"] for pdf in self._entwuerfe[slug]["pdfs"]]
-                self._entwurf_shingles[slug] = await self._pdf_shingles(urls)
-        entwuerfe = {slug: self._entwurf_shingles[slug] for slug in slugs}
+        if drucksache is not None:
+            for slug in slugs:
+                if slug not in self._entwurf_shingles:  # once per cycle
+                    urls = [pdf["url"] for pdf in self._entwuerfe[slug]["pdfs"]]
+                    self._entwurf_shingles[slug] = await self._pdf_shingles(urls, gone_is_empty=True)
+        entwuerfe = {slug: self._entwurf_shingles.get(slug) for slug in slugs}
         if drucksache is None or None in entwuerfe.values():
             # Unread is not "no draft": deciding now would keep the bill apart for good.
             self._retry_next_cycle.add(vorgang_id)
@@ -658,12 +659,17 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return shingles(dok.volltext)
         return await self._pdf_shingles([dok.link])
 
-    async def _pdf_shingles(self, urls: list[str]) -> frozenset[int] | None:
-        try:
-            return frozenset().union(*[shingles(await read_pdf(self.session, url)) for url in urls])
-        except Exception as exc:
-            logger.warning("Reading %s for the draft match failed: %s", urls, type(exc).__name__)
-            return None
+    async def _pdf_shingles(self, urls: list[str], *, gone_is_empty: bool = False) -> frozenset[int] | None:
+        """None if a PDF is unread; *gone_is_empty*: a 404 adds nothing (a draft the portal removed)."""
+        result: frozenset[int] = frozenset()
+        for url in urls:
+            try:
+                result |= shingles(await read_pdf(self.session, url))
+            except Exception as exc:
+                logger.warning("Reading %s for the draft match failed: %r", url, exc)
+                if not (gone_is_empty and isinstance(exc, PdfNotAvailableError) and exc.status == 404):
+                    return None
+        return result
 
     async def _entwurf_station(self, entwurf: dict) -> Station:
         """The draft's preparl-regent station as the Beteiligung scraper uploaded it (DD-079)."""

@@ -19,6 +19,7 @@ from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, _print_vorgaeng
 from bawue.beteiligung_client import BASE_URL
 from bawue.beteiligung_parser import parse_process_detail
 from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY
+from bawue.pdf_text import PdfNotAvailableError
 from bawue.types import UNSET, Doktyp, Stationstyp, Vorgang
 from tests.factories import make_scraper
 from tests.unit.test_bawue_scraper import _InMemoryCache, _make_raw_vorgang
@@ -135,9 +136,15 @@ def _pdfs(*pairs: Pair, entwurf_text: str | None = None) -> dict[str, str]:
     return texts
 
 
-async def _build(scraper, raw, pdfs: dict[str, str], *, uploaded: bool = False):
+async def _build(scraper, raw, pdfs: dict[str, str | Exception], *, uploaded: bool = False):
     """Build the bill as item_extractor does; `uploaded`: the backend already has it."""
-    read = AsyncMock(side_effect=lambda _session, url: pdfs[url])
+
+    async def _read(_session, url):
+        if isinstance(text := pdfs[url], Exception):
+            raise text
+        return text
+
+    read = AsyncMock(side_effect=_read)
     with (
         patch("bawue.bawue_vorgaenge_scraper.read_pdf", read),
         patch("bawue.bawue_vorgaenge_scraper.vorgang_exists", return_value=uploaded) as exists,
@@ -360,26 +367,48 @@ async def test_draft_taken_over_by_another_bill_is_not_a_candidate():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("missing", ["drucksache-down", "draft-down", "drucksache-not-published"])
+@pytest.mark.parametrize("missing", ["drucksache-not-yet", "drucksache-down", "draft-down", "drucksache-unlisted"])
 async def test_unread_pdf_retries_next_cycle(missing):
     """Uncached: a bill with a candidate must not settle on 'no draft' because a PDF was missing."""
     cache = _InMemoryCache()
     regent = await _upload_draft(cache, BVANP)
-    pdfs = _pdfs(BVANP)
+    entwurf_pdf = regent.stationen[0].dokumente[0].link
+    pdfs: dict[str, str | Exception] = {**_pdfs(BVANP)}
     raw = _raw(BVANP)
-    if missing == "drucksache-down":
-        del pdfs[BVANP.drucksache_pdf]
+    if missing == "drucksache-not-yet":
+        pdfs[BVANP.drucksache_pdf] = PdfNotAvailableError(404, BVANP.drucksache_pdf)
+    elif missing == "drucksache-down":
+        pdfs[BVANP.drucksache_pdf] = TimeoutError()
     elif missing == "draft-down":
-        del pdfs[regent.stationen[0].dokumente[0].link]
+        pdfs[entwurf_pdf] = PdfNotAvailableError(503, entwurf_pdf)
     else:
         raw["fundstellen_parsed"][0]["pdf_url"] = ""
     scraper = _parlis(cache)
 
-    parlis, _, _ = await _build(scraper, raw, pdfs)
+    parlis, read, _ = await _build(scraper, raw, pdfs)
 
     assert parlis.api_id == _own_api_id(BVANP)
     assert BVANP.vid in scraper._retry_next_cycle
     assert _uebernahmen(cache) == {}
+    if missing != "draft-down":  # without the bill's text no draft can be decided, so none is read
+        assert entwurf_pdf not in [c.args[1] for c in read.call_args_list]
+
+
+@pytest.mark.asyncio
+async def test_draft_the_portal_removed_is_no_candidate():
+    """A 404 draft would block every bill in its window for a year; the bill's own draft still wins."""
+    cache = _InMemoryCache()
+    gone = await _upload_draft(cache, BVANP)
+    regent = await _upload_draft(cache, HBEGLG)
+    pdfs: dict[str, str | Exception] = {**_pdfs(BVANP, HBEGLG)}
+    gone_pdf = gone.stationen[0].dokumente[0].link
+    pdfs[gone_pdf] = PdfNotAvailableError(404, gone_pdf)
+    scraper = _parlis(cache)
+
+    parlis, _, _ = await _build(scraper, _raw(HBEGLG), pdfs)
+
+    assert parlis.api_id == regent.api_id
+    assert HBEGLG.vid not in scraper._retry_next_cycle
 
 
 # -- Beteiligung side -----------------------------------------------------------------
