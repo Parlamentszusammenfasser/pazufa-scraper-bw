@@ -575,8 +575,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
     def _entwurf_kandidaten(self, raw: RawVorgang) -> list[str]:
         """Registered drafts a Landesregierung bill may have grown from (DD-079)."""
+        if not self._entwuerfe or map_vorgangstyp(raw.get("Vorgangstyp", "")) != Vorgangstyp.GG_LAND_PARL:
+            return []
         regbsl = _regbsl_datum(raw)
-        if regbsl is None or map_vorgangstyp(raw.get("Vorgangstyp", "")) != Vorgangstyp.GG_LAND_PARL:
+        if regbsl is None:
             return []
         return sorted(
             slug
@@ -1079,6 +1081,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
         raw_text = fund.get("raw", "")
 
         mapping_text = station_typ_str or raw_text
+        if not station_typ_str and raw_text:
+            logger.warning(
+                "Fundstelle station_typ not extracted by regex, using raw text fallback: '%s'",
+                raw_text[:80],
+            )
         station_typ = _map_fundstelle_stationstyp(station_typ_str, raw_text, initiative)
 
         # The document keeps the PARLIS date as its `zp_referenz` (for a Gesetzblatt: the Ausfertigung),
@@ -1539,12 +1546,6 @@ def _map_fundstelle_stationstyp(station_typ_str: str, raw_text: str, initiative:
     # Fallback: when the regex-based station_typ extraction fails (e.g. single-space
     # separator in the Fundstelle text), use the raw label for enum mapping.
     # map_stationstyp does substring matching, so it can find the type in the raw text.
-    if not station_typ_str and raw_text:
-        logger.warning(
-            "Fundstelle station_typ not extracted by regex, using raw text fallback: '%s'",
-            raw_text[:80],
-        )
-
     station_typ = map_stationstyp(station_typ_str or raw_label, initiator=initiative)
 
     # Cross-check: the parser can truncate multi-word types at internal

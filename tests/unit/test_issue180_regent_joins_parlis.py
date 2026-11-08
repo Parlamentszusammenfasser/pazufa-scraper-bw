@@ -7,6 +7,7 @@ the backend already has, adds the draft's station to it.
 
 import gzip
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -495,15 +496,21 @@ async def _fingerprint(cache, raw: dict) -> str:
 
 
 @pytest.mark.asyncio
-async def test_a_draft_in_the_window_changes_the_bills_fingerprint_once():
-    before = await _fingerprint(_InMemoryCache(), _raw(BVANP))
+@pytest.mark.parametrize("label", ["Gesetzentwurf", ""], ids=["parsed", "unparsed"])
+async def test_a_draft_in_the_window_changes_the_bills_fingerprint_once(label, caplog):
+    """Unparsed: the raw text decides (DD-011), quietly, as listing runs for every Vorgang every cycle."""
+    raw = _raw(BVANP)
+    raw["fundstellen_parsed"][0]["station_typ"] = label
+    before = await _fingerprint(_InMemoryCache(), raw)
     cache = _InMemoryCache()
     await _upload_draft(cache, BVANP)
-    registered = await _fingerprint(cache, _raw(BVANP))
+    caplog.clear()
+    registered = await _fingerprint(cache, raw)
     cache.store_raw(UEBERNAHMEN_KEY, json.dumps({BVANP.slug: {"vorgnr": BVANP.vid, "api_id": "x"}}))
 
     assert registered != before
-    assert await _fingerprint(cache, _raw(BVANP)) == registered
+    assert await _fingerprint(cache, raw) == registered
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
 
 @pytest.mark.asyncio
