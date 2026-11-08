@@ -95,8 +95,12 @@ Staatshaushaltsgesetzes. Bereits hochgeladene Einzelplan-Vorgänge (WP 17: 51) l
 Admin, und zwar **vor** einem Neulauf von WP 17: Beim Station-Merge verknüpft das Backend nur
 neu eingefügte Dokumente, die der Einzelpläne blieben sonst ohne Verknüpfung. Die alte
 `parl-ausschber` findet das Backend über die geteilte Beschlussempfehlung und aktualisiert sie.
-Der Typ bleibt `gg-land-parl`, bis das Backend einen BW-Track für `gg-land-parl-haushalt` hat
-([parlamentszusammenfasser#92](https://codeberg.org/PaZuFa/parlamentszusammenfasser/pulls/92)).
+Jeder Haushaltsgesetzgebung-Vorgang, auch Begleitgesetz und Nachtrag, hat den Typ
+`gg-land-parl-haushalt` (BW-Track wie `gg-land-parl`, Tracks ab v0.1.2). Der Typ steht nicht im
+`vg2:`-Fingerprint: Gespeicherte Vorgänge wechseln erst beim nächsten Upload, sofort nur nach
+Löschen ihres `vg2:`. Das Backend muss den Typ in die `vgtyp_class` von `gg-land-parl` legen,
+sonst findet der Merge keinen Kandidaten: HTTP 500 bei jedem erneuten Upload und beim Typwechsel,
+keine Übernahme eines Portal-Entwurfs (DD-079).
 
 <a id="dd-079"></a>
 ## DD-079: Referentenentwurf und Gesetzentwurf sind ein Vorgang
@@ -109,7 +113,7 @@ Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legt
 1. Nach jedem Upload legt der Beteiligungs-Scraper den Entwurf in `beteiligung-entwuerfe` ab
    (`api_id`, Wahlperiode, Portal-Link, Ministerium, PDFs mit Datum). Scheitert das, bleibt er
    ungecacht. Der Marker `entwuerfe` im Fingerprint füllt das Register einmal.
-2. Kandidaten eines Gesetzentwurfs der Landesregierung (`gg-land-parl`): Entwürfe derselben
+2. Kandidaten eines Gesetzentwurfs der Landesregierung (`gg-land-parl`, `-haushalt`): Entwürfe derselben
    Wahlperiode aus dem Jahr vor der Drucksache, nicht am selben Tag (`R` vor `S`). Sie gehören zum
    `vg2:`-Fingerprint (DD-052): Ein später registrierter Entwurf baut den Vorgang einmal neu.
    Verglichen werden nur die noch nicht übernommenen.
