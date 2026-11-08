@@ -97,9 +97,10 @@ neu eingefügte Dokumente, die der Einzelpläne blieben sonst ohne Verknüpfung.
 `parl-ausschber` findet das Backend über die geteilte Beschlussempfehlung und aktualisiert sie.
 Jeder Haushaltsgesetzgebung-Vorgang, auch Begleitgesetz und Nachtrag, hat den Typ
 `gg-land-parl-haushalt` (BW-Track wie `gg-land-parl`, Tracks ab v0.1.2). Ein Marker im
-`vg2:`-Fingerprint baut gespeicherte einmal neu, auch abgeschlossene. Das Backend muss den Typ in die `vgtyp_class` von `gg-land-parl` legen,
-sonst findet der Merge keinen Kandidaten: HTTP 500 bei jedem erneuten Upload und beim Typwechsel,
-keine Übernahme eines Portal-Entwurfs (DD-079).
+`vg2:`-Fingerprint baut gespeicherte einmal neu, auch abgeschlossene. Voraussetzung: Das Backend
+legt den Typ in die `vgtyp_class` von `gg-land-parl`
+([pazufa-backend#227](https://codeberg.org/PaZuFa/pazufa-backend/issues/227)), sonst scheitern
+erneute Uploads, der Typwechsel und die Übernahme eines Portal-Entwurfs (DD-079) mit HTTP 500.
 
 <a id="dd-079"></a>
 ## DD-079: Referentenentwurf und Gesetzentwurf sind ein Vorgang
