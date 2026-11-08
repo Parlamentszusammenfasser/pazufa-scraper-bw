@@ -4856,7 +4856,7 @@ class TestIssue161OneTimeRebuild:
 
     @staticmethod
     def _before(raw):
-        """_vorgang_fingerprint as on main before issue #161."""
+        """_vorgang_fingerprint as on main before issue #161, for a Vorgang without draft candidates."""
         fundstellen = sorted([f.get("raw", ""), f.get("pdf_url") or ""] for f in raw["fundstellen_parsed"])
         payload = [raw.get("Aktueller Stand", ""), fundstellen]
         if any(f.get("gesetzblatt_nr") for f in raw["fundstellen_parsed"]):
