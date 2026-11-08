@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 
-from bawue.api import BawueApiError, get_vorgaenge, put_kalender, put_vorgang
+from bawue.api import BawueApiError, get_vorgaenge, put_kalender, put_vorgang, vorgang_exists
 from bawue.types import Parlament
 
 
@@ -38,6 +38,23 @@ class TestPutVorgang:
         with patch("bawue.api._vorgang_put.sync_detailed", autospec=True, return_value=_resp(201)) as mock_put:
             put_vorgang(client, scraper_id, item)
         mock_put.assert_called_once_with(client=client, body=item, x_scraper_id=str(scraper_id))
+
+
+class TestVorgangExists:
+    """DD-079: a bill the backend already has must keep its api_id."""
+
+    @pytest.mark.parametrize(("status", "exists"), [(200, True), (404, False)])
+    def test_status(self, status, exists):
+        with patch("bawue.api._vorgang_get_by_id.sync_detailed", return_value=_resp(status)):
+            assert vorgang_exists(MagicMock(), str(uuid4())) is exists
+
+    @pytest.mark.parametrize("status", [400, 500])
+    def test_an_error_is_no_answer(self, status):
+        with (
+            patch("bawue.api._vorgang_get_by_id.sync_detailed", return_value=_resp(status)),
+            pytest.raises(BawueApiError),
+        ):
+            vorgang_exists(MagicMock(), str(uuid4()))
 
 
 class TestPutKalender:

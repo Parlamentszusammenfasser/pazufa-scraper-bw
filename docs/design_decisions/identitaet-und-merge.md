@@ -98,6 +98,46 @@ neu eingefügte Dokumente, die der Einzelpläne blieben sonst ohne Verknüpfung.
 Der Typ bleibt `gg-land-parl`, bis das Backend einen BW-Track für `gg-land-parl-haushalt` hat
 ([parlamentszusammenfasser#92](https://codeberg.org/PaZuFa/parlamentszusammenfasser/pulls/92)).
 
+<a id="dd-079"></a>
+## DD-079: Referentenentwurf und Gesetzentwurf sind ein Vorgang
+
+**Kontext:** Ein Entwurf vom Beteiligungsportal (`preparl-regent`, DD-007) und der spätere
+Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legte zwei Vorgänge an
+(Issue #180). Keine Quelle nennt die andere, und Titel ändern sich auf dem Weg.
+
+**Entscheidung:**
+1. Nach jedem Upload legt der Beteiligungs-Scraper den Entwurf in `beteiligung-entwuerfe` ab
+   (`api_id`, Wahlperiode, Portal-Link, Ministerium, PDFs mit Datum). Scheitert das, bleibt er
+   ungecacht. Der Marker `entwuerfe` im Fingerprint füllt das Register einmal.
+2. Kandidaten eines Gesetzentwurfs der Landesregierung (`gg-land-parl`): Entwürfe derselben
+   Wahlperiode aus dem Jahr vor der Drucksache, nicht am selben Tag (`R` vor `S`). Sie gehören zum
+   `vg2:`-Fingerprint (DD-052): Ein später registrierter Entwurf baut den Vorgang einmal neu.
+   Verglichen werden nur die noch nicht übernommenen.
+3. Der Text entscheidet: Mindestens 0,4 der Wort-5-Gramme des Entwurfs stehen in der Drucksache,
+   beim Zweitbesten weniger als 0,2 (WP 17/18: Paare 0,51 bis 0,96, fremde höchstens 0,16). Ist ein
+   PDF nicht lesbar, entscheidet der nächste Lauf; der Vorgang ist dann schon hochgeladen, also gilt
+   der zweite Weg in 4 (selten: in 8 Wochen Prod kein Fehlschlag). Ein vom Portal entferntes
+   Entwurfs-PDF (404) zählt als leer.
+4. Kennt das Backend den Vorgang noch nicht (`GET vorgang`), übernimmt er die `api_id` des
+   Entwurfs; das Backend führt beide zusammen und behält die `preparl-regent`-Station. Sonst
+   behält er seine `api_id` (zwei Kandidaten: `AmbiguousMatch`) und bekommt die Station mit
+   denselben Dokumenten; den Portal-Vorgang löscht ein Admin. Der Laufbericht (Mattermost) nennt
+   ihn in jedem Lauf, bis `GET vorgang` ihn nicht mehr findet.
+5. Die Entscheidung steht nur in `entwurf-uebernahmen`. Danach lädt der Beteiligungs-Scraper den
+   Entwurf nicht mehr hoch, geprüft auch direkt vor dem Upload: PARLIS schreibt den Vorgang, sonst
+   wechselten Titel und Kurztitel.
+
+**Verworfen:** Titelvergleich (WP 17: ein falsches Paar), gemeinsamer `vg_ident` (die Website
+zeigt `ids[0]`, Titel wechseln), Abgleich im Backend (träfe alle Länder).
+
+**Konsequenz:** Ein verpasster Treffer lässt zwei Vorgänge wie bisher. Ein falscher ist bei diesen
+Schwellen unwahrscheinlich, aber möglich; der Laufbericht nennt deshalb jede Übernahme mit Wert.
+Rückgängig, ohne den Entwurf: Vorgang löschen, im Eintrag `vorgnr` auf `-` setzen (sperrt den
+Entwurf) und `vg2:<vorgnr>` löschen. Geht Redis verloren, lädt der Beteiligungs-Scraper alle
+Entwürfe einmal neu: Ein übernommener zeigt kurz seinen Titel, ein gelöschter Portal-Vorgang kommt
+zurück und steht wieder im Laufbericht. Ministerium und Landesregierung sind nur bei Übernahme
+beide `initiatoren`. PDFs von Kandidaten werden einmal je Lauf gelesen.
+
 <a id="dd-043"></a>
 ## DD-043: Der `#page=N`-Anker gehört zur Dokumentidentität
 

@@ -54,13 +54,15 @@ vollständig vor.
    denselben stabilen IDs neu gebaut und hochgeladen.
 2. Gehasht wird, was Fortschritt anzeigt: je Fundstelle Rohtext + `pdf_url` (sortiert) und
    „Aktueller Stand". Dazu ein Marker `postparl-kraft`, wenn eine Fundstelle eine
-   Gesetzblatt-Nr. trägt: der einmalige Neubau gecachter Gesetze für DD-071.
+   Gesetzblatt-Nr. trägt: der einmalige Neubau gecachter Gesetze für DD-071. Bei einem
+   Gesetzentwurf der Landesregierung auch die Entwurf-Kandidaten aus dem Register des
+   Beteiligungs-Scrapers (Marker `entwuerfe` + Slugs, DD-079).
 3. Nicht gehasht: vom Parser abgeleitete Felder (sonst invalidiert jede Parser-Verbesserung
-   alles), die Reihenfolge, Titel/Initiative/Sachgebiet/Typ/Deskriptoren, Scraper-Output.
+   alles), die Reihenfolge, Titel/Initiative/Sachgebiet/Typ/Deskriptoren, sonst kein Scraper-Output.
 4. Ein Vorgang mit noch fehlendem PDF (Issue #66) oder künftiger Fundstelle (DD-068) wird
    nicht gecacht.
 5. **Beteiligungsportal** (Issue #104): `vg2:<slug>` hält den Fingerprint aus Status (Liste),
-   Titel, Ministerium, PDF-Links (URL + Titel), Kommentarfrist (DD-075) und Marker `fristen` (DD-076). Dafür wird die
+   Titel, Ministerium, PDF-Links (URL + Titel), Kommentarfrist (DD-075) sowie den Markern `fristen` (DD-076) und `entwuerfe` (DD-079). Dafür wird die
    Detailseite schon beim Listen gelesen, ein Request je Prozess und Lauf (derzeit ~6) —
    nur so fällt ein neues PDF auf. Scheitert der Abruf, gibt es
    keinen Fingerprint: kein Treffer, kein Cache-Eintrag.

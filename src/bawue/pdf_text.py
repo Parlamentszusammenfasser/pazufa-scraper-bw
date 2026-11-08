@@ -400,6 +400,15 @@ async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[
     return text, doc_hash
 
 
+async def read_pdf(session, url: str) -> str:
+    """A PDF's normalized volltext, as enrichment would store it."""
+    pdf_path = await download_pdf(session, url)
+    try:
+        return normalize_volltext((await extract_pdf_text(pdf_path))[0])
+    finally:
+        pdf_path.unlink(missing_ok=True)
+
+
 def pdf_sha1(pdf_path: Path) -> str:
     """SHA-1 of the PDF file: the backend cross-references documents by it (issue #41)."""
     with open(pdf_path, "rb") as f:

@@ -122,7 +122,8 @@ Dashed arrows: the pre-parliamentary stages are optional.
 - Caching: Redis `BawueCache`, no TTL; a Vorgang is skipped only while its PARLIS fingerprint is unchanged (DD-052),
   a Sitzungen date only while its events, Beteiligungsfristen and agenda are unchanged (DD-066, DD-070, DD-076)
 - Models: Generated from the OpenAPI spec by `pazufa-scraper-core` — no hand-written models
-- The PaZuFa backend handles deduplication/merging — the scraper does not need to
+- The PaZuFa backend merges Vorgänge on a shared `api_id` or `vg_ident` — the scraper only keeps them
+  stable, and gives a bill its draft's `api_id` (DD-079)
 
 ## 2. Dependencies
 
@@ -293,7 +294,7 @@ IDs. Items whose `Vorgangstyp` field doesn't match the enabled set are dropped d
 | Capability          | Provided by                                              |
 |---------------------|----------------------------------------------------------|
 | Scheduling          | Cloud Scheduler → Cloud Run Job; `bawue.__main__` runs one cycle and exits |
-| Redis caching       | `bawue.cache` — no TTL, `vg2:`/`sz:`/`llm-semantics:`/`drucks-hash:`/`beteiligungsfristen` keys (DD-052/066/076) |
+| Redis caching       | `bawue.cache` — no TTL, `vg2:`/`sz:`/`llm-semantics:`/`drucks-hash:`/`beteiligungsfristen`/`beteiligung-entwuerfe`/`entwurf-uebernahmen` keys (DD-052/066/076/079) |
 | API client          | `pazufa-scraper-core` httpx client + `bawue.upload_throttle` retry |
 | Models              | `pazufa-scraper-core` models generated from OpenAPI spec |
 | Document processing | Kreuzberg/OCR + LLM pipeline (`bawue.pdf_text`, `bawue.bawue_dok`) |
@@ -354,6 +355,8 @@ Subclass of `VorgangsScraper`. Searches PARLIS by Vorgangstyp, converts raw HTML
 Uses `_raw_cache` to bridge the listing/item phases. Configuration from `[bawue]` section.
 The station rules that need no scraper state (merging, ordering, stable `api_id`s) are plain functions
 in `stationen.py`.
+A Landesregierung bill takes over the `api_id` of the Beteiligung draft whose text its Drucksache
+contains, or gains the draft's station if the backend already has the bill (`entwurf_match.py`, DD-079).
 
 Only the Vorgangstypen listed under `enabled-vorgangstypen` in `config.toml` are scraped (default: `Gesetzgebung`,
 `Haushaltsgesetzgebung`, `Volksantrag`). These are the only types with full PaZuFa model support. Results with any
@@ -383,7 +386,8 @@ Overrides `send_result()` to use `Parlament.BW`. Uses `_events_by_date` to bridg
 
 Subclass of `VorgangsScraper`. Fetches the [Beteiligungsportal BW](https://beteiligungsportal.baden-wuerttemberg.de)
 LP index, filters to legislative content (pages with Entwurf PDFs), builds `Vorgang` with `preparl-regent` station.
-After an upload it registers the comment deadline for the calendar (`beteiligungsfristen`, DD-076).
+After an upload it registers the comment deadline for the calendar (`beteiligungsfristen`, DD-076) and the draft
+for the PARLIS scraper (`beteiligung-entwuerfe`, DD-079); a draft a PARLIS bill took over is not uploaded again.
 Configuration from `[beteiligung]` section.
 
 **Vorgang / Station mapping:**

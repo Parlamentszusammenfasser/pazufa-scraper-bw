@@ -11,6 +11,7 @@ import uuid
 from collections import Counter
 from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from hashlib import sha256
 from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
@@ -19,16 +20,19 @@ from zoneinfo import ZoneInfo
 import aiohttp
 import certifi
 
-from bawue.api import build_client
+from bawue.api import build_client, vorgang_exists
+from bawue.bawue_beteiligung_scraper import entwurf_station
 from bawue.bawue_dok import LLMMetrics, vorgang_zusammenfassung, zusammenfassung_text
-from bawue.cache import drucksache_hash_key
+from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY, RedisUnavailableError, drucksache_hash_key
 from bawue.config import BawueConfig
+from bawue.entwurf_match import containment, in_window, pick, shingles
 from bawue.enum_mapper import map_dokumententyp, map_sachgebiete, map_schlagworte, map_stationstyp, map_vorgangstyp
 from bawue.gesetzblatt_client import GesetzblattClient
 from bawue.gesetzblatt_lookup import GesetzblattDateLookup, GesetzblattUnavailable
 from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
 from bawue.parlis_client import ParlisClient
 from bawue.parlis_parser import vorgang_url
+from bawue.pdf_text import PdfNotAvailableError, read_pdf
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
@@ -57,6 +61,7 @@ from bawue.types import (
     Stationstyp,
     VgIdent,
     Vorgang,
+    Vorgangstyp,
     canonicalize_organisation,
     is_verfassungsaendernd,
     none_if_blank,
@@ -145,14 +150,15 @@ _MAX_MISSING_LINES = 20
 BERLIN_TZ = ZoneInfo("Europe/Berlin")
 
 
-def _vorgang_fingerprint(raw: RawVorgang) -> str:
+def _vorgang_fingerprint(raw: RawVorgang, entwuerfe: list[str] | None = None) -> str:
     """Fingerprint of the PARLIS data that signals progress on a Vorgang (issue #46, DD-052).
 
     A new Sitzung, Beschlussempfehlung or Gesetzblatt entry adds a Fundstelle, a
     published Protokoll adds its link, a decision changes "Aktueller Stand". Only
     that source data is hashed — never parser-derived fields, so improving the
     parser does not invalidate every cache entry — and the Fundstellen order is
-    ignored.
+    ignored. *entwuerfe* are the registered drafts the bill may have grown from: one
+    registered after the bill was built rebuilds it once (DD-079).
     """
     fundstellen = sorted([f.get("raw", ""), f.get("pdf_url") or ""] for f in raw.get("fundstellen_parsed", []))
     payload: list = [raw.get("Aktueller Stand", ""), fundstellen]
@@ -162,7 +168,32 @@ def _vorgang_fingerprint(raw: RawVorgang) -> str:
     # Rebuild cached Vorgänge once, so protocols are summarised per agenda item (DD-037).
     if any(f.get("druckseiten") for f in raw.get("fundstellen_parsed", [])):
         payload.append("tagesordnungspunkt")
+    if entwuerfe:
+        payload.append(["entwuerfe", *entwuerfe])
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
+
+
+def _initiative(raw: RawVorgang) -> str:
+    """PARLIS omits the Initiative for some Vorgangstypen (Haushalt): then the first Fundstelle's author (DD-009)."""
+    fundstellen = raw.get("fundstellen_parsed", [])
+    return raw.get("Initiative", "") or next((f["autor_text"] for f in fundstellen if f.get("autor_text")), "")
+
+
+def _regbsl_datum(raw: RawVorgang) -> date | None:
+    """Day of the Landesregierung's Gesetzentwurf (`preparl-regbsl`, DD-003), if the bill is one."""
+    initiative = _initiative(raw)
+    for fund in raw.get("fundstellen_parsed", []):
+        if _map_fundstelle_stationstyp(fund.get("station_typ", ""), fund.get("raw", ""), initiative) == (
+            Stationstyp.PREPARL_REGBSL
+        ):
+            zp_start = _parse_fundstelle_date(fund)
+            return zp_start.date() if zp_start else None
+    return None
+
+
+def _released(entwurf: dict) -> date:
+    """A registered draft's station date: its earliest PDF (DD-074)."""
+    return min(date.fromisoformat(pdf["datum"]) for pdf in entwurf["pdfs"])
 
 
 class BawueVorgaengeScraper(VorgangsScraper):
@@ -234,6 +265,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._parlis_errors: list[str] = []
         # Dropped Fundstellen per vorgnr, for the run summary (issue #5).
         self._dropped_fundstellen: dict[str, list[str]] = {}
+        # Beteiligung drafts as registered when the cycle starts, their 5-grams, and portal
+        # Vorgänge a bill could not take over, for an admin to delete (DD-079).
+        self._entwuerfe: dict[str, dict] = {}
+        self._entwurf_shingles: dict[str, frozenset[int] | None] = {}
+        self._entwurf_joins: list[str] = []
 
         # LLM document enrichment (optional, requires LLM_PROVIDER_KEY)
         llm_key = getattr(config, "llm_provider_key", None)
@@ -255,6 +291,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
         check_for_newer_wahlperiode(self._wahlperiode)
         start = time.monotonic()
         try:
+            # Before any await, so every bill of the cycle sees the same drafts (DD-079).
+            self._entwuerfe = json.loads(self.config.cache.get_raw(ENTWUERFE_KEY, "Entwürfe") or "{}")
             await super().run()
         finally:
             duration = time.monotonic() - start
@@ -273,6 +311,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 failed_items=self._failed_items,
                 parlis_errors=self._parlis_errors,
                 dropped_fundstellen=self._dropped_fundstellen,
+                entwurf_joins=self._entwurf_joins,
+                stale_entwuerfe=self._stale_entwuerfe(),
             )
             self.summary = ("Vorgänge", lines)
 
@@ -321,7 +361,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 continue
             if vid:
                 self._raw_cache[vid] = raw
-                self._fingerprints[vid] = _vorgang_fingerprint(raw)
+                self._fingerprints[vid] = _vorgang_fingerprint(raw, self._entwurf_kandidaten(raw))
                 vorgang_ids.append(vid)
 
         self._by_type[vorgangstyp] = self._by_type.get(vorgangstyp, 0) + len(vorgang_ids)
@@ -423,20 +463,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
         """
         vorgang_id = raw.get("vorgangs_id", "unknown")
         titel = raw.get("titel", "")
-        initiative = raw.get("Initiative", "")
+        initiative = _initiative(raw)
         vorgangstyp_str = raw.get("Vorgangstyp", "")
 
-        # Fallback: PARLIS omits Initiative for some Vorgangstypen (e.g. Haushaltsgesetzgebung).
-        # In that case, infer from the first Fundstelle's autor_text.
-        if not initiative:
-            fundstellen = raw.get("fundstellen_parsed", [])
-            for fund in fundstellen:
-                autor_text = fund.get("autor_text", "")
-                if autor_text:
-                    initiative = autor_text
-                    break
-
-        api_id = uuid5(NAMESPACE_URL, vorgang_id)
         typ = map_vorgangstyp(vorgangstyp_str)
         initiatoren = _parse_autoren(initiative)
 
@@ -446,6 +475,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # station building, when enrichment runs (issue #35).
         initiativ_vnr = _initiativ_drucksnr_from_fundstellen(fundstellen_parsed, initiative)
         stationen = await self._collect_stationen(fundstellen_parsed, initiative, vorgang_id, titel, initiativ_vnr)
+        api_id, portal = await self._entwurf(raw, vorgang_id, str(uuid5(NAMESPACE_URL, vorgang_id)), stationen)
 
         if fundstellen_parsed and not stationen:
             logger.warning(
@@ -523,7 +553,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             )
 
         return Vorgang(
-            api_id=str(api_id),
+            api_id=api_id,
             titel=vorgang_titel,
             kurztitel=kurztitel,
             typ=typ,
@@ -532,7 +562,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             initiatoren=initiatoren,
             stationen=stationen,
             ids=ids,
-            links=[detail_url] if detail_url else UNSET,
+            links=[link for link in (detail_url, portal) if link] or UNSET,
             ressort=ressort,
             # PARLIS' own Parlamentsspiegel subject field (issue #40, DD-058).
             sachgebiete=map_sachgebiete(raw.get("Sachgebiet")) or UNSET,
@@ -543,6 +573,156 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 d for s in stationen if s.typ in _INITIATIV_TYPEN for d in s.dokumente
             ),
         )
+
+    def _entwurf_kandidaten(self, raw: RawVorgang) -> list[str]:
+        """Registered drafts a Landesregierung bill may have grown from (DD-079)."""
+        if not self._entwuerfe or map_vorgangstyp(raw.get("Vorgangstyp", "")) != Vorgangstyp.GG_LAND_PARL:
+            return []
+        regbsl = _regbsl_datum(raw)
+        if regbsl is None:
+            return []
+        return sorted(
+            slug
+            for slug, entwurf in self._entwuerfe.items()
+            if entwurf["wahlperiode"] == self._wahlperiode and in_window(_released(entwurf), regbsl)
+        )
+
+    async def _entwurf(
+        self, raw: RawVorgang, vorgang_id: str, api_id: str, stationen: list[Station]
+    ) -> tuple[str, str | None]:
+        """The api_id to upload under and the portal page of the draft the bill grew from (DD-079).
+
+        A new bill takes over the draft's api_id, so the backend merges it into the draft's
+        Vorgang. A bill the backend already has keeps its own (two candidates would be an
+        AmbiguousMatch) and gains the draft's station; the portal Vorgang is then stale.
+        """
+        kandidaten = self._entwurf_kandidaten(raw)
+        if not kandidaten:
+            return api_id, None
+        uebernahmen = self._uebernahmen()
+        slug, upload_as = next(
+            ((s, uebernahmen[s]["api_id"]) for s in kandidaten if uebernahmen.get(s, {}).get("vorgnr") == vorgang_id),
+            (None, None),
+        )
+        if slug is None:
+            match = await self._match_entwurf(vorgang_id, stationen, [s for s in kandidaten if s not in uebernahmen])
+            if match is None:
+                return api_id, None
+            slug, score = match
+            upload_as = self._uebernehmen(slug, score, vorgang_id, api_id)
+            if upload_as is None:
+                return api_id, None
+        if upload_as == api_id:
+            stationen.insert(0, await self._entwurf_station(self._entwuerfe[slug]))
+        return upload_as, self._entwuerfe[slug]["portal"]
+
+    def _uebernahmen(self) -> dict[str, dict]:
+        return json.loads(self.config.cache.get_raw(UEBERNAHMEN_KEY, "Übernahmen") or "{}")
+
+    def _uebernehmen(self, slug: str, score: float, vorgang_id: str, api_id: str) -> str | None:
+        """Record the api_id the bill uploads under; None if another bill took the draft meanwhile.
+
+        No await between read and write, so two bills of one cycle cannot both take it.
+        """
+        uebernahmen = self._uebernahmen()
+        if slug in uebernahmen:
+            return None
+        entwurf_api_id = self._entwuerfe[slug]["api_id"]
+        upload_as = api_id if vorgang_exists(self._client, api_id) else entwurf_api_id
+        uebernahmen[slug] = {"vorgnr": vorgang_id, "api_id": upload_as}
+        if not self.config.cache.store_raw(UEBERNAHMEN_KEY, json.dumps(uebernahmen), "Übernahmen"):
+            self._retry_next_cycle.add(vorgang_id)
+        if upload_as == api_id:
+            logger.warning("%s gains draft %s; its portal Vorgang %s is stale", vorgang_id, slug, entwurf_api_id)
+        self._entwurf_joins.append(f"{vorgang_id} ← {slug} ({score:.2f})")
+        return upload_as
+
+    def _stale_entwuerfe(self) -> list[str]:
+        """Portal Vorgänge whose draft a bill holds as a station, until an admin deleted them.
+
+        Asked every run, so the report repeats until it is done (DD-079).
+        """
+        if not self._entwuerfe:
+            return []
+        try:
+            uebernahmen = self._uebernahmen()
+        except RedisUnavailableError:
+            return ["not checked: Redis unavailable"]
+        stale = []
+        for slug, entscheidung in uebernahmen.items():
+            entwurf_api_id = self._entwuerfe.get(slug, {}).get("api_id")
+            if entwurf_api_id in (None, entscheidung["api_id"]):
+                continue  # taken over: bill and draft are one Vorgang
+            try:
+                exists = vorgang_exists(self._client, entwurf_api_id)
+            except Exception as exc:
+                logger.warning("Checking portal Vorgang %s failed: %r", entwurf_api_id, exc)
+                exists = True  # unknown stays on the list
+            if exists:
+                stale.append(f"{entwurf_api_id} ({slug}), joined to {entscheidung['vorgnr']}")
+        return stale
+
+    async def _match_entwurf(
+        self, vorgang_id: str, stationen: list[Station], slugs: list[str]
+    ) -> tuple[str, float] | None:
+        """The candidate draft whose text the bill's Drucksache contains, and its score (DD-079)."""
+        if not slugs:
+            return None
+        drucksache = await self._drucksache_shingles(stationen)
+        if drucksache is not None:
+            for slug in slugs:
+                if slug not in self._entwurf_shingles:  # once per cycle
+                    urls = [pdf["url"] for pdf in self._entwuerfe[slug]["pdfs"]]
+                    self._entwurf_shingles[slug] = await self._pdf_shingles(urls, gone_is_empty=True)
+        entwuerfe = {slug: self._entwurf_shingles.get(slug) for slug in slugs}
+        if drucksache is None or None in entwuerfe.values():
+            # Unread is not "no draft". The bill uploads under its own api_id meanwhile, so a match
+            # next cycle adds the station and leaves the portal Vorgang to an admin (DD-079).
+            self._retry_next_cycle.add(vorgang_id)
+            return None
+        scores = {slug: containment(s, drucksache) for slug, s in entwuerfe.items()}
+        logger.info("Vorgang %s: draft containment %s", vorgang_id, {k: round(v, 2) for k, v in scores.items()})
+        slug = pick(scores)
+        return (slug, scores[slug]) if slug else None
+
+    async def _drucksache_shingles(self, stationen: list[Station]) -> frozenset[int] | None:
+        """5-grams of the Landesregierung's Gesetzentwurf: its enriched volltext, else the PDF."""
+        dok = next((s.dokumente[0] for s in stationen if s.typ == Stationstyp.PREPARL_REGBSL and s.dokumente), None)
+        if dok is None:  # no PDF yet
+            return None
+        if dok.volltext != TODO_MARKER:
+            return shingles(dok.volltext)
+        return await self._pdf_shingles([dok.link])
+
+    async def _pdf_shingles(self, urls: list[str], *, gone_is_empty: bool = False) -> frozenset[int] | None:
+        """None if a PDF is unread; *gone_is_empty*: a 404 adds nothing (a draft the portal removed)."""
+        result: frozenset[int] = frozenset()
+        for url in urls:
+            try:
+                result |= shingles(await read_pdf(self.session, url))
+            except Exception as exc:
+                logger.warning("Reading %s for the draft match failed: %r", url, exc)
+                if not (gone_is_empty and isinstance(exc, PdfNotAvailableError) and exc.status == 404):
+                    return None
+        return result
+
+    async def _entwurf_station(self, entwurf: dict) -> Station:
+        """The draft's preparl-regent station as the Beteiligung scraper uploaded it (DD-079)."""
+        enrich = None
+        if self._llm_enabled and self._llm is not None:
+            from bawue.bawue_dok import enrich_dokument
+
+            enrich = partial(
+                enrich_dokument,
+                self.session,
+                self._llm,
+                model=self._llm_model,
+                metrics=self._llm_metrics,
+                cache=self.config.cache,
+            )
+        pdfs = [(pdf["url"], pdf["titel"], date.fromisoformat(pdf["datum"])) for pdf in entwurf["pdfs"]]
+        autoren = [Autor.from_dict(autor) for autor in entwurf["autoren"]]
+        return await entwurf_station(pdfs, autoren, self._wahlperiode, enrich)
 
     _POSTPARL_TYPEN: frozenset[Stationstyp] = frozenset(
         {
@@ -926,6 +1106,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
         raw_text = fund.get("raw", "")
 
         mapping_text = station_typ_str or raw_text
+        if not station_typ_str and raw_text:
+            logger.warning(
+                "Fundstelle station_typ not extracted by regex, using raw text fallback: '%s'",
+                raw_text[:80],
+            )
         station_typ = _map_fundstelle_stationstyp(station_typ_str, raw_text, initiative)
 
         # The document keeps the PARLIS date as its `zp_referenz` (for a Gesetzblatt: the Ausfertigung),
@@ -1332,6 +1517,8 @@ def _print_vorgaenge_summary(
     failed_items: list[FailedItem] | None = None,
     parlis_errors: list[str] | None = None,
     dropped_fundstellen: dict[str, list[str]] | None = None,
+    entwurf_joins: list[str] | None = None,
+    stale_entwuerfe: list[str] | None = None,
 ) -> list[str]:
     lines = [
         f"Wahlperiode: {wahlperiode} | Duration: {format_duration(duration)}",
@@ -1356,6 +1543,14 @@ def _print_vorgaenge_summary(
             for vid, reasons in dropped_fundstellen.items()
         ]
         lines.extend(format_failed_section(dropped, header="Vorgänge with dropped Fundstellen"))
+    if entwurf_joins:
+        lines.append("")
+        lines.append(f"Bills joined to a Beteiligung draft ({len(entwurf_joins)}, DD-079):")
+        lines.extend(f"  - {join}" for join in entwurf_joins)
+    if stale_entwuerfe:
+        lines.append("")
+        lines.append(f":warning: Portal Vorgänge to delete ({len(stale_entwuerfe)}, DD-079):")
+        lines.extend(f"  - {stale}" for stale in stale_entwuerfe)
     if parlis_errors:
         lines.append("")
         lines.append(f":warning: PARLIS errors ({len(parlis_errors)}):")
@@ -1381,12 +1576,6 @@ def _map_fundstelle_stationstyp(station_typ_str: str, raw_text: str, initiative:
     # Fallback: when the regex-based station_typ extraction fails (e.g. single-space
     # separator in the Fundstelle text), use the raw label for enum mapping.
     # map_stationstyp does substring matching, so it can find the type in the raw text.
-    if not station_typ_str and raw_text:
-        logger.warning(
-            "Fundstelle station_typ not extracted by regex, using raw text fallback: '%s'",
-            raw_text[:80],
-        )
-
     station_typ = map_stationstyp(station_typ_str or raw_label, initiator=initiative)
 
     # Cross-check: the parser can truncate multi-word types at internal

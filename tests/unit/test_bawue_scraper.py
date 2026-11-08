@@ -23,6 +23,7 @@ from bawue.bawue_vorgaenge_scraper import (
     _vorgang_fingerprint,
     construct_drucksache_pdf_url,
 )
+from bawue.cache import RedisUnavailableError
 from bawue.gesetzblatt_lookup import GesetzblattUnavailable
 from bawue.parlis_parser import parse_fundstelle_text
 from bawue.stationen import (
@@ -1208,6 +1209,7 @@ def _make_scraper_with_mock_parlis(search_return=None, wahlperiode_start=date(20
         initial_delay=0.2, min_delay=0.05, backoff_multiplier=10.0, recovery_factor=0.5
     )
     mock_config = MagicMock()
+    mock_config.cache.get_raw.return_value = None  # nothing cached, no Beteiligung draft registered
     scraper.config = mock_config
     scraper.scraper_id = "test-scraper-id"
     scraper._llm_enabled = False
@@ -1583,8 +1585,11 @@ class TestRunSummary:
         assert "3" in captured.out
 
     @pytest.mark.asyncio
-    async def test_summary_still_printed_on_run_failure(self, capsys, caplog):
+    @pytest.mark.parametrize("failing", ["run", "draft-register"])
+    async def test_summary_still_printed_on_run_failure(self, failing, capsys, caplog):
         scraper = _make_scraper_with_mock_parlis()
+        if failing == "draft-register":  # DD-079: read at the start of each cycle
+            scraper.config.cache.get_raw.side_effect = RedisUnavailableError("Redis read failed")
 
         mock_run = AsyncMock(side_effect=RuntimeError("boom"))
         with (

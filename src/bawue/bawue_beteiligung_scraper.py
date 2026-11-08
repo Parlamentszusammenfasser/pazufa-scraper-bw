@@ -5,14 +5,16 @@ import json
 import logging
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime
+from functools import partial
 from hashlib import sha256
 from uuid import NAMESPACE_URL, uuid5
 
 import aiohttp
 
 from bawue.api import build_client
-from bawue.bawue_dok import LLMMetrics, vorgang_zusammenfassung, zusammenfassung_text
+from bawue.bawue_dok import EnrichmentResult, LLMMetrics, vorgang_zusammenfassung, zusammenfassung_text
 from bawue.beteiligung_client import BASE_URL, BeteiligungClient
 from bawue.beteiligung_parser import (
     RawBeteiligungDetail,
@@ -20,7 +22,7 @@ from bawue.beteiligung_parser import (
     parse_process_detail,
     release_date,
 )
-from bawue.cache import BETEILIGUNGSFRISTEN_KEY
+from bawue.cache import BETEILIGUNGSFRISTEN_KEY, ENTWUERFE_KEY, UEBERNAHMEN_KEY
 from bawue.config import BawueConfig
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
@@ -127,6 +129,10 @@ class BawueBeteiligungScraper(VorgangsScraper):
             self.summary = ("Beteiligung", lines)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
+        if item.api_id in {_draft_api_id(slug) for slug in self._uebernahmen()}:
+            # Taken over while it was built; its titel would overwrite the bill's (DD-079).
+            self._skipped += 1
+            return None
         outcome = upload_vorgang(
             self._api_client,
             self.scraper_id,
@@ -170,15 +176,21 @@ class BawueBeteiligungScraper(VorgangsScraper):
         return slugs
 
     async def get_cached_result(self, item_key: str) -> str | None:
-        """A cache hit only while the portal page is unchanged (issue #104, DD-052)."""
+        """A cache hit only while the portal page is unchanged (issue #104, DD-052), and for good
+        once a PARLIS bill took the draft over: PARLIS writes that Vorgang from then on (DD-079)."""
+        if item_key in self._uebernahmen():
+            return "übernommen"
         cached = await super().get_cached_result(item_key)
         if cached is not None and cached == self._fingerprints.get(item_key):
             return cached
         return None
 
+    def _uebernahmen(self) -> dict[str, dict]:
+        return json.loads(self.config.cache.get_raw(UEBERNAHMEN_KEY, "Übernahmen") or "{}")
+
     async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
-        if not self._register_frist(item_key, result):
-            return  # uncached, so the next cycle writes the register again (DD-076)
+        if not (self._register_frist(item_key, result) and self._register_entwurf(item_key, result)):
+            return  # uncached, so the next cycle writes the registers again (DD-076, DD-079)
         fingerprint = self._fingerprints.get(item_key)
         if fingerprint is not None:  # without one, the next cycle simply rebuilds
             self.config.cache.store_raw(f"vg2:{item_key}", fingerprint, "Vorgang")
@@ -205,6 +217,22 @@ class BawueBeteiligungScraper(VorgangsScraper):
                 "hash": row_sha256(dok.hash_) if dok.volltext != TODO_MARKER else None,
             }
         return self.config.cache.store_raw(BETEILIGUNGSFRISTEN_KEY, json.dumps(fristen, ensure_ascii=False), "Fristen")
+
+    def _register_entwurf(self, slug: str, vorgang: Vorgang) -> bool:
+        """Offer the just uploaded draft to the PARLIS scraper (DD-079); False if the register
+        could not be written. No await between read and write, as in `_register_frist`."""
+        entwuerfe = json.loads(self.config.cache.get_raw(ENTWUERFE_KEY, "Entwürfe") or "{}")
+        entwuerfe[slug] = {
+            "api_id": vorgang.api_id,
+            "wahlperiode": vorgang.wahlperiode,
+            "portal": vorgang.links[0],
+            "autoren": [autor.to_dict() for autor in vorgang.initiatoren],
+            "pdfs": [
+                {"url": dok.link, "titel": dok.titel, "datum": dok.zp_referenz.date().isoformat()}
+                for dok in vorgang.stationen[0].dokumente
+            ],
+        }
+        return self.config.cache.store_raw(ENTWUERFE_KEY, json.dumps(entwuerfe, ensure_ascii=False), "Entwürfe")
 
     async def item_extractor(self, slug: str) -> Vorgang | None:
         """Fetch detail page and build a Vorgang with preparl-regent station."""
@@ -253,9 +281,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             logger.warning("Skipping '%s' — a PDF has no publication date", slug)
             self._skipped += 1
             return None
-        zp_start = _midnight_utc(min(released))
-
-        api_id = uuid5(NAMESPACE_URL, f"beteiligung-{slug}")
+        api_id = _draft_api_id(slug)
 
         # An empty ministry yields no Autor — the new backend rejects
         # empty organisation strings, so the list stays empty rather than
@@ -266,53 +292,24 @@ class BawueBeteiligungScraper(VorgangsScraper):
             else []
         )
 
-        # Build documents
-        dokumente: list[Dokument] = []
-        for pdf, pdf_released in zip(detail.pdf_links, released, strict=True):
-            dok = Dokument(
-                titel=todo_if_blank(pdf["title"]),
-                volltext=TODO_MARKER,
-                hash_=placeholder_hash(pdf["url"]),
-                typ=Doktyp.PREPARL_ENTWURF,
-                zp_modifiziert=_midnight_utc(pdf_released),
-                zp_referenz=_midnight_utc(pdf_released),
-                link=pdf["url"],
-                autoren=ministry_autoren,
+        enrich = None
+        if self._llm_enabled and self._llm is not None:
+            from bawue.bawue_dok import enrich_dokument
+
+            enrich = partial(
+                enrich_dokument,
+                self.session,
+                self._llm,
+                model=self._llm_model,
+                metrics=self._llm_metrics,
+                cache=self.config.cache,
             )
-
-            if self._llm_enabled and self._llm is not None:
-                try:
-                    from bawue.bawue_dok import enrich_dokument
-
-                    result = await enrich_dokument(
-                        self.session,
-                        self._llm,
-                        dok,
-                        model=self._llm_model,
-                        metrics=self._llm_metrics,
-                        cache=self.config.cache,
-                    )
-                    dok = result.dokument
-                except Exception:
-                    logger.warning("Document enrichment failed for %s", pdf["url"])
-
-            dokumente.append(dok)
+        pdfs = [(pdf["url"], pdf["title"], day) for pdf, day in zip(detail.pdf_links, released, strict=True)]
+        station = await entwurf_station(pdfs, ministry_autoren, self._wahlperiode, enrich)
+        dokumente = station.dokumente
 
         if self._beteiligungsfristen and detail.comment_deadline:
             _add_beteiligungsfrist(dokumente, detail.comment_deadline)
-
-        gremium = Gremium(
-            parlament=Parlament.BW,
-            name=ReservedGremium.REGIERUNG,
-            wahlperiode=self._wahlperiode,
-        )
-
-        station = Station(
-            typ=Stationstyp.PREPARL_REGENT,
-            dokumente=dokumente,
-            zp_start=zp_start,
-            gremium=gremium,
-        )
 
         # Pre-parliamentary drafts have no Vorgangsnummer yet. Expose the source
         # page as a backlink (Issue #24) rather than mislabeling the URL as a
@@ -347,7 +344,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             )
 
         return Vorgang(
-            api_id=str(api_id),
+            api_id=api_id,
             titel=titel,
             kurztitel=kurztitel,
             typ=Vorgangstyp.GG_LAND_PARL,
@@ -365,8 +362,47 @@ class BawueBeteiligungScraper(VorgangsScraper):
         return release_date(pdf_url, last_modified, earliest=wahlperiode_start(self._wahlperiode))
 
 
+def _draft_api_id(slug: str) -> str:
+    return str(uuid5(NAMESPACE_URL, f"beteiligung-{slug}"))
+
+
 def _midnight_utc(day: date) -> datetime:
     return datetime(day.year, day.month, day.day, tzinfo=UTC)
+
+
+async def entwurf_station(
+    pdfs: list[tuple[str, str, date]],
+    autoren: list[Autor],
+    wahlperiode: int,
+    enrich: Callable[[Dokument], Awaitable[EnrichmentResult]] | None,
+) -> Station:
+    """The draft's preparl-regent station from its PDFs (url, title, release day), dated by the
+    earliest (DD-074). The PARLIS scraper builds it alike for a bill that gains the station, so the
+    backend finds the same document rows (DD-079)."""
+    dokumente = []
+    for url, titel, released in pdfs:
+        dok = Dokument(
+            titel=todo_if_blank(titel),
+            volltext=TODO_MARKER,
+            hash_=placeholder_hash(url),
+            typ=Doktyp.PREPARL_ENTWURF,
+            zp_modifiziert=_midnight_utc(released),
+            zp_referenz=_midnight_utc(released),
+            link=url,
+            autoren=autoren,
+        )
+        if enrich is not None:
+            try:
+                dok = (await enrich(dok)).dokument
+            except Exception:
+                logger.warning("Document enrichment failed for %s", url)
+        dokumente.append(dok)
+    return Station(
+        typ=Stationstyp.PREPARL_REGENT,
+        dokumente=dokumente,
+        zp_start=min(dok.zp_referenz for dok in dokumente),
+        gremium=Gremium(parlament=Parlament.BW, name=ReservedGremium.REGIERUNG, wahlperiode=wahlperiode),
+    )
 
 
 def _add_beteiligungsfrist(dokumente: list[Dokument], deadline: date) -> None:
@@ -406,6 +442,6 @@ def _print_beteiligung_summary(
 def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungDetail) -> str:
     """What shows progress on the portal (issue #104): status, title, ministry, PDFs, deadline (#148)."""
     pdfs = sorted([link["url"], link["title"]] for link in detail.pdf_links)
-    # "fristen": a one-time rebuild fills the calendar register for cached Vorgänge (DD-076).
-    payload = [process.status, detail.title, detail.ministry, pdfs, detail.comment_deadline, "fristen"]
+    # One-time rebuilds fill the registers for cached Vorgänge: "fristen" (DD-076), "entwuerfe" (DD-079).
+    payload = [process.status, detail.title, detail.ministry, pdfs, detail.comment_deadline, "fristen", "entwuerfe"]
     return sha256(json.dumps(payload, ensure_ascii=False, default=str).encode()).hexdigest()
