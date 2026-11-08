@@ -139,8 +139,8 @@ def _pdfs(*pairs: Pair, entwurf_text: str | None = None) -> dict[str, str]:
     return texts
 
 
-async def _build(scraper, raw, pdfs: dict[str, str | Exception], *, uploaded: bool = False):
-    """Build the bill as item_extractor does; `uploaded`: the backend already has it."""
+async def _build(scraper, raw, pdfs: dict[str, str | Exception], *, uploaded: bool | Exception = False):
+    """Build the bill as item_extractor does; `uploaded`: the backend already has it, or asking it raises."""
 
     async def _read(_session, url):
         if isinstance(text := pdfs[url], Exception):
@@ -148,9 +148,10 @@ async def _build(scraper, raw, pdfs: dict[str, str | Exception], *, uploaded: bo
         return text
 
     read = AsyncMock(side_effect=_read)
+    error = uploaded if isinstance(uploaded, Exception) else None
     with (
         patch("bawue.bawue_vorgaenge_scraper.read_pdf", read),
-        patch("bawue.bawue_vorgaenge_scraper.vorgang_exists", return_value=uploaded) as exists,
+        patch("bawue.bawue_vorgaenge_scraper.vorgang_exists", return_value=uploaded, side_effect=error) as exists,
     ):
         vorgang = await scraper._build_vorgang(raw)
     return vorgang, read, exists
@@ -350,6 +351,39 @@ async def test_unsaved_decision_retries_next_cycle():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("uploaded", "failing_read"),
+    [(BawueApiError(503, b"", "vorgang_get_by_id"), None), (False, 1), (False, 2)],
+    ids=["backend", "redis-before-the-match", "redis-after-the-match"],
+)
+async def test_failure_while_deciding_records_nothing(uploaded, failing_read):
+    """A decision on a guess would be permanent: the build fails, uncached (#83), and decides next cycle."""
+    cache = _InMemoryCache()
+    regent = await _upload_draft(cache, BVANP)
+    earlier = {"another-law": {"vorgnr": "V-1", "api_id": "x"}}
+    cache.store_raw(UEBERNAHMEN_KEY, json.dumps(earlier))
+    scraper = _parlis(cache)
+    get_raw, reads = cache.get_raw, []
+
+    def _down(key, typehint=""):
+        if key == UEBERNAHMEN_KEY:
+            reads.append(key)
+            if len(reads) == failing_read:
+                raise RedisUnavailableError("Redis read failed")
+        return get_raw(key)
+
+    cache.get_raw = _down
+    with pytest.raises((BawueApiError, RedisUnavailableError)):
+        await _build(scraper, _raw(BVANP), _pdfs(BVANP), uploaded=uploaded)
+
+    cache.get_raw = get_raw
+    assert _uebernahmen(cache) == earlier  # read as empty, the write would drop every earlier decision
+    assert scraper._entwurf_joins == []
+    parlis, _, _ = await _build(_parlis(cache), _raw(BVANP), _pdfs(BVANP))
+    assert parlis.api_id == regent.api_id
+
+
+@pytest.mark.asyncio
 async def test_second_bill_matching_a_draft_taken_meanwhile_stays_apart():
     """Two bills of one cycle may match concurrently: the first decision stands."""
     cache = _InMemoryCache()
@@ -379,6 +413,7 @@ async def _assert_separate(cache, pair: Pair, pdfs: dict[str, str], raw: dict | 
     assert parlis.links is UNSET
     exists.assert_not_called()
     assert pair.vid not in json.dumps(_uebernahmen(cache))
+    assert pair.vid not in scraper._retry_next_cycle  # settled: cached until its fingerprint changes
     return read
 
 
@@ -418,6 +453,14 @@ async def test_last_years_law_is_not_taken_over():
     cache = _InMemoryCache()
     await _upload_draft(cache, BVANP)
     await _assert_separate(cache, BVANP, _pdfs(BVANP, entwurf_text="entwurf_bvanpg_2024"))
+
+
+@pytest.mark.asyncio
+async def test_drucksache_without_text_has_no_draft():
+    """OCR found no text: every run would read the same, so a retry would only repeat OCR and upload."""
+    cache = _InMemoryCache()
+    await _upload_draft(cache, BVANP)
+    await _assert_separate(cache, BVANP, {**_pdfs(BVANP), BVANP.drucksache_pdf: ""})
 
 
 @pytest.mark.asyncio
@@ -480,6 +523,23 @@ async def test_draft_the_portal_removed_is_no_candidate():
 
     assert parlis.api_id == regent.api_id
     assert HBEGLG.vid not in scraper._retry_next_cycle
+
+
+@pytest.mark.asyncio
+async def test_draft_pdf_the_portal_removed_leaves_the_others_to_decide():
+    cache = _InMemoryCache()
+    regent = await _upload_draft(cache, BVANP)
+    gone = "https://beteiligungsportal.baden-wuerttemberg.de/fileadmin/anlage.pdf"
+    entwuerfe = json.loads(cache.get_raw(ENTWUERFE_KEY))
+    entwuerfe[BVANP.slug]["pdfs"].insert(0, {"url": gone, "titel": "Anlage", "datum": "2026-06-17"})
+    cache.store_raw(ENTWUERFE_KEY, json.dumps(entwuerfe))
+    scraper = _parlis(cache)
+
+    parlis, read, _ = await _build(scraper, _raw(BVANP), {**_pdfs(BVANP), gone: PdfNotAvailableError(404, gone)})
+
+    assert parlis.api_id == regent.api_id
+    assert BVANP.vid not in scraper._retry_next_cycle
+    assert gone in [c.args[1] for c in read.call_args_list]
 
 
 # -- Beteiligung side -----------------------------------------------------------------
