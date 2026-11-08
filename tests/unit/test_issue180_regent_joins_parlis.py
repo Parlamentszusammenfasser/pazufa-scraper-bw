@@ -351,30 +351,33 @@ async def test_unsaved_decision_retries_next_cycle():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("down", ["backend", "redis"])
-async def test_failure_while_deciding_records_nothing(down):
+@pytest.mark.parametrize(
+    ("uploaded", "failing_read"),
+    [(BawueApiError(503, b"", "vorgang_get_by_id"), None), (False, 1), (False, 2)],
+    ids=["backend", "redis-before-the-match", "redis-after-the-match"],
+)
+async def test_failure_while_deciding_records_nothing(uploaded, failing_read):
     """A decision on a guess would be permanent: the build fails, uncached (#83), and decides next cycle."""
     cache = _InMemoryCache()
     regent = await _upload_draft(cache, BVANP)
+    earlier = {"another-law": {"vorgnr": "V-1", "api_id": "x"}}
+    cache.store_raw(UEBERNAHMEN_KEY, json.dumps(earlier))
     scraper = _parlis(cache)
-    get_raw = cache.get_raw
-    uploaded: bool | Exception = False
-    if down == "backend":
-        uploaded = BawueApiError(503, b"", "vorgang_get_by_id")
-    else:
+    get_raw, reads = cache.get_raw, []
 
-        def _down(key, typehint=""):
-            if key == UEBERNAHMEN_KEY:
+    def _down(key, typehint=""):
+        if key == UEBERNAHMEN_KEY:
+            reads.append(key)
+            if len(reads) == failing_read:
                 raise RedisUnavailableError("Redis read failed")
-            return get_raw(key)
+        return get_raw(key)
 
-        cache.get_raw = _down
-
+    cache.get_raw = _down
     with pytest.raises((BawueApiError, RedisUnavailableError)):
         await _build(scraper, _raw(BVANP), _pdfs(BVANP), uploaded=uploaded)
 
     cache.get_raw = get_raw
-    assert _uebernahmen(cache) == {}
+    assert _uebernahmen(cache) == earlier  # read as empty, the write would drop every earlier decision
     assert scraper._entwurf_joins == []
     parlis, _, _ = await _build(_parlis(cache), _raw(BVANP), _pdfs(BVANP))
     assert parlis.api_id == regent.api_id
