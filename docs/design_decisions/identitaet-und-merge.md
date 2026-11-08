@@ -128,8 +128,9 @@ Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legt
 **Verworfen:** Titelvergleich (WP 17: ein falsches Paar), gemeinsamer `vg_ident` (die Website
 zeigt `ids[0]`, Titel wechseln), Abgleich im Backend (träfe alle Länder).
 
-**Konsequenz:** Ein verpasster Treffer lässt zwei Vorgänge wie bisher, nie einen falsch
-verschmolzenen. `initiatoren` = Ministerium und Landesregierung. Für einen neuen Gesetzentwurf mit
+**Konsequenz:** Ein verpasster Treffer lässt zwei Vorgänge wie bisher. Ein falscher ist bei diesen
+Schwellen unwahrscheinlich, aber möglich; der Laufbericht nennt deshalb jede Übernahme mit ihrem
+Wert. `initiatoren` = Ministerium und Landesregierung. Für einen neuen Gesetzentwurf mit
 Kandidaten werden deren PDFs einmal je Lauf gelesen.
 
 <a id="dd-043"></a>

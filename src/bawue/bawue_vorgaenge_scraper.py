@@ -269,7 +269,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # Vorgänge a bill could not take over, for an admin to delete (DD-079).
         self._entwuerfe: dict[str, dict] = {}
         self._entwurf_shingles: dict[str, frozenset[int] | None] = {}
-        self._stale_entwuerfe: list[str] = []
+        self._entwurf_joins: list[str] = []
 
         # LLM document enrichment (optional, requires LLM_PROVIDER_KEY)
         llm_key = getattr(config, "llm_provider_key", None)
@@ -311,7 +311,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 failed_items=self._failed_items,
                 parlis_errors=self._parlis_errors,
                 dropped_fundstellen=self._dropped_fundstellen,
-                stale_entwuerfe=self._stale_entwuerfe,
+                entwurf_joins=self._entwurf_joins,
             )
             self.summary = ("Vorgänge", lines)
 
@@ -602,8 +602,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
             (None, None),
         )
         if slug is None:
-            slug = await self._match_entwurf(vorgang_id, stationen, [s for s in kandidaten if s not in uebernahmen])
-            upload_as = self._uebernehmen(slug, vorgang_id, api_id) if slug else None
+            match = await self._match_entwurf(vorgang_id, stationen, [s for s in kandidaten if s not in uebernahmen])
+            if match is None:
+                return api_id, None
+            slug, score = match
+            upload_as = self._uebernehmen(slug, score, vorgang_id, api_id)
             if upload_as is None:
                 return api_id, None
         if upload_as == api_id:
@@ -613,7 +616,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
     def _uebernahmen(self) -> dict[str, dict]:
         return json.loads(self.config.cache.get_raw(UEBERNAHMEN_KEY, "Übernahmen") or "{}")
 
-    def _uebernehmen(self, slug: str, vorgang_id: str, api_id: str) -> str | None:
+    def _uebernehmen(self, slug: str, score: float, vorgang_id: str, api_id: str) -> str | None:
         """Record the api_id the bill uploads under; None if another bill took the draft meanwhile.
 
         No await between read and write, so two bills of one cycle cannot both take it.
@@ -626,13 +629,17 @@ class BawueVorgaengeScraper(VorgangsScraper):
         uebernahmen[slug] = {"vorgnr": vorgang_id, "api_id": upload_as}
         if not self.config.cache.store_raw(UEBERNAHMEN_KEY, json.dumps(uebernahmen), "Übernahmen"):
             self._retry_next_cycle.add(vorgang_id)
+        join = f"{vorgang_id} ← {slug} ({score:.2f})"
         if upload_as == api_id:
             logger.warning("%s gains draft %s; its portal Vorgang %s is stale", vorgang_id, slug, entwurf_api_id)
-            self._stale_entwuerfe.append(f"{entwurf_api_id} ({slug}) → {vorgang_id}")
+            join += f", please delete {entwurf_api_id}"
+        self._entwurf_joins.append(join)
         return upload_as
 
-    async def _match_entwurf(self, vorgang_id: str, stationen: list[Station], slugs: list[str]) -> str | None:
-        """The candidate draft whose text the bill's Drucksache contains (DD-079)."""
+    async def _match_entwurf(
+        self, vorgang_id: str, stationen: list[Station], slugs: list[str]
+    ) -> tuple[str, float] | None:
+        """The candidate draft whose text the bill's Drucksache contains, and its score (DD-079)."""
         if not slugs:
             return None
         drucksache = await self._drucksache_shingles(stationen)
@@ -648,7 +655,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
             return None
         scores = {slug: containment(s, drucksache) for slug, s in entwuerfe.items()}
         logger.info("Vorgang %s: draft containment %s", vorgang_id, {k: round(v, 2) for k, v in scores.items()})
-        return pick(scores)
+        slug = pick(scores)
+        return (slug, scores[slug]) if slug else None
 
     async def _drucksache_shingles(self, stationen: list[Station]) -> frozenset[int] | None:
         """5-grams of the Landesregierung's Gesetzentwurf: its enriched volltext, else the PDF."""
@@ -1477,7 +1485,7 @@ def _print_vorgaenge_summary(
     failed_items: list[FailedItem] | None = None,
     parlis_errors: list[str] | None = None,
     dropped_fundstellen: dict[str, list[str]] | None = None,
-    stale_entwuerfe: list[str] | None = None,
+    entwurf_joins: list[str] | None = None,
 ) -> list[str]:
     lines = [
         f"Wahlperiode: {wahlperiode} | Duration: {format_duration(duration)}",
@@ -1502,10 +1510,10 @@ def _print_vorgaenge_summary(
             for vid, reasons in dropped_fundstellen.items()
         ]
         lines.extend(format_failed_section(dropped, header="Vorgänge with dropped Fundstellen"))
-    if stale_entwuerfe:
+    if entwurf_joins:
         lines.append("")
-        lines.append(f"Beteiligung Vorgänge joined to a bill, please delete ({len(stale_entwuerfe)}, DD-079):")
-        lines.extend(f"  - {stale}" for stale in stale_entwuerfe)
+        lines.append(f"Bills joined to a Beteiligung draft ({len(entwurf_joins)}, DD-079):")
+        lines.extend(f"  - {join}" for join in entwurf_joins)
     if parlis_errors:
         lines.append("")
         lines.append(f":warning: PARLIS errors ({len(parlis_errors)}):")

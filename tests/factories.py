@@ -44,7 +44,7 @@ def make_scraper[S: Scraper](cls: type[S]) -> S:
             # No Beteiligung drafts registered: no bill looks for one (DD-079).
             "_entwuerfe": {},
             "_entwurf_shingles": {},
-            "_stale_entwuerfe": [],
+            "_entwurf_joins": [],
         }
     if issubclass(cls, (BawueBeteiligungScraper, BawueSitzungenScraper)):
         state["_beteiligungsfristen"] = True

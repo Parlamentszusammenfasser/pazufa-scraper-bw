@@ -146,4 +146,4 @@ async def test_bill_the_backend_has_gains_the_draft_station(
     entwurf = bill["stationen"][0]
     assert entwurf["typ"] == Stationstyp.PREPARL_REGENT.value
     assert entwurf["dokumente"][0]["link"] == ENTWURF_PDF
-    assert f"  - {DRAFT_API_ID} ({SLUG}) → V-98010" in s.summary[1]
+    assert f"  - V-98010 ← {SLUG} (0.51), please delete {DRAFT_API_ID}" in s.summary[1]

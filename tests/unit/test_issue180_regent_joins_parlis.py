@@ -163,13 +163,14 @@ def _uebernahmen(cache) -> dict:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("pair", [BVANP, HBEGLG], ids=["18-623", "18-701"])
-async def test_issue180_new_bill_takes_over_the_draft(pair):
+@pytest.mark.parametrize(("pair", "score"), [(BVANP, "0.86"), (HBEGLG, "0.89")], ids=["18-623", "18-701"])
+async def test_issue180_new_bill_takes_over_the_draft(pair, score):
     """The backend merges the bill into the draft's Vorgang, which keeps its regent station."""
     cache = _InMemoryCache()
     regent = await _upload_draft(cache, pair)
+    scraper = _parlis(cache)
 
-    parlis, _, exists = await _build(_parlis(cache), _raw(pair), _pdfs(pair))
+    parlis, _, exists = await _build(scraper, _raw(pair), _pdfs(pair))
 
     assert _backend_merges(regent, parlis)
     assert parlis.api_id == regent.api_id
@@ -177,6 +178,8 @@ async def test_issue180_new_bill_takes_over_the_draft(pair):
     assert regent.links[0] in parlis.links
     exists.assert_called_once_with(ANY, _own_api_id(pair))
     assert _uebernahmen(cache) == {pair.slug: {"vorgnr": pair.vid, "api_id": regent.api_id}}
+    # A wrong match would be silent otherwise.
+    assert scraper._entwurf_joins == [f"{pair.vid} ← {pair.slug} ({score})"]
 
 
 @pytest.mark.asyncio
@@ -205,10 +208,10 @@ async def test_bill_uploaded_before_keeps_its_api_id_and_gains_the_draft_station
         regent.initiatoren,
     )
     assert _uebernahmen(cache) == {BVANP.slug: {"vorgnr": BVANP.vid, "api_id": _own_api_id(BVANP)}}
-    assert scraper._stale_entwuerfe == [f"{regent.api_id} ({BVANP.slug}) → {BVANP.vid}"]
+    assert scraper._entwurf_joins == [f"{BVANP.vid} ← {BVANP.slug} (0.86), please delete {regent.api_id}"]
 
 
-def test_stale_draft_is_listed_for_deletion_in_the_run_report():
+def test_run_report_lists_every_join():
     lines = _print_vorgaenge_summary(
         18,
         {},
@@ -219,9 +222,13 @@ def test_stale_draft_is_listed_for_deletion_in_the_run_report():
         skipped=0,
         failed=0,
         duration=1.0,
-        stale_entwuerfe=["af0c847d (dienst-und-versorgungsbezuege) → V-248237"],
+        entwurf_joins=["V-248580 ← haushaltsbegleitgesetz-2027 (0.89)", "V-248237 ← x (0.86), please delete af0c847d"],
     )
-    assert "  - af0c847d (dienst-und-versorgungsbezuege) → V-248237" in lines
+    i = lines.index("Bills joined to a Beteiligung draft (2, DD-079):")
+    assert lines[i + 1 : i + 3] == [
+        "  - V-248580 ← haushaltsbegleitgesetz-2027 (0.89)",
+        "  - V-248237 ← x (0.86), please delete af0c847d",
+    ]
 
 
 @pytest.mark.asyncio
@@ -288,7 +295,7 @@ async def test_second_bill_matching_a_draft_taken_meanwhile_stays_apart():
 
     async def _taken_meanwhile(*_args):
         cache.store_raw(UEBERNAHMEN_KEY, json.dumps({BVANP.slug: {"vorgnr": "V-1", "api_id": "x"}}))
-        return BVANP.slug
+        return BVANP.slug, 0.86
 
     with patch.object(scraper, "_match_entwurf", _taken_meanwhile):
         parlis, _, exists = await _build(scraper, _raw(BVANP), {})
