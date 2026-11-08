@@ -410,6 +410,7 @@ async def _assert_separate(cache, pair: Pair, pdfs: dict[str, str], raw: dict | 
     assert parlis.links is UNSET
     exists.assert_not_called()
     assert pair.vid not in json.dumps(_uebernahmen(cache))
+    assert pair.vid not in scraper._retry_next_cycle  # settled: cached until its fingerprint changes
     return read
 
 
@@ -449,6 +450,14 @@ async def test_last_years_law_is_not_taken_over():
     cache = _InMemoryCache()
     await _upload_draft(cache, BVANP)
     await _assert_separate(cache, BVANP, _pdfs(BVANP, entwurf_text="entwurf_bvanpg_2024"))
+
+
+@pytest.mark.asyncio
+async def test_drucksache_without_text_has_no_draft():
+    """OCR found no text: every run would read the same, so a retry would only repeat OCR and upload."""
+    cache = _InMemoryCache()
+    await _upload_draft(cache, BVANP)
+    await _assert_separate(cache, BVANP, {**_pdfs(BVANP), BVANP.drucksache_pdf: ""})
 
 
 @pytest.mark.asyncio
