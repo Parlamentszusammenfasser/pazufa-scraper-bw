@@ -144,7 +144,8 @@ das Frontend Einzelpläne als „1./2. Lesung" zählt, ist dessen Anzeige.
 **Kontext:** Spec 0.2.5 brachte `preparl-formvs`, `parl-antragsst`, `parl-vermittas`,
 `parl-verfgstop` (seit 0.2.7 `postparl-vgstp`) und den Doktyp `eckpunktepapier`, Spec 0.2.8
 `parl-anhoerung` und die Doktypen `beschlussprotokoll`/`inhaltsprotokoll`. In PARLIS
-WP 17/18 und im Beteiligungsportal kommt keiner vor (GitHub #43).
+WP 17/18, im Beteiligungsportal und im ICS-Kalender kommt keiner vor (GitHub #43; live
+geprüft am 2026-11-04, GitHub #161).
 
 **Entscheidung:** Keiner wird gemappt.
 
@@ -157,9 +158,6 @@ WP 17/18 und im Beteiligungsportal kommt keiner vor (GitHub #43).
 | `eckpunktepapier` | Kommt nicht vor; bei Bedarf reicht ein Titel-Mapping im Beteiligungs-Scraper |
 | `parl-anhoerung` | PARLIS führt Anhörungen nicht als Fundstelle, der ICS-Kalender nicht als Termin; erwähnt nur als Anlage einer Beschlussempfehlung (17/9670) |
 | `beschlussprotokoll`, `inhaltsprotokoll` | PARLIS verlinkt keine Ausschussprotokolle, nur Plenarprotokolle (`redeprotokoll`) |
-
-Live geprüft am 2026-11-04 (GitHub #161): alle 244 Gesetzgebungs-, Haushalts- und
-Volksantrag-Vorgänge in WP 17/18 und der ICS-Kalender.
 
 **Konsequenz:** Der BW-Track hat für keinen der Stationstypen einen Buchstaben, eine solche
 Station gäbe HTTP 400. Ein Kanarienvogel-Test prüft `Stationstyp` auf Gleichheit
