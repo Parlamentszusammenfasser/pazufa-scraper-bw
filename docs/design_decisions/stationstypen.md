@@ -155,8 +155,11 @@ WP 17/18 und im Beteiligungsportal kommt keiner vor (GitHub #43).
 | `parl-vermittas` | Der Landtag hat keine zweite Kammer |
 | `postparl-vgstp` | PARLIS führt Verfassungsgerichtsstopps nicht als Station |
 | `eckpunktepapier` | Kommt nicht vor; bei Bedarf reicht ein Titel-Mapping im Beteiligungs-Scraper |
-| `parl-anhoerung` | PARLIS führt Anhörungen nicht als Fundstelle |
+| `parl-anhoerung` | PARLIS führt Anhörungen nicht als Fundstelle, der ICS-Kalender nicht als Termin; erwähnt nur als Anlage einer Beschlussempfehlung (17/9670) |
 | `beschlussprotokoll`, `inhaltsprotokoll` | PARLIS verlinkt keine Ausschussprotokolle, nur Plenarprotokolle (`redeprotokoll`) |
+
+Live geprüft am 2026-11-04 (GitHub #161): alle 244 Gesetzgebungs-, Haushalts- und
+Volksantrag-Vorgänge in WP 17/18 und der ICS-Kalender.
 
 **Konsequenz:** Der BW-Track hat für keinen der Stationstypen einen Buchstaben, eine solche
 Station gäbe HTTP 400. Ein Kanarienvogel-Test prüft `Stationstyp` auf Gleichheit
