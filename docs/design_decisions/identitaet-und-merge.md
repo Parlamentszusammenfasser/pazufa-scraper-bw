@@ -96,9 +96,8 @@ Admin, und zwar **vor** einem Neulauf von WP 17: Beim Station-Merge verknüpft d
 neu eingefügte Dokumente, die der Einzelpläne blieben sonst ohne Verknüpfung. Die alte
 `parl-ausschber` findet das Backend über die geteilte Beschlussempfehlung und aktualisiert sie.
 Jeder Haushaltsgesetzgebung-Vorgang, auch Begleitgesetz und Nachtrag, hat den Typ
-`gg-land-parl-haushalt` (BW-Track wie `gg-land-parl`, Tracks ab v0.1.2). Der Typ steht nicht im
-`vg2:`-Fingerprint: Gespeicherte Vorgänge wechseln erst beim nächsten Upload, sofort nur nach
-Löschen ihres `vg2:`. Das Backend muss den Typ in die `vgtyp_class` von `gg-land-parl` legen,
+`gg-land-parl-haushalt` (BW-Track wie `gg-land-parl`, Tracks ab v0.1.2). Ein Marker im
+`vg2:`-Fingerprint baut gespeicherte einmal neu, auch abgeschlossene. Das Backend muss den Typ in die `vgtyp_class` von `gg-land-parl` legen,
 sonst findet der Merge keinen Kandidaten: HTTP 500 bei jedem erneuten Upload und beim Typwechsel,
 keine Übernahme eines Portal-Entwurfs (DD-079).
 
