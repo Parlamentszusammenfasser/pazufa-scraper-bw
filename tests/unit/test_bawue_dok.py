@@ -45,6 +45,7 @@ from bawue.pdf_text import (
     normalize_volltext,
     paragraph_quality_score,
     parse_page_hint,
+    read_pdf,
 )
 from bawue.types import (
     UNSET,
@@ -278,6 +279,39 @@ class TestExtractPdfText:
 
         assert text == SAMPLE_FULL_TEXT
         assert doc_hash == SAMPLE_HASH
+
+
+class TestReadPdf:
+    """The draft match reads PDFs this way (DD-079): as enrichment stores them, no file left behind."""
+
+    URL = "https://www.landtag-bw.de/files/17_0273_D.pdf"
+
+    @staticmethod
+    def _downloaded(tmp_path: Path) -> Path:
+        pdf = tmp_path / "download.pdf"
+        pdf.write_bytes((Path(__file__).parent.parent / "fixtures" / "pdf" / "17_0273_D.pdf").read_bytes())
+        return pdf
+
+    @pytest.mark.asyncio
+    async def test_normalized_text(self, tmp_path):
+        pdf = self._downloaded(tmp_path)
+        with patch("bawue.pdf_text.download_pdf", AsyncMock(return_value=pdf)):
+            text = await read_pdf(MagicMock(), self.URL)
+
+        assert "abzusenken" in text  # the extracted text has "abzu-senken" (issue #20)
+        assert not pdf.exists()
+
+    @pytest.mark.asyncio
+    async def test_failed_extraction_leaves_no_file(self, tmp_path):
+        pdf = self._downloaded(tmp_path)
+        with (
+            patch("bawue.pdf_text.download_pdf", AsyncMock(return_value=pdf)),
+            patch("bawue.pdf_text.extract_file", AsyncMock(side_effect=RuntimeError("kreuzberg"))),
+            pytest.raises(RuntimeError),
+        ):
+            await read_pdf(MagicMock(), self.URL)
+
+        assert not pdf.exists()
 
 
 # ---------------------------------------------------------------------------
