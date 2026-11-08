@@ -53,14 +53,15 @@ PDF_TEXTS = {ENTWURF_PDF: _text("entwurf_gewhag"), GESETZENTWURF_PDF: _text("dru
 
 @pytest.fixture()
 def backend(httpserver, mock_backend, bawue_config):
-    """The PUT capture plus `GET /vorgang/{id}`, which knows the bill only once `has_bill` is set."""
+    """The PUT capture plus `GET /vorgang/{id}`: the uploaded Vorgänge, and the bill once `has_bill` is set."""
     bawue_config.cache = _InMemoryCache()
     state = {"has_bill": False, "asked": []}
 
     def _get(request):
         api_id = request.path.rsplit("/", 1)[1]
         state["asked"].append(api_id)
-        if not (state["has_bill"] and api_id == BILL_API_ID):
+        known = {v["api_id"] for v in mock_backend.vorgaenge} | ({BILL_API_ID} if state["has_bill"] else set())
+        if api_id not in known:
             return WerkzeugResponse(status=404)
         # Any valid Vorgang will do: the scraper only asks whether there is one.
         bill = {**mock_backend.vorgaenge[0], "api_id": BILL_API_ID}
@@ -146,4 +147,6 @@ async def test_bill_the_backend_has_gains_the_draft_station(
     entwurf = bill["stationen"][0]
     assert entwurf["typ"] == Stationstyp.PREPARL_REGENT.value
     assert entwurf["dokumente"][0]["link"] == ENTWURF_PDF
-    assert f"  - V-98010 ← {SLUG} (0.51), please delete {DRAFT_API_ID}" in s.summary[1]
+    assert f"  - V-98010 ← {SLUG} (0.51)" in s.summary[1]
+    assert f"  - {DRAFT_API_ID} ({SLUG}), joined to V-98010" in s.summary[1]
+    assert backend["asked"] == [BILL_API_ID, DRAFT_API_ID]

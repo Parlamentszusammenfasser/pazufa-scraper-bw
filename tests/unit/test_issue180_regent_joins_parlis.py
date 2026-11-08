@@ -16,10 +16,11 @@ from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 
+from bawue.api import BawueApiError
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, _print_vorgaenge_summary
 from bawue.beteiligung_client import BASE_URL
 from bawue.beteiligung_parser import parse_process_detail
-from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY
+from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY, RedisUnavailableError
 from bawue.pdf_text import PdfNotAvailableError
 from bawue.types import UNSET, Doktyp, Stationstyp, Vorgang
 from bawue.upload_throttle import UploadOutcome
@@ -209,7 +210,7 @@ async def test_bill_uploaded_before_keeps_its_api_id_and_gains_the_draft_station
         regent.initiatoren,
     )
     assert _uebernahmen(cache) == {BVANP.slug: {"vorgnr": BVANP.vid, "api_id": _own_api_id(BVANP)}}
-    assert scraper._entwurf_joins == [f"{BVANP.vid} ← {BVANP.slug} (0.86), please delete {regent.api_id}"]
+    assert scraper._entwurf_joins == [f"{BVANP.vid} ← {BVANP.slug} (0.86)"]
 
 
 def test_run_report_lists_every_join():
@@ -223,13 +224,74 @@ def test_run_report_lists_every_join():
         skipped=0,
         failed=0,
         duration=1.0,
-        entwurf_joins=["V-248580 ← haushaltsbegleitgesetz-2027 (0.89)", "V-248237 ← x (0.86), please delete af0c847d"],
+        entwurf_joins=["V-248580 ← haushaltsbegleitgesetz-2027 (0.89)", "V-248237 ← x (0.86)"],
     )
     i = lines.index("Bills joined to a Beteiligung draft (2, DD-079):")
-    assert lines[i + 1 : i + 3] == [
-        "  - V-248580 ← haushaltsbegleitgesetz-2027 (0.89)",
-        "  - V-248237 ← x (0.86), please delete af0c847d",
-    ]
+    assert lines[i + 1 : i + 3] == ["  - V-248580 ← haushaltsbegleitgesetz-2027 (0.89)", "  - V-248237 ← x (0.86)"]
+
+
+async def _report(cache, exists=lambda *_: True) -> tuple[list[str], MagicMock]:
+    """A later run's summary, which goes to Mattermost; the bills are cached, so it only reports."""
+    scraper = _parlis(cache)
+    scraper._by_type, scraper._failed_items, scraper._parlis_errors = {}, [], []
+    scraper._published = scraper._skipped = scraper._failed = 0
+    with (
+        patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", AsyncMock()),
+        patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+        patch("bawue.bawue_vorgaenge_scraper.vorgang_exists", side_effect=exists) as get,
+    ):
+        await scraper.run()
+    return scraper.summary[1], get
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("exists", "listed"),
+    [(lambda *_: True, True), (lambda *_: False, False), (BawueApiError(503, b"", "vorgang_get_by_id"), True)],
+    ids=["not-deleted", "deleted", "backend-down"],
+)
+async def test_stale_portal_vorgang_is_reported_every_run_until_deleted(exists, listed):
+    """Not only in the deciding run: an admin back from vacation still finds it."""
+    cache = _InMemoryCache()
+    regent = await _upload_draft(cache, BVANP)
+    await _build(_parlis(cache), _raw(BVANP), _pdfs(BVANP), uploaded=True)
+
+    lines, get = await _report(cache, exists)
+
+    get.assert_called_once_with(ANY, regent.api_id)
+    assert (":warning: Portal Vorgänge to delete (1, DD-079):" in lines) is listed
+    assert (f"  - {regent.api_id} ({BVANP.slug}), joined to {BVANP.vid}" in lines) is listed
+
+
+@pytest.mark.asyncio
+async def test_report_says_when_redis_failed_before_the_check():
+    """The check runs in run()'s finally: raising there would lose the whole summary."""
+    cache = _InMemoryCache()
+    await _upload_draft(cache, BVANP)
+    await _build(_parlis(cache), _raw(BVANP), _pdfs(BVANP), uploaded=True)
+    get_raw = cache.get_raw
+
+    def _down_after_start(key, typehint=""):
+        if key == UEBERNAHMEN_KEY:
+            raise RedisUnavailableError("Redis read failed")
+        return get_raw(key)
+
+    cache.get_raw = _down_after_start
+    lines, _ = await _report(cache)
+
+    assert "  - not checked: Redis unavailable" in lines
+
+
+@pytest.mark.asyncio
+async def test_taken_over_draft_leaves_nothing_to_delete():
+    cache = _InMemoryCache()
+    await _upload_draft(cache, BVANP)
+    await _build(_parlis(cache), _raw(BVANP), _pdfs(BVANP))
+
+    lines, get = await _report(cache)
+
+    get.assert_not_called()
+    assert not [line for line in lines if "to delete" in line]
 
 
 @pytest.mark.asyncio

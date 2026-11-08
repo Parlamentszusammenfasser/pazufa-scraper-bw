@@ -23,7 +23,7 @@ import certifi
 from bawue.api import build_client, vorgang_exists
 from bawue.bawue_beteiligung_scraper import entwurf_station
 from bawue.bawue_dok import LLMMetrics, vorgang_zusammenfassung, zusammenfassung_text
-from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY, drucksache_hash_key
+from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY, RedisUnavailableError, drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.entwurf_match import containment, in_window, pick, shingles
 from bawue.enum_mapper import map_dokumententyp, map_sachgebiete, map_schlagworte, map_stationstyp, map_vorgangstyp
@@ -312,6 +312,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 parlis_errors=self._parlis_errors,
                 dropped_fundstellen=self._dropped_fundstellen,
                 entwurf_joins=self._entwurf_joins,
+                stale_entwuerfe=self._stale_entwuerfe(),
             )
             self.summary = ("Vorgänge", lines)
 
@@ -631,12 +632,35 @@ class BawueVorgaengeScraper(VorgangsScraper):
         uebernahmen[slug] = {"vorgnr": vorgang_id, "api_id": upload_as}
         if not self.config.cache.store_raw(UEBERNAHMEN_KEY, json.dumps(uebernahmen), "Übernahmen"):
             self._retry_next_cycle.add(vorgang_id)
-        join = f"{vorgang_id} ← {slug} ({score:.2f})"
         if upload_as == api_id:
             logger.warning("%s gains draft %s; its portal Vorgang %s is stale", vorgang_id, slug, entwurf_api_id)
-            join += f", please delete {entwurf_api_id}"
-        self._entwurf_joins.append(join)
+        self._entwurf_joins.append(f"{vorgang_id} ← {slug} ({score:.2f})")
         return upload_as
+
+    def _stale_entwuerfe(self) -> list[str]:
+        """Portal Vorgänge whose draft a bill holds as a station, until an admin deleted them.
+
+        Asked every run, so the report repeats until it is done (DD-079).
+        """
+        if not self._entwuerfe:
+            return []
+        try:
+            uebernahmen = self._uebernahmen()
+        except RedisUnavailableError:
+            return ["not checked: Redis unavailable"]
+        stale = []
+        for slug, entscheidung in uebernahmen.items():
+            entwurf_api_id = self._entwuerfe.get(slug, {}).get("api_id")
+            if entwurf_api_id in (None, entscheidung["api_id"]):
+                continue  # taken over: bill and draft are one Vorgang
+            try:
+                exists = vorgang_exists(self._client, entwurf_api_id)
+            except Exception as exc:
+                logger.warning("Checking portal Vorgang %s failed: %r", entwurf_api_id, exc)
+                exists = True  # unknown stays on the list
+            if exists:
+                stale.append(f"{entwurf_api_id} ({slug}), joined to {entscheidung['vorgnr']}")
+        return stale
 
     async def _match_entwurf(
         self, vorgang_id: str, stationen: list[Station], slugs: list[str]
@@ -1494,6 +1518,7 @@ def _print_vorgaenge_summary(
     parlis_errors: list[str] | None = None,
     dropped_fundstellen: dict[str, list[str]] | None = None,
     entwurf_joins: list[str] | None = None,
+    stale_entwuerfe: list[str] | None = None,
 ) -> list[str]:
     lines = [
         f"Wahlperiode: {wahlperiode} | Duration: {format_duration(duration)}",
@@ -1522,6 +1547,10 @@ def _print_vorgaenge_summary(
         lines.append("")
         lines.append(f"Bills joined to a Beteiligung draft ({len(entwurf_joins)}, DD-079):")
         lines.extend(f"  - {join}" for join in entwurf_joins)
+    if stale_entwuerfe:
+        lines.append("")
+        lines.append(f":warning: Portal Vorgänge to delete ({len(stale_entwuerfe)}, DD-079):")
+        lines.extend(f"  - {stale}" for stale in stale_entwuerfe)
     if parlis_errors:
         lines.append("")
         lines.append(f":warning: PARLIS errors ({len(parlis_errors)}):")

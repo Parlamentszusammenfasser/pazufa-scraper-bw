@@ -121,7 +121,8 @@ Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legt
 4. Kennt das Backend den Vorgang noch nicht (`GET vorgang`), übernimmt er die `api_id` des
    Entwurfs; das Backend führt beide zusammen und behält die `preparl-regent`-Station. Sonst
    behält er seine `api_id` (zwei Kandidaten: `AmbiguousMatch`) und bekommt die Station mit
-   denselben Dokumenten; den Portal-Vorgang löscht ein Admin (Laufbericht).
+   denselben Dokumenten; den Portal-Vorgang löscht ein Admin. Der Laufbericht (Mattermost) nennt
+   ihn in jedem Lauf, bis `GET vorgang` ihn nicht mehr findet.
 5. Die Entscheidung steht nur in `entwurf-uebernahmen`. Danach lädt der Beteiligungs-Scraper den
    Entwurf nicht mehr hoch, geprüft auch direkt vor dem Upload: PARLIS schreibt den Vorgang, sonst
    wechselten Titel und Kurztitel.
