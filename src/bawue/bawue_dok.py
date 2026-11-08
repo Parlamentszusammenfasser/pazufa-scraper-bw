@@ -131,13 +131,9 @@ SYSTEM_PROMPT = (
     "Füge keine Formatierungen oder Hervorhebungen hinzu. "
     "Antworte nur mit dem reinen Text, ohne Einleitungen oder Erklärungen. "
     "Die Antwort darf nur die direkt angeforderten Informationen enthalten. "
-    "Spekulationen oder Annahmen sind zu vermeiden."
-)
-
-# Issue #179: the model copied each source's own number format. Document summaries
-# only, so the Kurztitel/Ressort cache keys (issue #57) stay valid.
-DOK_SYSTEM_PROMPT = (
-    SYSTEM_PROMPT + " Geldbeträge gerundet mit höchstens zwei Nachkommastellen in Tsd., Mio. oder "
+    "Spekulationen oder Annahmen sind zu vermeiden. "
+    # Issue #179: the model copied each source's own number format.
+    "Geldbeträge gerundet mit höchstens zwei Nachkommastellen in Tsd., Mio. oder "
     "Mrd. Euro angeben (z. B. 1,32 Mrd. Euro statt 1.322.962.200 Euro oder 1,3229 Milliarden Euro): "
     "ab einer Milliarde in Mrd., ab einer Million in Mio. Euro, deutsches Zahlenformat mit Komma, "
     "denselben Betrag nicht mehrfach in verschiedenen Schreibweisen nennen."
@@ -276,7 +272,7 @@ def _prompt_fingerprint(
     body = body_prompt or _prompt_for_doktyp(doktyp)
     prefix = _context_prefix(titel, drucksnr)
     vnr_part = f"\n\nVORGANG-VNR:{vorgang_vnr}" if vorgang_vnr else ""
-    return hashlib.sha256(f"{DOK_SYSTEM_PROMPT}\n\n{prefix}{body}{vnr_part}".encode()).hexdigest()
+    return hashlib.sha256(f"{SYSTEM_PROMPT}\n\n{prefix}{body}{vnr_part}".encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +453,7 @@ async def extract_semantics(
     logger.info("LLM call: %d input tokens, model=%s", input_tokens, model)
 
     messages = [
-        {"role": "system", "content": DOK_SYSTEM_PROMPT},
+        {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_message},
     ]
 

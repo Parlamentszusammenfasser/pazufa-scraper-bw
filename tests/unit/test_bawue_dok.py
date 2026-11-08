@@ -17,7 +17,7 @@ from bawue.bawue_dok import (
     BODY_PROMPT_ENTWURF,
     BODY_PROMPT_REDEPROTOKOLL,
     BODY_PROMPT_REDEPROTOKOLL_TOP,
-    DOK_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
     ZUSAMMENFASSUNG_TEILE,
     EnrichmentResult,
     LLMMetrics,
@@ -2223,7 +2223,7 @@ class TestIssue42PartialSummaries:
 
     def test_system_prompt_sets_one_money_format_issue_179(self):
         # Drucksache 18/700 mixed "1.322.962.200 Euro", "1,3229 Milliarden" and "491.6 Tsd.".
-        assert "1,32 Mrd. Euro statt 1.322.962.200 Euro" in DOK_SYSTEM_PROMPT
+        assert "1,32 Mrd. Euro statt 1.322.962.200 Euro" in SYSTEM_PROMPT
 
     @pytest.mark.parametrize(
         ("doktyp", "fingerprint"),
