@@ -52,7 +52,7 @@ als HTTP 422 auf.
    corelib-Keys verbieten `:` — alle BW-Keys (`vg2:`, `sz:`, `llm-semantics:` …) müssten
    umbenannt werden, der Cache samt bezahlter LLM-Ergebnisse liefe leer.
 5. **v0.3.2** / Spec 0.2.8 (GitHub #161; Prod kennt die neuen Werte seit spätestens 2026-11-04):
-   - `Vorgang.zusammenfassung` wird gesendet (DD-056).
+   - `Vorgang.zusammenfassung` kommt aus dem PARLIS-Kurzreferat (DD-080).
    - `Station.meta_tiebreaker` bleibt ungenutzt: Das Backend schreibt ihn nur beim Anlegen
      einer Station, nicht beim Merge. Bestehende Stationen behielten `NULL`, Stationen ohne
      Stunden-Bump (`enforce_total_ordering`) lägen dann gleichauf, und der Track-Check des

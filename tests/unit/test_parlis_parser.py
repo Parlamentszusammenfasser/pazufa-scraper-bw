@@ -44,6 +44,7 @@ SAMPLE_JSON_COMMENT_FULL = {
     "WMV30": [{"main": " Fraktion GRÜNE, Fraktion CDU"}],
     "WMV31": [{"main": "Verkündet"}],
     "WMV32": [{"main": "Umwelt; Energie"}],
+    "WMV43": [{"main": "Förderung der Wind- und Solarenergie"}],
     "EWBV34": [
         {"S": '"ERNEUERBARE ENERGIE"', "main": "Erneuerbare Energie"},
         {"S": '"KLIMASCHUTZ"', "main": "Klimaschutz", "C": "HS"},
@@ -77,6 +78,7 @@ class TestJsonCommentToRawVorgang:
         assert result["Aktueller Stand"] == "Verkündet"
         # Issue #33: EWBV34 carries every Deskriptor; WMV33 is truncated for long lists.
         assert result["Deskriptoren"] == ["Erneuerbare Energie", "Klimaschutz"]
+        assert result["Kurzreferat"] == "Förderung der Wind- und Solarenergie"  # issue #161
         assert len(result["fundstellen_parsed"]) == 2
 
     def test_falls_back_to_wmv40_for_vorgangs_id(self):
@@ -116,6 +118,7 @@ class TestJsonCommentToRawVorgang:
         assert result["vorgangs_id"] == "V-11111"
         assert "Initiative" not in result
         assert "Aktueller Stand" not in result
+        assert "Kurzreferat" not in result
 
 
 class TestParseWmv35Fundstellen:

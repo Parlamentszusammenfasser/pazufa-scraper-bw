@@ -12,7 +12,6 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import Iterable
 from pathlib import Path
 from typing import NamedTuple
 
@@ -33,7 +32,7 @@ from bawue.pdf_text import (
     parse_page_hint,
     pdf_sha1,
 )
-from bawue.types import UNSET, Doktyp, Dokument, DokumentHash, HashStrategy, Mime, Unset, Zusammenfassungstupel
+from bawue.types import Doktyp, Dokument, DokumentHash, HashStrategy, Mime, Zusammenfassungstupel
 
 logger = logging.getLogger(__name__)
 
@@ -367,12 +366,6 @@ def zusammenfassung_text(dok: Dokument) -> str | None:
     if isinstance(dok.zusammenfassung, list):
         return next((t.inhalt for t in dok.zusammenfassung if t.typ == ZUSAMMENFASSUNG_TYP), None)
     return None
-
-
-def vorgang_zusammenfassung(dokumente: Iterable[Dokument]) -> list[Zusammenfassungstupel] | Unset:
-    """All parts of the first AI-summarised document, as the Vorgang's summary (GitHub #161, DD-056):
-    the initiating document describes the whole process, and reusing it costs no LLM call."""
-    return next((list(d.zusammenfassung) for d in dokumente if zusammenfassung_text(d)), UNSET)
 
 
 def _sanitize_llm_strings(values: list[str] | None) -> list[str] | None:

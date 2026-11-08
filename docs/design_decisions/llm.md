@@ -126,12 +126,6 @@ gemeinsames Vokabular gibt es noch nicht.
 `beschlussempf`; im selben Call. Leere Abschnitte entfallen; ohne `full-llm` entfallen alle.
 Das `-llm`-Suffix steuert das „KI-generiert"-Kennzeichen der Website.
 
-`Vorgang.zusammenfassung` (Spec 0.2.8, GitHub #161) übernimmt alle Tupel des ersten
-zusammengefassten Initiativdokuments (PARLIS: `parl-initiativ`/`preparl-regbsl`, nie ein
-Protokoll, vgl. DD-055; Portal: der Entwurf samt Beteiligungsfrist, DD-075). Kein eigener
-LLM-Call. Ohne `full-llm` bleibt das Feld leer. Das Backend ersetzt es beim Merge je `typ`;
-bereits gecachte Vorgänge bekommen es erst beim nächsten Neubau (DD-052).
-
 <a id="dd-063"></a>
 ## DD-063: Modell im Cache-Schlüssel von Kurztitel und Ressort
 

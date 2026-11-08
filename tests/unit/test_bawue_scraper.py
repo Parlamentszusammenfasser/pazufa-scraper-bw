@@ -4816,31 +4816,63 @@ class TestIssue39Ressort:
         assert "ressort" not in vorgang.to_dict()
 
 
-class TestIssue161VorgangZusammenfassung:
-    """GitHub issue #161: the Vorgang's summary is its initiating document's, never a protocol's."""
+class TestIssue161Kurzreferat:
+    """GitHub issue #161 (DD-080): the Vorgang summary is PARLIS' Kurzreferat, written by the
+    Landtag; a copy of a document summary would only repeat what the website already shows."""
+
+    _TEXT = "Neufassung des Landesnichtraucherschutzgesetzes"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("protocol_only", "expected"),
+        ("kurzreferat", "expected"),
         [
-            (False, [{"typ": "full-llm", "inhalt": "Das Land wird klimaneutral."}]),
-            (True, None),
+            (_TEXT, [{"typ": "full-extern", "inhalt": _TEXT}]),
+            (" Neufassung  des\nLandesnichtraucherschutzgesetzes ", [{"typ": "full-extern", "inhalt": _TEXT}]),
+            ("   ", None),
+            (None, None),
         ],
-        ids=["initiating-document", "protocol-only"],
+        ids=["text", "whitespace", "blank", "missing"],
     )
-    async def test_summary_of_the_initiating_document(self, monkeypatch, protocol_only, expected):
-        def summary_for(dok):
-            if dok.drucksnr is None:
-                return "Debatte im Plenum."
-            return None if protocol_only else "Das Land wird klimaneutral."
-
-        scraper, _, _ = TestIssue39Ressort._llm_scraper(monkeypatch, None, summary_for)
-        raw = _make_raw_vorgang("V-004")
-        raw["fundstellen_parsed"][1]["pdf_url"] = "https://www.landtag-bw.de/resource/blob/999/plenarprotokoll.pdf"
-
-        vorgang = await scraper._build_vorgang(raw)
-
+    async def test_kurzreferat_is_the_summary(self, scraper_build_vorgang, kurzreferat, expected):
+        raw = _make_raw_vorgang("V-244420")
+        if kurzreferat is not None:
+            raw["Kurzreferat"] = kurzreferat
+        vorgang = await scraper_build_vorgang(raw)  # no LLM needed
         assert vorgang.to_dict().get("zusammenfassung") == expected
+
+    @pytest.mark.asyncio
+    async def test_document_summary_is_not_copied(self, monkeypatch):
+        scraper, _, _ = TestIssue39Ressort._llm_scraper(monkeypatch, None, lambda dok: "Das Land wird rauchfrei.")
+        raw = _make_raw_vorgang("V-244420")
+        assert "zusammenfassung" not in (await scraper._build_vorgang(raw)).to_dict()
+        raw["Kurzreferat"] = self._TEXT
+        assert (await scraper._build_vorgang(raw)).zusammenfassung == [
+            Zusammenfassungstupel(typ="full-extern", inhalt=self._TEXT)
+        ]
+
+
+class TestIssue161OneTimeRebuild:
+    """DD-080: cached Vorgänge with a Kurzreferat are rebuilt once to send it."""
+
+    @staticmethod
+    def _before(raw):
+        """_vorgang_fingerprint as on main before issue #161."""
+        fundstellen = sorted([f.get("raw", ""), f.get("pdf_url") or ""] for f in raw["fundstellen_parsed"])
+        payload = [raw.get("Aktueller Stand", ""), fundstellen]
+        if any(f.get("gesetzblatt_nr") for f in raw["fundstellen_parsed"]):
+            payload.append("postparl-kraft")
+        if any(f.get("druckseiten") for f in raw["fundstellen_parsed"]):
+            payload.append("tagesordnungspunkt")
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
+
+    @pytest.mark.parametrize(
+        ("kurzreferat", "rebuilt"), [("Neufassung", True), ("", False), (None, False)], ids=["with", "blank", "without"]
+    )
+    def test_only_vorgaenge_with_a_kurzreferat_are_rebuilt(self, kurzreferat, rebuilt):
+        raw = _make_raw_vorgang("V-1", fundstellen=[_GBL_GESETZENTWURF, _PLP_18_10_FUNDSTELLE])
+        if kurzreferat is not None:
+            raw["Kurzreferat"] = kurzreferat
+        assert (_vorgang_fingerprint(raw) != self._before(raw)) is rebuilt
 
 
 class TestIssue63WahlperiodeConfig:
