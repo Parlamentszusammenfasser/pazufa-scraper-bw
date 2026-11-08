@@ -461,7 +461,7 @@ class TestEnumValuesExistInFramework:
         assert Doktyp.ECKPUNKTEPAPIER not in DOKUMENTENTYP_MAP.values()
 
     def test_all_vorgangstyp_values_valid(self):
-        bawue_values = {"gg-land-parl", "gg-land-volk", "bw-einsatz", "sonstig"}
+        bawue_values = {"gg-land-parl", "gg-land-parl-haushalt", "gg-land-volk", "bw-einsatz", "sonstig"}
         framework_values = {m.value for m in Vorgangstyp}
         assert bawue_values.issubset(framework_values)
 
