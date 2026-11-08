@@ -88,7 +88,7 @@ def _backend_merges(a: Vorgang, b: Vorgang) -> bool:
     def ids(v: Vorgang) -> set[tuple[str, str]]:
         return set() if v.ids is UNSET else {(i.typ, i.id) for i in v.ids}
 
-    # Assumes the backend puts gg-land-parl-haushalt into gg-land-parl's vgtyp_class (issue #60).
+    # Assumes the fix proposed in pazufa-backend#227: gg-land-parl-haushalt in gg-land-parl's vgtyp_class.
     def vgtyp_class(v: Vorgang) -> Vorgangstyp:
         return Vorgangstyp.GG_LAND_PARL if v.typ == Vorgangstyp.GG_LAND_PARL_HAUSHALT else v.typ
 
