@@ -141,3 +141,22 @@ bewirkt (Issue #57).
 **Konsequenz:** Ein Modellwechsel erreicht nur neu gebaute Vorgänge; für alle müssen die
 `vg2:`-Einträge gelöscht werden (DD-052). `llm-semantics:` enthält das Modell bewusst nicht:
 sonst fasste nach jedem Wechsel jeder Neubau alle Dokumente neu zusammen.
+
+<a id="dd-081"></a>
+## DD-081: Einheitliches Zahlenformat für Geldbeträge
+
+**Kontext:** Das Modell übernahm das Format der Vorlage, in einer Zusammenfassung etwa
+„1.322.962.200 Euro", „1,3229 Milliarden" und „491.6 Tsd." (GitHub Issue #179).
+
+**Entscheidung:**
+1. Eine Regel im `SYSTEM_PROMPT`: ab einer Milliarde Mrd. Euro, ab einer Million Mio. Euro,
+   je zwei Nachkommastellen; kleinere Beträge ausgeschrieben mit Tausenderpunkt;
+   Dezimalkomma; Einheit der Vorlage beachten (Tabellen oft in Tsd. Euro).
+2. Einheit je Betrag, nicht je Absatz: für ein kleines Modell einfacher.
+3. Marker `zahlenformat` im Fingerprint beider Scraper: gecachte Vorgänge werden einmal neu
+   gebaut (DD-052).
+
+**Konsequenz:** Alle Dokumente werden einmal neu zusammengefasst, Kurztitel und Ressort neu
+erzeugt (ihr Schlüssel enthält die Zusammenfassung, DD-063). Alte Schlagworte bleiben, weil
+das Backend sie vereinigt (DD-037). `gpt-5-nano` hält die Regel nicht immer (z. B.
+„0,49 Mio. Euro"); kein Regex-Nachfilter, solange das reicht.

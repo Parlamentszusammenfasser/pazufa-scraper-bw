@@ -131,7 +131,13 @@ SYSTEM_PROMPT = (
     "Füge keine Formatierungen oder Hervorhebungen hinzu. "
     "Antworte nur mit dem reinen Text, ohne Einleitungen oder Erklärungen. "
     "Die Antwort darf nur die direkt angeforderten Informationen enthalten. "
-    "Spekulationen oder Annahmen sind zu vermeiden."
+    "Spekulationen oder Annahmen sind zu vermeiden. "
+    # The model copied each source's own number format (DD-081).
+    "Geldbeträge ab einer Milliarde in Mrd. Euro, ab einer Million in Mio. Euro mit zwei "
+    "Nachkommastellen angeben (z. B. 1,32 Mrd. Euro statt 1.322.962.200 Euro oder 1,3229 Milliarden "
+    "Euro), kleinere Beträge ausgeschrieben mit Tausenderpunkt (z. B. 491.600 Euro). Die Einheit "
+    "der Vorlage beachten (Tabellen oft in Tsd. Euro). Dezimalkomma; denselben Betrag nicht "
+    "mehrfach in verschiedenen Schreibweisen nennen."
 )
 
 # Closes the JSON template of the single-topic prompts below: Brandenburg's three

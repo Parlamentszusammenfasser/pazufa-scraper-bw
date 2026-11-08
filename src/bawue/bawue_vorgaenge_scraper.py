@@ -174,6 +174,8 @@ def _vorgang_fingerprint(raw: RawVorgang, entwuerfe: list[str] | None = None) ->
     # Rebuild cached Vorgänge once, so they send their Kurzreferat (DD-080).
     if raw.get("Kurzreferat", "").strip():
         payload.append("kurzreferat")
+    # Rebuild cached Vorgänge once, so documents are summarised with one money format (DD-081).
+    payload.append("zahlenformat")
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 
