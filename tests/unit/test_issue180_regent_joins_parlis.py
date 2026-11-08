@@ -22,7 +22,7 @@ from bawue.beteiligung_client import BASE_URL
 from bawue.beteiligung_parser import parse_process_detail
 from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY, RedisUnavailableError
 from bawue.pdf_text import PdfNotAvailableError
-from bawue.types import UNSET, Doktyp, Stationstyp, Vorgang
+from bawue.types import UNSET, Doktyp, Stationstyp, Vorgang, Vorgangstyp
 from bawue.upload_throttle import UploadOutcome
 from tests.factories import make_scraper
 from tests.unit.test_bawue_scraper import _InMemoryCache, _make_raw_vorgang
@@ -45,6 +45,7 @@ class Pair:
     eingang: str
     drucksache: str
     drucksache_text: str
+    vorgangstyp: str = "Gesetzgebung"
 
     @property
     def drucksache_pdf(self) -> str:
@@ -73,6 +74,7 @@ HBEGLG = Pair(
     "20.10.2026",
     "18/701",
     "drucksache_18_701",
+    "Haushaltsgesetzgebung",
 )
 
 
@@ -86,7 +88,11 @@ def _backend_merges(a: Vorgang, b: Vorgang) -> bool:
     def ids(v: Vorgang) -> set[tuple[str, str]]:
         return set() if v.ids is UNSET else {(i.typ, i.id) for i in v.ids}
 
-    same_frame = a.wahlperiode == b.wahlperiode and a.typ == b.typ
+    # Assumes the backend puts gg-land-parl-haushalt into gg-land-parl's vgtyp_class (issue #60).
+    def vgtyp_class(v: Vorgang) -> Vorgangstyp:
+        return Vorgangstyp.GG_LAND_PARL if v.typ == Vorgangstyp.GG_LAND_PARL_HAUSHALT else v.typ
+
+    same_frame = a.wahlperiode == b.wahlperiode and vgtyp_class(a) == vgtyp_class(b)
     return same_frame and (a.api_id == b.api_id or bool(ids(a) & ids(b)))
 
 
@@ -126,7 +132,9 @@ def _raw(pair: Pair, initiative: str = "Landesregierung") -> dict:
         "seiten": 40,
         "pdf_url": pair.drucksache_pdf,
     }
-    return _make_raw_vorgang(pair.vid, titel=pair.titel, initiative=initiative, fundstellen=[fund])
+    return _make_raw_vorgang(
+        pair.vid, titel=pair.titel, vorgangstyp=pair.vorgangstyp, initiative=initiative, fundstellen=[fund]
+    )
 
 
 def _pdfs(*pairs: Pair, entwurf_text: str | None = None) -> dict[str, str]:

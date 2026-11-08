@@ -32,7 +32,7 @@ class TestVorgangstypMapping:
         "parlis_typ,expected",
         [
             ("Gesetzgebung", Vorgangstyp.GG_LAND_PARL),
-            ("Haushaltsgesetzgebung", Vorgangstyp.GG_LAND_PARL),
+            ("Haushaltsgesetzgebung", Vorgangstyp.GG_LAND_PARL_HAUSHALT),
             ("Volksantrag", Vorgangstyp.GG_LAND_VOLK),
             ("Antrag", Vorgangstyp.SONSTIG),
             ("Antrag der Landesregierung/eines Ministeriums", Vorgangstyp.SONSTIG),
