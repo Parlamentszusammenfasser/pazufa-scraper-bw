@@ -115,8 +115,9 @@ Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legt
    Verglichen werden nur die noch nicht übernommenen.
 3. Der Text entscheidet: Mindestens 0,4 der Wort-5-Gramme des Entwurfs stehen in der Drucksache,
    beim Zweitbesten weniger als 0,2 (WP 17/18: Paare 0,51 bis 0,96, fremde höchstens 0,16). Ist ein
-   PDF nicht lesbar, entscheidet der nächste Lauf; ein vom Portal entferntes Entwurfs-PDF (404)
-   zählt als leer.
+   PDF nicht lesbar, entscheidet der nächste Lauf; der Vorgang ist dann schon hochgeladen, also gilt
+   der zweite Weg in 4 (selten: in 8 Wochen Prod kein Fehlschlag). Ein vom Portal entferntes
+   Entwurfs-PDF (404) zählt als leer.
 4. Kennt das Backend den Vorgang noch nicht (`GET vorgang`), übernimmt er die `api_id` des
    Entwurfs; das Backend führt beide zusammen und behält die `preparl-regent`-Station. Sonst
    behält er seine `api_id` (zwei Kandidaten: `AmbiguousMatch`) und bekommt die Station mit

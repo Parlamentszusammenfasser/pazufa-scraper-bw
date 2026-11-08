@@ -652,7 +652,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     self._entwurf_shingles[slug] = await self._pdf_shingles(urls, gone_is_empty=True)
         entwuerfe = {slug: self._entwurf_shingles.get(slug) for slug in slugs}
         if drucksache is None or None in entwuerfe.values():
-            # Unread is not "no draft": deciding now would keep the bill apart for good.
+            # Unread is not "no draft". The bill uploads under its own api_id meanwhile, so a match
+            # next cycle adds the station and leaves the portal Vorgang to an admin (DD-079).
             self._retry_next_cycle.add(vorgang_id)
             return None
         scores = {slug: containment(s, drucksache) for slug, s in entwuerfe.items()}
