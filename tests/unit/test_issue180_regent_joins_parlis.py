@@ -352,7 +352,7 @@ async def test_draft_of_another_law_is_not_taken_over():
 
 @pytest.mark.asyncio
 async def test_last_years_law_is_not_taken_over():
-    """The 2024 salary law shares most wording with the 2026 one (0.09), but not enough."""
+    """The 2024 salary law reads much like the 2026 one, yet shares only 0.09 of its 5-grams."""
     cache = _InMemoryCache()
     await _upload_draft(cache, BVANP)
     await _assert_separate(cache, BVANP, _pdfs(BVANP, entwurf_text="entwurf_bvanpg_2024"))

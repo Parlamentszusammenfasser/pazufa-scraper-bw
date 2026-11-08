@@ -26,7 +26,7 @@ DRUCKSACHE_OF = {
     "entwurf_gewhag": "drucksache_18_692",
     "entwurf_hbeglg_2027": "drucksache_18_701",
 }
-# Last salary law: shares most of its wording with the 2026 one, the hardest wrong candidate.
+# Last salary law: reads much like the 2026 one, the hardest wrong candidate.
 FAMILY = ["entwurf_bvanpg_2024"]
 
 

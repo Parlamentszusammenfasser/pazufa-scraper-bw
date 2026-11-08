@@ -122,7 +122,8 @@ Dashed arrows: the pre-parliamentary stages are optional.
 - Caching: Redis `BawueCache`, no TTL; a Vorgang is skipped only while its PARLIS fingerprint is unchanged (DD-052),
   a Sitzungen date only while its events, Beteiligungsfristen and agenda are unchanged (DD-066, DD-070, DD-076)
 - Models: Generated from the OpenAPI spec by `pazufa-scraper-core` — no hand-written models
-- The PaZuFa backend handles deduplication/merging — the scraper does not need to
+- The PaZuFa backend merges Vorgänge on a shared `api_id` or `vg_ident` — the scraper only keeps them
+  stable, and gives a bill its draft's `api_id` (DD-079)
 
 ## 2. Dependencies
 

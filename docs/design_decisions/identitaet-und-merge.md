@@ -110,9 +110,9 @@ Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legt
    (`api_id`, Wahlperiode, Portal-Link, Ministerium, PDFs mit Datum). Scheitert das, bleibt er
    ungecacht. Der Marker `entwuerfe` im Fingerprint füllt das Register einmal.
 2. Kandidaten eines Gesetzentwurfs der Landesregierung (`gg-land-parl`): Entwürfe derselben
-   Wahlperiode aus dem Jahr vor der Drucksache, nicht am selben Tag (`R` vor `S`), noch von keinem
-   Vorgang übernommen. Sie gehören zum `vg2:`-Fingerprint (DD-052): Ein später registrierter
-   Entwurf baut den Vorgang einmal neu.
+   Wahlperiode aus dem Jahr vor der Drucksache, nicht am selben Tag (`R` vor `S`). Sie gehören zum
+   `vg2:`-Fingerprint (DD-052): Ein später registrierter Entwurf baut den Vorgang einmal neu.
+   Verglichen werden nur die noch nicht übernommenen.
 3. Der Text entscheidet: Mindestens 0,4 der Wort-5-Gramme des Entwurfs stehen in der Drucksache,
    beim Zweitbesten weniger als 0,2 (WP 17/18: Paare 0,51 bis 0,96, fremde höchstens 0,16). Ist ein
    PDF nicht lesbar, entscheidet der nächste Lauf; ein vom Portal entferntes Entwurfs-PDF (404)
@@ -121,7 +121,7 @@ Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legt
    Entwurfs; das Backend führt beide zusammen und behält die `preparl-regent`-Station. Sonst
    behält er seine `api_id` (zwei Kandidaten: `AmbiguousMatch`) und bekommt die Station mit
    denselben Dokumenten; den Portal-Vorgang löscht ein Admin (Laufbericht).
-5. Die Entscheidung steht in `entwurf-uebernahmen`. Danach lädt der Beteiligungs-Scraper den
+5. Die Entscheidung steht nur in `entwurf-uebernahmen`. Danach lädt der Beteiligungs-Scraper den
    Entwurf nicht mehr hoch, geprüft auch direkt vor dem Upload: PARLIS schreibt den Vorgang, sonst
    wechselten Titel und Kurztitel.
 
@@ -129,9 +129,12 @@ Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legt
 zeigt `ids[0]`, Titel wechseln), Abgleich im Backend (träfe alle Länder).
 
 **Konsequenz:** Ein verpasster Treffer lässt zwei Vorgänge wie bisher. Ein falscher ist bei diesen
-Schwellen unwahrscheinlich, aber möglich; der Laufbericht nennt deshalb jede Übernahme mit ihrem
-Wert. `initiatoren` = Ministerium und Landesregierung. Für einen neuen Gesetzentwurf mit
-Kandidaten werden deren PDFs einmal je Lauf gelesen.
+Schwellen unwahrscheinlich, aber möglich; der Laufbericht nennt deshalb jede Übernahme mit Wert.
+Rückgängig, ohne den Entwurf: Vorgang löschen, im Eintrag `vorgnr` auf `-` setzen (sperrt den
+Entwurf) und `vg2:<vorgnr>` löschen. Geht Redis verloren, lädt der Beteiligungs-Scraper alle
+Entwürfe einmal neu: Ein übernommener zeigt kurz seinen Titel, ein gelöschter Portal-Vorgang kommt
+zurück und steht wieder im Laufbericht. Ministerium und Landesregierung sind nur bei Übernahme
+beide `initiatoren`. PDFs von Kandidaten werden einmal je Lauf gelesen.
 
 <a id="dd-043"></a>
 ## DD-043: Der `#page=N`-Anker gehört zur Dokumentidentität
