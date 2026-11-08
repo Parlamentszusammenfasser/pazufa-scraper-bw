@@ -139,8 +139,8 @@ def _pdfs(*pairs: Pair, entwurf_text: str | None = None) -> dict[str, str]:
     return texts
 
 
-async def _build(scraper, raw, pdfs: dict[str, str | Exception], *, uploaded: bool = False):
-    """Build the bill as item_extractor does; `uploaded`: the backend already has it."""
+async def _build(scraper, raw, pdfs: dict[str, str | Exception], *, uploaded: bool | Exception = False):
+    """Build the bill as item_extractor does; `uploaded`: the backend already has it, or asking it raises."""
 
     async def _read(_session, url):
         if isinstance(text := pdfs[url], Exception):
@@ -148,9 +148,10 @@ async def _build(scraper, raw, pdfs: dict[str, str | Exception], *, uploaded: bo
         return text
 
     read = AsyncMock(side_effect=_read)
+    error = uploaded if isinstance(uploaded, Exception) else None
     with (
         patch("bawue.bawue_vorgaenge_scraper.read_pdf", read),
-        patch("bawue.bawue_vorgaenge_scraper.vorgang_exists", return_value=uploaded) as exists,
+        patch("bawue.bawue_vorgaenge_scraper.vorgang_exists", return_value=uploaded, side_effect=error) as exists,
     ):
         vorgang = await scraper._build_vorgang(raw)
     return vorgang, read, exists
@@ -347,6 +348,36 @@ async def test_unsaved_decision_retries_next_cycle():
 
     assert parlis.api_id == regent.api_id
     assert BVANP.vid in scraper._retry_next_cycle
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("down", ["backend", "redis"])
+async def test_failure_while_deciding_records_nothing(down):
+    """A decision on a guess would be permanent: the build fails, uncached (#83), and decides next cycle."""
+    cache = _InMemoryCache()
+    regent = await _upload_draft(cache, BVANP)
+    scraper = _parlis(cache)
+    get_raw = cache.get_raw
+    uploaded: bool | Exception = False
+    if down == "backend":
+        uploaded = BawueApiError(503, b"", "vorgang_get_by_id")
+    else:
+
+        def _down(key, typehint=""):
+            if key == UEBERNAHMEN_KEY:
+                raise RedisUnavailableError("Redis read failed")
+            return get_raw(key)
+
+        cache.get_raw = _down
+
+    with pytest.raises((BawueApiError, RedisUnavailableError)):
+        await _build(scraper, _raw(BVANP), _pdfs(BVANP), uploaded=uploaded)
+
+    cache.get_raw = get_raw
+    assert _uebernahmen(cache) == {}
+    assert scraper._entwurf_joins == []
+    parlis, _, _ = await _build(_parlis(cache), _raw(BVANP), _pdfs(BVANP))
+    assert parlis.api_id == regent.api_id
 
 
 @pytest.mark.asyncio
