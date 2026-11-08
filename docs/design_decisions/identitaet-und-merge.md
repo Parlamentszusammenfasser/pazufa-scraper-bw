@@ -122,15 +122,15 @@ Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legt
    behält er seine `api_id` (zwei Kandidaten: `AmbiguousMatch`) und bekommt die Station mit
    denselben Dokumenten; den Portal-Vorgang löscht ein Admin (Laufbericht).
 5. Die Entscheidung steht in `entwurf-uebernahmen`. Danach lädt der Beteiligungs-Scraper den
-   Entwurf nicht mehr hoch: PARLIS schreibt den Vorgang, sonst wechselten Titel und Kurztitel.
+   Entwurf nicht mehr hoch, geprüft auch direkt vor dem Upload: PARLIS schreibt den Vorgang, sonst
+   wechselten Titel und Kurztitel.
 
 **Verworfen:** Titelvergleich (WP 17: ein falsches Paar), gemeinsamer `vg_ident` (die Website
 zeigt `ids[0]`, Titel wechseln), Abgleich im Backend (träfe alle Länder).
 
 **Konsequenz:** Ein verpasster Treffer lässt zwei Vorgänge wie bisher, nie einen falsch
 verschmolzenen. `initiatoren` = Ministerium und Landesregierung. Für einen neuen Gesetzentwurf mit
-Kandidaten werden deren PDFs einmal je Lauf gelesen. Ändert sich die Portalseite im Lauf der
-Übernahme, überschreibt der Entwurf den Titel bis zum nächsten PARLIS-Upload.
+Kandidaten werden deren PDFs einmal je Lauf gelesen.
 
 <a id="dd-043"></a>
 ## DD-043: Der `#page=N`-Anker gehört zur Dokumentidentität

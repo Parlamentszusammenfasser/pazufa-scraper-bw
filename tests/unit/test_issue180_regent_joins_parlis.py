@@ -21,6 +21,7 @@ from bawue.beteiligung_parser import parse_process_detail
 from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY
 from bawue.pdf_text import PdfNotAvailableError
 from bawue.types import UNSET, Doktyp, Stationstyp, Vorgang
+from bawue.upload_throttle import UploadOutcome
 from tests.factories import make_scraper
 from tests.unit.test_bawue_scraper import _InMemoryCache, _make_raw_vorgang
 from tests.unit.test_beteiligung_scraper import FIXTURES
@@ -448,6 +449,27 @@ async def test_taken_over_draft_is_never_uploaded_again():
     cache.store_raw(UEBERNAHMEN_KEY, json.dumps({BVANP.slug: {"vorgnr": BVANP.vid, "api_id": "x"}}))
 
     assert await scraper.get_cached_result(BVANP.slug) is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("taken", "uploaded"), [(BVANP.slug, False), ("another-law", True)], ids=["own", "other"])
+async def test_draft_taken_over_while_it_was_built_is_not_uploaded(taken, uploaded):
+    """PARLIS may take the draft over during the build (LLM enrichment): the cache check was before it."""
+    cache = _InMemoryCache()
+    scraper = _beteiligung_scraper()
+    scraper._wahlperiode = 18
+    scraper.config.cache = cache
+    regent = await scraper._build_vorgang(
+        BVANP.slug, parse_process_detail((FIXTURES / BVANP.fixture).read_text(), BASE_URL)
+    )
+    cache.store_raw(UEBERNAHMEN_KEY, json.dumps({taken: {"vorgnr": BVANP.vid, "api_id": "x"}}))
+
+    with patch("bawue.bawue_beteiligung_scraper.upload_vorgang", return_value=UploadOutcome(regent)) as upload:
+        sent = await scraper.send_result(regent)
+
+    assert upload.called is uploaded
+    assert (sent is not None) is uploaded
+    assert scraper._skipped == (0 if uploaded else 1)
 
 
 # -- Fingerprint: a draft registered later rebuilds the bill once ---------------------

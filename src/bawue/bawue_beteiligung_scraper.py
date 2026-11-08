@@ -129,6 +129,10 @@ class BawueBeteiligungScraper(VorgangsScraper):
             self.summary = ("Beteiligung", lines)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
+        if item.api_id in {_draft_api_id(slug) for slug in self._uebernahmen()}:
+            # Taken over while it was built; its titel would overwrite the bill's (DD-079).
+            self._skipped += 1
+            return None
         outcome = upload_vorgang(
             self._api_client,
             self.scraper_id,
@@ -174,12 +178,15 @@ class BawueBeteiligungScraper(VorgangsScraper):
     async def get_cached_result(self, item_key: str) -> str | None:
         """A cache hit only while the portal page is unchanged (issue #104, DD-052), and for good
         once a PARLIS bill took the draft over: PARLIS writes that Vorgang from then on (DD-079)."""
-        if item_key in json.loads(self.config.cache.get_raw(UEBERNAHMEN_KEY, "Übernahmen") or "{}"):
+        if item_key in self._uebernahmen():
             return "übernommen"
         cached = await super().get_cached_result(item_key)
         if cached is not None and cached == self._fingerprints.get(item_key):
             return cached
         return None
+
+    def _uebernahmen(self) -> dict[str, dict]:
+        return json.loads(self.config.cache.get_raw(UEBERNAHMEN_KEY, "Übernahmen") or "{}")
 
     async def store_extracted_result(self, item_key: str, result: Vorgang) -> None:
         if not (self._register_frist(item_key, result) and self._register_entwurf(item_key, result)):
@@ -274,7 +281,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             logger.warning("Skipping '%s' — a PDF has no publication date", slug)
             self._skipped += 1
             return None
-        api_id = uuid5(NAMESPACE_URL, f"beteiligung-{slug}")
+        api_id = _draft_api_id(slug)
 
         # An empty ministry yields no Autor — the new backend rejects
         # empty organisation strings, so the list stays empty rather than
@@ -337,7 +344,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             )
 
         return Vorgang(
-            api_id=str(api_id),
+            api_id=api_id,
             titel=titel,
             kurztitel=kurztitel,
             typ=Vorgangstyp.GG_LAND_PARL,
@@ -353,6 +360,10 @@ class BawueBeteiligungScraper(VorgangsScraper):
     async def _release_date(self, pdf_url: str) -> date | None:
         last_modified = await asyncio.to_thread(self._client.fetch_last_modified, pdf_url)
         return release_date(pdf_url, last_modified, earliest=wahlperiode_start(self._wahlperiode))
+
+
+def _draft_api_id(slug: str) -> str:
+    return str(uuid5(NAMESPACE_URL, f"beteiligung-{slug}"))
 
 
 def _midnight_utc(day: date) -> datetime:

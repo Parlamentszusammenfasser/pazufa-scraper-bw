@@ -57,6 +57,7 @@ def _make_scraper():
     scraper._llm_metrics = LLMMetrics()
     scraper.session = MagicMock()
     scraper.config = MagicMock()
+    scraper.config.cache.get_raw.return_value = None
     return scraper
 
 
@@ -712,8 +713,6 @@ class TestRunSummary:
         from bawue.api import BawueApiError
 
         scraper = _make_scraper()
-        mock_config = MagicMock()
-        scraper.config = mock_config
         scraper.scraper_id = "test-scraper-id"
 
         item = MagicMock()
