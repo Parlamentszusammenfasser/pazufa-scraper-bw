@@ -513,6 +513,23 @@ async def test_draft_the_portal_removed_is_no_candidate():
     assert HBEGLG.vid not in scraper._retry_next_cycle
 
 
+@pytest.mark.asyncio
+async def test_draft_pdf_the_portal_removed_leaves_the_others_to_decide():
+    cache = _InMemoryCache()
+    regent = await _upload_draft(cache, BVANP)
+    gone = "https://beteiligungsportal.baden-wuerttemberg.de/fileadmin/anlage.pdf"
+    entwuerfe = json.loads(cache.get_raw(ENTWUERFE_KEY))
+    entwuerfe[BVANP.slug]["pdfs"].insert(0, {"url": gone, "titel": "Anlage", "datum": "2026-06-17"})
+    cache.store_raw(ENTWUERFE_KEY, json.dumps(entwuerfe))
+    scraper = _parlis(cache)
+
+    parlis, read, _ = await _build(scraper, _raw(BVANP), {**_pdfs(BVANP), gone: PdfNotAvailableError(404, gone)})
+
+    assert parlis.api_id == regent.api_id
+    assert BVANP.vid not in scraper._retry_next_cycle
+    assert gone in [c.args[1] for c in read.call_args_list]
+
+
 # -- Beteiligung side -----------------------------------------------------------------
 
 
