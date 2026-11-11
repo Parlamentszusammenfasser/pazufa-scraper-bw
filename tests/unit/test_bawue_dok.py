@@ -405,8 +405,8 @@ class TestExtractSemanticsNoTruncation:
     The removed truncation (12 000-token cap) cut multi-topic plenary protocols
     mid-debate, so a later agenda item (the Fischereigesetz, Drucksache 17/529)
     was dropped while an earlier, unrelated debate survived in full — and the
-    summary then described the wrong topic. Only the issue #182 safety cap, above
-    any real document, cuts a tail.
+    summary then described the wrong topic. Only the issue #182 cap, above the
+    largest WP17 text, cuts a tail.
     """
 
     @pytest.mark.asyncio

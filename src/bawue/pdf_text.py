@@ -294,7 +294,7 @@ class PdfNotAvailableError(RuntimeError):
         self.status = status
 
 
-# Bounds memory (Cloud Run's /tmp is RAM too) and OCR time; the largest WP17 PDF has 3.4 MB (issue #182).
+# Bounds memory (Cloud Run's /tmp is RAM too); the largest WP17 PDF has 3.4 MB (issue #182).
 MAX_PDF_BYTES = 50 * 1024 * 1024
 
 

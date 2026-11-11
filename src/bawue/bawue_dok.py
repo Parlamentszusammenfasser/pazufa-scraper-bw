@@ -95,7 +95,8 @@ class LLMMetrics:
 
 MAX_JSON_RETRIES = 3
 _LLM_LIMIT = 3
-# ≈200k tokens, under gpt-5-nano's 272k input limit; the largest WP17 text has 773k (issue #182, DD-029).
+# Above the largest WP17 text (773k). Prose is ≈200k tokens, under gpt-5-nano's 272k input limit;
+# denser tables can still exceed it and then fall back to text-only (issue #182, DD-029).
 MAX_LLM_CHARS = 800_000
 
 
