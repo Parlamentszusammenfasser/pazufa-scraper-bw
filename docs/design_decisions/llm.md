@@ -31,7 +31,9 @@ Zielgesetz nicht (Issue #32, V-212391).
 
 **Entscheidung:**
 - Keine Kürzung. Der normalisierte Text geht vollständig ans LLM; das Seitenfenster um den
-  `#page=N`-Anker begrenzt Protokolle.
+  `#page=N`-Anker begrenzt Protokolle. Nur Ausreißer über `MAX_LLM_CHARS` (800 000 Zeichen,
+  ≈ 200k Tokens, unter dem Input-Limit von gpt-5-nano) werden gekappt; das größte Dokument
+  der WP17 hat 773 000 (Issue #182).
 - Ein Kontext-Header nennt Vorgangstitel und Drucksache; bei mehreren Themen zählt nur
   dieses. Beide gehen in den Cache-Schlüssel ein.
 

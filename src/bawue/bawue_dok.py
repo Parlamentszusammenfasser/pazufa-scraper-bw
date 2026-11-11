@@ -95,6 +95,8 @@ class LLMMetrics:
 
 MAX_JSON_RETRIES = 3
 _LLM_LIMIT = 3
+# ≈200k tokens, under gpt-5-nano's 272k input limit; the largest WP17 text has 773k (issue #182, DD-029).
+MAX_LLM_CHARS = 800_000
 
 
 _LLM_SLOT: dict = {}
@@ -437,7 +439,7 @@ async def extract_semantics(
     Returns a dict with keys like schlagworte, zusammenfassung, kurztitel,
     and optionally meinung/vorwort depending on doktyp.
 
-    The full document text is sent unmodified — there is no token truncation.
+    The full document text is sent, cut only past MAX_LLM_CHARS.
     When *dok_titel* and/or *drucksnr* are given, a context header is prepended
     so the model summarizes only the passages that concern this specific bill,
     even in multi-topic plenary protocols (issue #32).
@@ -446,6 +448,9 @@ async def extract_semantics(
     that occasionally emit malformed JSON, and validates score ranges
     post-extraction.
     """
+    if len(full_text) > MAX_LLM_CHARS:
+        logger.warning("Document text has %d chars, sending the first %d to the LLM", len(full_text), MAX_LLM_CHARS)
+        full_text = full_text[:MAX_LLM_CHARS]
     prompt = body_prompt or _prompt_for_doktyp(doktyp)
     context = _context_prefix(dok_titel, drucksnr)
     user_message = f"{context}{prompt}\n\n{full_text}"

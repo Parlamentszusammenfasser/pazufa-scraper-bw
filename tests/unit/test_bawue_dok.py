@@ -397,7 +397,8 @@ class TestExtractSemanticsNoTruncation:
     The removed truncation (12 000-token cap) cut multi-topic plenary protocols
     mid-debate, so a later agenda item (the Fischereigesetz, Drucksache 17/529)
     was dropped while an earlier, unrelated debate survived in full — and the
-    summary then described the wrong topic.
+    summary then described the wrong topic. Only the issue #182 safety cap, above
+    any real document, cuts a tail.
     """
 
     @pytest.mark.asyncio
@@ -411,6 +412,18 @@ class TestExtractSemanticsNoTruncation:
 
         user_msg = messages[-1]["content"]
         assert marker in user_msg, "the tail of a long protocol must not be truncated away"
+
+    @pytest.mark.asyncio
+    async def test_issue182_text_beyond_cap_is_cut(self, monkeypatch, caplog):
+        monkeypatch.setattr("bawue.bawue_dok.MAX_LLM_CHARS", 10)
+
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"):
+            messages = await _capture_llm_messages(
+                lambda: extract_semantics(_make_llm_mock(), "0123456789TAIL", Doktyp.ENTWURF)
+            )
+
+        assert messages[-1]["content"].endswith("\n\n0123456789")
+        assert "14 chars" in caplog.text
 
 
 class TestExtractSemanticsDocumentContext:
