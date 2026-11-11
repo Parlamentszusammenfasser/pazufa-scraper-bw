@@ -18,7 +18,9 @@ XSS-Prüfung des Backends aus (HTTP 400).
 1. **Erkennen und OCR:** `is_garbled()` schlägt an bei > 5 % Latin-Extended- oder > 0,5 %
    C1-Zeichen (bezogen auf Buchstaben, ganzes Dokument). Dann Tesseract-OCR (`deu`). Das
    Ergebnis gilt nur, wenn mehr nutzbarer Text übrig bleibt als beim Original
-   (`_usable_length`), denn OCR ersetzt den ganzen Text, auch saubere Seiten.
+   (`_usable_length`), denn OCR ersetzt den ganzen Text, auch saubere Seiten. PDFs über
+   `MAX_OCR_PAGES` (500 Seiten) behalten ihren nativen Text: OCR-Zeit wächst mit den Seiten
+   (Issue #182).
 2. **Absätze filtern:** `normalize_volltext()` verwirft Absätze mit schlechter Qualität
    (C1, Latin-Extended-B, vokallose lange Wörter, > 60 % Großbuchstaben).
 3. **Spitze Klammern** werden zu `‹`/`›`.

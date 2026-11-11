@@ -35,6 +35,7 @@ from bawue.bawue_dok import (
     zusammenfassung_text,
 )
 from bawue.pdf_text import (
+    MAX_OCR_PAGES,
     PdfNotAvailableError,
     agenda_text,
     ausgegeben_datum,
@@ -1820,6 +1821,21 @@ class TestExtractPdfTextOcrRetry:
         assert ocr_call_config.ocr.language == "deu"
         # No page hint → no page markers needed.
         assert ocr_call_config.pages is None or ocr_call_config.pages.insert_page_markers is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("content", ["", "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10])
+    async def test_issue182_no_ocr_past_max_ocr_pages(self, tmp_path, content):
+        """Issue #182: OCR time grows with pages, so a longer PDF keeps its native text."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+        result = _mock_extraction_result(content=content)
+        result.metadata["page_count"] = MAX_OCR_PAGES + 1
+
+        with patch("bawue.pdf_text.extract_file", new_callable=AsyncMock, return_value=result) as mock_extract:
+            text, _hash = await extract_pdf_text(pdf_file)
+
+        assert mock_extract.call_count == 1
+        assert text == content
 
     @pytest.mark.asyncio
     async def test_ocr_retry_keeps_page_markers(self, tmp_path):
