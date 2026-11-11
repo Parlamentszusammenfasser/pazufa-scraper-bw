@@ -10,3 +10,16 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: ci  # conventional commit, read by semantic-release
+
+  # poetry.lock; the Codeberg git deps (corelib, metrics client) stay manual.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      python:
+        patterns: ["*"]
+        update-types: [minor, patch]  # majors come as their own PRs
+    commit-message:
+      prefix: chore  # "chore(deps):" cuts no release; ships with the next fix/feat
+      include: scope
