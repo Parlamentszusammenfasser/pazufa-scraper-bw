@@ -504,13 +504,14 @@ _DRUCKSACHEN = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/
 def _route(pages: dict[str, bytes]) -> MagicMock:
     """session.get stub: the first URL prefix in *pages* answers, anything else is HTTP 404."""
 
-    async def _chunks(body, _size):
-        yield body
-
     def get(url, **_kwargs):
         body = next((b for prefix, b in pages.items() if url.startswith(prefix)), None)
+
+        async def _chunks():
+            yield body
+
         response = AsyncMock(status=200 if body is not None else 404, read=AsyncMock(return_value=body))
-        response.content.iter_chunked = lambda size: _chunks(body, size)
+        response.content.iter_any = _chunks
         response.__aenter__ = AsyncMock(return_value=response)
         response.__aexit__ = AsyncMock(return_value=False)
         return response

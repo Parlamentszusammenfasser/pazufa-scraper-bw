@@ -306,7 +306,7 @@ async def download_pdf(session, url: str) -> Path:
         if response.status != 200:
             raise PdfNotAvailableError(response.status, clean_url)
         content = bytearray()
-        async for chunk in response.content.iter_chunked(1 << 20):
+        async for chunk in response.content.iter_any():
             content += chunk
             if len(content) > MAX_PDF_BYTES:
                 raise ValueError(f"PDF larger than {MAX_PDF_BYTES} bytes: {clean_url}")

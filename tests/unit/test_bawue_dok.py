@@ -186,13 +186,13 @@ def _patch_llm(json_str: str):
 def _mock_session(status: int, body: bytes = SAMPLE_PDF_BYTES) -> MagicMock:
     """aiohttp-like session whose GET answers *status* with *body*, streamed in 8-byte chunks."""
 
-    async def _chunks(_size):
+    async def _chunks():
         for i in range(0, len(body), 8):
             yield body[i : i + 8]
 
     response = AsyncMock()
     response.status = status
-    response.content.iter_chunked = _chunks
+    response.content.iter_any = _chunks
     response.__aenter__ = AsyncMock(return_value=response)
     response.__aexit__ = AsyncMock(return_value=False)
     session = MagicMock()
