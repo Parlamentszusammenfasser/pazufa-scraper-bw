@@ -449,7 +449,12 @@ async def extract_semantics(
     post-extraction.
     """
     if len(full_text) > MAX_LLM_CHARS:
-        logger.warning("Document text has %d chars, sending the first %d to the LLM", len(full_text), MAX_LLM_CHARS)
+        logger.warning(
+            "Document %s has %d chars, sending the first %d to the LLM",
+            drucksnr or dok_titel,
+            len(full_text),
+            MAX_LLM_CHARS,
+        )
         full_text = full_text[:MAX_LLM_CHARS]
     prompt = body_prompt or _prompt_for_doktyp(doktyp)
     context = _context_prefix(dok_titel, drucksnr)

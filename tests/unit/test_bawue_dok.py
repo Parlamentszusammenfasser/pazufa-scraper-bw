@@ -427,11 +427,11 @@ class TestExtractSemanticsNoTruncation:
 
         with caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"):
             messages = await _capture_llm_messages(
-                lambda: extract_semantics(_make_llm_mock(), "0123456789TAIL", Doktyp.ENTWURF)
+                lambda: extract_semantics(_make_llm_mock(), "0123456789TAIL", Doktyp.ENTWURF, drucksnr="18/1")
             )
 
         assert messages[-1]["content"].endswith("\n\n0123456789")
-        assert "14 chars" in caplog.text
+        assert "18/1" in caplog.text
 
 
 class TestExtractSemanticsDocumentContext:
