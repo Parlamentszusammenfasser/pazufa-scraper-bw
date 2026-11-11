@@ -5,12 +5,14 @@ https://wiki.pazufa.de/de/Organisation/Tools/Observability. Both push only with 
 so local runs log the metrics (dry run) and ship nothing.
 """
 
+import atexit
 import logging
 import os
 import sys
 import time
 from collections import Counter
-from logging.handlers import BufferingHandler
+from logging.handlers import BufferingHandler, QueueHandler, QueueListener
+from queue import SimpleQueue
 
 import requests
 from pazufa_metrics_client import PazufaMetricsClient
@@ -129,8 +131,11 @@ class LokiHandler(BufferingHandler):
                 print(f"Loki push failed, log shipping stopped: {type(e).__name__}", file=sys.stderr)
 
 
-def add_loki_handler(config: BawueConfig) -> LokiHandler | None:
+def add_loki_handler(config: BawueConfig) -> QueueListener | None:
     """Ship this process's logs to Loki; None without a password.
+
+    The push runs on the listener's thread: a slow Loki must not stall the event loop or
+    the threads that log.
 
     shortcut: records still buffered when Cloud Run kills the job (timeout, OOM) are lost;
     Cloud Logging keeps them.
@@ -145,5 +150,10 @@ def add_loki_handler(config: BawueConfig) -> LokiHandler | None:
     }
     handler = LokiHandler(config.loki_url, (config.observability_username, config.observability_password), labels)
     handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
-    logging.getLogger().addHandler(handler)
-    return handler
+    queue: SimpleQueue = SimpleQueue()
+    listener = QueueListener(queue, handler)
+    listener.start()
+    # atexit runs last-registered first: the queue is drained before logging.shutdown flushes.
+    atexit.register(listener.stop)
+    logging.getLogger().addHandler(QueueHandler(queue))
+    return listener

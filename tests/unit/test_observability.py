@@ -176,17 +176,26 @@ class TestLokiHandler:
     @pytest.mark.parametrize("password", [None, "secret"])
     def test_added_only_with_password(self, monkeypatch, password):
         monkeypatch.setenv("ENVIRONMENT", "staging")
-        handler = add_loki_handler(_config(password))
+        root = logging.getLogger()
+        before = list(root.handlers)
+        listener = add_loki_handler(_config(password))
         try:
             if password is None:
-                assert handler is None
-            else:
-                assert handler in logging.getLogger().handlers
-                assert handler.labels == {
-                    "job": "pazufa_scraper",
-                    "scraper_uuid": "uuid-bw",
-                    "parliament": "BW",
-                    "environment": "staging",
-                }
+                assert listener is None
+                return
+            [loki] = listener.handlers
+            assert loki.labels == {
+                "job": "pazufa_scraper",
+                "scraper_uuid": "uuid-bw",
+                "parliament": "BW",
+                "environment": "staging",
+            }
+            # Records reach it through a queue, so the push runs off the logging thread.
+            logging.getLogger("queue.test").warning("queued")
+            listener.stop()
+            assert [r.getMessage() for r in loki.buffer if r.name == "queue.test"] == ["queued"]
         finally:
-            logging.getLogger().removeHandler(handler)
+            if listener:
+                listener.stop()
+                listener.handlers[0].buffer.clear()  # nothing for logging.shutdown to push
+            root.handlers = before

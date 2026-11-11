@@ -97,7 +97,7 @@ Push die ganze Gruppe ersetzt. `state="new"` enthält
 erneut versuchte Einträge (ein Cache-Miss unterscheidet sie nicht); Ablehnungen mit HTTP-Status
 zählen als `submitted{result="rejected", statuscode}`, Fehler ohne Antwort als
 `failed{reason="exception"}`, Redis-Fehler als `failed{reason="cache_error"}`, PDFs mit 404 nach
-vier Wochen als `failed{entity="document", reason="not_found"}`. Logs gehen gebündelt an Loki,
+vier Wochen als `failed{entity="document", reason="not_found"}`. Logs gehen gebündelt aus einem eigenen Thread an Loki,
 das Level als Label; nach einem gescheiterten Push stoppt der Versand für den Lauf. Beides nur
 mit `OBSERVABILITY_PASSWORD`, sonst werden die Metriken nur geloggt. Kein OpenTelemetry: das
 Pushgateway nimmt kein OTLP.
