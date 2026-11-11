@@ -183,11 +183,16 @@ def _patch_llm(json_str: str):
 # ---------------------------------------------------------------------------
 
 
-def _mock_session(status: int) -> MagicMock:
-    """aiohttp-like session whose GET answers *status* with SAMPLE_PDF_BYTES."""
+def _mock_session(status: int, body: bytes = SAMPLE_PDF_BYTES) -> MagicMock:
+    """aiohttp-like session whose GET answers *status* with *body*, streamed in 8-byte chunks."""
+
+    async def _chunks(_size):
+        for i in range(0, len(body), 8):
+            yield body[i : i + 8]
+
     response = AsyncMock()
     response.status = status
-    response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
+    response.content.iter_chunked = _chunks
     response.__aenter__ = AsyncMock(return_value=response)
     response.__aexit__ = AsyncMock(return_value=False)
     session = MagicMock()
@@ -224,6 +229,14 @@ class TestDownloadPdf:
             await download_pdf(session, "https://example.com/missing.pdf")
 
         assert caplog.records == []
+
+    @pytest.mark.asyncio
+    async def test_issue182_oversized_pdf_raises(self, monkeypatch):
+        """Issue #182: the body is streamed and the download aborts past MAX_PDF_BYTES."""
+        monkeypatch.setattr("bawue.pdf_text.MAX_PDF_BYTES", 16)
+
+        with pytest.raises(ValueError, match=r"larger than 16 bytes: https://example.com/huge.pdf"):
+            await download_pdf(_mock_session(200, b"x" * 40), "https://example.com/huge.pdf")
 
 
 # ---------------------------------------------------------------------------

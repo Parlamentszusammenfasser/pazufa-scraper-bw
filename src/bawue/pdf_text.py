@@ -294,14 +294,22 @@ class PdfNotAvailableError(RuntimeError):
         self.status = status
 
 
+# Bounds memory (Cloud Run's /tmp is RAM too) and OCR time; the largest WP17 PDF has 3.4 MB (issue #182).
+MAX_PDF_BYTES = 50 * 1024 * 1024
+
+
 async def download_pdf(session, url: str) -> Path:
-    """Download a PDF to a temporary file via aiohttp session."""
+    """Download a PDF of at most MAX_PDF_BYTES to a temporary file via aiohttp session."""
     clean_url = url.split("#")[0] if "#" in url else url
     ssl_ctx = ssl.create_default_context(cafile=certifi.where())
     async with session.get(clean_url, ssl=ssl_ctx, timeout=aiohttp.ClientTimeout(total=60)) as response:
         if response.status != 200:
             raise PdfNotAvailableError(response.status, clean_url)
-        content = await response.read()
+        content = bytearray()
+        async for chunk in response.content.iter_chunked(1 << 20):
+            content += chunk
+            if len(content) > MAX_PDF_BYTES:
+                raise ValueError(f"PDF larger than {MAX_PDF_BYTES} bytes: {clean_url}")
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(content)

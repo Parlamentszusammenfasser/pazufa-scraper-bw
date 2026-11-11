@@ -487,7 +487,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 |-------------------|-------------------------|--------------------------------------------------|
 | 1 — Full          | PDF + LLM succeed       | Dokument with volltext, hash, and all LLM fields |
 | 2 — Text-only     | PDF succeeds, LLM fails | Dokument with volltext + hash, no LLM fields     |
-| 3 — Metadata-only | PDF download fails      | Original Dokument unchanged                      |
+| 3 — Metadata-only | PDF download fails (or PDF > 50 MiB, issue #182) | Original Dokument unchanged |
 
 Spec 0.2.5 dropped `Station.trojanergefahr`, so the score is no longer extracted at all (DD-051).
 `enrich_dokument()` returns an `EnrichmentResult(dokument, download_failed)` NamedTuple; all
