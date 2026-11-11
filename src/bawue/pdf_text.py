@@ -294,14 +294,22 @@ class PdfNotAvailableError(RuntimeError):
         self.status = status
 
 
+# Bounds memory (Cloud Run's /tmp is RAM too); the largest WP17 PDF has 3.4 MB (issue #182).
+MAX_PDF_BYTES = 50 * 1024 * 1024
+
+
 async def download_pdf(session, url: str) -> Path:
-    """Download a PDF to a temporary file via aiohttp session."""
+    """Download a PDF of at most MAX_PDF_BYTES to a temporary file via aiohttp session."""
     clean_url = url.split("#")[0] if "#" in url else url
     ssl_ctx = ssl.create_default_context(cafile=certifi.where())
     async with session.get(clean_url, ssl=ssl_ctx, timeout=aiohttp.ClientTimeout(total=60)) as response:
         if response.status != 200:
             raise PdfNotAvailableError(response.status, clean_url)
-        content = await response.read()
+        content = bytearray()
+        async for chunk in response.content.iter_any():
+            content += chunk
+            if len(content) > MAX_PDF_BYTES:
+                raise ValueError(f"PDF larger than {MAX_PDF_BYTES} bytes: {clean_url}")
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(content)
@@ -327,6 +335,8 @@ async def download_pdf(session, url: str) -> Path:
 # that code path SIGABRTs in kreuzberg 4.9.9, so max_threads is the usable lever.
 _OCR_MAX_THREADS = 1
 _OCR_LIMIT = 2
+# OCR time grows with pages, not bytes: 0.76 s/page (17/1104); the largest WP17 PDF has 225 pages (issue #182).
+MAX_OCR_PAGES = 500
 _OCR_SLOT: dict = {}
 
 
@@ -360,7 +370,7 @@ async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[
             caller can cut a ``#page=N`` window (``extract_relevant_pages``) or a
             protocol's agenda pages (``agenda_text``, issue #74).
 
-    Returns (full_text, hash).  Falls back to OCR when:
+    Returns (full_text, hash).  Falls back to OCR, up to MAX_OCR_PAGES pages, when:
     1. Normal extraction yields fewer than 64 characters, or
     2. The extracted text is garbled (broken font encoding detected).
 
@@ -378,8 +388,12 @@ async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[
 
     result = await extract_file(pdf_path, config=config)
     text = result.content or ""
+    pages = result.metadata.get("page_count", 0)
 
-    if len(text) < MIN_TEXT_LENGTH:
+    if pages > MAX_OCR_PAGES:
+        if len(text) < MIN_TEXT_LENGTH or is_garbled(text):
+            logger.warning("PDF has %d pages, over %d for OCR: keeping its native text", pages, MAX_OCR_PAGES)
+    elif len(text) < MIN_TEXT_LENGTH:
         logger.warning("Normal text extraction yielded <%d chars, retrying with OCR", MIN_TEXT_LENGTH)
         async with _ocr_semaphore():
             ocr_result = await extract_file(pdf_path, config=ocr_config)

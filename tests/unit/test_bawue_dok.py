@@ -35,6 +35,7 @@ from bawue.bawue_dok import (
     zusammenfassung_text,
 )
 from bawue.pdf_text import (
+    MAX_OCR_PAGES,
     PdfNotAvailableError,
     agenda_text,
     ausgegeben_datum,
@@ -185,9 +186,13 @@ def _patch_llm(json_str: str):
 
 def _mock_session(status: int) -> MagicMock:
     """aiohttp-like session whose GET answers *status* with SAMPLE_PDF_BYTES."""
+
+    async def _chunks():
+        yield SAMPLE_PDF_BYTES
+
     response = AsyncMock()
     response.status = status
-    response.read = AsyncMock(return_value=SAMPLE_PDF_BYTES)
+    response.content.iter_any = _chunks
     response.__aenter__ = AsyncMock(return_value=response)
     response.__aexit__ = AsyncMock(return_value=False)
     session = MagicMock()
@@ -224,6 +229,22 @@ class TestDownloadPdf:
             await download_pdf(session, "https://example.com/missing.pdf")
 
         assert caplog.records == []
+
+    @pytest.mark.asyncio
+    async def test_issue182_oversized_pdf_stops_at_the_cap(self, monkeypatch):
+        """Issue #182: the download aborts past MAX_PDF_BYTES, before reading the rest."""
+        monkeypatch.setattr("bawue.pdf_text.MAX_PDF_BYTES", 16)
+
+        async def _stream():
+            for _ in range(3):
+                yield b"x" * 8
+            raise AssertionError("read past MAX_PDF_BYTES")
+
+        session = _mock_session(200)
+        session.get.return_value.content.iter_any = _stream
+
+        with pytest.raises(ValueError, match=r"larger than 16 bytes: https://example.com/huge.pdf"):
+            await download_pdf(session, "https://example.com/huge.pdf")
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +405,8 @@ class TestExtractSemanticsNoTruncation:
     The removed truncation (12 000-token cap) cut multi-topic plenary protocols
     mid-debate, so a later agenda item (the Fischereigesetz, Drucksache 17/529)
     was dropped while an earlier, unrelated debate survived in full — and the
-    summary then described the wrong topic.
+    summary then described the wrong topic. Only the issue #182 cap, above the
+    largest WP17 text, cuts a tail.
     """
 
     @pytest.mark.asyncio
@@ -398,6 +420,18 @@ class TestExtractSemanticsNoTruncation:
 
         user_msg = messages[-1]["content"]
         assert marker in user_msg, "the tail of a long protocol must not be truncated away"
+
+    @pytest.mark.asyncio
+    async def test_issue182_text_beyond_cap_is_cut(self, monkeypatch, caplog):
+        monkeypatch.setattr("bawue.bawue_dok.MAX_LLM_CHARS", 10)
+
+        with caplog.at_level(logging.WARNING, logger="bawue.bawue_dok"):
+            messages = await _capture_llm_messages(
+                lambda: extract_semantics(_make_llm_mock(), "0123456789TAIL", Doktyp.ENTWURF, drucksnr="18/1")
+            )
+
+        assert messages[-1]["content"].endswith("\n\n0123456789")
+        assert "18/1" in caplog.text
 
 
 class TestExtractSemanticsDocumentContext:
@@ -1787,6 +1821,21 @@ class TestExtractPdfTextOcrRetry:
         assert ocr_call_config.ocr.language == "deu"
         # No page hint → no page markers needed.
         assert ocr_call_config.pages is None or ocr_call_config.pages.insert_page_markers is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("content", ["", "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10])
+    async def test_issue182_no_ocr_past_max_ocr_pages(self, tmp_path, content):
+        """Issue #182: OCR time grows with pages, so a longer PDF keeps its native text."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
+        result = _mock_extraction_result(content=content)
+        result.metadata["page_count"] = MAX_OCR_PAGES + 1
+
+        with patch("bawue.pdf_text.extract_file", new_callable=AsyncMock, return_value=result) as mock_extract:
+            text, _hash = await extract_pdf_text(pdf_file)
+
+        assert mock_extract.call_count == 1
+        assert text == content
 
     @pytest.mark.asyncio
     async def test_ocr_retry_keeps_page_markers(self, tmp_path):

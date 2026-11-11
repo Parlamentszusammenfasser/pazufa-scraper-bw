@@ -9,6 +9,7 @@ import logging
 
 import requests
 
+from bawue.pdf_text import MAX_PDF_BYTES
 from bawue.rate_limiter import AdaptiveRateLimiter
 
 logger = logging.getLogger(__name__)
@@ -58,8 +59,12 @@ class GesetzblattClient:
         return resp.text
 
     def fetch_pdf(self, pdf_url: str) -> bytes:
-        """Fetch a Gesetzblatt PDF (the ``eID=dumpFile`` link of a detail page)."""
-        return self._get(pdf_url, timeout=60).content
+        """Fetch a Gesetzblatt PDF (the ``eID=dumpFile`` link of a detail page), at most MAX_PDF_BYTES."""
+        with self._get(pdf_url, timeout=60, stream=True) as resp:
+            content = resp.raw.read(MAX_PDF_BYTES + 1, decode_content=True)
+        if len(content) > MAX_PDF_BYTES:
+            raise ValueError(f"PDF larger than {MAX_PDF_BYTES} bytes: {pdf_url}")
+        return content
 
     def fetch_detail_for(self, year: int, num: int) -> str:
         """Fetch the detail page for entry ``YYYY-N``. Raises on any error status."""

@@ -478,7 +478,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 - JSON mode; malformed JSON is fixed with json-repair; up to 3 API retries
 - Concurrency limited to 3 parallel calls (`asyncio.Semaphore`)
 - Two-level cache skips LLM calls for known PDFs: in-memory per cycle, then Redis (key = content hash + prompt fingerprint, DD-020)
-- Full document text is sent to the LLM (no truncation); a context header names the target bill title + Drucksache so multi-topic protocols are summarized for the correct bill (DD-029)
+- Full document text is sent to the LLM, cut only past 800k chars (above the largest WP17 text, issue #182); a context header names the target bill title + Drucksache so multi-topic protocols are summarized for the correct bill (DD-029)
 - Plenary protocols (`redeprotokoll`): the LLM reads only the Fundstelle's printed pages (`S. 168-172; 179`), mapped from the `#page` anchor and capped at the volltext window; neutral, without Vorgang context (DD-037). Without pages or anchor: the whole window, one summary per session. `narrow_to_relevant_section` never narrows
 
 **Graceful degradation (3 tiers):**
@@ -487,7 +487,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 |-------------------|-------------------------|--------------------------------------------------|
 | 1 — Full          | PDF + LLM succeed       | Dokument with volltext, hash, and all LLM fields |
 | 2 — Text-only     | PDF succeeds, LLM fails | Dokument with volltext + hash, no LLM fields     |
-| 3 — Metadata-only | PDF download fails      | Original Dokument unchanged                      |
+| 3 — Metadata-only | PDF download fails (or PDF > 50 MiB, issue #182) | Original Dokument unchanged |
 
 Spec 0.2.5 dropped `Station.trojanergefahr`, so the score is no longer extracted at all (DD-051).
 `enrich_dokument()` returns an `EnrichmentResult(dokument, download_failed)` NamedTuple; all
