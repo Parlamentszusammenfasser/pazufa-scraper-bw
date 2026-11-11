@@ -77,3 +77,16 @@ class TestRequestDelay:
         elapsed = time.monotonic() - start
 
         assert elapsed >= 0.1
+
+
+class TestFetchPdf:
+    @responses.activate
+    def test_issue182_pdf_is_capped_at_max_pdf_bytes(self, client, monkeypatch):
+        monkeypatch.setattr("bawue.gesetzblatt_client.MAX_PDF_BYTES", 16)
+        url = f"{BASE_URL}/index.php?eID=dumpFile&f=1"
+        responses.add(responses.GET, url, body=b"x" * 16)
+        responses.add(responses.GET, url, body=b"x" * 17)
+
+        assert client.fetch_pdf(url) == b"x" * 16
+        with pytest.raises(ValueError, match=r"larger than 16 bytes"):
+            client.fetch_pdf(url)
