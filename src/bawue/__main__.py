@@ -125,6 +125,7 @@ def run(config: BawueConfig) -> None:
     try:
         failed = asyncio.run(main(config))
     except Exception as e:
+        logger.exception("Scraping cycle failed")  # the traceback reaches Loki, not only stderr
         send_alert(config, f"Scraping cycle failed: {type(e).__name__}: {' '.join(str(e).split())[:200]}")
         raise
     if failed:

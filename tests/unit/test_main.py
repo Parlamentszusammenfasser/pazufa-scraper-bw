@@ -145,7 +145,7 @@ class TestRedisUnavailableAtStartup:
 class TestCycleFailure:
     """A cycle that raises must reach Mattermost and fail the Cloud Run execution (exit 1)."""
 
-    def test_raising_cycle_alerts_and_propagates(self):
+    def test_raising_cycle_alerts_and_propagates(self, caplog):
         async def boom(_config):
             raise RuntimeError("constructor\n  boom")
 
@@ -157,6 +157,9 @@ class TestCycleFailure:
         ):
             run(config)
         alert.assert_called_once_with(config, "Scraping cycle failed: RuntimeError: constructor boom")
+        # Logged with its traceback, so it reaches Loki, not only stderr (DD-082).
+        [record] = [r for r in caplog.records if r.message == "Scraping cycle failed"]
+        assert record.exc_info is not None
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(("fail", "failed"), [(False, False), (True, True)])
