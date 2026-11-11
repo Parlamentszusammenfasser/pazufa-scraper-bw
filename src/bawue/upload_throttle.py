@@ -25,6 +25,7 @@ class UploadOutcome(NamedTuple):
 
     vorgang: Vorgang | None
     error: str | None = None
+    status: int | None = None
 
 
 def with_upload_retry[T](
@@ -94,7 +95,7 @@ def upload_vorgang(
                 log_item(item)
         elif e.status == 401:
             logger.critical("Authentication failed. Check your API key.")
-        return UploadOutcome(vorgang=None, error=api_exception_reason(e))
+        return UploadOutcome(vorgang=None, error=api_exception_reason(e), status=e.status)
     except Exception as e:
         logger.error("Unexpected error sending Vorgang to API: %s", e)
         return UploadOutcome(vorgang=None, error=api_exception_reason(e))

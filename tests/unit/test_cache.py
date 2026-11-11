@@ -95,7 +95,7 @@ def test_issue105_disabled_cache_still_reads_as_a_miss():
     ids=["written", "not-written", "error"],
 )
 def test_store_raw_reports_whether_the_write_happened(set_result, stored):
-    """A failed write must not read as success, else the Wochenbericht is posted twice."""
+    """A failed write must not read as success: the caller would assume it is cached."""
     with patch("bawue.cache.redis.Redis"):
         cache = BawueCache("localhost", 6379)
     if isinstance(set_result, Exception):

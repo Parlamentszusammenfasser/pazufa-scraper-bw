@@ -113,7 +113,7 @@ jobs:
             --max-retries 1 \
             --service-account "bawue-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
             --set-env-vars "PYTHONUNBUFFERED=1,MAX_CONCURRENCY=3,ENVIRONMENT=${ENVIRONMENT},COLLECTOR_ID=${COLLECTOR_ID},LTZF_API_URL=${LTZF_API_URL},WAHLPERIODE=${WAHLPERIODE},WAHLPERIODE_START_DATE=${WAHLPERIODE_START_DATE},PARLIS_REQUEST_DELAY_S=${PARLIS_REQUEST_DELAY_S},BETEILIGUNGSFRISTEN=${BETEILIGUNGSFRISTEN}" \
-            --set-secrets "LTZF_API_KEY=${SECRET_PREFIX}-ltzf-api-key:latest,LLM_PROVIDER_KEY=${SECRET_PREFIX}-llm-provider-key:latest,REDIS_URL=${SECRET_PREFIX}-redis-url:latest,MATTERMOST_HOOK=${SECRET_PREFIX}-mattermost-hook:latest"
+            --set-secrets "LTZF_API_KEY=${SECRET_PREFIX}-ltzf-api-key:latest,LLM_PROVIDER_KEY=${SECRET_PREFIX}-llm-provider-key:latest,REDIS_URL=${SECRET_PREFIX}-redis-url:latest,MATTERMOST_HOOK=${SECRET_PREFIX}-mattermost-hook:latest,OBSERVABILITY_PASSWORD=${SECRET_PREFIX}-observability-password:latest"
 
       # Daily. --max-retry-attempts so one transient 5xx from the Run Admin API
       # doesn't silently skip a day. `update` leaves a paused job paused, so

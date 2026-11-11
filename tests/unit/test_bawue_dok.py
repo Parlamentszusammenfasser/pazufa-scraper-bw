@@ -862,7 +862,7 @@ class TestEnrichDokument:
             result = await enrich_dokument(_mock_session(404), AsyncMock(), dok)
 
         assert result.download_failed is True
-        assert result.http_status == 404  # not published: the weekly report lists it (issue #128)
+        assert result.http_status == 404  # not published: counted as missing after four weeks (issue #128)
         assert len(caplog.records) == 1
         record = caplog.records[0]
         assert record.levelno == logging.WARNING

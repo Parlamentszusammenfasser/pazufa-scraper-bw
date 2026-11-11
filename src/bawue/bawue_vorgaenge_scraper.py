@@ -11,7 +11,7 @@ import uuid
 from collections import Counter
 from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
-from functools import partial
+from functools import cached_property, partial
 from hashlib import sha256
 from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
@@ -30,8 +30,8 @@ from bawue.enum_mapper import map_dokumententyp, map_sachgebiete, map_schlagwort
 from bawue.gesetzblatt_client import GesetzblattClient
 from bawue.gesetzblatt_lookup import GesetzblattDateLookup, GesetzblattUnavailable
 from bawue.log_context import reset_vorgangs_id, set_vorgangs_id
+from bawue.observability import record_entities, record_llm
 from bawue.parlis_client import ParlisClient
-from bawue.parlis_parser import vorgang_url
 from bawue.pdf_text import PdfNotAvailableError, read_pdf
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
@@ -147,7 +147,6 @@ DEFAULT_PARLIS_DELAY = 1.0
 DEFAULT_GSBLT_DELAY = 1.0
 # Plenarprotokolle appear 1-2 weeks after the session (WP18, measured 2026-10); later is a gap (issue #128).
 _MISSING_AFTER = timedelta(weeks=4)
-_MAX_MISSING_LINES = 20
 BERLIN_TZ = ZoneInfo("Europe/Berlin")
 
 
@@ -210,6 +209,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
     wrapped in the async framework contract.
     """
 
+    title = "Vorgänge"
+
     @staticmethod
     def _today() -> date:
         """Today in Berlin: PARLIS dates are Landtag calendar days (DD-068)."""
@@ -258,8 +259,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         # vorgnrs not to cache this cycle, so the next cycle retries them (see store_extracted_result).
         self._retry_next_cycle: set[str] = set()
-        # Unpublished PDF link → (label, Fundstelle day, vorgnrs), for the weekly report (issue #128).
-        self._missing: dict[str, tuple[str, date, set[str]]] = {}
+        # Links of PDFs still unpublished after four weeks, counted in the metrics (issue #128, DD-082).
+        self._missing: set[str] = set()
 
         self._published: int = 0
         self._failed: int = 0
@@ -303,7 +304,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         finally:
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
-            lines = _print_vorgaenge_summary(
+            _print_vorgaenge_summary(
                 self._wahlperiode,
                 self._by_type,
                 new_or_retried=self.item_count - self._changed,
@@ -318,9 +319,31 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 parlis_errors=self._parlis_errors,
                 dropped_fundstellen=self._dropped_fundstellen,
                 entwurf_joins=self._entwurf_joins,
-                stale_entwuerfe=self._stale_entwuerfe(),
+                stale_entwuerfe=self._stale_entwuerfe,
             )
-            self.summary = ("Vorgänge", lines)
+
+    @property
+    def errors(self) -> list[str]:
+        return [
+            *format_failed_section(self._failed_items, header="Failed Vorgänge"),
+            *_warning_section("Portal Vorgänge to delete", self._stale_entwuerfe, "DD-079"),
+            *_warning_section("PARLIS errors", self._parlis_errors),
+        ]
+
+    def record_metrics(self, pmc) -> None:
+        record_entities(
+            pmc,
+            pmc.ENTITY_PROCEDURE,
+            new=self.item_count - self._changed,
+            changed=self._changed,
+            cached=self.cached_count,
+            accepted=self._published,
+            skipped=self._skipped,
+            failed_items=self._failed_items,
+            cache_errors=self.cache_errors,
+        )
+        pmc.increaseMetricEntitiesFailed(len(self._missing), pmc.ENTITY_DOCUMENT, "not_found")
+        record_llm(pmc, self._llm_metrics)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
         outcome = upload_vorgang(
@@ -339,6 +362,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                     item_id=str(item.kurztitel or item.api_id),
                     titel=item.titel,
                     reason=outcome.error or "unknown error",
+                    status=outcome.status,
                 )
             )
         return outcome.vorgang
@@ -642,10 +666,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
         self._entwurf_joins.append(f"{vorgang_id} ← {slug} ({score:.2f})")
         return upload_as
 
+    @cached_property
     def _stale_entwuerfe(self) -> list[str]:
         """Portal Vorgänge whose draft a bill holds as a station, until an admin deleted them.
 
-        Asked every run, so the report repeats until it is done (DD-079).
+        Asked once per run (each cycle builds new scrapers) for the summary and the error report,
+        so the report repeats until it is done (DD-079).
         """
         if not self._entwuerfe:
             return []
@@ -1265,7 +1291,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 if result.download_failed:
                     self._retry_next_cycle.add(vorgang_id)
                     if result.http_status == 404:
-                        self._note_missing(fund, zp_start.date(), dok.link, vorgang_id)
+                        self._note_missing(zp_start.date(), dok.link)
                     # Without a drucksnr the backend matches by hash only: the real PDF
                     # would become a second row next to the placeholder (DD-067).
                     if dok.drucksnr is None:
@@ -1275,31 +1301,11 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         return [dok]
 
-    def _note_missing(self, fund: RawFundstelle, day: date, link: str, vorgang_id: str) -> None:
-        """Remember a PDF still unpublished four weeks after its Fundstelle date (issue #128)."""
-        if self._today() - day <= _MISSING_AFTER:
-            return
-        if pp := fund.get("plenarprotokoll"):
-            label = f"Plenarprotokoll {pp}"
-        elif ds := fund.get("drucksache"):
-            label = f"Drucksache {ds}"
-        else:
-            label = fund.get("station_typ") or "Dokument"
-        # One file for all #page anchors: Vorgänge debated together share a protocol.
-        self._missing.setdefault(link.split("#")[0], (label, day, set()))[2].add(vorgang_id)
-
-    @property
-    def missing_documents(self) -> list[str]:
-        """Markdown lines for the weekly run report, oldest first (issue #128)."""
-        lines = [
-            f"- {label} ({day:%d.%m.%Y}) - "
-            + ", ".join(f"[{v}]({vorgang_url(v)})" for v in sorted(vorgnrs))
-            + f" - seit {(self._today() - day).days // 7} Wochen [404]({link})"
-            for link, (label, day, vorgnrs) in sorted(self._missing.items(), key=lambda item: item[1][1])
-        ]
-        if len(lines) > _MAX_MISSING_LINES:  # keeps the post under Mattermost's size limit
-            lines = [*lines[:_MAX_MISSING_LINES], f"… {len(lines) - _MAX_MISSING_LINES} weitere"]
-        return lines
+    def _note_missing(self, day: date, link: str) -> None:
+        """Count a PDF still unpublished four weeks after its Fundstelle date (issue #128, DD-082)."""
+        if self._today() - day > _MISSING_AFTER:
+            # One file for all #page anchors: Vorgänge debated together share a protocol.
+            self._missing.add(link.split("#")[0])
 
     async def _official_gesetzblatt_pdf(self, fund: RawFundstelle) -> str | None:
         """The Gesetzblatt's own PDF with the Fundstelle's #page anchor, else None.
@@ -1552,17 +1558,16 @@ def _print_vorgaenge_summary(
         lines.append("")
         lines.append(f"Bills joined to a Beteiligung draft ({len(entwurf_joins)}, DD-079):")
         lines.extend(f"  - {join}" for join in entwurf_joins)
-    if stale_entwuerfe:
-        lines.append("")
-        lines.append(f":warning: Portal Vorgänge to delete ({len(stale_entwuerfe)}, DD-079):")
-        lines.extend(f"  - {stale}" for stale in stale_entwuerfe)
-    if parlis_errors:
-        lines.append("")
-        lines.append(f":warning: PARLIS errors ({len(parlis_errors)}):")
-        for err in parlis_errors:
-            lines.append(f"  - {err}")
-    print("=== BaWue Vorgänge Run Summary ===\n" + "\n".join(lines))
+    lines.extend(_warning_section("Portal Vorgänge to delete", stale_entwuerfe or [], "DD-079"))
+    lines.extend(_warning_section("PARLIS errors", parlis_errors or []))
+    logger.info("=== BaWue Vorgänge Run Summary ===\n%s", "\n".join(lines))
     return lines
+
+
+def _warning_section(header: str, items: list[str], dd: str = "") -> list[str]:
+    """A titled block for the run summary and the error report; empty without items."""
+    count = f"{len(items)}, {dd}" if dd else f"{len(items)}"
+    return ["", f":warning: {header} ({count}):", *(f"  - {item}" for item in items)] if items else []
 
 
 # -- Stationstyp mapping -----------------------------------------------------------

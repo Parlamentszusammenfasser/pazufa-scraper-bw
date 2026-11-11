@@ -9,6 +9,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 
 import aiohttp
 from dotenv import load_dotenv
@@ -20,8 +21,8 @@ from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper
 from bawue.cache import RedisUnavailableError
 from bawue.config import BawueConfig
 from bawue.notifications import send_alert, send_run_report
+from bawue.observability import add_loki_handler, push_run_metrics
 from bawue.pipeline import Scraper
-from bawue.wochenbericht import weekly_section
 
 load_dotenv()
 
@@ -53,6 +54,7 @@ def load_scrapers(config: BawueConfig, session: aiohttp.ClientSession) -> list[S
 async def main(config: BawueConfig) -> bool:
     """Run one scraping cycle; True if any scraper failed."""
     logger.info("Starting new Scraping Cycle")
+    start = time.monotonic()
     clear_hash_cache()  # once per cycle: the scrapers run concurrently and share it (issue #101)
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit_per_host=1)) as session:
         scrapers = load_scrapers(config, session)
@@ -63,6 +65,7 @@ async def main(config: BawueConfig) -> bool:
 
         logger.info("Running %d scraper tasks concurrently", len(scraper_tasks))
         results: list = []
+        success = False
         try:
             if not config.linearize:
                 results = await asyncio.gather(*scraper_tasks, return_exceptions=True)
@@ -72,33 +75,29 @@ async def main(config: BawueConfig) -> bool:
             else:
                 for t in scraper_tasks:
                     await t
+            success = not any(isinstance(r, Exception) for r in results)
         finally:
-            # One Mattermost message per cycle, not one per scraper (issue #52).
-            sections = _report_sections(scrapers, results)
-            weekly = weekly_section(config)  # after the uploads, so this run's changes count (issue #82)
-            missing = [line for s in scrapers for line in getattr(s, "missing_documents", [])]
-            send_run_report(
-                config,
-                [*sections, weekly] if weekly else sections,
-                # Weekly, like the Wochenbericht: Anne asks the Landtag about these (issue #128).
-                plain_sections=[("Fehlende Dokumente", missing)] if weekly and missing else [],
-            )
-    return any(isinstance(r, Exception) for r in results)
+            # One Mattermost message per cycle, and only for errors (issue #52, DD-082).
+            send_run_report(config, _report_sections(scrapers, results))
+            # Every cycle: a failed one's numbers count too, it only keeps the old heartbeat.
+            push_run_metrics(config, scrapers, time.monotonic() - start, success)
+    return not success
 
 
 def _report_sections(scrapers: list[Scraper], results: list) -> list[tuple[str, list[str]]]:
-    """Each scraper's summary, plus a FAILED line for one that raised, so a crash is never
-    silent in the report (issue #52). *results* are gather's, aligned with *scrapers*."""
+    """Each scraper's errors, plus a FAILED line for one that raised, so a crash is never
+    silent (issue #52); a scraper without errors is left out (DD-082). *results* are gather's,
+    aligned with *scrapers*."""
     sections = []
     for i, scraper in enumerate(scrapers):
-        title, lines = scraper.summary or (type(scraper).__name__, [])
+        lines = scraper.errors
         error = results[i] if i < len(results) else None
         if isinstance(error, Exception):
             lines = [*lines, f"FAILED: {type(error).__name__}: {' '.join(str(error).split())[:200]}"]
         if getattr(scraper, "cache_errors", 0):
             lines = [*lines, f"Cache errors: {scraper.cache_errors} (skipped, retried next run)"]
         if lines:
-            sections.append((title, lines))
+            sections.append((scraper.title, lines))
     return sections
 
 
@@ -126,6 +125,7 @@ def run(config: BawueConfig) -> None:
     try:
         failed = asyncio.run(main(config))
     except Exception as e:
+        logger.exception("Scraping cycle failed")  # the traceback reaches Loki, not only stderr
         send_alert(config, f"Scraping cycle failed: {type(e).__name__}: {' '.join(str(e).split())[:200]}")
         raise
     if failed:
@@ -142,6 +142,7 @@ if __name__ == "__main__":
     log_startup()
 
     config = load_config()
+    add_loki_handler(config)
 
     logger.info("Configuration Complete")
 

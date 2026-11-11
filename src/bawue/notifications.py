@@ -1,9 +1,8 @@
-"""Mattermost webhook notifications for scraper run summaries."""
+"""Mattermost webhook notifications for run errors and aborts (DD-082)."""
 
 import logging
 import os
 import re
-from collections.abc import Sequence
 
 import requests
 
@@ -14,7 +13,7 @@ logger = logging.getLogger(__name__)
 _ENV_PATTERN = re.compile(r"config\.(\w+)\.toml$")
 
 
-def _extract_environment(config: BawueConfig) -> str:
+def extract_environment(config: BawueConfig) -> str:
     # Cloud deployments run the image's default config.toml, so the filename
     # carries no environment — they set ENVIRONMENT instead.
     env = os.getenv("ENVIRONMENT")
@@ -28,30 +27,23 @@ def _extract_environment(config: BawueConfig) -> str:
     return "local"
 
 
-def send_run_report(
-    config: BawueConfig,
-    sections: list[tuple[str, list[str]]],
-    plain_sections: Sequence[tuple[str, list[str]]] = (),
-) -> None:
-    """Post one cycle's scraper summaries as a single Mattermost message (issue #52).
+def send_run_report(config: BawueConfig, sections: list[tuple[str, list[str]]]) -> None:
+    """Post one cycle's errors as a single Mattermost message (issue #52); numbers go to Grafana (DD-082).
 
-    *sections* are ``(title, lines)`` pairs, one per scraper, each in a code block.
-    *plain_sections* follow as Markdown, so their links stay clickable (issue #128).
+    *sections* are ``(title, lines)`` pairs, one per scraper with errors, each in a code block.
     Silently skips if mattermost-hook is empty or missing, or there is nothing to report.
     """
-    if not sections and not plain_sections:
+    if not sections:
         return
-    text = (
-        f"**[{_extract_environment(config)}] BaWue Run Summary**"
-        + "".join(f"\n**{title}**\n```\n" + "\n".join(lines) + "\n```" for title, lines in sections)
-        + "".join(f"\n**{title}**\n" + "\n".join(lines) for title, lines in plain_sections)
+    text = f"**[{extract_environment(config)}] BaWue run errors**" + "".join(
+        f"\n**{title}**\n```\n" + "\n".join(lines) + "\n```" for title, lines in sections
     )
     _post(config, text)
 
 
 def send_alert(config: BawueConfig, message: str) -> None:
     """Post a run-aborting error to Mattermost. Silently skips without a hook."""
-    _post(config, f"**[{_extract_environment(config)}] BaWue run aborted**\n{message}")
+    _post(config, f"**[{extract_environment(config)}] BaWue run aborted**\n{message}")
 
 
 def _post(config: BawueConfig, text: str) -> None:

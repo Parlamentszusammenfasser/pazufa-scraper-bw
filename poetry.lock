@@ -2243,6 +2243,28 @@ reference = "v0.3.2"
 resolved_reference = "bbd4044a146a46ce2c549295b4e552ae19f9bd53"
 
 [[package]]
+name = "pazufa-metrics-client"
+version = "0.1.0"
+description = "Push pazufa scraper metrics to the Prometheus Pushgateway"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = []
+develop = false
+
+[package.dependencies]
+prometheus-client = ">=0.20"
+
+[package.extras]
+example = ["python-dotenv"]
+
+[package.source]
+type = "git"
+url = "https://codeberg.org/PaZuFa/pazufa-metrics-client.git"
+reference = "781701a3ace4cce95179c7929b1307d642846b97"
+resolved_reference = "781701a3ace4cce95179c7929b1307d642846b97"
+
+[[package]]
 name = "pluggy"
 version = "1.7.0"
 description = "plugin and hook calling mechanisms for python"
@@ -2253,6 +2275,23 @@ files = [
     {file = "pluggy-1.7.0-py3-none-any.whl", hash = "sha256:7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec"},
     {file = "pluggy-1.7.0.tar.gz", hash = "sha256:d1eaa46ebb595891b860ab086b4d09c8588af65ebd4361b8e8f4bb8920b90ba8"},
 ]
+
+[[package]]
+name = "prometheus-client"
+version = "0.26.0"
+description = "Python client for the Prometheus monitoring system."
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "prometheus_client-0.26.0-py3-none-any.whl", hash = "sha256:fa93d06737aa02bacd05794768508bb97d2fbee28cb3bca04eaae92f0ca953d6"},
+    {file = "prometheus_client-0.26.0.tar.gz", hash = "sha256:04a91bcf94e2cf74a44a1a874d651a2e853ed354b6e822f3b7487751465d5c2b"},
+]
+
+[package.extras]
+aiohttp = ["aiohttp"]
+django = ["django"]
+twisted = ["twisted"]
 
 [[package]]
 name = "propcache"
@@ -3862,4 +3901,4 @@ type = ["pytest-mypy (>=1.0.1) ; platform_python_implementation != \"PyPy\""]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<3.15"
-content-hash = "cb4cecb9a956285f0ab75bff05dae5854a6efecd480b9b8aa1306f422b77ceb7"
+content-hash = "da8cb4e5db2a9854f9efec5725b5114004029684febe0c8813ed7989afec6b86"

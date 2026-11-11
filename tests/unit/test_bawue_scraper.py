@@ -45,7 +45,7 @@ from bawue.types import (
     Zusammenfassungstupel,
     placeholder_hash,
 )
-from tests.factories import make_scraper, mock_config
+from tests.factories import make_scraper, mock_config, run_metrics
 from tests.unit.test_bawue_dok import SAMPLE_HASH, SAMPLE_PDF_HASHES
 
 
@@ -1343,11 +1343,12 @@ class _InMemoryCache:
 
 
 class TestIssue52RunReport:
-    """Issue #52: the run report tells cached, changed and other (new or retried) Vorgänge apart and
-    goes into the cycle's single Mattermost message instead of its own."""
+    """Issue #52: a cycle tells cached, changed and other (new or retried) Vorgänge apart, as run
+    metrics since issue #188; the scraper posts nothing to Mattermost itself."""
 
     @staticmethod
-    async def _run(scraper, raws):
+    async def _run(scraper, raws) -> tuple[float, float, float]:
+        """(new or retried, changed, cached) Vorgänge of the cycle."""
         scraper.config.section.return_value = {"mattermost-hook": "https://hook.example"}
         with (
             patch("bawue.bawue_vorgaenge_scraper.asyncio.to_thread", return_value=raws),
@@ -1356,23 +1357,20 @@ class TestIssue52RunReport:
         ):
             await scraper.run()
         post.assert_not_called()
-        return "\n".join(scraper.summary[1])
+        metrics = run_metrics(scraper)
+        return tuple(metrics[f"entities_found|entity=procedure|state={s}"] for s in ("new", "changed", "cached"))
 
     @pytest.mark.asyncio
     async def test_new_changed_and_unchanged_are_counted_per_cycle(self):
         first = TestVorgangRefreshIssue46._scraper()
-        report = await self._run(first, [_make_raw_vorgang("V-1"), _make_raw_vorgang("V-2")])
-        assert "Found:       2  (new or retried 2, changed 0, cached 0)" in report
+        assert await self._run(first, [_make_raw_vorgang("V-1"), _make_raw_vorgang("V-2")]) == (2, 0, 0)
 
         # Each cycle builds fresh scrapers (__main__.load_scrapers); only the cache persists.
         second = TestVorgangRefreshIssue46._scraper()
         second.config.cache = first.config.cache
         changed = _make_raw_vorgang("V-2")
         changed["Aktueller Stand"] = "Abgelehnt"
-        report = await self._run(second, [_make_raw_vorgang("V-1"), changed, _make_raw_vorgang("V-3")])
-
-        assert second.summary[0] == "Vorgänge"
-        assert "Found:       3  (new or retried 1, changed 1, cached 1)" in report
+        assert await self._run(second, [_make_raw_vorgang("V-1"), changed, _make_raw_vorgang("V-3")]) == (1, 1, 1)
 
     @pytest.mark.asyncio
     async def test_failed_upload_is_new_or_retried_next_cycle(self):
@@ -1388,9 +1386,7 @@ class TestIssue52RunReport:
 
         second = TestVorgangRefreshIssue46._scraper()
         second.config.cache = first.config.cache
-        report = await self._run(second, [_make_raw_vorgang("V-1")])
-
-        assert "(new or retried 1, changed 0, cached 0)" in report
+        assert await self._run(second, [_make_raw_vorgang("V-1")]) == (1, 0, 0)
 
 
 class TestIssue83SummaryAddsUp:
@@ -1411,13 +1407,14 @@ class TestIssue83SummaryAddsUp:
 
         scraper._build_vorgang = _build
         with patch("bawue.bawue_vorgaenge_scraper.upload_vorgang", side_effect=lambda *a, **_: UploadOutcome(a[3])):
-            report = await TestIssue52RunReport._run(scraper, [_make_raw_vorgang("V-1"), _make_raw_vorgang("V-2")])
+            found = await TestIssue52RunReport._run(scraper, [_make_raw_vorgang("V-1"), _make_raw_vorgang("V-2")])
 
-        assert "Found:       2  (new or retried 2, changed 0, cached 0)" in report
-        assert "Published:   1" in report
-        assert "Skipped:     0" in report
-        assert "Failed:      1" in report
-        assert "  - V-2 | Test Gesetz | ValueError: boom" in report
+        metrics = run_metrics(scraper)
+        assert found == (2, 0, 0)
+        assert metrics["entities_submitted|entity=procedure|result=accepted"] == 1
+        assert metrics["entities_skipped|entity=procedure"] == 0
+        assert metrics["entities_failed|entity=procedure|reason=exception"] == 1
+        assert "  - V-2 | Test Gesetz | ValueError: boom" in scraper.errors
         assert "vg2:V-1" in scraper.config.cache.data
         assert "vg2:V-2" not in scraper.config.cache.data  # retried next cycle
 
@@ -1570,23 +1567,22 @@ class TestPlaceholderDate:
 
 class TestRunSummary:
     @pytest.mark.asyncio
-    async def test_summary_shows_by_type(self, capsys):
+    async def test_summary_shows_by_type(self, caplog):
         scraper = _make_scraper_with_mock_parlis()
         scraper._by_type = {"Kleine Anfrage": 3}
 
         with (
             patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
             patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
+            caplog.at_level(logging.INFO, logger="bawue.bawue_vorgaenge_scraper"),
         ):
             await scraper.run()
 
-        captured = capsys.readouterr()
-        assert "Kleine Anfrage" in captured.out
-        assert "3" in captured.out
+        assert "  Kleine Anfrage:  3" in caplog.text
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("failing", ["run", "draft-register"])
-    async def test_summary_still_printed_on_run_failure(self, failing, capsys, caplog):
+    async def test_summary_still_logged_on_run_failure(self, failing, caplog):
         scraper = _make_scraper_with_mock_parlis()
         if failing == "draft-register":  # DD-079: read at the start of each cycle
             scraper.config.cache.get_raw.side_effect = RedisUnavailableError("Redis read failed")
@@ -1600,15 +1596,13 @@ class TestRunSummary:
         ):
             await scraper.run()
 
-        captured = capsys.readouterr()
-        assert "=== BaWue Vorgänge Run Summary ===" in captured.out
-        duration_line = next(line for line in captured.out.splitlines() if "Duration" in line)
+        assert "=== BaWue Vorgänge Run Summary ===" in caplog.text
+        duration_line = next(line for line in caplog.text.splitlines() if "Duration" in line)
         assert "Duration: 0m 00s" in duration_line  # human readable, no raw seconds
-        assert scraper.summary[0] == "Vorgänge"  # issue #52: the cycle report still gets it
         assert any("Completed in" in msg for msg in caplog.messages)
 
     @pytest.mark.asyncio
-    async def test_summary_lists_failed_vorgaenge_with_id_title_and_reason(self, capsys):
+    async def test_errors_list_failed_vorgaenge_with_id_title_and_reason(self):
         from bawue.api import BawueApiError
 
         scraper = _make_scraper_with_mock_parlis()
@@ -1624,19 +1618,13 @@ class TestRunSummary:
         ):
             await scraper.send_result(item)
 
-        with (
-            patch("bawue.bawue_vorgaenge_scraper.VorgangsScraper.run", new=AsyncMock()),
-            patch("bawue.bawue_vorgaenge_scraper.check_for_newer_wahlperiode"),
-        ):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        assert "Failed Vorgänge" in captured.out
-        failed_block = captured.out.split("Failed Vorgänge", 1)[1]
-        assert "V-500" in failed_block
-        assert "Klimaschutzgesetz 2026" in failed_block
-        assert "422" in failed_block
-        assert scraper._failed == 1
+        assert scraper.errors == [
+            "",
+            "Failed Vorgänge (1):",
+            "  - V-500 | Klimaschutzgesetz 2026 | HTTP 422",
+        ]
+        # Issue #188: the status reaches the metrics.
+        assert run_metrics(scraper)["entities_submitted|entity=procedure|result=rejected|statuscode=422"] == 1
 
 
 class TestParseAutoren:
@@ -4979,7 +4967,7 @@ class TestIssue66DrucksacheHashRegistry:
 
 
 class TestIssue128MissingDocuments:
-    """Issue #128: PDFs still 404 four weeks after their Fundstelle date, for the weekly report."""
+    """Issue #128: PDFs still 404 four weeks after their Fundstelle date, counted as a metric (DD-082)."""
 
     _PLP = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokumente/WP18/Plp/18%5F0013%5F08102026.pdf"
 
@@ -4998,7 +4986,8 @@ class TestIssue128MissingDocuments:
         scraper._llm_model = "gpt-5-nano"
         scraper._llm_metrics = LLMMetrics()
         scraper._retry_next_cycle = set()
-        scraper._missing = {}
+        scraper._published = scraper._skipped = 0
+        scraper._failed_items = []
         scraper._today = lambda: today
 
         async def _fake_enrich(session, llm, dok, **kwargs):
@@ -5032,17 +5021,12 @@ class TestIssue128MissingDocuments:
         )
 
     @pytest.mark.asyncio
-    async def test_protocol_shared_by_two_vorgaenge_is_one_line(self, monkeypatch):
+    async def test_protocol_shared_by_two_vorgaenge_counts_once(self, monkeypatch):
         scraper = self._scraper(monkeypatch, date(2026, 11, 20), 404)
         await scraper._build_vorgang(self._raw("V-248237", page=12))
         await scraper._build_vorgang(self._raw("V-248001", page=30))
 
-        assert scraper.missing_documents == [
-            "- Plenarprotokoll 18/13 (08.10.2026) - "
-            "[V-248001](https://parlis.landtag-bw.de/parlis/vorgang/V-248001), "
-            "[V-248237](https://parlis.landtag-bw.de/parlis/vorgang/V-248237) - "
-            f"seit 6 Wochen [404]({self._PLP})"
-        ]
+        assert run_metrics(scraper)["entities_failed|entity=document|reason=not_found"] == 1
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -5053,32 +5037,12 @@ class TestIssue128MissingDocuments:
             (date(2026, 11, 20), 503),
         ],
     )
-    async def test_young_or_transient_failure_is_not_listed(self, monkeypatch, today, status):
+    async def test_young_or_transient_failure_is_not_counted(self, monkeypatch, today, status):
         scraper = self._scraper(monkeypatch, today, status)
         await scraper._build_vorgang(self._raw("V-248237", page=12))
 
-        assert scraper.missing_documents == []
+        assert run_metrics(scraper)["entities_failed|entity=document|reason=not_found"] == 0
         assert "V-248237" in scraper._retry_next_cycle  # retried all the same (DD-067)
-
-    def test_oldest_first_with_drucksache_and_fallback_labels(self, monkeypatch):
-        scraper = self._scraper(monkeypatch, date(2026, 11, 20), 404)
-        scraper._note_missing({"station_typ": "Gesetzesbeschluss"}, date(2026, 10, 8), "https://x/b.pdf", "V-2")
-        scraper._note_missing({"drucksache": "18/1234"}, date(2026, 10, 1), "https://x/a.pdf", "V-1")
-
-        assert [line.split(" - ")[0] for line in scraper.missing_documents] == [
-            "- Drucksache 18/1234 (01.10.2026)",
-            "- Gesetzesbeschluss (08.10.2026)",
-        ]
-
-    def test_long_list_is_cut_like_the_wochenbericht(self, monkeypatch):
-        """A gap like Gesetzblatt Nr. 69-82 (#127) must not push the post past Mattermost's limit."""
-        scraper = self._scraper(monkeypatch, date(2026, 11, 20), 404)
-        for i in range(22):
-            scraper._note_missing({"drucksache": f"18/{i}"}, date(2026, 10, 1), f"https://x/{i}.pdf", "V-1")
-
-        lines = scraper.missing_documents
-        assert len(lines) == 21
-        assert lines[-1] == "… 2 weitere"
 
 
 class TestIssue74ProtocolPagesReachEnrichment:

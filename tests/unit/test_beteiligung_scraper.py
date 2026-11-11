@@ -26,7 +26,7 @@ from bawue.types import (
     Zusammenfassungstupel,
     placeholder_hash,
 )
-from tests.factories import make_scraper, mock_config
+from tests.factories import make_scraper, mock_config, run_metrics
 from tests.unit.test_bawue_dok import SAMPLE_HASH, SAMPLE_PDF_HASHES
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "beteiligung"
@@ -620,8 +620,8 @@ class TestItemExtractor:
 
 
 class TestIssue52RunReport:
-    """Issue #52: Found counts cached processes too, and the summary goes into the
-    cycle's single Mattermost message instead of its own."""
+    """Issue #52: Found counts cached processes too (a run metric since issue #188); the scraper
+    posts nothing to Mattermost itself."""
 
     @pytest.mark.asyncio
     async def test_found_includes_cached_processes(self):
@@ -637,9 +637,9 @@ class TestIssue52RunReport:
             await scraper.run()
 
         post.assert_not_called()
-        title, lines = scraper.summary
-        assert title == "Beteiligung"
-        assert "Found:       4  (new or retried 1, cached 3)" in lines
+        metrics = run_metrics(scraper)
+        assert metrics["entities_found|entity=procedure|state=new"] == 1
+        assert metrics["entities_found|entity=procedure|state=cached"] == 3
 
 
 class TestIssue83SummaryAddsUp:
@@ -678,19 +678,19 @@ class TestIssue83SummaryAddsUp:
         ):
             await scraper.run()
 
-        lines = scraper.summary[1]
-        assert "Found:       2  (new or retried 2, cached 0)" in lines
-        assert "Published:   1" in lines
-        assert "Skipped:     0" in lines
-        assert "Failed:      1" in lines
-        assert "  - timeout | Timeout-Gesetz | TimeoutError: portal timeout" in lines
+        metrics = run_metrics(scraper)
+        assert metrics["entities_found|entity=procedure|state=new"] == 2
+        assert metrics["entities_submitted|entity=procedure|result=accepted"] == 1
+        assert metrics["entities_skipped|entity=procedure"] == 0
+        assert metrics["entities_failed|entity=procedure|reason=exception"] == 1
+        assert "  - timeout | Timeout-Gesetz | TimeoutError: portal timeout" in scraper.errors
         stored = [c.args[0] for c in scraper.config.cache.store_raw.call_args_list if c.args[0].startswith("vg2:")]
         assert stored == ["vg2:effizienzgesetz"]  # the crashed one is retried next cycle
 
 
 class TestRunSummary:
     @pytest.mark.asyncio
-    async def test_summary_still_printed_on_run_failure(self, capsys, caplog):
+    async def test_summary_still_logged_on_run_failure(self, caplog):
         scraper = _make_scraper()
 
         mock_run = AsyncMock(side_effect=RuntimeError("boom"))
@@ -701,15 +701,13 @@ class TestRunSummary:
         ):
             await scraper.run()
 
-        captured = capsys.readouterr()
-        assert "=== BaWue Beteiligung Run Summary ===" in captured.out
-        duration_line = next(line for line in captured.out.splitlines() if "Duration" in line)
+        assert "=== BaWue Beteiligung Run Summary ===" in caplog.text
+        duration_line = next(line for line in caplog.text.splitlines() if "Duration" in line)
         assert "Duration: 0m 00s" in duration_line  # human readable, no raw seconds
-        assert scraper.summary[0] == "Beteiligung"  # issue #52: the cycle report still gets it
         assert any("Completed in" in msg for msg in caplog.messages)
 
     @pytest.mark.asyncio
-    async def test_summary_lists_failed_vorgaenge_with_reason(self, capsys):
+    async def test_errors_list_failed_vorgaenge_with_reason(self):
         from bawue.api import BawueApiError
 
         scraper = _make_scraper()
@@ -726,16 +724,9 @@ class TestRunSummary:
         ):
             await scraper.send_result(item)
 
-        with patch("bawue.bawue_beteiligung_scraper.VorgangsScraper.run", new=AsyncMock()):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        assert "Failed Vorgänge" in captured.out
-        failed_block = captured.out.split("Failed Vorgänge", 1)[1]
-        assert "klima-slug" in failed_block
-        assert "Klimaschutzgesetz" in failed_block
-        assert "422" in failed_block
-        assert scraper._failed == 1
+        assert scraper.errors == ["", "Failed Vorgänge (1):", "  - klima-slug | Klimaschutzgesetz | HTTP 422"]
+        # Issue #188: the status reaches the metrics.
+        assert run_metrics(scraper)["entities_submitted|entity=procedure|result=rejected|statuscode=422"] == 1
 
 
 class TestInit:

@@ -16,6 +16,8 @@ packages = [{include = "bawue", from = "src"}]
 # For local iteration against a sibling checkout, uncomment the dev-group
 # override below.
 pazufa-corelib = {git = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git", rev = "v0.3.2"}
+# Shared metric names and labels for all PaZuFa scrapers (issue #188); no tag yet, so a commit.
+pazufa-metrics-client = {git = "https://codeberg.org/PaZuFa/pazufa-metrics-client.git", rev = "781701a3ace4cce95179c7929b1307d642846b97"}
 httpx = ">=0.28"          # via corelib transitively; pinned explicitly (used by bawue.api)
 redis = ">=7.4"           # was transitively provided by collector; used by bawue.cache
 python-dotenv = ">=1.0"   # was transitively provided by collector; used by bawue.__main__

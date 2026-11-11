@@ -14,7 +14,7 @@ import pytest_asyncio
 
 from bawue.bawue_sitzungen_scraper import DEFAULT_ICS_URL, BawueSitzungenScraper, _fristen_by_date
 from bawue.types import Doktyp
-from tests.factories import make_scraper, mock_config
+from tests.factories import make_scraper, mock_config, run_metrics
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 ICS_BYTES = (FIXTURES_DIR / "sample_calendar.ics").read_bytes()
@@ -414,8 +414,8 @@ class TestSendResult:
 
 
 class TestIssue52RunReport:
-    """Issue #52: cached dates are visible, and the summary goes into the cycle's
-    single Mattermost message instead of its own."""
+    """Issue #52: cached dates are visible (a run metric since issue #188); the scraper posts
+    nothing to Mattermost itself."""
 
     @pytest.mark.asyncio
     async def test_found_dates_split_into_cached_and_the_rest(self):
@@ -433,14 +433,14 @@ class TestIssue52RunReport:
             await scraper.run()
 
         post.assert_not_called()
-        title, lines = scraper.summary
-        assert title == "Sitzungen"
-        assert "Dates found:      50  (new or retried 2, cached 48)" in lines
+        metrics = run_metrics(scraper)
+        assert metrics["entities_found|entity=session|state=new"] == 2
+        assert metrics["entities_found|entity=session|state=cached"] == 48
 
 
 class TestRunSummary:
     @pytest.mark.asyncio
-    async def test_summary_printed_to_stdout(self, capsys, caplog):
+    async def test_summary_logged(self, caplog):
         scraper = _make_scraper()
         scraper._total_dates = 5
         scraper._published_dates = 3
@@ -453,7 +453,7 @@ class TestRunSummary:
         ):
             await scraper.run()
 
-        out = capsys.readouterr().out
+        out = caplog.text
         assert "=== BaWue Sitzungen Run Summary ===" in out
 
         def line(label):
@@ -466,7 +466,7 @@ class TestRunSummary:
         assert any("Completed in" in msg for msg in caplog.messages)
 
     @pytest.mark.asyncio
-    async def test_summary_still_printed_on_run_failure(self, capsys, caplog):
+    async def test_summary_still_logged_on_run_failure(self, caplog):
         scraper = _make_scraper()
 
         mock_run = AsyncMock(side_effect=RuntimeError("boom"))
@@ -477,29 +477,20 @@ class TestRunSummary:
         ):
             await scraper.run()
 
-        captured = capsys.readouterr()
-        assert "=== BaWue Sitzungen Run Summary ===" in captured.out
-        assert scraper.summary[0] == "Sitzungen"  # issue #52: the cycle report still gets it
+        assert "=== BaWue Sitzungen Run Summary ===" in caplog.text
         assert any("Completed in" in msg for msg in caplog.messages)
 
     @pytest.mark.asyncio
-    async def test_summary_lists_failed_dates_with_reason(self, capsys):
-        from bawue.run_report import FailedItem
+    async def test_errors_list_failed_dates_with_reason(self):
+        from bawue.api import BawueApiError
 
         scraper = _make_scraper()
-        scraper._failed_dates = 1
-        scraper._failed_items = [
-            FailedItem(item_id="2026-03-12", titel=None, reason="HTTP 500 Internal Server Error"),
-        ]
+        with patch("bawue.bawue_sitzungen_scraper.put_kalender", side_effect=BawueApiError(500, b"", "kal_date_put")):
+            await scraper.send_result((datetime.datetime(2026, 3, 12), []))
 
-        with patch("bawue.bawue_sitzungen_scraper.SitzungsScraper.run", new=AsyncMock()):
-            await scraper.run()
-
-        captured = capsys.readouterr()
-        assert "Failed Sitzung dates" in captured.out
-        failed_block = captured.out.split("Failed Sitzung dates", 1)[1]
-        assert "2026-03-12" in failed_block
-        assert "500" in failed_block
+        assert scraper.errors == ["", "Failed Sitzung dates (1):", "  - 2026-03-12 | HTTP 500"]
+        # Issue #188: the status reaches the metrics.
+        assert run_metrics(scraper)["entities_submitted|entity=session|result=rejected|statuscode=500"] == 1
 
 
 _AGENDA_PDF = (

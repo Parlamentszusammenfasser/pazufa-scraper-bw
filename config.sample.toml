@@ -80,3 +80,11 @@ ics-url = "https://www.landtag-bw.de/resource/calendar/501552/download/terminkal
 # the file — this one is published to Docker Hub inside the image).
 # mattermost-hook = "SET_VIA_ENV"
 mattermost-username = "bawue-scraper"
+
+# Grafana (DD-082): run metrics to the Pushgateway, logs to Loki. Both push only with
+# a password, read from the OBSERVABILITY_PASSWORD env var (not in this file, see above).
+# Without one, the metrics are only logged.
+[observability]
+# prometheus-url = "https://prom.pazufa.de/"
+# loki-url = "https://loki.pazufa.de/"
+# username = "LogPush"

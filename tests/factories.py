@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import toml
+from pazufa_metrics_client import PazufaMetricsClient
 
 from bawue.bawue_beteiligung_scraper import BawueBeteiligungScraper
 from bawue.bawue_sitzungen_scraper import BawueSitzungenScraper
@@ -31,7 +32,6 @@ def make_scraper[S: Scraper](cls: type[S]) -> S:
         "item_count": 0,
         "cached_count": 0,
         "cache_errors": 0,
-        "summary": None,
     }
     if issubclass(cls, BawueVorgaengeScraper):
         state |= {
@@ -41,6 +41,7 @@ def make_scraper[S: Scraper](cls: type[S]) -> S:
             "_dropped_fundstellen": {},
             "_retry_next_cycle": set(),
             "_changed": 0,
+            "_missing": set(),
             # No Beteiligung drafts registered: no bill looks for one (DD-079).
             "_entwuerfe": {},
             "_entwurf_shingles": {},
@@ -51,3 +52,16 @@ def make_scraper[S: Scraper](cls: type[S]) -> S:
     for name, value in state.items():
         setattr(scraper, name, value)
     return scraper
+
+
+def run_metrics(scraper: Scraper) -> dict[str, float]:
+    """The scraper's run metrics (issue #188), e.g. {"entities_found|entity=procedure|state=new": 2.0};
+    empty labels are left out."""
+    pmc = PazufaMetricsClient()
+    scraper.record_metrics(pmc)
+    return {
+        sample.name.removeprefix("pazufa_scraper_")
+        + "".join(f"|{k}={v}" for k, v in sorted(sample.labels.items()) if v): sample.value
+        for metric in pmc._registry.collect()
+        for sample in metric.samples
+    }
