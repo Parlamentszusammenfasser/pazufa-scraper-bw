@@ -79,7 +79,7 @@ grant "$SCHEDULER_SA" roles/run.invoker
 echo "==> Secrets"
 # Access is granted per secret, not project-wide: a compromised staging runtime
 # must not be able to read bawue-prod-* from the same project.
-for name in ltzf-api-key llm-provider-key redis-url mattermost-hook; do
+for name in ltzf-api-key llm-provider-key redis-url mattermost-hook observability-password; do
   secret="bawue-${ENVIRONMENT}-${name}"
   gcloud secrets describe "$secret" >/dev/null 2>&1 || \
     gcloud secrets create "$secret"
@@ -163,6 +163,7 @@ Done.
      printf '%s' 'VALUE' | gcloud secrets versions add bawue-${ENVIRONMENT}-llm-provider-key --data-file=-
      printf '%s' 'VALUE' | gcloud secrets versions add bawue-${ENVIRONMENT}-redis-url        --data-file=-
      printf '%s' 'VALUE' | gcloud secrets versions add bawue-${ENVIRONMENT}-mattermost-hook  --data-file=-
+     printf '%s' 'VALUE' | gcloud secrets versions add bawue-${ENVIRONMENT}-observability-password --data-file=-
 
 2) GitHub → Settings → Secrets and variables → Actions → Variables, repository:
 

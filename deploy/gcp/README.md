@@ -14,6 +14,8 @@ Cloud Scheduler (0 3 * * *, Europe/Berlin)
         → Upstash Redis  (REDIS_URL, rediss://)
         → PaZuFa backend (staging.api.pazufa.de)
         → OpenAI
+        → Grafana: Pushgateway (prom.pazufa.de), Loki (loki.pazufa.de)
+        → Mattermost (errors only)
     → Cloud Logging
 ```
 
@@ -56,7 +58,8 @@ directly, which is create-or-update on every step.
    printf '%s' 'VALUE' | gcloud secrets versions add bawue-staging-redis-url --data-file=-
    ```
 
-   `ltzf-api-key` · `llm-provider-key` · `redis-url` · `mattermost-hook`
+   `ltzf-api-key` · `llm-provider-key` · `redis-url` · `mattermost-hook` ·
+   `observability-password` (Grafana user `LogPush`, metrics and logs, DD-082)
 
 4. **GitHub** — repository *variables*:
 

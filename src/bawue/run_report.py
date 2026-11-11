@@ -15,6 +15,8 @@ class FailedItem:
     item_id: str
     titel: str | None
     reason: str
+    # HTTP status of a rejected upload, for the metrics (issue #188); None without an HTTP answer.
+    status: int | None = None
 
 
 def api_exception_reason(exc: Exception) -> str:

@@ -630,6 +630,7 @@ Large Vorgangstypen (e.g. "Kleine Anfrage", 4000+ hits) cause `status: "running"
 | Cache failures                  | `bawue.cache`     | Connect failure alerts Mattermost and exits; a read error mid-run skips the item, counted as a cache error (DD-073) |
 | PARLIS session expiry           | ParlisClient      | Re-establishes session before each search cycle             |
 | Large result sets               | ParlisClient      | Automatic date subdivision into monthly windows             |
+| Run results                     | `bawue.observability`, `bawue.notifications` | Metrics to the Pushgateway after a successful cycle, logs to Loki, Mattermost only for errors and aborts (DD-082) |
 | PARLIS HTTP errors              | ParlisClient      | `raise_for_status()`, propagated to the pipeline error handler |
 | Beteiligungsportal HTTP errors  | BeteiligungClient | `raise_for_status()`, propagated to the pipeline error handler |
 | Beteiligungsportal HTML changes | BeteiligungParser | Unit tests with HTML fixtures detect regressions            |

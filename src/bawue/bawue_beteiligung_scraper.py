@@ -24,6 +24,7 @@ from bawue.beteiligung_parser import (
 )
 from bawue.cache import BETEILIGUNGSFRISTEN_KEY, ENTWUERFE_KEY, UEBERNAHMEN_KEY
 from bawue.config import BawueConfig
+from bawue.observability import record_entities, record_llm
 from bawue.pipeline import VorgangsScraper
 from bawue.rate_limiter import create_upload_limiter
 from bawue.run_report import FailedItem, api_exception_reason, format_duration, format_failed_section
@@ -64,6 +65,8 @@ class BawueBeteiligungScraper(VorgangsScraper):
 
     Auto-discovered by the framework when placed in the scrapers directory.
     """
+
+    title = "Beteiligung"
 
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         beteiligung_config = config.section("beteiligung")
@@ -116,7 +119,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
         finally:
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
-            lines = _print_beteiligung_summary(
+            _print_beteiligung_summary(
                 self.item_count,
                 self.cached_count,
                 self._published,
@@ -126,7 +129,23 @@ class BawueBeteiligungScraper(VorgangsScraper):
                 self._llm_metrics if self._llm_enabled else None,
                 self._failed_items,
             )
-            self.summary = ("Beteiligung", lines)
+
+    @property
+    def errors(self) -> list[str]:
+        return format_failed_section(self._failed_items, header="Failed Vorgänge")
+
+    def record_metrics(self, pmc) -> None:
+        record_entities(
+            pmc,
+            pmc.ENTITY_PROCEDURE,
+            new=self.item_count,
+            cached=self.cached_count,
+            accepted=self._published,
+            skipped=self._skipped,
+            failed_items=self._failed_items,
+            cache_errors=self.cache_errors,
+        )
+        record_llm(pmc, self._llm_metrics)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
         if item.api_id in {_draft_api_id(slug) for slug in self._uebernahmen()}:
@@ -149,6 +168,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
                     item_id=str(item.kurztitel or item.api_id),
                     titel=item.titel,
                     reason=outcome.error or "unknown error",
+                    status=outcome.status,
                 )
             )
         return outcome.vorgang
@@ -434,7 +454,7 @@ def _print_beteiligung_summary(
         lines.extend(llm_metrics.format_lines())
     if failed_items:
         lines.extend(format_failed_section(failed_items, header="Failed Vorgänge"))
-    print("=== BaWue Beteiligung Run Summary ===\n" + "\n".join(lines))
+    logger.info("=== BaWue Beteiligung Run Summary ===\n%s", "\n".join(lines))
     return lines
 
 

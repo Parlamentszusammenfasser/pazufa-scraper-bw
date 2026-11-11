@@ -69,27 +69,12 @@ absatzweise. In BW-Drucksachen derzeit nicht beobachtet; tritt es auf, gehört d
 nach corelib.
 
 <a id="dd-072"></a>
-## DD-072: Wochenbericht aus dem Backend
+## DD-072: Wochenbericht aus dem Backend (aufgehoben)
 
-**Kontext:** Leser wollen wissen, welche Gesetzesvorhaben in der Woche neu sind oder
-weitergekommen sind. Der Scraper hat keine Historie, und der „geändert"-Zeitstempel im
-Backend setzt jeder Neuaufbau (Issue #82).
-
-**Entscheidung:** Im ersten Lauf jeder ISO-Woche holt der Scraper alle BW-Vorgänge der
-Wahlperiode und merkt sich je `gg-*`-Vorgang den Typ der letzten **begonnenen** Station in
-Redis (`wochenbericht`). Der Vergleich mit der Vorwoche ergibt 🆕 neu und ➡️ andere Station,
-als Abschnitt im Run-Report (ab 20 Zeilen gekürzt). Fail-soft: bei Fehlern bleibt der alte
-Stand.
-
-Mit dem Bericht kommt „Fehlende Dokumente“: PDFs, die mehr als 4 Wochen nach dem
-Fundstellen-Datum noch HTTP 404 liefern (Plenarprotokolle erscheinen nach 1–2 Wochen), eine
-Zeile je Datei mit Vorgängen und Links, als Markdown statt Codeblock (Issue #128). 5xx und
-Timeouts zählen nicht. Die Liste entsteht im Lauf selbst: ungecachte Vorgänge werden jedes Mal
-neu gebaut (DD-067).
-
-**Konsequenz:** Der erste Lauf und ein geleertes Redis liefern keinen Bericht. Eine zweite
-Station gleichen Typs gilt nicht als Änderung. Ohne LLM-Anreicherung lädt der Scraper keine
-PDFs, die Liste bleibt dann leer.
+Der wöchentliche Abschnitt im Run-Report (neue und weitergekommene `gg-*`-Vorgänge, Issue #82)
+und die Liste „Fehlende Dokumente“ (Issue #128) entfallen mit DD-082: Mattermost bekommt nur
+noch Fehler. Fehlende PDFs zählt eine Metrik; ein Wochenbericht gehört als Auswertung der
+Backend-Daten nach Grafana. Der Redis-Schlüssel `wochenbericht` wird nicht mehr gelesen.
 
 <a id="dd-078"></a>
 ## DD-078: Ein Config-Loader, ein Wert gilt wie geschrieben
@@ -106,3 +91,28 @@ fehlend. `--dump-config` zeigt auch die Abschnitte, Secrets als `***`.
 
 **Konsequenz:** `max-concurrency = 0` o. ä. in der Datei wird jetzt übernommen statt durch den
 Default ersetzt. Keine der Repo-Configs enthält einen solchen Wert.
+
+<a id="dd-082"></a>
+## DD-082: Metriken und Logs nach Grafana, Mattermost nur bei Fehlern
+
+**Kontext:** Der Run-Report in Mattermost war die einzige Auswertung: knapp, ohne Verlauf, und
+ein Absturz, OOM oder Timeout schickte gar nichts (GitHub Issue #188).
+
+**Entscheidung:** Nach einem Lauf ohne gescheiterten Scraper pusht der Scraper seine Zahlen
+über den gemeinsamen `pazufa-metrics-client` an das Pushgateway, Namen und Labels wie auf der
+Wiki-Seite *Observability*. Dessen `push_time_seconds` ist der Heartbeat. `state="new"` enthält
+erneut versuchte Einträge (ein Cache-Miss unterscheidet sie nicht); Ablehnungen mit HTTP-Status
+zählen als `submitted{result="rejected", statuscode}`, Fehler ohne Antwort als
+`failed{reason="exception"}`, Redis-Fehler als `failed{reason="cache_error"}`, PDFs mit 404 nach
+vier Wochen als `failed{entity="document", reason="not_found"}`. Logs gehen gebündelt an Loki,
+das Level als Label; nach einem gescheiterten Push stoppt der Versand für den Lauf. Beides nur
+mit `OBSERVABILITY_PASSWORD`, sonst werden die Metriken nur geloggt. Kein OpenTelemetry: das
+Pushgateway nimmt kein OTLP.
+
+Mattermost bekommt nur noch Fehler: gescheiterte Einträge, PARLIS-Fehler, zu löschende
+Portal-Vorgänge (DD-079), abgestürzte Scraper, Abbrüche. Die Zusammenfassung steht im Log.
+
+**Konsequenz:** Ein gescheiterter Lauf pusht keine Metriken; das Alter von `push_time_seconds`
+alarmiert in Grafana, der Fehler in Mattermost. Wochenbericht und „Fehlende Dokumente“ entfallen
+(DD-072). LLM-Tokens folgen mit dem nächsten corelib-Release. Noch gepufferte Logs gehen verloren,
+wenn Cloud Run den Job beendet; Cloud Logging hat sie.

@@ -23,7 +23,7 @@ from bawue.cache import BawueCache
 logger = logging.getLogger(__name__)
 
 # Redacted by --dump-config. REDIS_URL carries the Upstash token in its userinfo.
-_SECRETS = frozenset({"api_key", "llm_provider_key", "redis_url", "mattermost-hook"})
+_SECRETS = frozenset({"api_key", "llm_provider_key", "redis_url", "mattermost-hook", "observability_password"})
 
 
 def _flag(raw: str) -> bool:
@@ -125,6 +125,13 @@ class BawueConfig:
             # bawue_beteiligung_scraper).
             ConfigProp("llm_provider_key", "llm.provider-key", "LLM_PROVIDER_KEY"),
             ConfigProp("llm_model", "llm.model", "LLM_MODEL", None, "gpt-5-nano"),
+            # Grafana: metrics to the Pushgateway, logs to Loki; both only with a password (DD-082).
+            ConfigProp(
+                "prometheus_url", "observability.prometheus-url", "PROMETHEUS_URL", None, "https://prom.pazufa.de/"
+            ),
+            ConfigProp("loki_url", "observability.loki-url", "LOKI_URL", None, "https://loki.pazufa.de/"),
+            ConfigProp("observability_username", "observability.username", "OBSERVABILITY_USERNAME", None, "LogPush"),
+            ConfigProp("observability_password", "observability.password", "OBSERVABILITY_PASSWORD"),
         ]
         self.config_file = None
         self.file_config: dict = {}  # the parsed TOML file

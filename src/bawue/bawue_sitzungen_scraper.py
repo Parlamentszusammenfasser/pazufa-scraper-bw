@@ -20,6 +20,7 @@ from bawue.bawue_vorgaenge_scraper import construct_drucksache_pdf_url
 from bawue.cache import BETEILIGUNGSFRISTEN_KEY, RedisUnavailableError, drucksache_hash_key
 from bawue.config import BawueConfig
 from bawue.ics_parser import ParsedEvent, group_events_by_date, parse_ics_feed
+from bawue.observability import record_entities
 from bawue.pdf_text import download_pdf, extract_pdf_text
 from bawue.pipeline import SitzungsScraper
 from bawue.rate_limiter import create_upload_limiter
@@ -40,6 +41,8 @@ class BawueSitzungenScraper(SitzungsScraper):
 
     Auto-discovered by the framework when placed in the scrapers directory.
     """
+
+    title = "Sitzungen"
 
     def __init__(self, config: BawueConfig, session: aiohttp.ClientSession) -> None:
         bawue_config = config.section("bawue")
@@ -72,7 +75,7 @@ class BawueSitzungenScraper(SitzungsScraper):
         finally:
             duration = time.monotonic() - start
             logger.info("Completed in %.1fs", duration)
-            lines = _print_sitzungen_summary(
+            _print_sitzungen_summary(
                 self._total_dates,
                 self.item_count,
                 self.cached_count,
@@ -82,7 +85,22 @@ class BawueSitzungenScraper(SitzungsScraper):
                 duration,
                 self._failed_items,
             )
-            self.summary = ("Sitzungen", lines)
+
+    @property
+    def errors(self) -> list[str]:
+        return format_failed_section(self._failed_items, header="Failed Sitzung dates")
+
+    def record_metrics(self, pmc) -> None:
+        # One entity per calendar date: put_kalender uploads a day's Sitzungen together.
+        record_entities(
+            pmc,
+            pmc.ENTITY_SESSION,
+            new=self.item_count,
+            cached=self.cached_count,
+            accepted=self._published_dates,
+            failed_items=self._failed_items,
+            cache_errors=self.cache_errors,
+        )
 
     async def listing_page_extractor(self, url: str) -> list[str]:
         """Fetch the ICS feed and return ISO date strings as listing keys."""
@@ -336,7 +354,7 @@ class BawueSitzungenScraper(SitzungsScraper):
                 logger.critical("Authentication failed. Check your API key.")
             self._failed_dates += 1
             self._failed_items.append(
-                FailedItem(item_id=item[0].date().isoformat(), titel=None, reason=api_exception_reason(e))
+                FailedItem(item[0].date().isoformat(), None, api_exception_reason(e), status=e.status)
             )
             return None
         except Exception as e:
@@ -396,5 +414,5 @@ def _print_sitzungen_summary(
     ]
     if failed_items:
         lines.extend(format_failed_section(failed_items, header="Failed Sitzung dates"))
-    print("=== BaWue Sitzungen Run Summary ===\n" + "\n".join(lines))
+    logger.info("=== BaWue Sitzungen Run Summary ===\n%s", "\n".join(lines))
     return lines

@@ -147,6 +147,6 @@ async def test_bill_the_backend_has_gains_the_draft_station(
     entwurf = bill["stationen"][0]
     assert entwurf["typ"] == Stationstyp.PREPARL_REGENT.value
     assert entwurf["dokumente"][0]["link"] == ENTWURF_PDF
-    assert f"  - V-98010 ← {SLUG} (0.51)" in s.summary[1]
-    assert f"  - {DRAFT_API_ID} ({SLUG}), joined to V-98010" in s.summary[1]
+    assert f"V-98010 ← {SLUG} (0.51)" in s._entwurf_joins  # logged with the run summary
+    assert f"  - {DRAFT_API_ID} ({SLUG}), joined to V-98010" in s.errors  # to Mattermost (DD-082)
     assert backend["asked"] == [BILL_API_ID, DRAFT_API_ID]

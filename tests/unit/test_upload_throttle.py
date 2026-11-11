@@ -113,15 +113,15 @@ class TestUploadVorgang:
         assert outcome == UploadOutcome(vorgang=item)
 
     @pytest.mark.parametrize(
-        ("error", "reason"),
+        ("error", "reason", "status"),
         [
-            (BawueApiError(401, b"Unauthorized", "vorgang_put"), "HTTP 401"),
-            (ConnectionError("network down"), "ConnectionError: network down"),
+            (BawueApiError(401, b"Unauthorized", "vorgang_put"), "HTTP 401", 401),  # status: issue #188
+            (ConnectionError("network down"), "ConnectionError: network down", None),
         ],
         ids=["auth", "network"],
     )
-    def test_failure_is_returned_not_raised(self, limiter, error, reason):
+    def test_failure_is_returned_not_raised(self, limiter, error, reason, status):
         with patch("bawue.upload_throttle.put_vorgang", side_effect=error):
             outcome = upload_vorgang(MagicMock(), "scraper-id", limiter, MagicMock(titel="T"))
 
-        assert outcome == UploadOutcome(vorgang=None, error=reason)
+        assert outcome == UploadOutcome(vorgang=None, error=reason, status=status)

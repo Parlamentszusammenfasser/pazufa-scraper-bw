@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 import responses as responses_lib
 
-from bawue.notifications import _extract_environment, send_alert, send_run_report
+from bawue.notifications import extract_environment, send_alert, send_run_report
 
 HOOK_URL = "https://chat.pazufa.de/hooks/testhook"
 
@@ -38,7 +38,7 @@ class TestExtractEnvironment:
             monkeypatch.setenv("ENVIRONMENT", env)
         config = MagicMock()
         config.config_file = config_file
-        assert _extract_environment(config) == environment
+        assert extract_environment(config) == environment
 
 
 class TestSendRunReport:
@@ -62,13 +62,13 @@ class TestSendRunReport:
 
     @responses_lib.activate
     def test_issue52_one_post_for_all_sections(self, mock_config):
-        """Issue #52: one message per cycle and environment, not one per scraper."""
+        """Issue #52: one message per cycle and environment, not one per scraper; errors only (DD-082)."""
         mock_config.config_file = "config.prod.toml"
         responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
         mock_config.section.return_value["mattermost-username"] = "my-bot"
         send_run_report(
             mock_config,
-            [("Vorgänge", ["Found: 3"]), ("Beteiligung", ["Found: 1"]), ("Sitzungen", ["Dates found: 50"])],
+            [("Vorgänge", ["  - V-1 | HTTP 422"]), ("Sitzungen", ["FAILED: TimeoutError: ics"])],
         )
         import json
 
@@ -77,28 +77,14 @@ class TestSendRunReport:
         assert json.loads(responses_lib.calls[0].request.body)["username"] == "my-bot"
         # Environment once; each section keeps its own code block for column alignment.
         assert json.loads(responses_lib.calls[0].request.body)["text"] == (
-            "**[prod] BaWue Run Summary**"
-            "\n**Vorgänge**\n```\nFound: 3\n```"
-            "\n**Beteiligung**\n```\nFound: 1\n```"
-            "\n**Sitzungen**\n```\nDates found: 50\n```"
-        )
-
-    @responses_lib.activate
-    def test_issue128_plain_section_keeps_links_clickable(self, mock_config):
-        """Issue #128: links inside a code block are not clickable, so this section has none."""
-        responses_lib.add(responses_lib.POST, HOOK_URL, json={"ok": True}, status=200)
-        send_run_report(
-            mock_config, [("Vorgänge", ["Found: 3"])], plain_sections=[("Fehlende Dokumente", ["- [a](b)"])]
-        )
-        import json
-
-        assert json.loads(responses_lib.calls[0].request.body)["text"] == (
-            "**[staging] BaWue Run Summary**\n**Vorgänge**\n```\nFound: 3\n```\n**Fehlende Dokumente**\n- [a](b)"
+            "**[prod] BaWue run errors**"
+            "\n**Vorgänge**\n```\n  - V-1 | HTTP 422\n```"
+            "\n**Sitzungen**\n```\nFAILED: TimeoutError: ics\n```"
         )
 
     @responses_lib.activate
     def test_issue52_no_post_without_sections(self, mock_config):
-        """No scraper enabled or none reported: nothing to say."""
+        """No scraper had errors: nothing to say (DD-082)."""
         send_run_report(mock_config, [])
         assert len(responses_lib.calls) == 0
 

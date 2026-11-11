@@ -27,10 +27,10 @@ async def test_lookup_error_skips_the_item_and_counts_it():
 
 @pytest.mark.parametrize(
     ("cache_errors", "expected"),
-    [(3, ["Found: 1", "Cache errors: 3 (skipped, retried next run)"]), (0, ["Found: 1"])],
+    [(3, ["  - V-1 | HTTP 500", "Cache errors: 3 (skipped, retried next run)"]), (0, ["  - V-1 | HTTP 500"])],
 )
 def test_report_names_cache_errors(cache_errors, expected):
-    scraper = MagicMock(summary=("Vorgänge", ["Found: 1"]), cache_errors=cache_errors)
+    scraper = MagicMock(title="Vorgänge", errors=["  - V-1 | HTTP 500"], cache_errors=cache_errors)
     [(_, lines)] = _report_sections([scraper], [])
     assert lines == expected
 

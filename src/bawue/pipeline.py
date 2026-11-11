@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 
 class Scraper(ABC):
+    # Heads this scraper's part of the Mattermost error report (DD-082).
+    title = ""
+
     def __init__(
         self,
         config: BawueConfig,
@@ -45,8 +48,6 @@ class Scraper(ABC):
         self.cached_count = 0
         # Items skipped this cycle because Redis failed on their lookup (issue #105).
         self.cache_errors = 0
-        # (title, lines) set by run(); __main__ sends a cycle's summaries as one message (issue #52).
-        self.summary: tuple[str, list[str]] | None = None
         logger.info("Initialized %s with %d listing urls", self.__class__.__name__, len(self.listing_urls))
 
     async def process_lpurls(self, lpurls: list[str]) -> set[Any]:
@@ -184,6 +185,15 @@ class Scraper(ABC):
         iset = await self.process_lpurls(self.listing_urls)
         rset = await self.process_items(iset)
         await self.process_results(rset)
+
+    @property
+    def errors(self) -> list[str]:
+        """Lines for the Mattermost error report: only what needs someone's attention (DD-082)."""
+        return []
+
+    @abstractmethod
+    def record_metrics(self, pmc: Any) -> None:
+        """Add this cycle's counts to the run metrics (issue #188)."""
 
     @abstractmethod
     async def get_cached_result(self, item_key: str) -> Any | None: ...

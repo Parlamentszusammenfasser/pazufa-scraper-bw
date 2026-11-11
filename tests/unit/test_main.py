@@ -10,16 +10,14 @@ from bawue.bawue_dok import _hash_cache
 
 
 class _FakeScraper:
-    def __init__(self, title: str | None, fail: bool = False):
-        self._title = title
+    def __init__(self, title: str, errors: tuple[str, ...] = (), fail: bool = False):
+        self.title = title
+        self.errors = list(errors)
         self._fail = fail
-        self.summary = None
 
     async def run(self) -> None:
-        if self._title is not None:
-            self.summary = (self._title, [f"{self._title} line"])
         if self._fail:
-            raise RuntimeError(f"{self._title} boom")
+            raise RuntimeError(f"{self.title} boom")
 
 
 def _config(linearize: bool) -> MagicMock:
@@ -29,18 +27,18 @@ def _config(linearize: bool) -> MagicMock:
 
 
 @pytest.fixture(autouse=True)
-def _no_weekly_section():
-    with patch("bawue.__main__.weekly_section", return_value=None) as weekly:
-        yield weekly
+def _push():
+    with patch("bawue.__main__.push_run_metrics") as push:
+        yield push
 
 
 class TestIssue52OneRunReport:
-    """Issue #52: a cycle posts one Mattermost message with every scraper's summary."""
+    """Issue #52: a cycle posts one Mattermost message; since DD-082 only with the scrapers' errors."""
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("linearize", [False, True])
-    async def test_one_report_with_all_summaries_in_scraper_order(self, linearize):
-        scrapers = [_FakeScraper("Vorgänge"), _FakeScraper("Beteiligung"), _FakeScraper("Sitzungen")]
+    async def test_one_report_with_errors_in_scraper_order(self, linearize):
+        scrapers = [_FakeScraper("Vorgänge", ["  - V-1"]), _FakeScraper("Beteiligung"), _FakeScraper("S", ["  - x"])]
         config = _config(linearize)
 
         with (
@@ -49,34 +47,13 @@ class TestIssue52OneRunReport:
         ):
             await main(config)
 
-        send.assert_called_once_with(
-            config,
-            [
-                ("Vorgänge", ["Vorgänge line"]),
-                ("Beteiligung", ["Beteiligung line"]),
-                ("Sitzungen", ["Sitzungen line"]),
-            ],
-            plain_sections=[],
-        )
-
-    @pytest.mark.asyncio
-    async def test_failing_scraper_still_reports(self):
-        """A scraper that raises still fills its summary (run's finally); the report must go out."""
-        scrapers = [_FakeScraper("Vorgänge", fail=True), _FakeScraper("Sitzungen")]
-
-        with (
-            patch("bawue.__main__.load_scrapers", return_value=scrapers),
-            patch("bawue.__main__.send_run_report") as send,
-        ):
-            await main(_config(False))
-
-        assert [title for title, _ in send.call_args.args[1]] == ["Vorgänge", "Sitzungen"]
+        send.assert_called_once_with(config, [("Vorgänge", ["  - V-1"]), ("S", ["  - x"])])
 
     @pytest.mark.asyncio
     # linearize leaves the scrapers after a failure un-awaited (unchanged behavior).
     @pytest.mark.filterwarnings("ignore:coroutine '_FakeScraper.run' was never awaited")
     async def test_failing_scraper_still_reports_when_linearized(self):
-        scrapers = [_FakeScraper("Vorgänge", fail=True), _FakeScraper("Sitzungen")]
+        scrapers = [_FakeScraper("Vorgänge", ["  - V-1"], fail=True), _FakeScraper("Sitzungen")]
 
         with (
             patch("bawue.__main__.load_scrapers", return_value=scrapers),
@@ -90,9 +67,8 @@ class TestIssue52OneRunReport:
 
     @pytest.mark.asyncio
     async def test_failure_is_named_in_the_report(self):
-        """A crash before run() sets its summary (e.g. in check_for_newer_wahlperiode) must
-        not vanish from the report; a crash after it is marked in its section."""
-        scrapers = [_FakeScraper(None, fail=True), _FakeScraper("Sitzungen", fail=True)]
+        """A scraper that raises is reported, with or without errors of its own."""
+        scrapers = [_FakeScraper("Vorgänge", fail=True), _FakeScraper("Sitzungen", ["  - x"], fail=True)]
 
         with (
             patch("bawue.__main__.load_scrapers", return_value=scrapers),
@@ -101,21 +77,9 @@ class TestIssue52OneRunReport:
             await main(_config(False))
 
         assert send.call_args.args[1] == [
-            ("_FakeScraper", ["FAILED: RuntimeError: None boom"]),
-            ("Sitzungen", ["Sitzungen line", "FAILED: RuntimeError: Sitzungen boom"]),
+            ("Vorgänge", ["FAILED: RuntimeError: Vorgänge boom"]),
+            ("Sitzungen", ["  - x", "FAILED: RuntimeError: Sitzungen boom"]),
         ]
-
-    @pytest.mark.asyncio
-    async def test_scraper_without_summary_is_left_out(self):
-        scrapers = [_FakeScraper(None), _FakeScraper("Sitzungen")]
-
-        with (
-            patch("bawue.__main__.load_scrapers", return_value=scrapers),
-            patch("bawue.__main__.send_run_report") as send,
-        ):
-            await main(_config(False))
-
-        assert send.call_args.args[1] == [("Sitzungen", ["Sitzungen line"])]
 
 
 class TestIssue101HashCachePerCycle:
@@ -132,7 +96,7 @@ class TestIssue101HashCachePerCycle:
 
         try:
             with (
-                patch("bawue.__main__.load_scrapers", return_value=[_Probe(None)]),
+                patch("bawue.__main__.load_scrapers", return_value=[_Probe("Probe")]),
                 patch("bawue.__main__.send_run_report"),
             ):
                 await main(_config(False))
@@ -140,20 +104,6 @@ class TestIssue101HashCachePerCycle:
             _hash_cache.clear()
 
         assert seen == [{}]
-
-
-class TestIssue82WeeklySection:
-    @pytest.mark.asyncio
-    async def test_weekly_section_ends_the_report(self, _no_weekly_section):
-        _no_weekly_section.return_value = ("Wochenbericht", ["🆕 A: Eingebracht"])
-
-        with (
-            patch("bawue.__main__.load_scrapers", return_value=[_FakeScraper("Vorgänge")]),
-            patch("bawue.__main__.send_run_report") as send,
-        ):
-            await main(_config(False))
-
-        assert send.call_args.args[1] == [("Vorgänge", ["Vorgänge line"]), ("Wochenbericht", ["🆕 A: Eingebracht"])]
 
 
 class TestIssue84StartupVersion:
@@ -209,13 +159,20 @@ class TestCycleFailure:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(("fail", "failed"), [(False, False), (True, True)])
-    async def test_cycle_reports_failed_scrapers(self, fail, failed):
+    async def test_cycle_reports_failed_scrapers(self, fail, failed, _push):
+        """Metrics only after a cycle without failed scrapers: their push time is the heartbeat (issue #188)."""
         scrapers = [_FakeScraper("Vorgänge", fail=fail), _FakeScraper("Sitzungen")]
+        config = _config(False)
         with (
             patch("bawue.__main__.load_scrapers", return_value=scrapers),
             patch("bawue.__main__.send_run_report"),
         ):
-            assert await main(_config(False)) is failed
+            assert await main(config) is failed
+
+        if failed:
+            _push.assert_not_called()
+        else:
+            _push.assert_called_once_with(config, scrapers, pytest.approx(0, abs=5))
 
     @pytest.mark.parametrize(("failed", "code"), [(False, None), (True, 1)])
     def test_failed_scraper_fails_the_execution(self, failed, code):
@@ -230,32 +187,6 @@ class TestCycleFailure:
                     run(_config(False))
                 assert exc.value.code == code
         alert.assert_not_called()  # the run report already names the failure
-
-
-class TestIssue128MissingDocuments:
-    """Issue #128: the weekly run lists unpublished documents as plain, clickable text."""
-
-    class _Vorgaenge(_FakeScraper):
-        missing_documents = ("- Plenarprotokoll 18/13 …",)
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        ("weekly", "plain"),
-        [
-            (("Wochenbericht", ["Keine Änderungen."]), [("Fehlende Dokumente", ["- Plenarprotokoll 18/13 …"])]),
-            (None, []),  # not the week's first run
-        ],
-    )
-    async def test_listed_with_the_weekly_report_only(self, _no_weekly_section, weekly, plain):
-        _no_weekly_section.return_value = weekly
-
-        with (
-            patch("bawue.__main__.load_scrapers", return_value=[self._Vorgaenge("Vorgänge"), _FakeScraper("S")]),
-            patch("bawue.__main__.send_run_report") as send,
-        ):
-            await main(_config(False))
-
-        assert send.call_args.kwargs["plain_sections"] == plain
 
 
 class TestLoadScrapers:

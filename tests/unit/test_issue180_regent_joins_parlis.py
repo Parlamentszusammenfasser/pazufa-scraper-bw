@@ -232,7 +232,7 @@ def test_run_report_lists_every_join():
 
 
 async def _report(cache, exists=lambda *_: True) -> tuple[list[str], MagicMock]:
-    """A later run's summary, which goes to Mattermost; the bills are cached, so it only reports."""
+    """A later run's error report, which goes to Mattermost; the bills are cached, so it only reports."""
     scraper = _parlis(cache)
     scraper._by_type, scraper._failed_items, scraper._parlis_errors = {}, [], []
     scraper._published = scraper._skipped = scraper._failed = 0
@@ -242,7 +242,7 @@ async def _report(cache, exists=lambda *_: True) -> tuple[list[str], MagicMock]:
         patch("bawue.bawue_vorgaenge_scraper.vorgang_exists", side_effect=exists) as get,
     ):
         await scraper.run()
-    return scraper.summary[1], get
+        return scraper.errors, get
 
 
 @pytest.mark.asyncio
@@ -266,7 +266,7 @@ async def test_stale_portal_vorgang_is_reported_every_run_until_deleted(exists, 
 
 @pytest.mark.asyncio
 async def test_report_says_when_redis_failed_before_the_check():
-    """The check runs in run()'s finally: raising there would lose the whole summary."""
+    """The check runs in run()'s finally: raising there would lose the whole summary and report."""
     cache = _InMemoryCache()
     await _upload_draft(cache, BVANP)
     await _build(_parlis(cache), _raw(BVANP), _pdfs(BVANP), uploaded=True)
