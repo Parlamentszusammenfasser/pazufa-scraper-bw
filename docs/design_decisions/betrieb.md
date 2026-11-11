@@ -61,20 +61,11 @@ als HTTP 422 auf.
      Stations-`api_id` (DD-028). Erst mit Backend-Fix und Migration.
    - `gg-land-parl-haushalt` erst mit einem BW-Track dafür (DD-077).
    - `parl-anhoerung`, `beschlussprotokoll`, `inhaltsprotokoll` gibt es in BW nicht (DD-057).
-   - `if_none_match` lohnt für den wöchentlichen Abruf (DD-072) nicht.
 
 **Konsequenz:** corelibs `html_to_text` behandelt einen Text als HTML, sobald ein einzelnes
 Block-Tag vorkommt, und verliert dann alle Absätze — die Garbled-Filter (DD-015) arbeiten
 absatzweise. In BW-Drucksachen derzeit nicht beobachtet; tritt es auf, gehört die Korrektur
 nach corelib.
-
-<a id="dd-072"></a>
-## DD-072: Wochenbericht aus dem Backend (aufgehoben)
-
-Der wöchentliche Abschnitt im Run-Report (neue und weitergekommene `gg-*`-Vorgänge, Issue #82)
-und die Liste „Fehlende Dokumente“ (Issue #128) entfallen mit DD-082: Mattermost bekommt nur
-noch Fehler. Fehlende PDFs zählt eine Metrik; ein Wochenbericht gehört als Auswertung der
-Backend-Daten nach Grafana. Der Redis-Schlüssel `wochenbericht` wird nicht mehr gelesen.
 
 <a id="dd-078"></a>
 ## DD-078: Ein Config-Loader, ein Wert gilt wie geschrieben
@@ -113,6 +104,6 @@ Mattermost bekommt nur noch Fehler: gescheiterte Einträge, PARLIS-Fehler, zu l�
 Portal-Vorgänge (DD-079), abgestürzte Scraper, Abbrüche. Die Zusammenfassung steht im Log.
 
 **Konsequenz:** Ein gescheiterter Lauf pusht keine Metriken; das Alter von `push_time_seconds`
-alarmiert in Grafana, der Fehler in Mattermost. Wochenbericht und „Fehlende Dokumente“ entfallen
-(DD-072). LLM-Tokens folgen mit dem nächsten corelib-Release. Noch gepufferte Logs gehen verloren,
+alarmiert in Grafana, der Fehler in Mattermost. Wochenbericht und „Fehlende Dokumente“ entfallen.
+LLM-Tokens folgen mit dem nächsten corelib-Release. Noch gepufferte Logs gehen verloren,
 wenn Cloud Run den Job beendet; Cloud Logging hat sie.

@@ -15,7 +15,6 @@ Versionskonstante gibt es bewusst nicht; ein gezielter Neubau ändert den Finger
 | `vorgang-kurztitel:`, `vorgang-ressort:` | LLM-Ergebnis je Vorgang | DD-053, DD-055, DD-063 |
 | `drucks-hash:` | Hash hochgeladener Drucksachen für TOPs | DD-070 |
 | `beteiligungsfristen` | Frist, Titel, Links und Entwurf-Hash je hochgeladenem Beteiligungsprozess. Zustand, kein Cache: nicht löschen (die Fristen fielen aus dem Kalender), neu aufbauen über die Beteiligungs-`vg2:`-Einträge | DD-076 |
-| `wochenbericht` | letzte begonnene Station je Vorgang, Stand der Vorwoche | DD-072 |
 
 <a id="dd-073"></a>
 ## DD-073: Redis ist Pflicht — ohne Redis keine Arbeit
