@@ -259,7 +259,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         # vorgnrs not to cache this cycle, so the next cycle retries them (see store_extracted_result).
         self._retry_next_cycle: set[str] = set()
-        # Unpublished PDF link → (label, Fundstelle day, vorgnrs), for the weekly report (issue #128).
+        # Links of PDFs still unpublished after four weeks, counted in the metrics (issue #128, DD-082).
         self._missing: set[str] = set()
 
         self._published: int = 0

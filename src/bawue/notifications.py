@@ -1,4 +1,4 @@
-"""Mattermost webhook notifications for scraper run summaries."""
+"""Mattermost webhook notifications for run errors and aborts (DD-082)."""
 
 import logging
 import os
