@@ -14,6 +14,7 @@ Versionskonstante gibt es bewusst nicht; ein gezielter Neubau ändert den Finger
 | `llm-semantics:` | LLM-Ergebnis je Dokument und Prompt | DD-020 |
 | `vorgang-kurztitel:`, `vorgang-ressort:` | LLM-Ergebnis je Vorgang | DD-053, DD-055, DD-063 |
 | `drucks-hash:` | Hash hochgeladener Drucksachen für TOPs | DD-070 |
+| `metrics-last-success` | Zeit des letzten erfolgreichen Laufs, für den Metrik-Heartbeat | DD-082 |
 | `beteiligungsfristen` | Frist, Titel, Links und Entwurf-Hash je hochgeladenem Beteiligungsprozess. Zustand, kein Cache: nicht löschen (die Fristen fielen aus dem Kalender), neu aufbauen über die Beteiligungs-`vg2:`-Einträge | DD-076 |
 
 <a id="dd-073"></a>

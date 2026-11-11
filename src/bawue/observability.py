@@ -8,6 +8,7 @@ so local runs log the metrics (dry run) and ship nothing.
 import logging
 import os
 import sys
+import time
 from collections import Counter
 from logging.handlers import BufferingHandler
 
@@ -15,6 +16,7 @@ import requests
 from pazufa_metrics_client import PazufaMetricsClient
 
 from bawue.bawue_dok import LLMMetrics
+from bawue.cache import LAST_SUCCESS_KEY, RedisUnavailableError
 from bawue.config import BawueConfig
 from bawue.notifications import extract_environment
 from bawue.run_report import FailedItem
@@ -67,8 +69,21 @@ def record_llm(pmc: PazufaMetricsClient, llm: LLMMetrics) -> None:
     pmc.increaseMetricLLMEnrichment(llm.ressort_rejected + llm.ressort_failed, proc, M.RESULT_FAILED, "Ressort")
 
 
-def push_run_metrics(config: BawueConfig, scrapers: list, duration: float) -> None:
-    """Push once per successful cycle: the Pushgateway's push_time_seconds is the heartbeat."""
+def _last_success(config: BawueConfig, success: bool) -> float | None:
+    """Now after a successful cycle, else the stored time: each push replaces the whole group."""
+    if success:
+        now = time.time()
+        config.cache.store_raw(LAST_SUCCESS_KEY, str(now), "Last success")
+        return now
+    try:
+        stored = config.cache.get_raw(LAST_SUCCESS_KEY, "Last success")
+    except RedisUnavailableError:
+        return None
+    return float(stored) if stored else None
+
+
+def push_run_metrics(config: BawueConfig, scrapers: list, duration: float, success: bool) -> None:
+    """Push after every cycle; last_success_timestamp_seconds is the heartbeat (DD-082)."""
     pmc = M(host=config.prometheus_url, username=config.observability_username, password=config.observability_password)
     pmc.setScraperUUID(config.collector_id).setParliament(M.PARLIAMENT_BW).setEnvironment(_environment(config))
     pmc.setElectionPeriod(config.section("bawue").get("wahlperiode", CURRENT_WAHLPERIODE))
@@ -77,6 +92,9 @@ def push_run_metrics(config: BawueConfig, scrapers: list, duration: float) -> No
     pmc.increaseMetricRuntime(duration)
     pmc.registerMetric("info", ["version"])
     pmc.increaseMetric("info", 1, {"version": os.environ.get("SCRAPER_VERSION") or "dev"})
+    if (last_success := _last_success(config, success)) is not None:
+        pmc.registerMetric("last_success_timestamp_seconds")
+        pmc.increaseMetric("last_success_timestamp_seconds", last_success)
     pmc.pushMetrics(dryrun=not config.observability_password)
 
 

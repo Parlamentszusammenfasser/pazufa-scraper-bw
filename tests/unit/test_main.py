@@ -52,7 +52,7 @@ class TestIssue52OneRunReport:
     @pytest.mark.asyncio
     # linearize leaves the scrapers after a failure un-awaited (unchanged behavior).
     @pytest.mark.filterwarnings("ignore:coroutine '_FakeScraper.run' was never awaited")
-    async def test_failing_scraper_still_reports_when_linearized(self):
+    async def test_failing_scraper_still_reports_when_linearized(self, _push):
         scrapers = [_FakeScraper("Vorgänge", ["  - V-1"], fail=True), _FakeScraper("Sitzungen")]
 
         with (
@@ -64,6 +64,7 @@ class TestIssue52OneRunReport:
 
         send.assert_called_once()
         assert [title for title, _ in send.call_args.args[1]] == ["Vorgänge"]
+        assert _push.call_args.args[3] is False  # the cycle failed: no new heartbeat (DD-082)
 
     @pytest.mark.asyncio
     async def test_failure_is_named_in_the_report(self):
@@ -160,7 +161,7 @@ class TestCycleFailure:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(("fail", "failed"), [(False, False), (True, True)])
     async def test_cycle_reports_failed_scrapers(self, fail, failed, _push):
-        """Metrics only after a cycle without failed scrapers: their push time is the heartbeat (issue #188)."""
+        """Metrics after every cycle, also a failed one; only a successful one renews the heartbeat (DD-082)."""
         scrapers = [_FakeScraper("Vorgänge", fail=fail), _FakeScraper("Sitzungen")]
         config = _config(False)
         with (
@@ -169,10 +170,7 @@ class TestCycleFailure:
         ):
             assert await main(config) is failed
 
-        if failed:
-            _push.assert_not_called()
-        else:
-            _push.assert_called_once_with(config, scrapers, pytest.approx(0, abs=5))
+        _push.assert_called_once_with(config, scrapers, pytest.approx(0, abs=5), not failed)
 
     @pytest.mark.parametrize(("failed", "code"), [(False, None), (True, 1)])
     def test_failed_scraper_fails_the_execution(self, failed, code):

@@ -2,13 +2,15 @@
 
 import json
 import logging
-from unittest.mock import MagicMock, patch
+import time
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 import responses as responses_lib
 from pazufa_metrics_client import PazufaMetricsClient
 
 from bawue.bawue_dok import LLMMetrics
+from bawue.cache import RedisUnavailableError
 from bawue.observability import LokiHandler, add_loki_handler, push_run_metrics, record_entities, record_llm
 from bawue.run_report import FailedItem
 
@@ -88,8 +90,9 @@ class TestPushRunMetrics:
         monkeypatch.setenv("SCRAPER_VERSION", "1.2.3")
         scraper = MagicMock()
 
+        config = _config("secret")
         with patch("pazufa_metrics_client.push_to_gateway") as push:
-            push_run_metrics(_config("secret"), [scraper], 26.0)
+            push_run_metrics(config, [scraper], 26.0, success=True)
 
         scraper.record_metrics.assert_called_once()
         kwargs = push.call_args.kwargs
@@ -101,10 +104,27 @@ class TestPushRunMetrics:
         }
         assert _value(kwargs["registry"], "runtime_seconds", entity="") == 26.0
         assert _value(kwargs["registry"], "info", version="1.2.3") == 1
+        assert _value(kwargs["registry"], "last_success_timestamp_seconds") == pytest.approx(time.time(), abs=5)
+        config.cache.store_raw.assert_called_once_with("metrics-last-success", ANY, "Last success")
+
+    @pytest.mark.parametrize(
+        ("stored", "heartbeat"),
+        [("1700000000.0", 1700000000.0), (None, None), (RedisUnavailableError("down"), None)],
+        ids=["stored", "never-succeeded", "redis-down"],
+    )
+    def test_failed_cycle_keeps_the_last_success(self, stored, heartbeat):
+        """Each push replaces the whole group: without the stored value the heartbeat would vanish."""
+        config = _config("secret")
+        config.cache.get_raw.side_effect = [stored]
+        with patch("pazufa_metrics_client.push_to_gateway") as push:
+            push_run_metrics(config, [], 1.0, success=False)
+
+        assert _value(push.call_args.kwargs["registry"], "last_success_timestamp_seconds") == heartbeat
+        config.cache.store_raw.assert_not_called()
 
     def test_nothing_is_pushed_without_password(self):
         with patch("pazufa_metrics_client.push_to_gateway") as push:
-            push_run_metrics(_config(None), [], 1.0)
+            push_run_metrics(_config(None), [], 1.0, success=True)
         push.assert_not_called()
 
 

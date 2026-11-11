@@ -89,9 +89,11 @@ Default ersetzt. Keine der Repo-Configs enthält einen solchen Wert.
 **Kontext:** Der Run-Report in Mattermost war die einzige Auswertung: knapp, ohne Verlauf, und
 ein Absturz, OOM oder Timeout schickte gar nichts (GitHub Issue #188).
 
-**Entscheidung:** Nach einem Lauf ohne gescheiterten Scraper pusht der Scraper seine Zahlen
-über den gemeinsamen `pazufa-metrics-client` an das Pushgateway, Namen und Labels wie auf der
-Wiki-Seite *Observability*. Dessen `push_time_seconds` ist der Heartbeat. `state="new"` enthält
+**Entscheidung:** Nach jedem Lauf pusht der Scraper seine Zahlen über den gemeinsamen
+`pazufa-metrics-client` an das Pushgateway, Namen und Labels wie auf der Wiki-Seite
+*Observability*. Heartbeat ist `last_success_timestamp_seconds`: nur ein Lauf ohne gescheiterten
+Scraper setzt ihn neu, sonst kommt der letzte Wert aus Redis (`metrics-last-success`), weil jeder
+Push die ganze Gruppe ersetzt. `state="new"` enthält
 erneut versuchte Einträge (ein Cache-Miss unterscheidet sie nicht); Ablehnungen mit HTTP-Status
 zählen als `submitted{result="rejected", statuscode}`, Fehler ohne Antwort als
 `failed{reason="exception"}`, Redis-Fehler als `failed{reason="cache_error"}`, PDFs mit 404 nach
@@ -103,7 +105,7 @@ Pushgateway nimmt kein OTLP.
 Mattermost bekommt nur noch Fehler: gescheiterte Einträge, PARLIS-Fehler, zu löschende
 Portal-Vorgänge (DD-079), abgestürzte Scraper, Abbrüche. Die Zusammenfassung steht im Log.
 
-**Konsequenz:** Ein gescheiterter Lauf pusht keine Metriken; das Alter von `push_time_seconds`
+**Konsequenz:** Auch ein gescheiterter Lauf liefert seine Zahlen; das Alter des Heartbeats
 alarmiert in Grafana, der Fehler in Mattermost. Wochenbericht und „Fehlende Dokumente“ entfallen.
 LLM-Tokens folgen mit dem nächsten corelib-Release. Noch gepufferte Logs gehen verloren,
 wenn Cloud Run den Job beendet; Cloud Logging hat sie.

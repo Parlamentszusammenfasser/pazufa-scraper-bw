@@ -65,6 +65,7 @@ async def main(config: BawueConfig) -> bool:
 
         logger.info("Running %d scraper tasks concurrently", len(scraper_tasks))
         results: list = []
+        success = False
         try:
             if not config.linearize:
                 results = await asyncio.gather(*scraper_tasks, return_exceptions=True)
@@ -74,13 +75,13 @@ async def main(config: BawueConfig) -> bool:
             else:
                 for t in scraper_tasks:
                     await t
+            success = not any(isinstance(r, Exception) for r in results)
         finally:
             # One Mattermost message per cycle, and only for errors (issue #52, DD-082).
             send_run_report(config, _report_sections(scrapers, results))
-    failed = any(isinstance(r, Exception) for r in results)
-    if not failed:
-        push_run_metrics(config, scrapers, time.monotonic() - start)
-    return failed
+            # Every cycle: a failed one's numbers count too, it only keeps the old heartbeat.
+            push_run_metrics(config, scrapers, time.monotonic() - start, success)
+    return not success
 
 
 def _report_sections(scrapers: list[Scraper], results: list) -> list[tuple[str, list[str]]]:

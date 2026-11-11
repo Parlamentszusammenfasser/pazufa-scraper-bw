@@ -25,6 +25,8 @@ BETEILIGUNGSFRISTEN_KEY = "beteiligungsfristen"
 # Uploaded Beteiligung drafts by slug, and which PARLIS bill took each over (DD-079).
 ENTWUERFE_KEY = "beteiligung-entwuerfe"
 UEBERNAHMEN_KEY = "entwurf-uebernahmen"
+# When a cycle last succeeded, for the metrics heartbeat (DD-082).
+LAST_SUCCESS_KEY = "metrics-last-success"
 
 
 def _redact(redis_url: str) -> str:
