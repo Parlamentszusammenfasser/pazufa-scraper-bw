@@ -352,6 +352,7 @@ class TestDokumententypMapping:
             ("Gesetzblatt", False, Doktyp.GESETZ),
             ("Bekanntmachung", False, Doktyp.MITTEILUNG),
             ("Gesetz", False, Doktyp.GESETZ),
+            ("Berichtigung des Gesetzes", False, Doktyp.BERICHTIGUNG),  # issue #204
         ],
     )
     def test_known_patterns(self, context, is_vorparl, expected):

@@ -1157,8 +1157,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
             )
         station_typ = _map_fundstelle_stationstyp(station_typ_str, raw_text, initiative)
 
-        # The document keeps the PARLIS date as its `zp_referenz` (for a Gesetzblatt: the Ausfertigung),
-        # so `_build_dokumente` is deliberately still given the unmodified zp_start.
+        ausgabe = await self._gesetzblatt_ausgabedatum(fund) if station_typ == Stationstyp.POSTPARL_GSBLT else None
+        # The document keeps the PARLIS date as its `zp_referenz` (for a Gesetzblatt: the Ausfertigung).
+        # A Berichtigung has none, only the 01.01. year fallback: its Ausgabedatum dates it (issue #204).
+        dok_zp = ausgabe if ausgabe and station_typ_str.startswith("Berichtigung") else zp_start
         gremium = self._determine_gremium(fund, station_typ)
         dokumente = await self._build_dokumente(
             fund,
@@ -1166,14 +1168,12 @@ class BawueVorgaengeScraper(VorgangsScraper):
             mapping_text,
             station_typ,
             initiative,
-            zp_start,
+            dok_zp,
             vorgang_id,
             vorgang_titel,
             vorgang_vnr,
         )
-
-        if station_typ == Stationstyp.POSTPARL_GSBLT:
-            zp_start = await self._gesetzblatt_ausgabedatum(fund) or zp_start
+        zp_start = ausgabe or zp_start
 
         # Only the federführende committee reports with a Beschlussempfehlung (DD-065).
         federf = (

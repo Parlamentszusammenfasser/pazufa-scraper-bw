@@ -92,9 +92,15 @@ aus `G` ist nie track-gültig (DD-040), und das Gesetzblatt nennt keine Drucksac
   lückenhaft. Der Link ist signiert (`dl=1`): Ändert die Seite ihren Schlüssel, liefern alte
   Links 403.
 - Das PDF liefert auch das Inkrafttreten (DD-071).
+- Eine „Berichtigung des Gesetzes“ im Vorgang des Gesetzes wird Dokument `berichtigung` an
+  dessen `postparl-gsblt`-Station (Merge wie jede Folge-Fundstelle gleichen Typs). PARLIS
+  datiert sie nicht (Parser-Fallback 01.01. des Jahres), daher ist ihr `zp_referenz` das
+  Ausgabedatum ihrer eigenen Gesetzblatt-Ausgabe (GitHub Issue #204). Eigenständige
+  Berichtigungs-Vorgänge bleiben übersprungen (DD-036): Den berichtigten Vorgang fände nur
+  ein unscharfer Titelabgleich.
 
 **Konsequenz:** Digital gibt es das Gesetzblatt erst ab 2024; ältere Zitate behalten das
-PARLIS-Datum und den PARLIS-Link. Gesetzblatt-Einträge ohne PARLIS-Vorgang (Verordnungen)
+PARLIS-Datum und den PARLIS-Link; eine Berichtigung vor 2024 behält das Datum 01.01. Gesetzblatt-Einträge ohne PARLIS-Vorgang (Verordnungen)
 erscheinen nicht. Die Station erbt die Wahlperiode ihres Vorgangs.
 
 <a id="dd-044"></a>
