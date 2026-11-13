@@ -21,10 +21,16 @@ Tag `v0.2.9+v0.1.3`). Ältere DDs schrieben `V` für die Lesung und `Z` für die
    `N` ablehnung, `G` gsblt, `K` kraft, `C` vgstp. Ein Typ ohne Buchstaben (`sonstig`) lässt
    den ganzen Vorgang scheitern.
 3. Je Parlament gilt `[tracks.<Parlament>].<Vorgangstyp>`. Fehlt der Eintrag: „A vorgang of
-   type … is not specified for parliament BW“ (DD-016: `gg-land-volk`; DD-085).
+   type … is not specified for parliament BW“ (DD-016: `gg-land-volk`).
 4. Die Buchstabenfolge muss ein **Präfix** eines gültigen Worts sein (alle NFA-Zustände
    akzeptieren): spätere Stationen dürfen fehlen, ein laufendes Verfahren wie `SILAL` ist
-   gültig. Falsch ist nur, was nicht mehr passen kann. Sonst HTTP 400 mit den Konflikten.
+   gültig. Falsch ist nur, was nicht mehr passen kann.
+5. Geprüft wird auch der Stand nach dem Merge mit der Datenbank: Ein Upload kann an bereits
+   gespeicherten Stationen scheitern, nicht nur an den eigenen.
+
+Jeder dieser Fehler kommt beim Collector-`PUT /vorgang` als **HTTP 500** mit dem Fehlertext
+zurück (`api/vorgang.rs`); nur `PUT /vorgang/{id}` antwortet mit 400. Ältere DDs nennen
+„HTTP 400“.
 
 BW (tracks v0.1.3), `gg-land-parl` und `-haushalt` gleich:
 

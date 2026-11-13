@@ -34,8 +34,8 @@ A `Vorgang` is a list of `Station`s (`typ`, `zp_start`, `gremium`, `dokumente`).
 come from two backend behaviors:
 
 1. **Track validation orders Stationen by `zp_start`, not list order**, and demands a canonical
-   sequence (BY track, DD-016). Out-of-order timestamps → HTTP 400. So ordering logic must
-   reason about time, not position (#48).
+   sequence (BW track, DD-040). Out-of-order timestamps → rejected upload (HTTP 500 on the
+   collector PUT). So ordering logic must reason about time, not position (#48).
 2. **The backend merges Stationen by `api_id`, else by document hash.** The same PDF recurs
    across Vorgänge, so hash matching collides → HTTP 500. Hence every Station gets a
    Vorgang-scoped stable `api_id` (DD-028/DD-034, #47). Treat `api_id`s and the cache
