@@ -992,6 +992,17 @@ _ISSUE_75_FUNDSTELLEN = [
 ]
 
 
+def _freeze_now(monkeypatch, now: datetime) -> None:
+    """Pin the scraper module's clock (Cloud Run runs in UTC)."""
+
+    class _Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now.astimezone(tz)
+
+    monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.datetime", _Clock)
+
+
 class TestIssue75FutureFundstellen:
     """DD-068: a Fundstelle becomes a Station only from its date on (Berlin day)."""
 
@@ -1012,14 +1023,45 @@ class TestIssue75FutureFundstellen:
 
     def test_today_is_the_berlin_day(self, monkeypatch):
         """Cloud Run runs in UTC: at 00:30 in Berlin, UTC still has the previous day."""
-
-        class _Clock(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return datetime(2026, 10, 7, 22, 30, tzinfo=UTC).astimezone(tz)
-
-        monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.datetime", _Clock)
+        _freeze_now(monkeypatch, datetime(2026, 10, 7, 22, 30, tzinfo=UTC))
         assert BawueVorgaengeScraper._today() == date(2026, 10, 8)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("now", "held"),
+        [
+            (datetime(2026, 2, 4, 23, 30, tzinfo=UTC), True),  # 00:30 in Berlin: the day is due
+            (datetime(2026, 2, 5, 0, 30, tzinfo=UTC), True),  # the reading is bumped to 01:00
+            (datetime(2026, 2, 5, 1, 0, tzinfo=UTC), False),
+        ],
+    )
+    async def test_holds_back_a_vorgang_with_a_station_after_now(self, monkeypatch, now, held):
+        """Backend 0.3.6 rejects a Station after now (HTTP 422): Stationen sit at midnight UTC plus
+        ordering bumps, so one dated today may still lie ahead. Not cached, retried next cycle."""
+        _freeze_now(monkeypatch, now)
+        fundstellen = [
+            {
+                "raw": "Gesetzentwurf Fraktion GRÜNE 05.02.2026 Drucksache 17/10266",
+                "datum": "05.02.2026",
+                "drucksache": "17/10266",
+                "station_typ": "Gesetzentwurf",
+                "pdf_url": "https://www.landtag-bw.de/resource/blob/12345/doc.pdf",
+            },
+            {
+                "raw": "Erste Beratung Plenarprotokoll 17/141 05.02.2026",
+                "datum": "05.02.2026",
+                "plenarprotokoll": "17/141",
+                "station_typ": "Erste Beratung",
+                "pdf_url": "",
+            },
+        ]
+        scraper = _make_scraper_with_mock_parlis()
+        scraper._raw_cache["V-920"] = _make_raw_vorgang("V-920", fundstellen=fundstellen)
+
+        result = await scraper.item_extractor("V-920")
+
+        assert (result is None) is held
+        assert scraper._skipped == int(held)
 
     @pytest.mark.parametrize(("today", "track"), [(date(2021, 12, 1), "SI"), (date(2021, 12, 17), "SILA")])
     @pytest.mark.asyncio
@@ -1304,34 +1346,6 @@ class TestItemExtractor:
 
         assert result is None
         assert scraper._skipped == 1
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        ("now", "held"),
-        [
-            (datetime(2026, 2, 4, 23, 30, tzinfo=UTC), True),  # 00:30 in Berlin: the day is due (DD-068)
-            (datetime(2026, 2, 5, 0, 30, tzinfo=UTC), True),  # the reading is bumped to 01:00
-            (datetime(2026, 2, 5, 1, 0, tzinfo=UTC), False),
-        ],
-    )
-    async def test_holds_back_a_vorgang_with_a_station_after_now(self, monkeypatch, now, held):
-        """Backend 0.3.6 rejects a Station after now (HTTP 422): Stationen sit at midnight UTC plus
-        ordering bumps, so one dated today may still lie ahead. Not cached, retried next cycle."""
-
-        class _Clock(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return now.astimezone(tz)
-
-        monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.datetime", _Clock)
-        fundstellen = [{**f, "datum": "05.02.2026"} for f in _make_raw_vorgang("V-1")["fundstellen_parsed"]]
-        scraper = _make_scraper_with_mock_parlis()
-        scraper._raw_cache["V-920"] = _make_raw_vorgang("V-920", fundstellen=fundstellen)
-
-        result = await scraper.item_extractor("V-920")
-
-        assert (result is None) is held
-        assert scraper._skipped == held
 
     @pytest.mark.asyncio
     async def test_skips_vorgang_with_no_stations(self):
