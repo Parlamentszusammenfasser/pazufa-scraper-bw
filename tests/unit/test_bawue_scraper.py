@@ -3259,9 +3259,9 @@ class TestEnsureAusschberAfterVollvlsgn:
 
 
 # Authoritative station→letter mapping and BW track, copied verbatim from the
-# backend's configured trackfile (see DD-036):
-#   docs/specs/tracks.toml @ tag v0.2.3+v0.0.7, version 0.0.7
-#   https://codeberg.org/PaZuFa/parlamentszusammenfasser/raw/tag/v0.2.3+v0.0.7/docs/specs/tracks.toml
+# backend's configured trackfile (see DD-040):
+#   tracks.toml @ tag v0.2.9+v0.1.3, version 0.1.3
+#   https://codeberg.org/PaZuFa/parlamentszusammenfasser/raw/tag/v0.2.9+v0.1.3/tracks.toml
 # The backend maps each Station's ``typ`` to the [stations] letter, joins them in
 # zp_start order, then checks the [tracks.BW] regex as a PREFIX match — a Vorgang
 # is valid iff its letters are consumed as the *start* of an accepting word, so
@@ -3278,6 +3278,7 @@ _TRACKS_TOML_STATIONS = {
     "parl-ausschber": "A",
     "postparl-gsblt": "G",
     "postparl-kraft": "K",
+    "postparl-vgstp": "C",
     "preparl-vbegde": "B",
     "parl-ggentwurf": "W",
     "postparl-vesja": "Y",
@@ -3292,7 +3293,7 @@ _GG_LAND_PARL_LETTER = {
 }
 
 # [tracks.BW] gg-land-parl, verbatim.
-_BW_GG_LAND_PARL_TRACK = "((E*R+)?S)?I((LA*(Z|LJGA*KA*|LN|LA*(Z|LJGA*KA*|LN)))|Z)"
+_BW_GG_LAND_PARL_TRACK = "((E*R+)?S)?I((LA*(Z|LJ(C|GA*(C|KA*C?))|LN|LA*(Z|LJ(C|GA*(C|KA*C?))|LN)))|Z)"
 
 
 def _passes_bw_track_validation(track: str) -> bool:
@@ -3300,7 +3301,7 @@ def _passes_bw_track_validation(track: str) -> bool:
 
     The backend accepts a Vorgang iff its station-letter string is fully consumed
     as a *prefix* of an accepting word (``matched && consumed == len``; see
-    validate.rs / DD-036). Python's ``regex`` module reproduces exactly this with
+    tracks.rs / DD-040). Python's ``regex`` module reproduces exactly this with
     ``fullmatch(..., partial=True)``: a proper prefix returns a partial match.
     """
     regex = pytest.importorskip("regex")  # provided transitively via litellm→tiktoken
@@ -3445,7 +3446,7 @@ class TestIssue48OrderByZpStartNotListPosition:
         * the letter string (stations mapped and sorted by ``zp_start``) equals
           ``expected`` (e.g. ``"SILAL"``);
         * that string passes the real ``BW.gg-land-parl`` prefix match — i.e. the
-          backend would accept the Vorgang (DD-036);
+          backend would accept the Vorgang (DD-040);
         * no two *different-typed* stations share a ``zp_start`` — the backend
           sorts by ``zp_start``, so a tie between different types leaves the order
           ambiguous. ``enforce_total_ordering`` guarantees this (issue #48 root).
@@ -3535,7 +3536,7 @@ class TestIssue48OrderByZpStartNotListPosition:
     )
     def test_bw_track_prefix_validation_matches_backend(self, track, valid):
         """Pin the prefix-match semantics and the station→letter mapping against
-        the real ``BW.gg-land-parl`` track (DD-036): valid prefixes (including
+        the real ``BW.gg-land-parl`` track (DD-040): valid prefixes (including
         in-progress and completed processes) pass; the mis-orderings issue #48
         produced are rejected."""
         assert _passes_bw_track_validation(track) is valid
