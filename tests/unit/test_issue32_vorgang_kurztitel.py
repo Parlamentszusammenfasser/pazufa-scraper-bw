@@ -204,3 +204,25 @@ def test_issue72_status_words(kurztitel, is_status):
     """Issue #72: a bare participle or "in Kraft" claims a Verfahrensstand; nouns don't."""
     problem = _kurztitel_problem(kurztitel)
     assert (problem is not None and "Verfahrensstand" in problem) is is_status
+
+
+ASVG_TITEL = "Gesetz zur Änderung des Agrarstrukturverbesserungsgesetzes (Agrarstrukturverbesserungsgesetz - ASVG)"
+
+
+@pytest.mark.parametrize(
+    ("kurztitel", "titel", "unexplained"),
+    [
+        ("Digitalisierung der ASVG-Immobilienverträge", ASVG_TITEL, True),
+        ("Umsetzung des GewHAG in BW", "Ausführungsgesetz (Gewalthilfeausführungsgesetz - GewHAG)", True),
+        ("Digitale Verträge für Agrarflächen", ASVG_TITEL, False),
+        ("Gewaltschutz in BW nach EU-Vorgaben", "Gewaltschutzgesetz BW zur Umsetzung von EU-Recht", False),
+        ("Hilfe nach SGB XII", "Änderung des Ausführungsgesetzes zum SGB XII", True),
+        ("Neue Regeln für XII Gemeinden", "Gesetz für XII Gemeinden", False),
+        ("Förderung von KI-Projekten mit CO2-Bilanz", ASVG_TITEL, False),
+    ],
+    ids=["asvg", "gewhag", "spelled-out", "known", "sgb", "roman", "not-from-titel"],
+)
+def test_issue181_unexplained_abbreviation(kurztitel, titel, unexplained):
+    """Issue #181: a law abbreviation taken from the titel is cryptic as a heading; BW/EU are fine."""
+    problem = _kurztitel_problem(kurztitel, titel)
+    assert (problem is not None and "Abkürzung" in problem) is unexplained
