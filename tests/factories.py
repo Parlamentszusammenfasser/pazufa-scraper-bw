@@ -59,6 +59,7 @@ def run_metrics(scraper: Scraper) -> dict[str, float]:
     empty labels are left out."""
     pmc = PazufaMetricsClient()
     pmc.registerMetric("llm_tokens", ["type"])  # as push_run_metrics does
+    pmc.registerMetric("llm_cost_usd", ["model"])
     scraper.record_metrics(pmc)
     return {
         sample.name.removeprefix("pazufa_scraper_")

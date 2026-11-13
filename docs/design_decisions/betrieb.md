@@ -105,7 +105,10 @@ zählen als `submitted{result="rejected", statuscode}`, Fehler ohne Antwort als
 `failed{reason="exception"}`, Redis-Fehler als `failed{reason="cache_error"}`, PDFs mit 404 nach
 vier Wochen als `failed{entity="document", reason="not_found"}`. LLM-Tokens (corelib ≥ 0.3.3) gehen als
 `llm_tokens{type="prompt"|"completion"|"reasoning"}` aller Scraper in eine Summe je Lauf;
-`reasoning` ist Teil von `completion`, die Gesamtsumme also nur `prompt` + `completion`. Logs gehen gebündelt aus einem eigenen Thread an Loki,
+`reasoning` ist Teil von `completion`, die Gesamtsumme also nur `prompt` + `completion`.
+`llm_cost_usd{model}` rechnet sie mit litellms mitgelieferter Preistabelle um, damit kein Preis
+im Dashboard steht; gecachte Prompt-Tokens zählen zum vollen Preis (leicht zu hoch). Ohne Preis
+für das Modell fehlt die Reihe, statt 0 zu melden. Logs gehen gebündelt aus einem eigenen Thread an Loki,
 das Level als Label; nach einem gescheiterten Push stoppt der Versand für den Lauf. Beides nur
 mit `OBSERVABILITY_PASSWORD`, sonst werden die Metriken nur geloggt. Kein OpenTelemetry: das
 Pushgateway nimmt kein OTLP.

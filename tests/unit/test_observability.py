@@ -5,6 +5,7 @@ import logging
 import time
 from unittest.mock import ANY, MagicMock, patch
 
+import litellm
 import pytest
 import responses as responses_lib
 from pazufa_metrics_client import PazufaMetricsClient
@@ -123,7 +124,7 @@ class TestPushRunMetrics:
         config.cache.store_raw.assert_not_called()
 
     def test_llm_tokens_of_all_scrapers_add_up(self):
-        connector = MagicMock(prompt_tokens=100, completion_tokens=40, reasoning_tokens=10)
+        connector = MagicMock(model="gpt-5-nano", prompt_tokens=100, completion_tokens=40, reasoning_tokens=10)
         scrapers = [MagicMock(), MagicMock(), MagicMock()]
         scrapers[0].record_metrics.side_effect = lambda pmc: record_llm(pmc, LLMMetrics(), connector)
         scrapers[1].record_metrics.side_effect = lambda pmc: record_llm(pmc, LLMMetrics(), connector)
@@ -134,6 +135,23 @@ class TestPushRunMetrics:
 
         reg = push.call_args.kwargs["registry"]
         assert [_value(reg, "llm_tokens", type=t) for t in ("prompt", "completion", "reasoning")] == [200, 80, 20]
+        # Price from litellm's table, not hardcoded: it changes with litellm updates.
+        assert _value(reg, "llm_cost_usd", model="gpt-5-nano") == pytest.approx(
+            2 * sum(litellm.cost_per_token("gpt-5-nano", 100, 40))
+        )
+
+    def test_unknown_model_pushes_tokens_without_cost(self, caplog):
+        connector = MagicMock(model="no-such-model", prompt_tokens=100, completion_tokens=40, reasoning_tokens=0)
+        scraper = MagicMock()
+        scraper.record_metrics.side_effect = lambda pmc: record_llm(pmc, LLMMetrics(), connector)
+
+        with patch("pazufa_metrics_client.push_to_gateway") as push:
+            push_run_metrics(_config("secret"), [scraper], 1.0, success=True)
+
+        reg = push.call_args.kwargs["registry"]
+        assert _value(reg, "llm_tokens", type="prompt") == 100
+        assert _value(reg, "llm_cost_usd", model="no-such-model") is None  # no series, not a cost of 0
+        assert "No LLM price for no-such-model" in caplog.text
 
     def test_nothing_is_pushed_without_password(self):
         with patch("pazufa_metrics_client.push_to_gateway") as push:
