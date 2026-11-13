@@ -49,7 +49,7 @@ Kurztitel keine Rolle (Issue #32).
    („Gewalthilfeausführungsgesetz (GewHAG)“). Der `SYSTEM_PROMPT` verlangt dasselbe für
    Zusammenfassungen: Abkürzungen beim ersten Vorkommen ausschreiben. Das ändert alle
    `llm-semantics:`-, Kurztitel- und Ressort-Schlüssel (DD-063).
-   Neue Prompts gelten erst beim nächsten Neubau eines Vorgangs (DD-052).
+   Marker `abkuerzungen-dokument-tags` baut gecachte Vorgänge einmal neu (DD-083).
 
 <a id="dd-055"></a>
 ## DD-055: `Vorgang.ressort` per LLM nach fachlichem Schwerpunkt
