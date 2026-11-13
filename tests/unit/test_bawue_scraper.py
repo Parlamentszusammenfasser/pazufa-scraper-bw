@@ -1028,16 +1028,17 @@ class TestIssue75FutureFundstellen:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("now", "held"),
+        ("now", "typen"),
         [
-            (datetime(2026, 2, 4, 23, 30, tzinfo=UTC), True),  # 00:30 in Berlin: the day is due
-            (datetime(2026, 2, 5, 0, 30, tzinfo=UTC), True),  # the reading is bumped to 01:00
-            (datetime(2026, 2, 5, 1, 0, tzinfo=UTC), False),
+            (datetime(2026, 2, 4, 23, 30, tzinfo=UTC), []),  # 00:30 in Berlin: the day is due
+            (datetime(2026, 2, 5, 0, 30, tzinfo=UTC), [Stationstyp.PARL_INITIATIV]),  # reading bumped to 01:00
+            (datetime(2026, 2, 5, 1, 0, tzinfo=UTC), [Stationstyp.PARL_INITIATIV, Stationstyp.PARL_VOLLVLSGN]),
         ],
     )
-    async def test_holds_back_a_vorgang_with_a_station_after_now(self, monkeypatch, now, held):
+    async def test_holds_back_the_stationen_after_now(self, monkeypatch, now, typen):
         """Backend 0.3.6 rejects a Station after now (HTTP 422): Stationen sit at midnight UTC plus
-        ordering bumps, so one dated today may still lie ahead. Not cached, retried next cycle."""
+        ordering bumps, so one dated today may still lie ahead. The others go up; not cached, so
+        the held-back ones follow next cycle."""
         _freeze_now(monkeypatch, now)
         fundstellen = [
             {
@@ -1060,8 +1061,8 @@ class TestIssue75FutureFundstellen:
 
         result = await scraper.item_extractor("V-920")
 
-        assert (result is None) is held
-        assert scraper._skipped == int(held)
+        assert ([s.typ for s in result.stationen] if result else []) == typen
+        assert ("V-920" in scraper._retry_next_cycle) is (len(typen) < 2)
 
     @pytest.mark.parametrize(("today", "track"), [(date(2021, 12, 1), "SI"), (date(2021, 12, 17), "SILA")])
     @pytest.mark.asyncio
