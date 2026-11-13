@@ -177,6 +177,9 @@ def _vorgang_fingerprint(raw: RawVorgang, entwuerfe: list[str] | None = None) ->
     payload.append("zahlenformat")
     # Rebuild cached Vorgänge once for the new summary prompt (DD-053 abbreviations, DD-083 tags).
     payload.append("abkuerzungen-dokument-tags")
+    # Rebuild cached budgets once, so they switch to gg-land-parl-haushalt (DD-077).
+    if raw.get("Vorgangstyp") == _HAUSHALT_VORGANGSTYP:
+        payload.append("haushalt")
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 
@@ -518,7 +521,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # station building, when enrichment runs (issue #35).
         initiativ_vnr = _initiativ_drucksnr_from_fundstellen(fundstellen_parsed, initiative)
         stationen = await self._collect_stationen(fundstellen_parsed, initiative, vorgang_id, titel, initiativ_vnr)
-        api_id, portal = await self._entwurf(raw, vorgang_id, str(uuid5(NAMESPACE_URL, vorgang_id)), stationen)
+        api_id, portal = await self._entwurf(raw, typ, vorgang_id, str(uuid5(NAMESPACE_URL, vorgang_id)), stationen)
 
         if fundstellen_parsed and not stationen:
             logger.warning(
@@ -618,7 +621,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
     def _entwurf_kandidaten(self, raw: RawVorgang) -> list[str]:
         """Registered drafts a Landesregierung bill may have grown from (DD-079)."""
-        if not self._entwuerfe or map_vorgangstyp(raw.get("Vorgangstyp", "")) != Vorgangstyp.GG_LAND_PARL:
+        # Haushaltsbegleitgesetze have portal drafts too (18/701).
+        typ = map_vorgangstyp(raw.get("Vorgangstyp", ""))
+        if not self._entwuerfe or typ not in (Vorgangstyp.GG_LAND_PARL, Vorgangstyp.GG_LAND_PARL_HAUSHALT):
             return []
         regbsl = _regbsl_datum(raw)
         if regbsl is None:
@@ -630,13 +635,14 @@ class BawueVorgaengeScraper(VorgangsScraper):
         )
 
     async def _entwurf(
-        self, raw: RawVorgang, vorgang_id: str, api_id: str, stationen: list[Station]
+        self, raw: RawVorgang, typ: Vorgangstyp, vorgang_id: str, api_id: str, stationen: list[Station]
     ) -> tuple[str, str | None]:
         """The api_id to upload under and the portal page of the draft the bill grew from (DD-079).
 
         A new bill takes over the draft's api_id, so the backend merges it into the draft's
         Vorgang. A bill the backend already has keeps its own (two candidates would be an
-        AmbiguousMatch) and gains the draft's station; the portal Vorgang is then stale.
+        AmbiguousMatch) and gains the draft's station; the portal Vorgang is then stale. So does a
+        -haushalt bill: the backend never merges it into a gg-land-parl draft.
         """
         kandidaten = self._entwurf_kandidaten(raw)
         if not kandidaten:
@@ -651,7 +657,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             if match is None:
                 return api_id, None
             slug, score = match
-            upload_as = self._uebernehmen(slug, score, vorgang_id, api_id)
+            upload_as = self._uebernehmen(slug, score, vorgang_id, api_id, typ)
             if upload_as is None:
                 return api_id, None
         if upload_as == api_id:
@@ -661,7 +667,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
     def _uebernahmen(self) -> dict[str, dict]:
         return json.loads(self.config.cache.get_raw(UEBERNAHMEN_KEY, "Übernahmen") or "{}")
 
-    def _uebernehmen(self, slug: str, score: float, vorgang_id: str, api_id: str) -> str | None:
+    def _uebernehmen(self, slug: str, score: float, vorgang_id: str, api_id: str, typ: Vorgangstyp) -> str | None:
         """Record the api_id the bill uploads under; None if another bill took the draft meanwhile.
 
         No await between read and write, so two bills of one cycle cannot both take it.
@@ -670,7 +676,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if slug in uebernahmen:
             return None
         entwurf_api_id = self._entwuerfe[slug]["api_id"]
-        upload_as = api_id if vorgang_exists(self._client, api_id) else entwurf_api_id
+        # The backend merges only within a Vorgangstyp class; drafts are gg-land-parl (pazufa-backend#227).
+        keeps_own = typ != Vorgangstyp.GG_LAND_PARL or vorgang_exists(self._client, api_id)
+        upload_as = api_id if keeps_own else entwurf_api_id
         uebernahmen[slug] = {"vorgnr": vorgang_id, "api_id": upload_as}
         if not self.config.cache.store_raw(UEBERNAHMEN_KEY, json.dumps(uebernahmen), "Übernahmen"):
             self._retry_next_cycle.add(vorgang_id)

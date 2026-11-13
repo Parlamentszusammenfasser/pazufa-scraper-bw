@@ -9,7 +9,7 @@ import gzip
 import json
 import logging
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date
 from pathlib import Path
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 from uuid import NAMESPACE_URL, uuid5
@@ -45,6 +45,7 @@ class Pair:
     eingang: str
     drucksache: str
     drucksache_text: str
+    vorgangstyp: str = "Gesetzgebung"
 
     @property
     def drucksache_pdf(self) -> str:
@@ -73,6 +74,7 @@ HBEGLG = Pair(
     "20.10.2026",
     "18/701",
     "drucksache_18_701",
+    "Haushaltsgesetzgebung",
 )
 
 
@@ -86,6 +88,7 @@ def _backend_merges(a: Vorgang, b: Vorgang) -> bool:
     def ids(v: Vorgang) -> set[tuple[str, str]]:
         return set() if v.ids is UNSET else {(i.typ, i.id) for i in v.ids}
 
+    # Each BW Vorgangstyp is its own backend class (pazufa-backend#227, v0.3.6).
     same_frame = a.wahlperiode == b.wahlperiode and a.typ == b.typ
     return same_frame and (a.api_id == b.api_id or bool(ids(a) & ids(b)))
 
@@ -126,7 +129,9 @@ def _raw(pair: Pair, initiative: str = "Landesregierung") -> dict:
         "seiten": 40,
         "pdf_url": pair.drucksache_pdf,
     }
-    return _make_raw_vorgang(pair.vid, titel=pair.titel, initiative=initiative, fundstellen=[fund])
+    return _make_raw_vorgang(
+        pair.vid, titel=pair.titel, vorgangstyp=pair.vorgangstyp, initiative=initiative, fundstellen=[fund]
+    )
 
 
 def _pdfs(*pairs: Pair, entwurf_text: str | None = None) -> dict[str, str]:
@@ -166,39 +171,46 @@ def _uebernahmen(cache) -> dict:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("pair", "score"), [(BVANP, "0.86"), (HBEGLG, "0.89")], ids=["18-623", "18-701"])
-async def test_issue180_new_bill_takes_over_the_draft(pair, score):
+async def test_issue180_new_bill_takes_over_the_draft():
     """The backend merges the bill into the draft's Vorgang, which keeps its regent station."""
     cache = _InMemoryCache()
-    regent = await _upload_draft(cache, pair)
+    regent = await _upload_draft(cache, BVANP)
     scraper = _parlis(cache)
 
-    parlis, _, exists = await _build(scraper, _raw(pair), _pdfs(pair))
+    parlis, _, exists = await _build(scraper, _raw(BVANP), _pdfs(BVANP))
 
     assert _backend_merges(regent, parlis)
     assert parlis.api_id == regent.api_id
     assert Stationstyp.PREPARL_REGENT not in [s.typ for s in parlis.stationen]
     assert regent.links[0] in parlis.links
-    exists.assert_called_once_with(ANY, _own_api_id(pair))
-    assert _uebernahmen(cache) == {pair.slug: {"vorgnr": pair.vid, "api_id": regent.api_id}}
+    exists.assert_called_once_with(ANY, _own_api_id(BVANP))
+    assert _uebernahmen(cache) == {BVANP.slug: {"vorgnr": BVANP.vid, "api_id": regent.api_id}}
     # A wrong match would be silent otherwise.
-    assert scraper._entwurf_joins == [f"{pair.vid} ← {pair.slug} ({score})"]
+    assert scraper._entwurf_joins == [f"{BVANP.vid} ← {BVANP.slug} (0.86)"]
 
 
 @pytest.mark.asyncio
-async def test_bill_uploaded_before_keeps_its_api_id_and_gains_the_draft_station():
-    """A second api_id would make the backend find two Vorgänge (AmbiguousMatch), so the bill keeps its own."""
+@pytest.mark.parametrize(
+    ("pair", "uploaded", "score"),
+    [
+        (BVANP, True, "0.86"),  # a second api_id would make the backend find two Vorgänge (AmbiguousMatch)
+        (HBEGLG, False, "0.89"),  # 18/701: never merged into a gg-land-parl draft; its api_id gave HTTP 500
+    ],
+)
+async def test_bill_keeps_its_api_id_and_gains_the_draft_station(pair, uploaded, score):
+    """Where the backend won't merge the bill into the draft, the bill keeps its own api_id."""
     cache = _InMemoryCache()
-    regent = await _upload_draft(cache, BVANP)
+    regent = await _upload_draft(cache, pair)
     scraper = _parlis(cache)
 
-    parlis, _, _ = await _build(scraper, _raw(BVANP), _pdfs(BVANP), uploaded=True)
+    parlis, _, exists = await _build(scraper, _raw(pair), _pdfs(pair), uploaded=uploaded)
 
-    assert parlis.api_id == _own_api_id(BVANP)
+    assert parlis.api_id == _own_api_id(pair)
+    assert exists.called is uploaded
     assert regent.links[0] in parlis.links
     entwurf, regbsl = sorted(parlis.stationen, key=lambda s: s.zp_start)[:2]
     assert (entwurf.typ, regbsl.typ) == (Stationstyp.PREPARL_REGENT, Stationstyp.PREPARL_REGBSL)
-    assert entwurf.zp_start == datetime(2026, 6, 17, tzinfo=UTC)
+    assert entwurf.zp_start == regent.stationen[0].zp_start
     assert entwurf.api_id is not UNSET
     # The same document rows as the draft's, so the backend links them instead of adding new ones.
     [dok] = entwurf.dokumente
@@ -210,8 +222,8 @@ async def test_bill_uploaded_before_keeps_its_api_id_and_gains_the_draft_station
         Doktyp.PREPARL_ENTWURF,
         regent.initiatoren,
     )
-    assert _uebernahmen(cache) == {BVANP.slug: {"vorgnr": BVANP.vid, "api_id": _own_api_id(BVANP)}}
-    assert scraper._entwurf_joins == [f"{BVANP.vid} ← {BVANP.slug} (0.86)"]
+    assert _uebernahmen(cache) == {pair.slug: {"vorgnr": pair.vid, "api_id": _own_api_id(pair)}}
+    assert scraper._entwurf_joins == [f"{pair.vid} ← {pair.slug} ({score})"]
 
 
 def test_run_report_lists_every_join():
@@ -513,15 +525,15 @@ async def test_draft_the_portal_removed_is_no_candidate():
     """A 404 draft would block every bill in its window for a year; the bill's own draft still wins."""
     cache = _InMemoryCache()
     gone = await _upload_draft(cache, BVANP)
-    regent = await _upload_draft(cache, HBEGLG)
+    await _upload_draft(cache, HBEGLG)
     pdfs: dict[str, str | Exception] = {**_pdfs(BVANP, HBEGLG)}
     gone_pdf = gone.stationen[0].dokumente[0].link
     pdfs[gone_pdf] = PdfNotAvailableError(404, gone_pdf)
     scraper = _parlis(cache)
 
-    parlis, _, _ = await _build(scraper, _raw(HBEGLG), pdfs)
+    await _build(scraper, _raw(HBEGLG), pdfs)
 
-    assert parlis.api_id == regent.api_id
+    assert list(_uebernahmen(cache)) == [HBEGLG.slug]
     assert HBEGLG.vid not in scraper._retry_next_cycle
 
 

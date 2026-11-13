@@ -16,9 +16,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, _fold_einzelplaene
+from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, _fold_einzelplaene, _vorgang_fingerprint
 from bawue.types import Stationstyp
 from tests.factories import make_scraper
+from tests.unit.test_bawue_scraper import _make_raw_vorgang
 
 _FIXTURE = Path(__file__).parent.parent / "fixtures" / "parlis" / "issue60" / "haushalt_2025_26.json"
 _STHG = "V-236470"
@@ -146,3 +147,10 @@ async def test_listing_lists_the_budget_once_and_fingerprints_every_einzelplan()
 
     assert sorted(ids) == [_BEGLEITGESETZ, _STHG]
     assert scraper._fingerprints[_STHG] != before
+
+
+@pytest.mark.parametrize(("vorgangstyp", "rebuilt"), [("Haushaltsgesetzgebung", True), ("Gesetzgebung", False)])
+def test_haushalt_vorgaenge_are_rebuilt_once_for_their_type(vorgangstyp, rebuilt):
+    """Closed budgets never change in PARLIS, so a marker switches stored ones to the Haushalt type."""
+    raw = _make_raw_vorgang("V-1", vorgangstyp=vorgangstyp)
+    assert (_vorgang_fingerprint(raw) != _vorgang_fingerprint({**raw, "Vorgangstyp": ""})) is rebuilt

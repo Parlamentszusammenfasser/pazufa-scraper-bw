@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 VORGANGSTYP_MAP: dict[str, Vorgangstyp] = {
     "Gesetzgebung": Vorgangstyp.GG_LAND_PARL,
-    "Haushaltsgesetzgebung": Vorgangstyp.GG_LAND_PARL,
+    "Haushaltsgesetzgebung": Vorgangstyp.GG_LAND_PARL_HAUSHALT,
     "Volksantrag": Vorgangstyp.GG_LAND_VOLK,
     "Antrag": Vorgangstyp.SONSTIG,
     "Antrag der Landesregierung/eines Ministeriums": Vorgangstyp.SONSTIG,

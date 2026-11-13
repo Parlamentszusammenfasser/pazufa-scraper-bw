@@ -32,7 +32,7 @@ class TestVorgangstypMapping:
         "parlis_typ,expected",
         [
             ("Gesetzgebung", Vorgangstyp.GG_LAND_PARL),
-            ("Haushaltsgesetzgebung", Vorgangstyp.GG_LAND_PARL),
+            ("Haushaltsgesetzgebung", Vorgangstyp.GG_LAND_PARL_HAUSHALT),
             ("Volksantrag", Vorgangstyp.GG_LAND_VOLK),
             ("Antrag", Vorgangstyp.SONSTIG),
             ("Antrag der Landesregierung/eines Ministeriums", Vorgangstyp.SONSTIG),
@@ -461,9 +461,12 @@ class TestEnumValuesExistInFramework:
         assert Doktyp.ECKPUNKTEPAPIER not in DOKUMENTENTYP_MAP.values()
 
     def test_all_vorgangstyp_values_valid(self):
-        bawue_values = {"gg-land-parl", "gg-land-volk", "bw-einsatz", "sonstig"}
-        framework_values = {m.value for m in Vorgangstyp}
-        assert bawue_values.issubset(framework_values)
+        """A new Land type in the spec fails here until it is mapped or listed."""
+        produced = {typ.value for typ in VORGANGSTYP_MAP.values()}
+        unproduced = {"bw-einsatz", "gg-land-parl-nachtragshaushalt", "gg-land-parl-staatsvertrag"}  # #203
+        bund = {m.value for m in Vorgangstyp if m.value.startswith("bu-")}
+        assert produced | unproduced | bund == {m.value for m in Vorgangstyp}
+        assert not produced & unproduced
 
     def test_all_doktyp_values_valid(self):
         bawue_values = {
