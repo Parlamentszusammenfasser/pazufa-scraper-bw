@@ -160,6 +160,8 @@ DOKUMENTENTYP_MAP: dict[str, Doktyp] = {
     "Gesetzblatt": Doktyp.GESETZ,
     "Bekanntmachung": Doktyp.MITTEILUNG,
     "Gesetz": Doktyp.GESETZ,
+    # "Berichtigung des Gesetzes" joins the law's postparl-gsblt station (issue #204, DD-057).
+    "Berichtigung": Doktyp.BERICHTIGUNG,
 }
 
 _DOKUMENTENTYP_KEYS_SORTED = sorted(DOKUMENTENTYP_MAP.keys(), key=len, reverse=True)
