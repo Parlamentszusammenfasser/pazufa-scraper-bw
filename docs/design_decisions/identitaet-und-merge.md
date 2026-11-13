@@ -118,7 +118,8 @@ Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legt
 1. Nach jedem Upload legt der Beteiligungs-Scraper den Entwurf in `beteiligung-entwuerfe` ab
    (`api_id`, Wahlperiode, Portal-Link, Ministerium, PDFs mit Datum). Scheitert das, bleibt er
    ungecacht. Der Marker `entwuerfe` im Fingerprint füllt das Register einmal.
-2. Kandidaten eines Gesetzentwurfs der Landesregierung (`gg-land-parl`, `-haushalt`): Entwürfe derselben
+2. Kandidaten eines Gesetzentwurfs der Landesregierung (`gg-land-parl` und seine Untertypen,
+   DD-077, DD-085): Entwürfe derselben
    Wahlperiode aus dem Jahr vor der Drucksache, nicht am selben Tag (`R` vor `S`). Sie gehören zum
    `vg2:`-Fingerprint (DD-052): Ein später registrierter Entwurf baut den Vorgang einmal neu.
    Verglichen werden nur die noch nicht übernommenen.
@@ -132,9 +133,10 @@ Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legt
 4. Kennt das Backend den Vorgang noch nicht (`GET vorgang`), übernimmt er die `api_id` des
    Entwurfs; das Backend führt beide zusammen und behält die `preparl-regent`-Station. Sonst
    behält er seine `api_id` (zwei Kandidaten: `AmbiguousMatch`) und bekommt die Station mit
-   denselben Dokumenten; den Portal-Vorgang löscht ein Admin. Ein `-haushalt`-Gesetzentwurf geht
-   immer diesen Weg: Das Backend führt nur innerhalb einer `vgtyp_class` zusammen, der Entwurf ist
-   `gg-land-parl` (DD-077). Der Laufbericht (Mattermost) nennt
+   denselben Dokumenten; den Portal-Vorgang löscht ein Admin. Jeder Gesetzentwurf eines anderen
+   Typs (`-haushalt`, `-staatsvertrag`, `-nachtragshaushalt`) geht immer diesen Weg, auch nach einer
+   früher gespeicherten Übernahme: Das Backend führt nur innerhalb einer `vgtyp_class` zusammen,
+   der Entwurf ist `gg-land-parl` (DD-077). Der Laufbericht (Mattermost) nennt
    ihn in jedem Lauf, bis `GET vorgang` ihn nicht mehr findet.
 5. Die Entscheidung steht nur in `entwurf-uebernahmen`. Danach lädt der Beteiligungs-Scraper den
    Entwurf nicht mehr hoch, geprüft auch direkt vor dem Upload: PARLIS schreibt den Vorgang, sonst
@@ -221,17 +223,19 @@ PARLIS führt Vertragsgesetze als „Gesetzgebung", Nachträge als „Haushaltsg
 (GitHub Issue #203).
 
 **Entscheidung:** `map_vorgangstyp` verfeinert den PARLIS-Typ am Titel:
-- `Gesetzgebung` mit Titelanfang „Gesetz zu dem …" (Staatsvertrag, Abkommen, Vertrag) oder
-  „Gesetz zum …staatsvertrag" → `-staatsvertrag`. Ein Gesetz, das nebenbei einen Vertrag
+- `Gesetzgebung` mit Titelanfang „Gesetz zu dem …" (Staatsvertrag, Abkommen, Vertrag; WP 17: 16
+  Gesetze) → `-staatsvertrag`. Ein Gesetz, das nebenbei einen Vertrag
   billigt („Gesetz zur Änderung … sowie Gesetz zu dem Abkommen"), bleibt `gg-land-parl`.
 - `Haushaltsgesetzgebung` mit „Nachtrag(s) zum Staatshaushalt" oder „Nachtragshaushaltsgesetz"
   → `-nachtragshaushalt`; ein Begleitgesetz zum Nachtrag bleibt `-haushalt`.
 - Beide können einen Portal-Entwurf als Station gewinnen, behalten aber ihre `api_id`
-  (andere `vgtyp_class` als der Entwurf, DD-079).
+  (andere `vgtyp_class` als der Entwurf), auch wenn sie ihn als `gg-land-parl` übernommen hatten
+  (DD-079).
 - Marker mit dem Typ im `vg2:`-Fingerprint baut gespeicherte einmal neu.
 
 **Konsequenz:** Erst mit einem Backend, dessen Tracks beide Typen für BW führen (sonst
 HTTP 400). Jeder Typ hat eine eigene `vgtyp_class`; ein gespeicherter Vorgang wechselt den Typ
-nicht (HTTP 500, wie DD-077): Ein Admin löscht die gespeicherten Vertragsgesetze und Nachträge,
-sobald diese Version in der Umgebung läuft.
+nicht (HTTP 500, wie DD-077): Ein Admin löscht die gespeicherten Vertragsgesetze und Nachträge
+(WP 18: V-247045; WP 17 vor einem Neulauf), sobald diese Version in der Umgebung läuft. Bis zum
+Löschen scheitert ihr Upload in jedem Lauf, danach fehlen sie bis zum nächsten Lauf.
 

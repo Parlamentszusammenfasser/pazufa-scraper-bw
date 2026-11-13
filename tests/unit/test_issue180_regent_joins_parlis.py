@@ -22,7 +22,7 @@ from bawue.beteiligung_client import BASE_URL
 from bawue.beteiligung_parser import parse_process_detail
 from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY, RedisUnavailableError
 from bawue.pdf_text import PdfNotAvailableError
-from bawue.types import UNSET, Doktyp, Stationstyp, Vorgang
+from bawue.types import UNSET, Doktyp, Stationstyp, Vorgang, Vorgangstyp
 from bawue.upload_throttle import UploadOutcome
 from tests.factories import make_scraper
 from tests.unit.test_bawue_scraper import _InMemoryCache, _make_raw_vorgang
@@ -293,6 +293,23 @@ async def test_report_says_when_redis_failed_before_the_check():
     lines, _ = await _report(cache)
 
     assert "  - not checked: Redis unavailable" in lines
+
+
+@pytest.mark.asyncio
+async def test_issue203_bill_taken_over_as_gg_land_parl_keeps_its_api_id_after_a_type_change():
+    """A treaty law that took over its draft can't share the draft's gg-land-parl api_id any more (DD-085)."""
+    cache = _InMemoryCache()
+    regent = await _upload_draft(cache, BVANP)
+    taken, _, _ = await _build(_parlis(cache), _raw(BVANP), _pdfs(BVANP))
+    assert taken.api_id == regent.api_id
+
+    staatsvertrag = {**_raw(BVANP), "titel": "Gesetz zu dem Staatsvertrag über die Besoldung"}
+    again, read, _ = await _build(_parlis(cache), staatsvertrag, {})
+
+    assert again.typ == Vorgangstyp.GG_LAND_PARL_STAATSVERTRAG
+    assert again.api_id == _own_api_id(BVANP)
+    assert Stationstyp.PREPARL_REGENT in [s.typ for s in again.stationen]
+    read.assert_not_called()
 
 
 @pytest.mark.asyncio
