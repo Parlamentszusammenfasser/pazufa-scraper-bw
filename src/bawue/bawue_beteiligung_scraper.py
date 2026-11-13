@@ -145,7 +145,7 @@ class BawueBeteiligungScraper(VorgangsScraper):
             failed_items=self._failed_items,
             cache_errors=self.cache_errors,
         )
-        record_llm(pmc, self._llm_metrics)
+        record_llm(pmc, self._llm_metrics, self._llm)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
         if item.api_id in {_draft_api_id(slug) for slug in self._uebernahmen()}:

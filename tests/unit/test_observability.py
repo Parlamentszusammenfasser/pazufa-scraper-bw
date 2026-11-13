@@ -61,7 +61,7 @@ def test_record_llm_maps_documents_and_vorgang_fields():
     llm.ressort_classified, llm.ressort_null, llm.ressort_rejected, llm.ressort_failed = 2, 1, 1, 1
     pmc = PazufaMetricsClient()
 
-    record_llm(pmc, llm)
+    record_llm(pmc, llm, None)
 
     reg = pmc._registry
     document = [_value(reg, "llmenrichment", entity="document", result=r, field="") for r in ("enriched", "failed")]
@@ -121,6 +121,19 @@ class TestPushRunMetrics:
 
         assert _value(push.call_args.kwargs["registry"], "last_success_timestamp_seconds") == heartbeat
         config.cache.store_raw.assert_not_called()
+
+    def test_llm_tokens_of_all_scrapers_add_up(self):
+        connector = MagicMock(prompt_tokens=100, completion_tokens=40, reasoning_tokens=10)
+        scrapers = [MagicMock(), MagicMock(), MagicMock()]
+        scrapers[0].record_metrics.side_effect = lambda pmc: record_llm(pmc, LLMMetrics(), connector)
+        scrapers[1].record_metrics.side_effect = lambda pmc: record_llm(pmc, LLMMetrics(), connector)
+        scrapers[2].record_metrics.side_effect = lambda pmc: record_llm(pmc, LLMMetrics(), None)  # LLM off
+
+        with patch("pazufa_metrics_client.push_to_gateway") as push:
+            push_run_metrics(_config("secret"), scrapers, 1.0, success=True)
+
+        reg = push.call_args.kwargs["registry"]
+        assert [_value(reg, "llm_tokens", type=t) for t in ("prompt", "completion", "reasoning")] == [200, 80, 20]
 
     def test_nothing_is_pushed_without_password(self):
         with patch("pazufa_metrics_client.push_to_gateway") as push:

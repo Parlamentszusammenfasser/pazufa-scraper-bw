@@ -58,6 +58,7 @@ def run_metrics(scraper: Scraper) -> dict[str, float]:
     """The scraper's run metrics (issue #188), e.g. {"entities_found|entity=procedure|state=new": 2.0};
     empty labels are left out."""
     pmc = PazufaMetricsClient()
+    pmc.registerMetric("llm_tokens", ["type"])  # as push_run_metrics does
     scraper.record_metrics(pmc)
     return {
         sample.name.removeprefix("pazufa_scraper_")

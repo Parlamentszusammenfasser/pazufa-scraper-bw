@@ -15,6 +15,7 @@ from logging.handlers import BufferingHandler, QueueHandler, QueueListener
 from queue import SimpleQueue
 
 import requests
+from pazufa_corelib.llm import LLMConnector
 from pazufa_metrics_client import PazufaMetricsClient
 
 from bawue.bawue_dok import LLMMetrics
@@ -59,7 +60,11 @@ def record_entities(
     pmc.increaseMetricEntitiesFailed(cache_errors, entity, "cache_error")
 
 
-def record_llm(pmc: PazufaMetricsClient, llm: LLMMetrics) -> None:
+def record_llm(pmc: PazufaMetricsClient, llm: LLMMetrics, connector: LLMConnector | None) -> None:
+    if connector is not None:
+        # reasoning is part of completion: sum only prompt + completion for the total.
+        for kind in ("prompt", "completion", "reasoning"):
+            pmc.increaseMetric("llm_tokens", getattr(connector, f"{kind}_tokens"), {"type": kind})
     doc, proc = M.ENTITY_DOCUMENT, M.ENTITY_PROCEDURE
     pmc.increaseMetricLLMEnrichment(llm.success, doc, M.RESULT_ENRICHED)
     pmc.increaseMetricLLMEnrichment(llm.failed, doc, M.RESULT_FAILED)
@@ -89,6 +94,7 @@ def push_run_metrics(config: BawueConfig, scrapers: list, duration: float, succe
     pmc = M(host=config.prometheus_url, username=config.observability_username, password=config.observability_password)
     pmc.setScraperUUID(config.collector_id).setParliament(M.PARLIAMENT_BW).setEnvironment(_environment(config))
     pmc.setElectionPeriod(config.section("bawue").get("wahlperiode", CURRENT_WAHLPERIODE))
+    pmc.registerMetric("llm_tokens", ["type"])  # once: both LLM scrapers add into it (record_llm)
     for scraper in scrapers:
         scraper.record_metrics(pmc)
     pmc.increaseMetricRuntime(duration)

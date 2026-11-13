@@ -343,7 +343,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             cache_errors=self.cache_errors,
         )
         pmc.increaseMetricEntitiesFailed(len(self._missing), pmc.ENTITY_DOCUMENT, "not_found")
-        record_llm(pmc, self._llm_metrics)
+        record_llm(pmc, self._llm_metrics, self._llm)
 
     async def send_result(self, item: Vorgang) -> Vorgang | None:
         outcome = upload_vorgang(
