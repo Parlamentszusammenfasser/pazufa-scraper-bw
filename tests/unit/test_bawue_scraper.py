@@ -1028,14 +1028,15 @@ class TestIssue75FutureFundstellen:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("now", "typen"),
+        ("now", "typen", "level"),
         [
-            (datetime(2026, 2, 4, 23, 30, tzinfo=UTC), []),  # 00:30 in Berlin: the day is due
-            (datetime(2026, 2, 5, 0, 30, tzinfo=UTC), [Stationstyp.PARL_INITIATIV]),  # reading bumped to 01:00
-            (datetime(2026, 2, 5, 1, 0, tzinfo=UTC), [Stationstyp.PARL_INITIATIV, Stationstyp.PARL_VOLLVLSGN]),
+            (datetime(2026, 2, 4, 23, 30, tzinfo=UTC), [], logging.INFO),  # 00:30 in Berlin: the day is due
+            (datetime(2026, 2, 5, 0, 30, tzinfo=UTC), [Stationstyp.PARL_INITIATIV], logging.INFO),  # bumped to 01:00
+            (datetime(2026, 2, 5, 1, 0, tzinfo=UTC), [Stationstyp.PARL_INITIATIV, Stationstyp.PARL_VOLLVLSGN], None),
+            (datetime(2026, 2, 3, 12, 0, tzinfo=UTC), [], logging.WARNING),  # only a bug: today is 03.02.
         ],
     )
-    async def test_holds_back_the_stationen_after_now(self, monkeypatch, now, typen):
+    async def test_holds_back_the_stationen_after_now(self, monkeypatch, caplog, now, typen, level):
         """Backend 0.3.6 rejects a Station after now (HTTP 422): Stationen sit at midnight UTC plus
         ordering bumps, so one dated today may still lie ahead. The others go up; not cached, so
         the held-back ones follow next cycle."""
@@ -1057,12 +1058,16 @@ class TestIssue75FutureFundstellen:
             },
         ]
         scraper = _make_scraper_with_mock_parlis()
+        scraper._today = lambda: date(2026, 2, 5)
         scraper._raw_cache["V-920"] = _make_raw_vorgang("V-920", fundstellen=fundstellen)
 
-        result = await scraper.item_extractor("V-920")
+        with caplog.at_level(logging.INFO):
+            result = await scraper.item_extractor("V-920")
 
         assert ([s.typ for s in result.stationen] if result else []) == typen
-        assert ("V-920" in scraper._retry_next_cycle) is (len(typen) < 2)
+        assert ("V-920" in scraper._retry_next_cycle) is (level is not None)
+        held = [r.levelno for r in caplog.records if "Stationen of V-920" in r.getMessage()]
+        assert held == ([level] if level else [])
 
     @pytest.mark.parametrize(("today", "track"), [(date(2021, 12, 1), "SI"), (date(2021, 12, 17), "SILA")])
     @pytest.mark.asyncio

@@ -423,8 +423,10 @@ class BawueVorgaengeScraper(VorgangsScraper):
             # still lie ahead for a Fundstelle of today (DD-068). The track sorts by zp_start,
             # so the rest is a valid prefix; not cached, so the tail follows next cycle.
             now = datetime.now(UTC)
-            if any(s.zp_start > now for s in vorgang.stationen):
-                logger.info("Holding back the Stationen of %s after %s", vorgang_id, now)
+            if later := [s.zp_start for s in vorgang.stationen if s.zp_start > now]:
+                # More than a day ahead only a bug produces: DD-068 drops Fundstellen after today.
+                level = logging.WARNING if max(later) > now + timedelta(days=1) else logging.INFO
+                logger.log(level, "Holding back %d Stationen of %s after %s", len(later), vorgang_id, now)
                 vorgang.stationen = [s for s in vorgang.stationen if s.zp_start <= now]
                 self._retry_next_cycle.add(vorgang_id)
 
@@ -448,7 +450,6 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 )
                 self._skipped += 1
                 return None
-
 
             return vorgang
         finally:
