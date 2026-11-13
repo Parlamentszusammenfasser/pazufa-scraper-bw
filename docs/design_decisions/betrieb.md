@@ -120,3 +120,23 @@ Portal-Vorgänge (DD-079), abgestürzte Scraper, Abbrüche. Die Zusammenfassung 
 alarmiert in Grafana, der Fehler in Mattermost. Wochenbericht und „Fehlende Dokumente“ entfallen.
 Noch gepufferte Logs gehen verloren,
 wenn Cloud Run den Job beendet; Cloud Logging hat sie.
+
+<a id="dd-084"></a>
+## DD-084: PDF-Parser laufen im Prozess mit den Secrets — Risiko akzeptiert
+
+**Kontext:** kreuzberg (mit eingebautem pdfium und Tesseract) liest PDFs aus dem Internet im selben
+Prozess, dessen Umgebung `LTZF_API_KEY`, `LLM_PROVIDER_KEY`, `REDIS_URL`, `MATTERMOST_HOOK`
+und `OBSERVABILITY_PASSWORD` enthält. Ein Speicherfehler in einem Parser gäbe Codeausführung
+neben allen Secrets (Threat Model T-03, GitHub Issue #185).
+
+**Entscheidung:** Keine Prozesstrennung; das Risiko ist akzeptiert. Ein Kindprozess ohne
+Umgebung schützt nicht: dieselbe UID liest `/proc/<ppid>/environ`. Echte Trennung braucht eine
+eigene UID für den Parser (Container startet als root, Secrets als Dateien nur für `app`) oder
+einen eigenen Job — ein Umbau von Dockerfile, Entrypoint und Deploy, der für die Lage
+(Exploit für pdfium/Tesseract nötig, dazu ein PDF in einer Landtagsquelle) zu groß ist.
+
+**Konsequenz:** Grenzen bleiben Nicht-root-User, Cloud-Run-Sandbox und `MAX_PDF_BYTES`
+(GitHub Issue #182). Der ausgeführte Parser-Code steckt im kreuzberg-Wheel: Dependabot (pip)
+hält ihn aktuell, Trivy prüft den Lockfile. Aus Debian kommen nur die Sprachdaten
+(`tesseract-ocr-deu`). Neu bewerten,
+wenn ein Parser-Exploit bekannt wird oder die Secrets ohnehin als Dateien gemountet werden.
