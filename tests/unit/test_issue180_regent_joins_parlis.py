@@ -9,7 +9,7 @@ import gzip
 import json
 import logging
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date
 from pathlib import Path
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 from uuid import NAMESPACE_URL, uuid5
@@ -190,36 +190,27 @@ async def test_issue180_new_bill_takes_over_the_draft():
 
 
 @pytest.mark.asyncio
-async def test_issue60_haushalt_bill_keeps_its_api_id_and_gains_the_draft_station():
-    """18/701: the backend never merges a -haushalt bill into a gg-land-parl draft; taking its api_id gave HTTP 500."""
+@pytest.mark.parametrize(
+    ("pair", "uploaded", "score"),
+    [
+        (BVANP, True, "0.86"),  # a second api_id would make the backend find two Vorgänge (AmbiguousMatch)
+        (HBEGLG, False, "0.89"),  # 18/701: never merged into a gg-land-parl draft; its api_id gave HTTP 500
+    ],
+)
+async def test_bill_keeps_its_api_id_and_gains_the_draft_station(pair, uploaded, score):
+    """Where the backend won't merge the bill into the draft, the bill keeps its own api_id."""
     cache = _InMemoryCache()
-    regent = await _upload_draft(cache, HBEGLG)
+    regent = await _upload_draft(cache, pair)
     scraper = _parlis(cache)
 
-    parlis, _, exists = await _build(scraper, _raw(HBEGLG), _pdfs(HBEGLG))
+    parlis, _, exists = await _build(scraper, _raw(pair), _pdfs(pair), uploaded=uploaded)
 
-    assert not _backend_merges(regent, parlis)
-    assert parlis.api_id == _own_api_id(HBEGLG)
-    assert Stationstyp.PREPARL_REGENT in [s.typ for s in parlis.stationen]
-    exists.assert_not_called()
-    assert _uebernahmen(cache) == {HBEGLG.slug: {"vorgnr": HBEGLG.vid, "api_id": _own_api_id(HBEGLG)}}
-    assert scraper._entwurf_joins == [f"{HBEGLG.vid} ← {HBEGLG.slug} (0.89)"]
-
-
-@pytest.mark.asyncio
-async def test_bill_uploaded_before_keeps_its_api_id_and_gains_the_draft_station():
-    """A second api_id would make the backend find two Vorgänge (AmbiguousMatch), so the bill keeps its own."""
-    cache = _InMemoryCache()
-    regent = await _upload_draft(cache, BVANP)
-    scraper = _parlis(cache)
-
-    parlis, _, _ = await _build(scraper, _raw(BVANP), _pdfs(BVANP), uploaded=True)
-
-    assert parlis.api_id == _own_api_id(BVANP)
+    assert parlis.api_id == _own_api_id(pair)
+    assert exists.called is uploaded
     assert regent.links[0] in parlis.links
     entwurf, regbsl = sorted(parlis.stationen, key=lambda s: s.zp_start)[:2]
     assert (entwurf.typ, regbsl.typ) == (Stationstyp.PREPARL_REGENT, Stationstyp.PREPARL_REGBSL)
-    assert entwurf.zp_start == datetime(2026, 6, 17, tzinfo=UTC)
+    assert entwurf.zp_start == regent.stationen[0].zp_start
     assert entwurf.api_id is not UNSET
     # The same document rows as the draft's, so the backend links them instead of adding new ones.
     [dok] = entwurf.dokumente
@@ -231,8 +222,8 @@ async def test_bill_uploaded_before_keeps_its_api_id_and_gains_the_draft_station
         Doktyp.PREPARL_ENTWURF,
         regent.initiatoren,
     )
-    assert _uebernahmen(cache) == {BVANP.slug: {"vorgnr": BVANP.vid, "api_id": _own_api_id(BVANP)}}
-    assert scraper._entwurf_joins == [f"{BVANP.vid} ← {BVANP.slug} (0.86)"]
+    assert _uebernahmen(cache) == {pair.slug: {"vorgnr": pair.vid, "api_id": _own_api_id(pair)}}
+    assert scraper._entwurf_joins == [f"{pair.vid} ← {pair.slug} ({score})"]
 
 
 def test_run_report_lists_every_join():
