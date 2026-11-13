@@ -1,152 +1,62 @@
 # CLAUDE.md — BaWue Scraper
 
-Project context for the Landtag Baden-Württemberg scraper. The generic behavioral
-guidelines in the parent `../CLAUDE.md` (Think Before Coding, Simplicity, Surgical
-Changes, Goal-Driven) also apply — this file adds project-specific facts so you don't
-need them re-posted each time.
+Scrapes Landtag Baden-Württemberg (parliament code `BW`, Wahlperiode 18, Python 3.14,
+package `bawue` in `src/`) and pushes `Vorgang`/`Sitzung` objects to the
+[PaZuFa](https://codeberg.org/PaZuFa/parlamentszusammenfasser) Write-API v2. Depends only on
+[pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core) (pinned git tag).
+Repo, issues and PRs live on **GitHub** (`gh`); backend, spec and corelib on Codeberg.
+The generic guidelines in `../CLAUDE.md` apply too.
 
-## What this is
+## Maintenance mode — why it shapes every change
 
-A **self-contained** scraper for the Baden-Württemberg state parliament
-([Landtag BW](https://www.landtag-bw.de/)). It scrapes legislative proceedings and
-submits them to the [Parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser)
-(PaZuFa) platform via its Write-API v2 (`PUT /api/v2/vorgang`, `PUT /api/v2/kalender`).
+The scraper runs in production (GCP Cloud Run); **every merge to `main` ships**. Its users see
+our output as public parliamentary data, so a wrong Station or a rejected upload is a visible
+defect. Work like the lead engineer who owns it long-term:
 
-- Parliament code `BW`, Wahlperiode **18** (since 2026-05-01; set once in `[bawue] wahlperiode`, DD-062). 
-  Python **3.14**. Package `bawue` under `src/`.
-- Owns its entry point (`bawue.__main__`), config loader, Redis cache, and scraping loop.
-  Depends only on [pazufa-scraper-core](https://codeberg.org/PaZuFa/pazufa-scraper-core)
-  ("corelib" — httpx API client, generated OpenAPI models, LLM enrichment), pinned to a git tag.
-- **Hosted on GitHub**: https://github.com/Parlamentszusammenfasser/pazufa-scraper-bw.
-  Issues and PRs live there; use the `gh` CLI. Everything else in the PaZuFa
-  ecosystem (backend, spec, corelib) is still on **Codeberg** — see the links above.
-- **In production**: staging and prod run on GCP Cloud Run (`deploy/gcp/`,
-  workflows `deploy-staging.yml` / `deploy-prod.yml`).
+- **Understand before changing.** Behavior here is usually deliberate. Read the code, its
+  callers, the relevant DD and tests; name what the change can break before writing it.
+- **Small, focused diffs.** The smallest change that fully solves the problem. No speculative
+  options, no side features, no tutorial-style code ("forum examples") — write what this
+  codebase would write.
+- **Leave touched code better.** Continuous improvement keeps a long-lived codebase readable:
+  if code you touch can be modernized or clarified, refactor it under green tests in a separate
+  `refactor:` commit. Larger refactorings: propose, don't do.
+- **Tests are the safety net, not ballast.** Failing test first; each fixed issue leaves a
+  regression test named for the issue/Drucksache. Cover the edge cases real PARLIS data
+  produces (missing dates, same-day Stationen, recurring Drucksachen). After implementing,
+  prune: merge near-duplicates into parameterized tests, drop tests of library/standard
+  behavior. Fewer, sharper tests are easier to keep green.
+- **Comments say why** (cite DD/issue), never what.
 
-Three scrapers (all in `src/bawue/`), run from a static registry:
+## What breaks things — the backend's two rules
 
-| Scraper | Source | Produces |
-|---|---|---|
-| `BawueVorgaengeScraper` | PARLIS (`parlis.landtag-bw.de`, HTML/JSON-comment scraping) | `Vorgang` |
-| `BawueBeteiligungScraper` | Beteiligungsportal BW | `Vorgang` (`preparl-regent` station) |
-| `BawueSitzungenScraper` | ICS calendar feed | `Sitzung` |
+A `Vorgang` is a list of `Station`s (`typ`, `zp_start`, `gremium`, `dokumente`). Most bugs
+come from two backend behaviors:
 
-## Maintenance mode
+1. **Track validation orders Stationen by `zp_start`, not list order**, and demands a canonical
+   sequence (BY track, DD-016). Out-of-order timestamps → HTTP 400. So ordering logic must
+   reason about time, not position (#48).
+2. **The backend merges Stationen by `api_id`, else by document hash.** The same PDF recurs
+   across Vorgänge, so hash matching collides → HTTP 500. Hence every Station gets a
+   Vorgang-scoped stable `api_id` (DD-028/DD-034, #47). Treat `api_id`s and the cache
+   fingerprint as contracts: changing them duplicates Stationen or forces a full re-upload.
 
-The scraper is **productive**; every merge to `main` ships. Therefore:
+## Design decisions
 
-- **Review before changing.** Read the affected code, its callers, the relevant DD and
-  existing tests. Name the implications (Station ordering, stable `api_id`s, cache
-  fingerprint, backend merge) before writing code.
-- **Test-driven, always.** Failing test first, then the fix. `make test` and `make lint` green.
-  Cleanup Tests after changes: no duplicate tests, similar tests should be merged, no bloat, 
-  no tests for standard features.
-- **Surgical.** Smallest diff that solves the problem; no side features.
-- **Refactor what you touch / continuous improvement** With each change, check whether the touched
-  code gets cleaner by refactoring. Do it only under green tests (before and after), in a
-  separate `refactor:` commit. Broader refactorings: propose, don't do.
-- **Comments:** short, precise, easy to read. Say *why* (cite DD/issue), not *what*.
+`docs/design_decisions.md` indexes every deliberate deviation from PaZuFa conventions
+(DD-001 …; details in `docs/design_decisions/<topic>.md`, anchor `#dd-NNN`). Check it before
+touching station mapping, ordering, enums or synthetic Stationen — what looks like a bug is
+often a DD. When a change alters a rule, update the DD in the same change; prefer extending an
+existing DD over adding one. Keep DDs as context → decision → consequence; history goes in
+commits. `docs/architecture.md` has the full component and data-flow reference.
 
-## The mental model that matters most
+## Workflow
 
-A `Vorgang` (legislative process) is a list of **`Station`s** (lifecycle steps), each with a
-`typ` (`Stationstyp`), a `zp_start` timestamp, a `gremium`, and `dokumente`. PARLIS gives
-semi-structured "Fundstellen" text that `_build_vorgang` parses into Stationen.
-
-Two backend behaviors drive most bugs — keep both in mind:
-
-1. **Track validation sorts Stationen by `zp_start`, not list order**, and requires a
-   canonical sequence (BW reuses the BY track unchanged, DD-016), e.g.
-   `parl-initiativ → parl-vollvlsgn → parl-ausschber`. A Station whose `zp_start` puts it
-   out of canonical order → **HTTP 400 Track validation failed**. Ordering helpers must
-   therefore reason about `zp_start`, not list position (see issue #48).
-2. **The backend merges/deduplicates** Stationen by `api_id`, or — if none — by shared
-   document hash. Identical PDFs recur across Vorgänge (every Haushalt-Einzelplan cites the
-   shared Staatshaushaltsgesetz Drucksache 17/1000), so hash-based matching collides across
-   Vorgänge → **HTTP 500 duplicate key `rel_station_dokument_pkey`**. Every Station gets a
-   Vorgang-scoped stable `api_id` (`assign_stable_station_ids`, DD-028/DD-034, issue #47).
-
-Related machinery in `bawue_vorgaenge_scraper.py` and `stationen.py`: synthetic Stationen (`parl-initiativ`
-after `preparl-regbsl` DD-012; `parl-ablehnung` from "Aktueller Stand" DD-010), reading-round
-consolidation (DD-024/DD-026), out-of-order ausschber retiming (DD-025), and
-`enforce_total_ordering` (bumps colliding `zp_start`s so different-typed Stationen never tie).
-
-## Design decisions — read these first
-
-`docs/design_decisions.md` records **every deliberate deviation** from PaZuFa conventions as
-`DD-001 …` (also mirrored to the project wiki). It is a **scannable index table** (DD
-number + trigger keywords + code symbols); the DDs live grouped by topic in
-`docs/design_decisions/<topic>.md`, each under an anchor `#dd-NNN`. Before changing station mapping, ordering,
-enum mapping, or synthetic-station logic: **find the relevant DD**, and when your change alters
-or adds a rule, record it in the same change. **Prefer updating an existing DD** (its section and
-index row) when the change extends or adjusts a decision already there — e.g. the same mechanism
-for another scraper. Add a new DD only for a decision that is really new. A DD is an
-architecture decision — context, decision, consequence, kept short; implementation details and
-history belong in commits and PRs. A changed rule edits its section instead of appending a note.
-Behavior in the code is usually intentional and DD-justified — don't "fix" it without checking.
-
-Other docs: `docs/architecture.md` (full component/data-flow reference, principles, known gaps),
-`docs/observed_station_types.md` (enum-coverage inventory).
-
-## Working on an issue
-
-TDD is the norm here, and each fixed issue leaves a **regression test**:
-
-1. Review the code and implications (see *Maintenance mode*).
-2. Reproduce with a failing test — unit tests in `tests/unit/` (fixtures in `tests/fixtures/`),
-   integration in `tests/integration/`. Use existing helpers like `_make_raw_vorgang` /
-   `scraper_build_vorgang` (see `tests/unit/test_bawue_scraper.py`).
-3. Make a **surgical** fix; update/add the relevant DD if behavior rules change. Then check
-   whether a refactoring makes the touched code cleaner (separate commit, tests green).
-4. Keep the regression test named for the issue/Drucksache so it pins the fix.
-
-Git workflow: branch `fix/issue-<N>-<slug>` off `main`, conventional commit (see below),
-PR into `main` on GitHub (`gh pr create --base main`). Work that doesn't trace to an
-issue uses a descriptive slug instead (`fix/<slug>`). Don't commit or push unless asked.
-
-## Commands
-
-```bash
-make install         # venv + poetry install (fetches corelib from its pinned git tag)
-make test            # unit tests
-make test-cov        # unit tests with coverage
-make test-all        # unit + integration (integration needs a backend)
-make audit           # dependency vulnerability scan (SCA)
-make lint            # ruff lint (CI gates: trivy audit → ruff-lint + ruff-format → pytest)
-make format          # ruff format (black-compatible)
-make run             # run the scraper (needs config.toml + Redis)
-```
-
-Config is 4-tier: defaults → TOML (`config.*.toml`) → env vars → CLI. LLM document
-enrichment (`bawue_dok.py`) is **off by default** (needs `LLM_PROVIDER_KEY`).
-
-## Git Commit
-
-This repo uses semantic-releases and requires "conventional commit" messages.
-Types: `feat`, `fix`, `build`, `chore`, `ci`, `docs`, `style`, `refactor`, `perf`, `test`  
-Scope is optional, e.g. `fix: …` or `fix(issue-46): …`.  
-Breaking changes: `!` after type/scope (`feat!: …`, `feat(api)!: …`) or a footer `BREAKING CHANGE:`
-
-On push to `main`, python-semantic-release derives the next version from these
-commits, pushes a bare semver tag, and publishes **GitHub Releases** with the
-generated notes (no `CHANGELOG.md` on protected `main`); the `docker` job then
-builds a multi-arch image from that tag.
-
-## Local dev data / logs
-
-`locallogs/*.jsonl` are produced when `api-obj-log = "locallogs"` is set (see
-`config.wp17.toml` / `config.dev.toml`). The file is named by collector UUID
-(`…017.jsonl` = WP17). Each line is `json.dumps(item, default=str) + ",\n"` — i.e. one fully
-built `Vorgang` per line as a Python `repr` string (**post** `_build_vorgang`, so stable
-`api_id`s are already assigned). It's a data dump, not an error log. A local dev run for WP17
-already exists; the mock backend (`mock_pazufa_server.py`) allows end-to-end runs without a
-real PaZuFa backend.
-
-## Key files (`src/bawue/`)
-
-`bawue_vorgaenge_scraper.py` (PARLIS → Vorgang; station building, synthetic
-stations) · `stationen.py` (station rules: merge, ordering, stable ids) · `parlis_client.py` / `parlis_parser.py` (PARLIS fetch + parse) ·
-`enum_mapper.py` (PARLIS terms → PaZuFa enums, context-aware) · `bawue_dok.py` (LLM
-enrichment) · `pdf_text.py` (PDF download, text, OCR) · `vorgang_llm.py` (Kurztitel, Ressort) · `pipeline.py` (scraper base classes, run loop, `log_item`) ·
-`bawue_beteiligung_scraper.py` / `bawue_sitzungen_scraper.py` / `ics_parser.py` ·
-`config.py` (config loader, `section()`) · `cache.py` (Redis) · `upload_throttle.py` (retry/429).
+- Branch `fix/issue-<N>-<slug>` (or `fix/<slug>`) off `main`; PR via `gh pr create --base main`.
+  Don't commit or push unless asked.
+- Conventional commits (`feat`, `fix`, `refactor`, `test`, `docs`, `chore`, …; `!` for breaking):
+  python-semantic-release derives versions and releases from them on `main`.
+- `make test` and `make lint` must be green. See `make help` for the rest (`test-all` needs a
+  backend; `run` needs `config.toml` + Redis; `mock_pazufa_server.py` replaces the backend).
+- `locallogs/*.jsonl` are dumps of fully built Vorgänge (post `_build_vorgang`), useful as
+  real-world test input — not error logs.
