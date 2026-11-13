@@ -45,6 +45,7 @@ from bawue.types import (
     Zusammenfassungstupel,
     placeholder_hash,
 )
+from tests.bw_tracks import letters, passes
 from tests.factories import make_scraper, mock_config, run_metrics
 from tests.unit.test_bawue_dok import SAMPLE_HASH, SAMPLE_PDF_HASHES
 
@@ -3258,56 +3259,6 @@ class TestEnsureAusschberAfterVollvlsgn:
         assert stationen[3].zp_modifiziert == late_end  # must not be reduced
 
 
-# Authoritative station→letter mapping and BW track, copied verbatim from the
-# backend's configured trackfile (see DD-040):
-#   tracks.toml @ tag v0.2.9+v0.1.3, version 0.1.3
-#   https://codeberg.org/PaZuFa/parlamentszusammenfasser/raw/tag/v0.2.9+v0.1.3/tracks.toml
-# The backend maps each Station's ``typ`` to the [stations] letter, joins them in
-# zp_start order, then checks the [tracks.BW] regex as a PREFIX match — a Vorgang
-# is valid iff its letters are consumed as the *start* of an accepting word, so
-# later stages (parl-akzeptanz J, postparl G/K, …) may legitimately be missing.
-_TRACKS_TOML_STATIONS = {
-    "preparl-regent": "R",
-    "preparl-eckpup": "E",
-    "preparl-regbsl": "S",
-    "parl-initiativ": "I",
-    "parl-vollvlsgn": "L",
-    "parl-akzeptanz": "J",
-    "parl-zurueckgz": "Z",
-    "parl-ablehnung": "N",
-    "parl-ausschber": "A",
-    "postparl-gsblt": "G",
-    "postparl-kraft": "K",
-    "postparl-vgstp": "C",
-    "preparl-vbegde": "B",
-    "parl-ggentwurf": "W",
-    "postparl-vesja": "Y",
-    "postparl-vesne": "X",
-}
-# Build the Stationstyp→letter map, keeping only the station strings that are
-# valid Stationstyp members (mirrors the backend's station_mapping).
-_GG_LAND_PARL_LETTER = {
-    Stationstyp(value): letter
-    for value, letter in _TRACKS_TOML_STATIONS.items()
-    if value in {s.value for s in Stationstyp}
-}
-
-# [tracks.BW] gg-land-parl, verbatim.
-_BW_GG_LAND_PARL_TRACK = "((E*R+)?S)?I((LA*(Z|LJ(C|GA*(C|KA*C?))|LN|LA*(Z|LJ(C|GA*(C|KA*C?))|LN)))|Z)"
-
-
-def _passes_bw_track_validation(track: str) -> bool:
-    """Mirror the backend's track validation for ``BW.gg-land-parl``.
-
-    The backend accepts a Vorgang iff its station-letter string is fully consumed
-    as a *prefix* of an accepting word (``matched && consumed == len``; see
-    tracks.rs / DD-040). Python's ``regex`` module reproduces exactly this with
-    ``fullmatch(..., partial=True)``: a proper prefix returns a partial match.
-    """
-    regex = pytest.importorskip("regex")  # provided transitively via litellm→tiktoken
-    return regex.fullmatch(_BW_GG_LAND_PARL_TRACK, track, partial=True) is not None
-
-
 # The five processes from issue #48. Real dates from the local WP17 dump;
 # Fundstellen are fed to the parametrized test in a deliberately non-chronological
 # order to exercise the ordering helpers end-to-end.
@@ -3424,18 +3375,6 @@ class TestIssue48OrderByZpStartNotListPosition:
         initiativ = next(x for x in stationen if x.typ == Stationstyp.PARL_INITIATIV)
         assert initiativ.zp_start == regbsl_zp
 
-    @staticmethod
-    def _track_string(stationen: list) -> str:
-        """Whole track as the backend sees it: stations sorted by ``zp_start``,
-        each mapped to its ``gg-land-parl`` letter. Fails loudly on a Stationstyp
-        this test does not know how to score, so an unexpected type can't slip
-        through as a silent pass."""
-        letters = []
-        for s in sorted(stationen, key=lambda s: s.zp_start):
-            assert s.typ in _GG_LAND_PARL_LETTER, f"unmapped Stationstyp in track: {s.typ}"
-            letters.append(_GG_LAND_PARL_LETTER[s.typ])
-        return "".join(letters)
-
     @classmethod
     def _assert_valid_track(cls, stationen: list, expected: str) -> None:
         """Assert the *whole* zp_start-sorted track would pass backend validation.
@@ -3451,9 +3390,9 @@ class TestIssue48OrderByZpStartNotListPosition:
           sorts by ``zp_start``, so a tie between different types leaves the order
           ambiguous. ``enforce_total_ordering`` guarantees this (issue #48 root).
         """
-        track = cls._track_string(stationen)
+        track = letters(stationen)
         assert track == expected, f"track {track!r} != expected {expected!r}"
-        assert _passes_bw_track_validation(track), f"track {track!r} rejected by BW.gg-land-parl validation"
+        assert passes("gg-land-parl", track), f"track {track!r} rejected by BW.gg-land-parl validation"
 
         slots: dict = {}
         for s in stationen:
@@ -3517,29 +3456,6 @@ class TestIssue48OrderByZpStartNotListPosition:
         )
         vorgang = await scraper_build_vorgang(raw)
         self._assert_valid_track(vorgang.stationen, expected="SILAL")
-
-    @pytest.mark.parametrize(
-        ("track", "valid"),
-        [
-            # Valid prefixes of an accepting BW.gg-land-parl word:
-            ("SILAL", True),  # the Haushalt Einzelplan shape the five issue-#48 cases resolve to
-            ("SIL", True),  # in progress: through the first reading only
-            ("ILAL", True),  # Fraktion bill (no preparl-regbsl)
-            ("SILALJGK", True),  # fully completed process (…akzeptanz, Gesetzblatt, in Kraft)
-            ("SILALN", True),  # rejected at the final reading (N = parl-ablehnung)
-            # Invalid orderings — the ones issue #48 produced or guards against:
-            ("SALIL", False),  # committee report before the first reading, initiativ after it
-            ("SLIAL", False),  # reading before the parl-initiativ
-            ("LIAL", False),  # reading before the parl-initiativ, no preparl
-            ("SIALL", False),  # ausschber immediately after initiativ, before any reading
-        ],
-    )
-    def test_bw_track_prefix_validation_matches_backend(self, track, valid):
-        """Pin the prefix-match semantics and the station→letter mapping against
-        the real ``BW.gg-land-parl`` track (DD-040): valid prefixes (including
-        in-progress and completed processes) pass; the mis-orderings issue #48
-        produced are rejected."""
-        assert _passes_bw_track_validation(track) is valid
 
 
 class TestAblehnungAnchorsAfterAusschberRetiming:
@@ -4600,9 +4516,9 @@ class TestIssue98KraftStation:
         assert kraft.gremium.name == ReservedGremium.GESETZESBLATT
         assert kraft.dokumente == []
         scraper._gsblt_dates.inkrafttreten.assert_awaited_once_with(2026, 14)
-        track = "".join(_GG_LAND_PARL_LETTER[s.typ] for s in sorted(vorgang.stationen, key=lambda s: s.zp_start))
+        track = letters(vorgang.stationen)
         assert track.endswith("GK")
-        assert _passes_bw_track_validation(track)
+        assert passes("gg-land-parl", track)
 
     @pytest.mark.asyncio
     async def test_api_id_does_not_depend_on_the_date(self):

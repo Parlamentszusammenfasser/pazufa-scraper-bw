@@ -44,10 +44,12 @@ mit Ausschussberichten (`L A* L …`), am Ende Annahme mit Gesetzblatt und Inkra
 und ein `C` (Verfassungsgerichtsstopp) erlaubt. Abstimmung in erster Lesung gibt es nicht
 (GO-LT BW §43 Abs. 4, DD-016).
 
-**Konsequenz:** Die Tests bauen die Buchstabenfolge und prüfen sie mit
-`regex.fullmatch(track, partial=True)`, das den Präfix-Match nachbildet, gegen eine wörtliche
-Kopie des BW-Tracks (`_BW_GG_LAND_PARL_TRACK`). Ändert sich die Trackdatei, gehören Kopie und
-dieser Abschnitt nachgezogen.
+**Konsequenz:** `tests/bw_tracks.py` hält eine wörtliche Kopie von `[stations]` und
+`[tracks.BW]` und bildet den Präfix-Match mit `regex.fullmatch(track, partial=True)` nach.
+`tests/unit/test_bw_tracks.py` prüft damit ohne Backend gültige und ungültige Folgen, ob jeder
+gemappte Vorgangs- und Stationstyp einen Track bzw. Buchstaben hat, und alle aus den
+PARLIS-Fixtures gebauten Vorgänge. Ändert sich die Trackdatei, gehören Kopie und dieser
+Abschnitt nachgezogen.
 
 <a id="dd-016"></a>
 ## DD-016: BW-Track ohne Lockerung der Lesungen
