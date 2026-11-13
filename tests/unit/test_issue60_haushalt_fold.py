@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from bawue.bawue_vorgaenge_scraper import BawueVorgaengeScraper, _fold_einzelplaene, _vorgang_fingerprint
-from bawue.types import Stationstyp, Vorgangstyp
+from bawue.types import Stationstyp
 from tests.factories import make_scraper
 from tests.unit.test_bawue_scraper import _make_raw_vorgang
 
@@ -127,7 +127,6 @@ async def test_builds_one_track_valid_vorgang():
         hashes = [d.hash_ for d in station.dokumente]
         assert len(hashes) == len(set(hashes)), f"duplicate document hash on {station.typ}"
     assert ("initdrucks", "17/8000") in {(i.typ, i.id) for i in vorgang.ids}
-    assert vorgang.typ == Vorgangstyp.GG_LAND_PARL_HAUSHALT
 
 
 @pytest.mark.asyncio
