@@ -641,7 +641,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
 
         A new bill takes over the draft's api_id, so the backend merges it into the draft's
         Vorgang. A bill the backend already has keeps its own (two candidates would be an
-        AmbiguousMatch) and gains the draft's station; the portal Vorgang is then stale.
+        AmbiguousMatch) and gains the draft's station; the portal Vorgang is then stale. So does a
+        -haushalt bill: the backend never merges it into a gg-land-parl draft.
         """
         kandidaten = self._entwurf_kandidaten(raw)
         if not kandidaten:
