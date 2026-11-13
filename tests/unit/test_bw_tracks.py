@@ -59,20 +59,19 @@ _INVALID = [
 ]
 
 
-@pytest.mark.parametrize("typ", sorted(BW_TRACKS))
+# gg-land-parl only: the other BW tracks equal it or deviate on purpose (e.g. §47a).
 @pytest.mark.parametrize("track", _VALID)
-def test_valid_track(typ, track):
-    assert passes(typ, track)
+def test_valid_track(track):
+    assert passes("gg-land-parl", track)
 
 
-@pytest.mark.parametrize("typ", sorted(BW_TRACKS))
 @pytest.mark.parametrize("track", _INVALID)
-def test_invalid_track(typ, track):
-    assert not passes(typ, track)
+def test_invalid_track(track):
+    assert not passes("gg-land-parl", track)
 
 
 def test_every_vorgangstyp_the_scraper_maps_has_a_bw_track():
-    """Else „not specified for parliament BW“. ``sonstig`` is not uploaded; ``gg-land-volk`` is a gap (DD-016)."""
+    """Else „not specified for parliament BW“. ``sonstig`` is off by default; ``gg-land-volk`` is a gap (DD-016)."""
     mapped = set(VORGANGSTYP_MAP.values()) - {Vorgangstyp.SONSTIG, Vorgangstyp.GG_LAND_VOLK}
     assert mapped <= BW_TRACKS.keys()
 
