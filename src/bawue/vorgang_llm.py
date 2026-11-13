@@ -86,7 +86,9 @@ def _kurztitel_problem(kurztitel: str, titel: str = "") -> str | None:
     if match := _STATUS_RE.search(kurztitel):
         return f"Der Kurztitel nennt einen Verfahrensstand („{match[0]}“), benenne nur den Gegenstand."
     from_titel = set(_ABBREVIATION_RE.findall(titel)) - _KNOWN_ABBREVIATIONS
-    if unexplained := next((a for a in _ABBREVIATION_RE.findall(kurztitel) if a in from_titel), None):
+    # "Gewalthilfeausführungsgesetz (GewHAG)" explains it: parenthesised ones pass.
+    unexplained_text = re.sub(r"\([^()]*\)", "", kurztitel)
+    if unexplained := next((a for a in _ABBREVIATION_RE.findall(unexplained_text) if a in from_titel), None):
         return f"Der Kurztitel enthält die unerklärte Abkürzung „{unexplained}“, benenne stattdessen den Inhalt."
     return None
 
