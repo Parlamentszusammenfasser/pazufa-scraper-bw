@@ -489,7 +489,7 @@ class TestEnumValuesExistInFramework:
             # Added by spec 0.2.8, deliberately unmapped (DD-057).
             "beschlussprotokoll",
             "inhaltsprotokoll",
-            # Added by spec 0.2.9, unmapped for now (DD-057).
+            # Added by spec 0.2.9: Gesetzblatt corrections (DD-047, issue #204).
             "berichtigung",
         }
         framework_values = {m.value for m in Doktyp}

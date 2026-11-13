@@ -97,7 +97,8 @@ aus `G` ist nie track-gültig (DD-040), und das Gesetzblatt nennt keine Drucksac
   datiert sie nicht (Parser-Fallback 01.01. des Jahres), daher ist ihr `zp_referenz` das
   Ausgabedatum ihrer eigenen Gesetzblatt-Ausgabe (GitHub Issue #204). Eigenständige
   Berichtigungs-Vorgänge bleiben übersprungen (DD-036): Den berichtigten Vorgang fände nur
-  ein unscharfer Titelabgleich.
+  ein unscharfer Titelabgleich. Marker `berichtigung` im `vg2:`-Fingerprint baut gespeicherte
+  Gesetze mit Berichtigung einmal neu.
 
 **Konsequenz:** Digital gibt es das Gesetzblatt erst ab 2024; ältere Zitate behalten das
 PARLIS-Datum und den PARLIS-Link; eine Berichtigung vor 2024 behält das Datum 01.01. Gesetzblatt-Einträge ohne PARLIS-Vorgang (Verordnungen)

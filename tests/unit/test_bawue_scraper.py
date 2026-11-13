@@ -4446,6 +4446,14 @@ _GBL_FUNDSTELLE = {
     "gesetzblatt_nr": 14,
     "pdf_url": f"{_LTBW_FILES}/gesetzblaetter/2026/GBl2026014.pdf#page=1",
 }
+_GBL_BERICHTIGUNG = {
+    "raw": "Berichtigung des Gesetzes  Gesetzblatt für Baden-Württemberg 2026 Nr. 20     S. 3",
+    "datum": "01.01.2026",  # parlis_parser's year fallback: PARLIS gives no date
+    "station_typ": "Berichtigung des Gesetzes",
+    "gesetzblatt_jahr": 2026,
+    "gesetzblatt_nr": 20,
+    "pdf_url": f"{_LTBW_FILES}/gesetzblaetter/2026/GBl2026020.pdf#page=3",
+}
 _GBL_AUSGABEDATUM = datetime(2026, 2, 27, tzinfo=UTC)
 _GBL_AUSFERTIGUNG = datetime(2026, 2, 10, tzinfo=UTC)
 
@@ -4504,19 +4512,11 @@ class TestIssue9GesetzblattAusgabedatum:
     @pytest.mark.asyncio
     async def test_issue204_berichtigung_joins_the_gesetzblatt_station(self):
         """A correction is a `berichtigung` on the law's station, dated by its own Gesetzblatt issue."""
-        berichtigung = {
-            "raw": "Berichtigung des Gesetzes  Gesetzblatt für Baden-Württemberg 2026 Nr. 20     S. 3",
-            "datum": "01.01.2026",  # parlis_parser's year fallback: PARLIS gives no date
-            "station_typ": "Berichtigung des Gesetzes",
-            "gesetzblatt_jahr": 2026,
-            "gesetzblatt_nr": 20,
-            "pdf_url": f"{_LTBW_FILES}/gesetzblaetter/2026/GBl2026020.pdf#page=3",
-        }
         ausgabe_20 = datetime(2026, 3, 10, tzinfo=UTC)
         lookup = self._lookup(None)
         lookup.publikationsdatum = AsyncMock(side_effect=lambda _jahr, nr: {14: _GBL_AUSGABEDATUM, 20: ausgabe_20}[nr])
         raw = self._raw()
-        raw["fundstellen_parsed"].append(berichtigung)
+        raw["fundstellen_parsed"].append(_GBL_BERICHTIGUNG)
 
         vorgang = await self._scraper(lookup)._build_vorgang(raw)
 
@@ -4526,6 +4526,16 @@ class TestIssue9GesetzblattAusgabedatum:
             (Doktyp.GESETZ, _GBL_AUSFERTIGUNG),
             (Doktyp.BERICHTIGUNG, ausgabe_20),
         ]
+
+    def test_issue204_cached_laws_with_a_correction_are_rebuilt_once(self):
+        """Closed laws never change in PARLIS, so a marker re-sends their correction as `berichtigung`."""
+        raw = self._raw()
+        raw["fundstellen_parsed"].append(_GBL_BERICHTIGUNG)
+        relabeled = {
+            **raw,
+            "fundstellen_parsed": [*raw["fundstellen_parsed"][:-1], {**_GBL_BERICHTIGUNG, "station_typ": "Gesetz"}],
+        }
+        assert _vorgang_fingerprint(raw) != _vorgang_fingerprint(relabeled)
 
     @pytest.mark.asyncio
     async def test_falls_back_to_parlis_date_when_entry_unresolvable(self):

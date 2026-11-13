@@ -177,6 +177,9 @@ def _vorgang_fingerprint(raw: RawVorgang, entwuerfe: list[str] | None = None) ->
     payload.append("zahlenformat")
     # Rebuild cached Vorgänge once for the new summary prompt (DD-053 abbreviations, DD-083 tags).
     payload.append("abkuerzungen-dokument-tags")
+    # Rebuild cached laws once, so their correction becomes a dated `berichtigung` (DD-047).
+    if any("Berichtigung" in (f.get("station_typ") or f.get("raw", "")) for f in raw.get("fundstellen_parsed", [])):
+        payload.append("berichtigung")
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 
@@ -1160,7 +1163,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         ausgabe = await self._gesetzblatt_ausgabedatum(fund) if station_typ == Stationstyp.POSTPARL_GSBLT else None
         # The document keeps the PARLIS date as its `zp_referenz` (for a Gesetzblatt: the Ausfertigung).
         # A Berichtigung has none, only the 01.01. year fallback: its Ausgabedatum dates it (issue #204).
-        dok_zp = ausgabe if ausgabe and station_typ_str.startswith("Berichtigung") else zp_start
+        dok_zp = ausgabe if ausgabe and "Berichtigung" in mapping_text else zp_start
         gremium = self._determine_gremium(fund, station_typ)
         dokumente = await self._build_dokumente(
             fund,
