@@ -352,6 +352,7 @@ class TestDokumententypMapping:
             ("Gesetzblatt", False, Doktyp.GESETZ),
             ("Bekanntmachung", False, Doktyp.MITTEILUNG),
             ("Gesetz", False, Doktyp.GESETZ),
+            ("Berichtigung des Gesetzes", False, Doktyp.BERICHTIGUNG),  # issue #204
         ],
     )
     def test_known_patterns(self, context, is_vorparl, expected):
@@ -488,7 +489,7 @@ class TestEnumValuesExistInFramework:
             # Added by spec 0.2.8, deliberately unmapped (DD-057).
             "beschlussprotokoll",
             "inhaltsprotokoll",
-            # Added by spec 0.2.9, unmapped for now (DD-057).
+            # Added by spec 0.2.9: Gesetzblatt corrections (DD-047, issue #204).
             "berichtigung",
         }
         framework_values = {m.value for m in Doktyp}
