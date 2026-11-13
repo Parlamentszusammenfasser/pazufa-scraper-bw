@@ -462,8 +462,9 @@ class TestEnumValuesExistInFramework:
 
     def test_all_vorgangstyp_values_valid(self):
         """A new Land type in the spec fails here until it is mapped or listed."""
-        produced = {typ.value for typ in VORGANGSTYP_MAP.values()}
-        unproduced = {"bw-einsatz", "gg-land-parl-nachtragshaushalt", "gg-land-parl-staatsvertrag"}  # #203
+        by_titel = {Vorgangstyp.GG_LAND_PARL_STAATSVERTRAG, Vorgangstyp.GG_LAND_PARL_NACHTRAGSHAUSHALT}  # DD-085
+        produced = {typ.value for typ in {*VORGANGSTYP_MAP.values(), *by_titel}}
+        unproduced = {"bw-einsatz"}
         bund = {m.value for m in Vorgangstyp if m.value.startswith("bu-")}
         assert produced | unproduced | bund == {m.value for m in Vorgangstyp}
         assert not produced & unproduced

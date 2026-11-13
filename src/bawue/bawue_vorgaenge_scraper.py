@@ -143,6 +143,15 @@ DEFAULT_ENABLED_VORGANGSTYPEN: list[str] = [
 ]
 # Its Einzelpläne are folded into their Staatshaushaltsgesetz (DD-077).
 _HAUSHALT_VORGANGSTYP = "Haushaltsgesetzgebung"
+# Bills of the Landtag; a Landesregierung one may have grown from a portal draft (DD-079).
+_LANDTAG_GESETZE = frozenset(
+    {
+        Vorgangstyp.GG_LAND_PARL,
+        Vorgangstyp.GG_LAND_PARL_HAUSHALT,
+        Vorgangstyp.GG_LAND_PARL_NACHTRAGSHAUSHALT,
+        Vorgangstyp.GG_LAND_PARL_STAATSVERTRAG,
+    }
+)
 DEFAULT_PARLIS_DELAY = 1.0
 DEFAULT_GSBLT_DELAY = 1.0
 # Plenarprotokolle appear 1-2 weeks after the session (WP18, measured 2026-10); later is a gap (issue #128).
@@ -180,6 +189,10 @@ def _vorgang_fingerprint(raw: RawVorgang, entwuerfe: list[str] | None = None) ->
     # Rebuild cached budgets once, so they switch to gg-land-parl-haushalt (DD-077).
     if raw.get("Vorgangstyp") == _HAUSHALT_VORGANGSTYP:
         payload.append("haushalt")
+    # Rebuild cached treaty laws and Nachträge once for their own type (DD-085).
+    typ = map_vorgangstyp(raw.get("Vorgangstyp", ""), raw.get("titel", ""))
+    if typ in (Vorgangstyp.GG_LAND_PARL_STAATSVERTRAG, Vorgangstyp.GG_LAND_PARL_NACHTRAGSHAUSHALT):
+        payload.append(typ.value)
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 
@@ -512,7 +525,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         initiative = _initiative(raw)
         vorgangstyp_str = raw.get("Vorgangstyp", "")
 
-        typ = map_vorgangstyp(vorgangstyp_str)
+        typ = map_vorgangstyp(vorgangstyp_str, titel)
         initiatoren = _parse_autoren(initiative)
 
         fundstellen_parsed = raw.get("fundstellen_parsed", [])
@@ -622,8 +635,8 @@ class BawueVorgaengeScraper(VorgangsScraper):
     def _entwurf_kandidaten(self, raw: RawVorgang) -> list[str]:
         """Registered drafts a Landesregierung bill may have grown from (DD-079)."""
         # Haushaltsbegleitgesetze have portal drafts too (18/701).
-        typ = map_vorgangstyp(raw.get("Vorgangstyp", ""))
-        if not self._entwuerfe or typ not in (Vorgangstyp.GG_LAND_PARL, Vorgangstyp.GG_LAND_PARL_HAUSHALT):
+        typ = map_vorgangstyp(raw.get("Vorgangstyp", ""), raw.get("titel", ""))
+        if not self._entwuerfe or typ not in _LANDTAG_GESETZE:
             return []
         regbsl = _regbsl_datum(raw)
         if regbsl is None:

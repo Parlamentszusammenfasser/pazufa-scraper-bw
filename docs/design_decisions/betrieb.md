@@ -66,7 +66,7 @@ als HTTP 422 auf.
      setzt BW weiterhin immer.
    - LLM-Tokens gehen in die Metriken (DD-082).
    - `berichtigung` bleibt ungemappt (DD-057); `gg-land-parl-staatsvertrag` und
-     `gg-land-parl-nachtragshaushalt` sind offen (GitHub #203).
+     `gg-land-parl-nachtragshaushalt` am Titel erkannt (DD-085).
 
 **Konsequenz:** corelibs `html_to_text` behandelt einen Text als HTML, sobald ein einzelnes
 Block-Tag vorkommt, und verliert dann alle Absätze — die Garbled-Filter (DD-015) arbeiten

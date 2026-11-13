@@ -95,8 +95,9 @@ Staatshaushaltsgesetzes. Bereits hochgeladene Einzelplan-Vorgänge (WP 17: 51) l
 Admin, und zwar **vor** einem Neulauf von WP 17: Beim Station-Merge verknüpft das Backend nur
 neu eingefügte Dokumente, die der Einzelpläne blieben sonst ohne Verknüpfung. Die alte
 `parl-ausschber` findet das Backend über die geteilte Beschlussempfehlung und aktualisiert sie.
-Jeder Haushaltsgesetzgebung-Vorgang, auch Begleitgesetz und Nachtrag, hat den Typ
-`gg-land-parl-haushalt` (BW-Track wie `gg-land-parl`, Tracks ab v0.1.2). Ein Marker im
+Jeder Haushaltsgesetzgebung-Vorgang, auch ein Begleitgesetz, hat den Typ
+`gg-land-parl-haushalt` (BW-Track wie `gg-land-parl`, Tracks ab v0.1.2), ein Nachtrag
+`-nachtragshaushalt` (DD-085). Ein Marker im
 `vg2:`-Fingerprint baut gespeicherte einmal neu, auch abgeschlossene. Ab Backend 0.3.6 hat der
 Typ eine eigene `vgtyp_class`
 ([pazufa-backend#227](https://codeberg.org/PaZuFa/pazufa-backend/issues/227)); das Backend führt
@@ -211,3 +212,26 @@ Tagesordnungspunkts (DD-037). „Beschluss des Landtags in … Beratung"-Drucksa
 Datei-Hash und teilen einen Row; ihr Titel ist gleich. Bekannte Lücke: Ein lesbares
 Protokoll, das noch ohne Anker in mehreren Vorgängen steht, teilt ebenfalls einen Row
 (letzter `titel` gewinnt); kommt der Anker nach, entsteht je Station ein weiterer Row.
+
+<a id="dd-085"></a>
+## DD-085: Staatsvertrag und Nachtrag am Titel erkennen
+
+**Kontext:** Spec 0.2.9 bringt `gg-land-parl-staatsvertrag` und `gg-land-parl-nachtragshaushalt`.
+PARLIS führt Vertragsgesetze als „Gesetzgebung", Nachträge als „Haushaltsgesetzgebung"
+(GitHub Issue #203).
+
+**Entscheidung:** `map_vorgangstyp` verfeinert den PARLIS-Typ am Titel:
+- `Gesetzgebung` mit Titelanfang „Gesetz zu dem …" (Staatsvertrag, Abkommen, Vertrag) oder
+  „Gesetz zum …staatsvertrag" → `-staatsvertrag`. Ein Gesetz, das nebenbei einen Vertrag
+  billigt („Gesetz zur Änderung … sowie Gesetz zu dem Abkommen"), bleibt `gg-land-parl`.
+- `Haushaltsgesetzgebung` mit „Nachtrag(s) zum Staatshaushalt" oder „Nachtragshaushaltsgesetz"
+  → `-nachtragshaushalt`; ein Begleitgesetz zum Nachtrag bleibt `-haushalt`.
+- Beide können einen Portal-Entwurf als Station gewinnen, behalten aber ihre `api_id`
+  (andere `vgtyp_class` als der Entwurf, DD-079).
+- Marker mit dem Typ im `vg2:`-Fingerprint baut gespeicherte einmal neu.
+
+**Konsequenz:** Erst mit einem Backend, dessen Tracks beide Typen für BW führen (sonst
+HTTP 400). Jeder Typ hat eine eigene `vgtyp_class`; ein gespeicherter Vorgang wechselt den Typ
+nicht (HTTP 500, wie DD-077): Ein Admin löscht die gespeicherten Vertragsgesetze und Nachträge,
+sobald diese Version in der Umgebung läuft.
+

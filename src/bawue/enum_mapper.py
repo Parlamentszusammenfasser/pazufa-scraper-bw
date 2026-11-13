@@ -165,9 +165,19 @@ DOKUMENTENTYP_MAP: dict[str, Doktyp] = {
 _DOKUMENTENTYP_KEYS_SORTED = sorted(DOKUMENTENTYP_MAP.keys(), key=len, reverse=True)
 
 
-def map_vorgangstyp(parlis_typ: str) -> Vorgangstyp:
-    """Map a PARLIS Vorgangstyp string to the PaZuFa Vorgangstyp enum."""
-    return VORGANGSTYP_MAP.get(parlis_typ, Vorgangstyp.SONSTIG)
+# PARLIS files treaty laws as Gesetzgebung and Nachträge as Haushaltsgesetzgebung; the title tells (DD-085).
+_STAATSVERTRAG_RE = re.compile(r"Gesetz zu dem\b|Gesetz zum \S*[Ss]taatsvertrag")
+_NACHTRAG_RE = re.compile(r"Nachtrags? zum Staatshaushalt|Nachtragshaushaltsgesetz")
+
+
+def map_vorgangstyp(parlis_typ: str, titel: str = "") -> Vorgangstyp:
+    """Map a PARLIS Vorgangstyp string, refined by the Vorgang's *titel*, to the PaZuFa Vorgangstyp enum."""
+    typ = VORGANGSTYP_MAP.get(parlis_typ, Vorgangstyp.SONSTIG)
+    if typ == Vorgangstyp.GG_LAND_PARL and _STAATSVERTRAG_RE.match(titel):
+        return Vorgangstyp.GG_LAND_PARL_STAATSVERTRAG
+    if typ == Vorgangstyp.GG_LAND_PARL_HAUSHALT and _NACHTRAG_RE.search(titel):
+        return Vorgangstyp.GG_LAND_PARL_NACHTRAGSHAUSHALT
+    return typ
 
 
 def _normalize_whitespace(text: str) -> str:
