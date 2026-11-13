@@ -7,6 +7,7 @@ import re
 import ssl
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -379,6 +380,25 @@ class TestExtractSemantics:
             pytest.raises(json.JSONDecodeError),
         ):
             await extract_semantics(llm, SAMPLE_FULL_TEXT, Doktyp.ENTWURF)
+
+    @pytest.mark.asyncio
+    async def test_counts_tokens_on_the_connector(self):
+        """llm_json bypasses LLMConnector.extract, so it adds the usage itself (DD-082); failed parses too."""
+        from pazufa_corelib.llm import LLMConnector
+
+        llm = LLMConnector(model="gpt-5-nano", api_key="test-key")
+        responses = [_mock_llm_response(SAMPLE_LLM_RESPONSE_ENTWURF), _mock_llm_response("not json at all")]
+        for response in responses:
+            response.usage = SimpleNamespace(
+                prompt_tokens=120, completion_tokens=30, completion_tokens_details=SimpleNamespace(reasoning_tokens=10)
+            )
+
+        with patch("bawue.bawue_dok.litellm.acompletion", new_callable=AsyncMock, side_effect=responses):
+            await extract_semantics(llm, SAMPLE_FULL_TEXT, Doktyp.ENTWURF)
+            with pytest.raises(json.JSONDecodeError):
+                await extract_semantics(llm, SAMPLE_FULL_TEXT, Doktyp.ENTWURF)
+
+        assert (llm.prompt_tokens, llm.completion_tokens, llm.reasoning_tokens) == (240, 60, 20)
 
 
 # ---------------------------------------------------------------------------

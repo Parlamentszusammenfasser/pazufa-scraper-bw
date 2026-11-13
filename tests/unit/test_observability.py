@@ -5,6 +5,7 @@ import logging
 import time
 from unittest.mock import ANY, MagicMock, patch
 
+import litellm
 import pytest
 import responses as responses_lib
 from pazufa_metrics_client import PazufaMetricsClient
@@ -61,7 +62,7 @@ def test_record_llm_maps_documents_and_vorgang_fields():
     llm.ressort_classified, llm.ressort_null, llm.ressort_rejected, llm.ressort_failed = 2, 1, 1, 1
     pmc = PazufaMetricsClient()
 
-    record_llm(pmc, llm)
+    record_llm(pmc, llm, None)
 
     reg = pmc._registry
     document = [_value(reg, "llmenrichment", entity="document", result=r, field="") for r in ("enriched", "failed")]
@@ -121,6 +122,24 @@ class TestPushRunMetrics:
 
         assert _value(push.call_args.kwargs["registry"], "last_success_timestamp_seconds") == heartbeat
         config.cache.store_raw.assert_not_called()
+
+    @pytest.mark.parametrize("model", ["gpt-5-nano", "no-such-model"], ids=["priced", "unknown-model"])
+    def test_llm_tokens_and_cost_of_all_scrapers_add_up(self, model, caplog):
+        connector = MagicMock(model=model, prompt_tokens=100, completion_tokens=40, reasoning_tokens=10)
+        scrapers = [MagicMock(), MagicMock(), MagicMock()]
+        for scraper, conn in zip(scrapers, (connector, connector, None), strict=True):  # the last has LLM off
+            scraper.record_metrics.side_effect = lambda pmc, conn=conn: record_llm(pmc, LLMMetrics(), conn)
+
+        with patch("pazufa_metrics_client.push_to_gateway") as push:
+            push_run_metrics(_config("secret"), scrapers, 1.0, success=True)
+
+        reg = push.call_args.kwargs["registry"]
+        assert [_value(reg, "llm_tokens", type=t) for t in ("prompt", "completion", "reasoning")] == [200, 80, 20]
+        priced = model == "gpt-5-nano"
+        # Price from litellm's table, not hardcoded; an unknown model gets no series rather than a cost of 0.
+        expected = pytest.approx(2 * sum(litellm.cost_per_token(model, 100, 40))) if priced else None
+        assert _value(reg, "llm_cost_usd", model=model) == expected
+        assert ("No LLM price for no-such-model" in caplog.text) is not priced
 
     def test_nothing_is_pushed_without_password(self):
         with patch("pazufa_metrics_client.push_to_gateway") as push:

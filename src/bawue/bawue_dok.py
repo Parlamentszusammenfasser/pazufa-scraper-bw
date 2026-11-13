@@ -423,6 +423,9 @@ async def llm_json(llm: LLMConnector, model: str, messages: list[dict]) -> dict:
             response_format={"type": "json_object"},
             num_retries=MAX_JSON_RETRIES,
         )
+    # Bypasses LLMConnector.extract, which counts tokens for the metrics (DD-082).
+    # shortcut: private corelib API, switch once corelib makes it public.
+    llm._count_usage(getattr(response, "usage", None))
     return _parse_llm_response(response.choices[0].message.content)
 
 

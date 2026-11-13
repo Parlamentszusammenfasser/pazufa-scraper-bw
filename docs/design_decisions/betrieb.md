@@ -36,7 +36,7 @@ Pydantic-Modell der corelib — der attrs-Client serialisiert ungeprüft, Drift 
 als HTTP 422 auf.
 
 <a id="dd-059"></a>
-## DD-059: corelib v0.3.x / Spec 0.2.7–0.2.8
+## DD-059: corelib v0.3.x / Spec 0.2.7–0.2.9
 
 **Entscheidung:**
 1. `PUT kalender` sendet `X-Scraper-Id` wieder (Spec 0.2.7 verlangt ihn).
@@ -61,6 +61,12 @@ als HTTP 422 auf.
      Stations-`api_id` (DD-028). Erst mit Backend-Fix und Migration.
    - `gg-land-parl-haushalt` erst mit einem BW-Track dafür (DD-077).
    - `parl-anhoerung`, `beschlussprotokoll`, `inhaltsprotokoll` gibt es in BW nicht (DD-057).
+6. **v0.3.3** / Spec 0.2.9 (GitHub #202):
+   - Die jetzt optionalen Zeitpunkte (`zp_start`, `termin`, `zp_modifiziert`, `zp_referenz`)
+     setzt BW weiterhin immer.
+   - LLM-Tokens gehen in die Metriken (DD-082).
+   - `berichtigung` bleibt ungemappt (DD-057); `gg-land-parl-staatsvertrag` und
+     `gg-land-parl-nachtragshaushalt` sind offen (GitHub #203).
 
 **Konsequenz:** corelibs `html_to_text` behandelt einen Text als HTML, sobald ein einzelnes
 Block-Tag vorkommt, und verliert dann alle Absätze — die Garbled-Filter (DD-015) arbeiten
@@ -97,7 +103,12 @@ Push die ganze Gruppe ersetzt. `state="new"` enthält
 erneut versuchte Einträge (ein Cache-Miss unterscheidet sie nicht); Ablehnungen mit HTTP-Status
 zählen als `submitted{result="rejected", statuscode}`, Fehler ohne Antwort als
 `failed{reason="exception"}`, Redis-Fehler als `failed{reason="cache_error"}`, PDFs mit 404 nach
-vier Wochen als `failed{entity="document", reason="not_found"}`. Logs gehen gebündelt aus einem eigenen Thread an Loki,
+vier Wochen als `failed{entity="document", reason="not_found"}`. LLM-Tokens (corelib ≥ 0.3.3) gehen als
+`llm_tokens{type="prompt"|"completion"|"reasoning"}` aller Scraper in eine Summe je Lauf;
+`reasoning` ist Teil von `completion`, die Gesamtsumme also nur `prompt` + `completion`.
+`llm_cost_usd{model}` rechnet sie mit litellms mitgelieferter Preistabelle um, damit kein Preis
+im Dashboard steht; gecachte Prompt-Tokens zählen zum vollen Preis (leicht zu hoch). Ohne Preis
+für das Modell fehlt die Reihe, statt 0 zu melden. Logs gehen gebündelt aus einem eigenen Thread an Loki,
 das Level als Label; nach einem gescheiterten Push stoppt der Versand für den Lauf. Beides nur
 mit `OBSERVABILITY_PASSWORD`, sonst werden die Metriken nur geloggt. Kein OpenTelemetry: das
 Pushgateway nimmt kein OTLP.
@@ -107,5 +118,5 @@ Portal-Vorgänge (DD-079), abgestürzte Scraper, Abbrüche. Die Zusammenfassung 
 
 **Konsequenz:** Auch ein gescheiterter Lauf liefert seine Zahlen; das Alter des Heartbeats
 alarmiert in Grafana, der Fehler in Mattermost. Wochenbericht und „Fehlende Dokumente“ entfallen.
-LLM-Tokens folgen mit dem nächsten corelib-Release. Noch gepufferte Logs gehen verloren,
+Noch gepufferte Logs gehen verloren,
 wenn Cloud Run den Job beendet; Cloud Logging hat sie.

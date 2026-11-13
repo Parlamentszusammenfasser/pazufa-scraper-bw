@@ -4,21 +4,3 @@
 
 # diskcache 5.6.3: transitive via litellm, no fix released upstream
 CVE-2025-69872
-
-# filelock 3.32.7: transitive via litellm (pins filelock<4.0), fix only in 4.2.1.
-# litellm lifts the cap in BerriAI/litellm#49137, not in a stable release yet.
-# Not exploitable here: all need a second local user or Windows, and the HIGH one
-# needs ReadWriteLock, which nothing we ship uses. Drop once litellm allows 4.2.1.
-CVE-2026-112907 exp:2026-12-15
-CVE-2026-112908 exp:2026-12-15
-CVE-2026-112909 exp:2026-12-15
-CVE-2026-112910 exp:2026-12-15
-CVE-2026-112911 exp:2026-12-15
-CVE-2026-112912 exp:2026-12-15
-CVE-2026-112913 exp:2026-12-15
-CVE-2026-112915 exp:2026-12-15
-CVE-2026-112935 exp:2026-12-15
-CVE-2026-112936 exp:2026-12-15
-CVE-2026-112938 exp:2026-12-15
-CVE-2026-112939 exp:2026-12-15
-CVE-2026-112940 exp:2026-12-15

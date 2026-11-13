@@ -158,6 +158,7 @@ geprüft am 2026-11-04, GitHub #161).
 | `eckpunktepapier` | Kommt nicht vor; bei Bedarf reicht ein Titel-Mapping im Beteiligungs-Scraper |
 | `parl-anhoerung` | PARLIS führt Anhörungen nicht als Fundstelle, der ICS-Kalender nicht als Termin; erwähnt nur als Anlage einer Beschlussempfehlung (17/9670) |
 | `beschlussprotokoll`, `inhaltsprotokoll` | PARLIS verlinkt keine Ausschussprotokolle, nur Plenarprotokolle (`redeprotokoll`) |
+| `berichtigung` (Spec 0.2.9) | Gesetzblatt-Berichtigungen überspringt der Scraper als Meta-Eintrag; ein Mapping ist offen |
 
 **Konsequenz:** Der BW-Track hat für keinen der Stationstypen einen Buchstaben, eine solche
 Station gäbe HTTP 400. Ein Kanarienvogel-Test prüft `Stationstyp` auf Gleichheit
