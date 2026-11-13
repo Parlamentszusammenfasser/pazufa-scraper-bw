@@ -7,35 +7,53 @@ Jede Regel hier hält einen Vorgang in einer gültigen Folge, ohne den Track auf
 Buchstaben nach DD-040: `L` = `parl-vollvlsgn`, `A` = `parl-ausschber`, `N` = Ablehnung.
 
 <a id="dd-040"></a>
-## DD-040: Maßgeblicher Track und Prefix-Match
+## DD-040: Track-Validierung im Backend
 
-**Kontext:** Ältere DDs schrieben `V` für die Lesung und `Z` für die Ablehnung. Maßgeblich ist
-die Trackdatei, die das Backend lädt (`tracks.toml` v0.0.7, Tag `v0.2.3+v0.0.7`).
+**Kontext:** Jeder Upload wird gegen die Trackdatei geprüft, die das Backend lädt: `tracks.toml`
+im Spec-Repo ([parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser),
+Tag `v0.2.9+v0.1.3`). Ältere DDs schrieben `V` für die Lesung und `Z` für die Ablehnung.
 
-**Entscheidung:** Es gilt
+**Entscheidung:** Die Scraper-Regeln richten sich nach der Prüfung im Backend
+(`pazufa-models/src/tracks.rs`, `Tracks::validate`):
+1. Stationen werden nach `(zp_start, meta_tiebreaker)` sortiert, nicht nach Listenposition.
+2. Jeder Stationstyp wird über `[stations]` zu einem Buchstaben: `R` regent, `E` eckpup,
+   `S` regbsl, `I` initiativ, `L` vollvlsgn, `A` ausschber, `J` akzeptanz, `Z` zurückgezogen,
+   `N` ablehnung, `G` gsblt, `K` kraft, `C` vgstp. Ein Typ ohne Buchstaben (`sonstig`) lässt
+   den ganzen Vorgang scheitern.
+3. Je Parlament gilt `[tracks.<Parlament>].<Vorgangstyp>`. Fehlt der Eintrag: „A vorgang of
+   type … is not specified for parliament BW“ (DD-016: `gg-land-volk`; DD-085).
+4. Die Buchstabenfolge muss ein **Präfix** eines gültigen Worts sein (alle NFA-Zustände
+   akzeptieren): spätere Stationen dürfen fehlen, ein laufendes Verfahren wie `SILAL` ist
+   gültig. Falsch ist nur, was nicht mehr passen kann. Sonst HTTP 400 mit den Konflikten.
+
+BW (tracks v0.1.3), `gg-land-parl` und `-haushalt` gleich:
 
 ```
-gg-land-parl = "((E*R+)?S)?I((LA*(Z|LJGA*KA*|LN|LA*(Z|LJGA*KA*|LN)))|Z)"
+((E*R+)?S)?I((LA*(Z|LJ(C|GA*(C|KA*C?))|LN|LA*(Z|LJ(C|GA*(C|KA*C?))|LN)))|Z)
 ```
 
-mit `R` regent, `E` eckpup, `S` regbsl, `I` initiativ, `L` vollvlsgn, `A` ausschber,
-`J` akzeptanz, `Z` zurückgezogen, `N` ablehnung, `G` gsblt, `K` kraft. Die Validierung ist ein
-**Prefix-Match** (`validate.rs`: `matched && consumed == len`): spätere Stationen dürfen
-fehlen, ein laufendes Verfahren wie `SILAL` ist gültig.
+Lesbar: optional Entwurf/Kabinett (`S`), Einbringung (`I`), dann zwei oder drei Lesungen
+mit Ausschussberichten (`L A* L …`), am Ende Annahme mit Gesetzblatt und Inkrafttreten
+(`J G K`), Ablehnung (`N`) oder Rücknahme (`Z`). Nach `G`/`K` sind weitere `A` (Folgeberichte)
+und ein `C` (Verfassungsgerichtsstopp) erlaubt. Abstimmung in erster Lesung gibt es nicht
+(GO-LT BW §43 Abs. 4, DD-016).
 
 **Konsequenz:** Die Tests bauen die Buchstabenfolge und prüfen sie mit
-`regex.fullmatch(track, partial=True)` gegen eine wörtliche Kopie des Tracks
-(`_BW_GG_LAND_PARL_TRACK`).
+`regex.fullmatch(track, partial=True)`, das den Präfix-Match nachbildet, gegen eine wörtliche
+Kopie des BW-Tracks (`_BW_GG_LAND_PARL_TRACK`). Ändert sich die Trackdatei, gehören Kopie und
+dieser Abschnitt nachgezogen.
 
 <a id="dd-016"></a>
-## DD-016: BW nutzt den BY-Track unverändert
+## DD-016: BW-Track ohne Lockerung der Lesungen
 
 **Kontext:** Seit Backend v0.2.7 werden Tracks validiert. Ein eigener BW-Track mit optionalen
 Lesungen hätte PARLIS-Lücken kaschiert.
 
-**Entscheidung:** Kein eigener Track. Tracks bilden Parlamentsrecht ab; Lücken in PARLIS sind
-Scraper-Bugs. GO-LT BW §42 verlangt zwei Lesungen, §43 Abs. 4 verbietet die Abstimmung in
-erster Lesung, also `ILALN`, nie `ILN`. Daraus folgen DD-003, DD-012, DD-025, DD-031.
+**Entscheidung:** Keine optionalen Lesungen im Track. Tracks bilden Parlamentsrecht ab; Lücken
+in PARLIS sind Scraper-Bugs. Der eigene BW-Eintrag (DD-040) verlangt zwei oder drei Lesungen;
+Lockerungen gibt es nur nach dem Gesetzblatt (Folgeberichte, Verfassungsgerichtsstopp). GO-LT
+BW §42 verlangt zwei Lesungen, §43 Abs. 4 verbietet die Abstimmung in erster Lesung, also
+`ILALN`, nie `ILN`. Daraus folgen DD-003, DD-012, DD-025, DD-031.
 
 **Konsequenz:** Kollidierende `zp_start` verschiedener Typen werden vorwärts verschoben
 (`enforce_total_ordering`), damit die Sortierung eindeutig ist. Volksanträge
