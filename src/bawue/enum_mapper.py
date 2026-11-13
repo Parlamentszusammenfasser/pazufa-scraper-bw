@@ -166,7 +166,7 @@ _DOKUMENTENTYP_KEYS_SORTED = sorted(DOKUMENTENTYP_MAP.keys(), key=len, reverse=T
 
 
 # PARLIS files treaty laws as Gesetzgebung and Nachträge as Haushaltsgesetzgebung; the title tells (DD-085).
-_STAATSVERTRAG_RE = re.compile(r"Gesetz zu dem\b|Gesetz zum \S*[Ss]taatsvertrag")
+_STAATSVERTRAG_RE = re.compile(r"Gesetz zu dem\b")
 _NACHTRAG_RE = re.compile(r"Nachtrags? zum Staatshaushalt|Nachtragshaushaltsgesetz")
 
 

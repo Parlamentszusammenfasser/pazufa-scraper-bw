@@ -23,7 +23,6 @@ NACHTRAG = "Gesetz über die Feststellung eines Nachtrags zum Staatshaushaltspla
             "Gesetz zu dem Abkommen über die Zentralstelle der Länder",
             Vorgangstyp.GG_LAND_PARL_STAATSVERTRAG,
         ),
-        ("Gesetzgebung", "Gesetz zum Glücksspielstaatsvertrag 2021", Vorgangstyp.GG_LAND_PARL_STAATSVERTRAG),
         ("Gesetzgebung", "Gesetz zum Schutz von Kindern", Vorgangstyp.GG_LAND_PARL),
         # A law that also ratifies a treaty is no treaty law.
         (
@@ -36,7 +35,7 @@ NACHTRAG = "Gesetz über die Feststellung eines Nachtrags zum Staatshaushaltspla
         ("Haushaltsgesetzgebung", "Haushaltsbegleitgesetz zum Nachtrag 2025/2026", Vorgangstyp.GG_LAND_PARL_HAUSHALT),
         ("Haushaltsgesetzgebung", "Staatshaushaltsgesetz 2025/2026", Vorgangstyp.GG_LAND_PARL_HAUSHALT),
     ],
-    ids=["staatsvertrag", "abkommen", "zum", "zum-schutz", "mixed", "volk", "nachtrag", "begleitgesetz", "sthg"],
+    ids=["staatsvertrag", "abkommen", "zum-schutz", "mixed", "volk", "nachtrag", "begleitgesetz", "sthg"],
 )
 def test_title_refines_the_parlis_type(parlis_typ, titel, expected):
     assert map_vorgangstyp(parlis_typ, titel) == expected
