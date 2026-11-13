@@ -102,8 +102,9 @@ Typ eine eigene `vgtyp_class`
 ([pazufa-backend#227](https://codeberg.org/PaZuFa/pazufa-backend/issues/227)); das Backend führt
 nur innerhalb einer Klasse zusammen, auch bei gleicher `api_id`. Ein gespeicherter
 `gg-land-parl`-Vorgang wechselt den Typ deshalb nicht (HTTP 500, doppelte `api_id`): Ein Admin
-löscht beim Rollout die gespeicherten Haushalt-Vorgänge (WP 18: V-248475, V-248580; WP 17 vor
-einem Neulauf), bis dahin scheitert ihr Upload in jedem Lauf.
+löscht die gespeicherten Haushalt-Vorgänge (WP 18: V-248475, V-248580; WP 17 vor einem Neulauf),
+sobald diese Version in der Umgebung läuft; davor legte der alte Scraper sie wieder an. Bis zum
+Löschen scheitert ihr Upload in jedem Lauf, danach fehlen sie bis zum nächsten Lauf.
 
 <a id="dd-079"></a>
 ## DD-079: Referentenentwurf und Gesetzentwurf sind ein Vorgang
