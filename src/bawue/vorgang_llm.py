@@ -37,6 +37,7 @@ Regeln:
 - höchstens {KURZTITEL_MAX_LEN} Zeichen
 - einfache, verständliche Sprache; benenne, worum es inhaltlich geht
 - keine juristischen Floskeln wie „Gesetz zur Änderung des …“, keine Artikel- oder Paragrafenverweise
+- keine unerklärten Abkürzungen wie „ASVG“ oder „GewHAG“, benenne stattdessen den Inhalt; BW, EU u. Ä. sind erlaubt
 - als Substantivgruppe, ohne Verfahrensstand oder Ergebnis wie „umgesetzt“, „beschlossen“, „abgelehnt“ oder „in Kraft“
 - eine Zeile, kein Punkt am Ende, keine Anführungszeichen
 Ist der offizielle Titel bereits kurz und verständlich, übernimm ihn unverändert.
@@ -54,6 +55,10 @@ _STATUS_RE = re.compile(
     r"|\b(?:in|außer) Kraft\b(?!-)",
     re.IGNORECASE,
 )
+# Abbreviations readers know; others the titel uses stay out of the heading (issue #181).
+_KNOWN_ABBREVIATIONS = frozenset({"BW", "EU", "KI", "IT", "ÖPNV", "SWR", "AfD", "CDU", "SPD", "FDP", "DVP"})
+# Two capitals make an abbreviation (ASVG, GewHAG); Roman numerals (SGB XII) don't count.
+_ABBREVIATION_RE = re.compile(r"\b(?![IVXLC]+\b)\w*[A-ZÄÖÜ]\w*[A-ZÄÖÜ]\w*")
 _KURZTITEL_QUOTES = " \t\"'„“”«»"
 # A trailing period after a word of 2+ letters; keeps abbreviations like "e.V." or "u. a.".
 _TRAILING_PERIOD_RE = re.compile(r"(?<=[^\W\d_]{2})\.$")
@@ -66,7 +71,7 @@ def _clean_kurztitel(raw: object) -> str:
     return _TRAILING_PERIOD_RE.sub("", text).strip(_KURZTITEL_QUOTES)
 
 
-def _kurztitel_problem(kurztitel: str) -> str | None:
+def _kurztitel_problem(kurztitel: str, titel: str = "") -> str | None:
     """Why *kurztitel* breaks the rules, phrased for the re-prompt; None when valid."""
     if not kurztitel:
         return "Der Kurztitel ist leer."
@@ -80,6 +85,11 @@ def _kurztitel_problem(kurztitel: str) -> str | None:
         return "Der Kurztitel enthält juristische Floskeln oder Artikel-/Paragrafenverweise."
     if match := _STATUS_RE.search(kurztitel):
         return f"Der Kurztitel nennt einen Verfahrensstand („{match[0]}“), benenne nur den Gegenstand."
+    from_titel = set(_ABBREVIATION_RE.findall(titel)) - _KNOWN_ABBREVIATIONS
+    # "Gewalthilfeausführungsgesetz (GewHAG)" explains it: parenthesised ones pass.
+    unexplained_text = re.sub(r"\([^()]*\)", "", kurztitel)
+    if unexplained := next((a for a in _ABBREVIATION_RE.findall(unexplained_text) if a in from_titel), None):
+        return f"Der Kurztitel enthält die unerklärte Abkürzung „{unexplained}“, benenne stattdessen den Inhalt."
     return None
 
 
@@ -118,7 +128,7 @@ async def vorgang_kurztitel(
     try:
         for attempt in range(2):
             kurztitel = _clean_kurztitel((await llm_json(llm, model, messages)).get("kurztitel"))
-            problem = _kurztitel_problem(kurztitel)
+            problem = _kurztitel_problem(kurztitel, titel)
             if problem is None:
                 redis_set(cache, cache_key, kurztitel, prefix=_KURZTITEL_CACHE_PREFIX, typehint="Vorgang Kurztitel")
                 if metrics is not None:

@@ -42,6 +42,14 @@ Kurztitel keine Rolle (Issue #32).
 3. Fallback `titel` (LLM aus, Fehler, zweiter Verstoß) — nie `null`, nie der Slug.
 4. Cache `vorgang-kurztitel:<sha256(Modell + Prompts + Eingaben)>` (DD-063); nur
    generierte Titel, nicht der Fallback.
+5. Keine unerklärten Abkürzungen (Issue #181): Leser verstanden „ASVG“ und „GewHAG“ aus dem
+   Klammerzusatz des `titel` nicht. Der Prompt verbietet sie; enthält der Kurztitel ein Wort
+   mit zwei Großbuchstaben aus dem `titel`, wird nachgefragt — außer bekannten Kürzeln
+   (`_KNOWN_ABBREVIATIONS`: BW, EU, Parteien …), römischen Zahlen und erklärten in Klammern
+   („Gewalthilfeausführungsgesetz (GewHAG)“). Der `SYSTEM_PROMPT` verlangt dasselbe für
+   Zusammenfassungen: Abkürzungen beim ersten Vorkommen ausschreiben. Das ändert alle
+   `llm-semantics:`-, Kurztitel- und Ressort-Schlüssel (DD-063).
+   Neue Prompts gelten erst beim nächsten Neubau eines Vorgangs (DD-052).
 
 <a id="dd-055"></a>
 ## DD-055: `Vorgang.ressort` per LLM nach fachlichem Schwerpunkt

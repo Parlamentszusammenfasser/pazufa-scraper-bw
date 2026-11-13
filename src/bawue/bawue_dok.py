@@ -135,6 +135,9 @@ SYSTEM_PROMPT = (
     "Antworte nur mit dem reinen Text, ohne Einleitungen oder Erklärungen. "
     "Die Antwort darf nur die direkt angeforderten Informationen enthalten. "
     "Spekulationen oder Annahmen sind zu vermeiden. "
+    # Readers stumbled over law abbreviations like "ASVG" (issue #181).
+    "Abkürzungen außer allgemein bekannten (z. B. BW, EU) beim ersten Vorkommen ausschreiben, "
+    "etwa Agrarstrukturverbesserungsgesetz (ASVG). "
     # The model copied each source's own number format (DD-081).
     "Geldbeträge ab einer Milliarde in Mrd. Euro, ab einer Million in Mio. Euro mit zwei "
     "Nachkommastellen angeben (z. B. 1,32 Mrd. Euro statt 1.322.962.200 Euro oder 1,3229 Milliarden "
