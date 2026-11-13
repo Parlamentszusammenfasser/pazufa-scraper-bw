@@ -521,7 +521,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         # station building, when enrichment runs (issue #35).
         initiativ_vnr = _initiativ_drucksnr_from_fundstellen(fundstellen_parsed, initiative)
         stationen = await self._collect_stationen(fundstellen_parsed, initiative, vorgang_id, titel, initiativ_vnr)
-        api_id, portal = await self._entwurf(raw, vorgang_id, str(uuid5(NAMESPACE_URL, vorgang_id)), stationen)
+        api_id, portal = await self._entwurf(raw, typ, vorgang_id, str(uuid5(NAMESPACE_URL, vorgang_id)), stationen)
 
         if fundstellen_parsed and not stationen:
             logger.warning(
@@ -635,7 +635,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
         )
 
     async def _entwurf(
-        self, raw: RawVorgang, vorgang_id: str, api_id: str, stationen: list[Station]
+        self, raw: RawVorgang, typ: Vorgangstyp, vorgang_id: str, api_id: str, stationen: list[Station]
     ) -> tuple[str, str | None]:
         """The api_id to upload under and the portal page of the draft the bill grew from (DD-079).
 
@@ -656,7 +656,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             if match is None:
                 return api_id, None
             slug, score = match
-            upload_as = self._uebernehmen(slug, score, vorgang_id, api_id, map_vorgangstyp(raw.get("Vorgangstyp", "")))
+            upload_as = self._uebernehmen(slug, score, vorgang_id, api_id, typ)
             if upload_as is None:
                 return api_id, None
         if upload_as == api_id:
