@@ -78,6 +78,7 @@ markers = [
     "integration: marks tests requiring a running PaZuFa backend",
 ]
 addopts = "-m 'not integration'"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 target-version = "py312"
