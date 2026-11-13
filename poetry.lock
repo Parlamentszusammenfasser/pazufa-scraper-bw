@@ -2219,7 +2219,7 @@ files = [
 
 [[package]]
 name = "pazufa-corelib"
-version = "0.3.3"
+version = "0.3.4"
 description = "Core library for collecting parliamentary data"
 optional = false
 python-versions = ">=3.12,<3.15"
@@ -2240,8 +2240,8 @@ w3lib = "^2.4.1"
 [package.source]
 type = "git"
 url = "https://codeberg.org/PaZuFa/pazufa-scraper-core.git"
-reference = "v0.3.3"
-resolved_reference = "32ec7b8b7317669ae2fc8402db210f84394afb35"
+reference = "v0.3.4"
+resolved_reference = "3a4b9c85b67ccb12da7563398fbdf7a2847b729e"
 
 [[package]]
 name = "pazufa-metrics-client"
@@ -3902,4 +3902,4 @@ type = ["pytest-mypy (>=1.0.1) ; platform_python_implementation != \"PyPy\""]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<3.15"
-content-hash = "3793ebca060fe3c12e9f33e5ff5606f0e0126a174a4070b8b598951ced76edfa"
+content-hash = "96fd0d48c06e1bf193c2926a1f5966af55421686e1f7e9e13ba63ef4ad03ea19"
