@@ -131,6 +131,10 @@ nicht (Issue #75).
 4. Die synthetische Initiative fällt auf das Datum des Entwurfs zurück; ihre `api_id` ist
    datumsfrei (DD-046). Sie zurückzuhalten wurde verworfen: die Einbringung ist mit der
    Drucksache geschehen.
+5. Liegt danach noch eine Station nach jetzt, wartet der ganze Vorgang auf den nächsten Lauf:
+   Stationen stehen auf Mitternacht UTC plus Stunden-Bumps (`enforce_total_ordering`), und ab
+   Backend 0.3.6 scheitert eine Station nach jetzt mit HTTP 422. Das trifft nur die ersten
+   Stunden eines Tages.
 
 **Konsequenz:** Ein Vorgang mit geplanter Sitzung wird bis dahin in jedem Lauf hochgeladen.
 Früher hochgeladene künftige Stationen bleiben im Backend. Geplante Lesungen gehören als TOP

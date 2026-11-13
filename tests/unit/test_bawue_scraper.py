@@ -1306,6 +1306,34 @@ class TestItemExtractor:
         assert scraper._skipped == 1
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("now", "held"),
+        [
+            (datetime(2026, 2, 4, 23, 30, tzinfo=UTC), True),  # 00:30 in Berlin: the day is due (DD-068)
+            (datetime(2026, 2, 5, 0, 30, tzinfo=UTC), True),  # the reading is bumped to 01:00
+            (datetime(2026, 2, 5, 1, 0, tzinfo=UTC), False),
+        ],
+    )
+    async def test_holds_back_a_vorgang_with_a_station_after_now(self, monkeypatch, now, held):
+        """Backend 0.3.6 rejects a Station after now (HTTP 422): Stationen sit at midnight UTC plus
+        ordering bumps, so one dated today may still lie ahead. Not cached, retried next cycle."""
+
+        class _Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz)
+
+        monkeypatch.setattr("bawue.bawue_vorgaenge_scraper.datetime", _Clock)
+        fundstellen = [{**f, "datum": "05.02.2026"} for f in _make_raw_vorgang("V-1")["fundstellen_parsed"]]
+        scraper = _make_scraper_with_mock_parlis()
+        scraper._raw_cache["V-920"] = _make_raw_vorgang("V-920", fundstellen=fundstellen)
+
+        result = await scraper.item_extractor("V-920")
+
+        assert (result is None) is held
+        assert scraper._skipped == held
+
+    @pytest.mark.asyncio
     async def test_skips_vorgang_with_no_stations(self):
         """Vorgänge where all Fundstellen have unparseable dates produce no stations and are skipped."""
         scraper = _make_scraper_with_mock_parlis()

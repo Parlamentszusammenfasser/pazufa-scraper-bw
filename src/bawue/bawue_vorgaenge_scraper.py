@@ -440,6 +440,13 @@ class BawueVorgaengeScraper(VorgangsScraper):
                 self._skipped += 1
                 return None
 
+            # Backend 0.3.6 rejects a Station after now: midnight UTC plus ordering bumps can
+            # still lie ahead for a Fundstelle of today (DD-068). Not cached, so retried next cycle.
+            if any(s.zp_start > datetime.now(UTC) for s in vorgang.stationen):
+                logger.info("Holding back Vorgang %s until its latest Station has happened", vorgang_id)
+                self._skipped += 1
+                return None
+
             return vorgang
         finally:
             reset_vorgangs_id(token)
