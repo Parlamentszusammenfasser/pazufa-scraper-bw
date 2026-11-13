@@ -46,7 +46,7 @@ def _make_llm():
     from pazufa_corelib.llm import LLMConnector
 
     return LLMConnector(
-        model=os.environ.get("LLM_MODEL", "gpt-5-nano"),
+        model=os.environ.get("LLM_MODEL", "gpt-6-luna"),
         api_key=LLM_PROVIDER_KEY,
     )
 
@@ -122,7 +122,9 @@ class TestEntwurfEnrichment:
         assert enriched.typ == Doktyp.ENTWURF
         assert enriched.autoren[0].organisation == "Fraktion GRÜNE"
         assert enriched.autoren[1].organisation == "Fraktion der CDU"
-        assert enriched.zp_modifiziert == datetime(2026, 1, 15, tzinfo=UTC)
+        assert enriched.zp_referenz == datetime(2026, 1, 15, tzinfo=UTC)
+        # The printed "Ausgegeben:" date replaces the PARLIS one (issue #23, DD-061).
+        assert enriched.zp_modifiziert == datetime(2026, 2, 12, tzinfo=UTC)
 
     @pytest.mark.asyncio
     async def test_vorgang_kurztitel_is_short_and_readable(self):

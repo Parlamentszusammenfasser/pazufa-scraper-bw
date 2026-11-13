@@ -13,7 +13,7 @@ sichtbare Texte ändern.
 **Kontext:** Ein lokales Ollama lief über einen Workaround (`api_base` nachträglich gesetzt),
 den die corelib-Abschnittsextraktion nicht durchreichte.
 
-**Entscheidung:** Nur OpenAI (Default `gpt-5-nano`). `provider-base-url` und der Workaround
+**Entscheidung:** Nur OpenAI (Default `gpt-6-luna`, vorher `gpt-5-nano`, abgekündigt zum 11.12.2026, Issue #196). `provider-base-url` und der Workaround
 sind entfernt; auch Dev braucht einen OpenAI-Key.
 
 <a id="dd-013"></a>
@@ -32,8 +32,8 @@ Zielgesetz nicht (Issue #32, V-212391).
 **Entscheidung:**
 - Keine Kürzung unter `MAX_LLM_CHARS` (800 000 Zeichen, über dem größten WP17-Text mit
   773 000); das Seitenfenster um den `#page=N`-Anker begrenzt Protokolle. Darüber geht nur der
-  Anfang ans LLM: als Prosa ≈ 200k Tokens, unter dem Input-Limit von gpt-5-nano. Dichte
-  Tabellen können es noch überschreiten und bleiben ohne LLM-Felder (Issue #182).
+  Anfang ans LLM: als Prosa ≈ 200k Tokens, unter dem Input-Limit von gpt-6-luna (922k). Dichte
+  Tabellen über 272k Tokens kosten den doppelten Satz (Issue #182, #196).
 - Ein Kontext-Header nennt Vorgangstitel und Drucksache; bei mehreren Themen zählt nur
   dieses. Beide gehen in den Cache-Schlüssel ein.
 
