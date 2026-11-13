@@ -656,7 +656,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
             if match is None:
                 return api_id, None
             slug, score = match
-            upload_as = self._uebernehmen(slug, score, vorgang_id, api_id)
+            upload_as = self._uebernehmen(slug, score, vorgang_id, api_id, map_vorgangstyp(raw.get("Vorgangstyp", "")))
             if upload_as is None:
                 return api_id, None
         if upload_as == api_id:
@@ -666,7 +666,7 @@ class BawueVorgaengeScraper(VorgangsScraper):
     def _uebernahmen(self) -> dict[str, dict]:
         return json.loads(self.config.cache.get_raw(UEBERNAHMEN_KEY, "Übernahmen") or "{}")
 
-    def _uebernehmen(self, slug: str, score: float, vorgang_id: str, api_id: str) -> str | None:
+    def _uebernehmen(self, slug: str, score: float, vorgang_id: str, api_id: str, typ: Vorgangstyp) -> str | None:
         """Record the api_id the bill uploads under; None if another bill took the draft meanwhile.
 
         No await between read and write, so two bills of one cycle cannot both take it.
@@ -675,7 +675,9 @@ class BawueVorgaengeScraper(VorgangsScraper):
         if slug in uebernahmen:
             return None
         entwurf_api_id = self._entwuerfe[slug]["api_id"]
-        upload_as = api_id if vorgang_exists(self._client, api_id) else entwurf_api_id
+        # The backend merges only within a Vorgangstyp class; drafts are gg-land-parl (pazufa-backend#227).
+        keeps_own = typ != Vorgangstyp.GG_LAND_PARL or vorgang_exists(self._client, api_id)
+        upload_as = api_id if keeps_own else entwurf_api_id
         uebernahmen[slug] = {"vorgnr": vorgang_id, "api_id": upload_as}
         if not self.config.cache.store_raw(UEBERNAHMEN_KEY, json.dumps(uebernahmen), "Übernahmen"):
             self._retry_next_cycle.add(vorgang_id)

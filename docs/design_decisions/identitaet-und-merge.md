@@ -97,10 +97,13 @@ neu eingefügte Dokumente, die der Einzelpläne blieben sonst ohne Verknüpfung.
 `parl-ausschber` findet das Backend über die geteilte Beschlussempfehlung und aktualisiert sie.
 Jeder Haushaltsgesetzgebung-Vorgang, auch Begleitgesetz und Nachtrag, hat den Typ
 `gg-land-parl-haushalt` (BW-Track wie `gg-land-parl`, Tracks ab v0.1.2). Ein Marker im
-`vg2:`-Fingerprint baut gespeicherte einmal neu, auch abgeschlossene. Voraussetzung: Das Backend
-legt den Typ in die `vgtyp_class` von `gg-land-parl`
-([pazufa-backend#227](https://codeberg.org/PaZuFa/pazufa-backend/issues/227)), sonst scheitern
-erneute Uploads, der Typwechsel und die Übernahme eines Portal-Entwurfs (DD-079) mit HTTP 500.
+`vg2:`-Fingerprint baut gespeicherte einmal neu, auch abgeschlossene. Ab Backend 0.3.6 hat der
+Typ eine eigene `vgtyp_class`
+([pazufa-backend#227](https://codeberg.org/PaZuFa/pazufa-backend/issues/227)); das Backend führt
+nur innerhalb einer Klasse zusammen, auch bei gleicher `api_id`. Ein gespeicherter
+`gg-land-parl`-Vorgang wechselt den Typ deshalb nicht (HTTP 500, doppelte `api_id`): Ein Admin
+löscht beim Rollout die gespeicherten Haushalt-Vorgänge (WP 18: V-248475, V-248580; WP 17 vor
+einem Neulauf), bis dahin scheitert ihr Upload in jedem Lauf.
 
 <a id="dd-079"></a>
 ## DD-079: Referentenentwurf und Gesetzentwurf sind ein Vorgang
@@ -127,7 +130,9 @@ Gesetzentwurf in PARLIS teilten weder `api_id` noch `vg_ident`; das Backend legt
 4. Kennt das Backend den Vorgang noch nicht (`GET vorgang`), übernimmt er die `api_id` des
    Entwurfs; das Backend führt beide zusammen und behält die `preparl-regent`-Station. Sonst
    behält er seine `api_id` (zwei Kandidaten: `AmbiguousMatch`) und bekommt die Station mit
-   denselben Dokumenten; den Portal-Vorgang löscht ein Admin. Der Laufbericht (Mattermost) nennt
+   denselben Dokumenten; den Portal-Vorgang löscht ein Admin. Ein `-haushalt`-Gesetzentwurf geht
+   immer diesen Weg: Das Backend führt nur innerhalb einer `vgtyp_class` zusammen, der Entwurf ist
+   `gg-land-parl` (DD-077). Der Laufbericht (Mattermost) nennt
    ihn in jedem Lauf, bis `GET vorgang` ihn nicht mehr findet.
 5. Die Entscheidung steht nur in `entwurf-uebernahmen`. Danach lädt der Beteiligungs-Scraper den
    Entwurf nicht mehr hoch, geprüft auch direkt vor dem Upload: PARLIS schreibt den Vorgang, sonst
