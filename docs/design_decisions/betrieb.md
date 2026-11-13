@@ -36,7 +36,7 @@ Pydantic-Modell der corelib — der attrs-Client serialisiert ungeprüft, Drift 
 als HTTP 422 auf.
 
 <a id="dd-059"></a>
-## DD-059: corelib v0.3.x / Spec 0.2.7–0.2.8
+## DD-059: corelib v0.3.x / Spec 0.2.7–0.2.9
 
 **Entscheidung:**
 1. `PUT kalender` sendet `X-Scraper-Id` wieder (Spec 0.2.7 verlangt ihn).
@@ -61,6 +61,12 @@ als HTTP 422 auf.
      Stations-`api_id` (DD-028). Erst mit Backend-Fix und Migration.
    - `gg-land-parl-haushalt` erst mit einem BW-Track dafür (DD-077).
    - `parl-anhoerung`, `beschlussprotokoll`, `inhaltsprotokoll` gibt es in BW nicht (DD-057).
+6. **v0.3.3** / Spec 0.2.9 (GitHub #202):
+   - Die jetzt optionalen Zeitpunkte (`zp_start`, `termin`, `zp_modifiziert`, `zp_referenz`)
+     setzt BW weiterhin immer.
+   - LLM-Tokens gehen in die Metriken (DD-082).
+   - `berichtigung` bleibt ungemappt (DD-057); `gg-land-parl-staatsvertrag` und
+     `gg-land-parl-nachtragshaushalt` sind offen (GitHub #203).
 
 **Konsequenz:** corelibs `html_to_text` behandelt einen Text als HTML, sobald ein einzelnes
 Block-Tag vorkommt, und verliert dann alle Absätze — die Garbled-Filter (DD-015) arbeiten
