@@ -4908,6 +4908,7 @@ class TestIssue161OneTimeRebuild:
         if any(f.get("druckseiten") for f in raw["fundstellen_parsed"]):
             payload.append("tagesordnungspunkt")
         payload.append("zahlenformat")
+        payload.append("abkuerzungen-dokument-tags")
         return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
     @pytest.mark.parametrize(
@@ -5153,6 +5154,7 @@ class TestIssue74OneTimeRebuild:
         if any(f.get("gesetzblatt_nr") for f in raw["fundstellen_parsed"]):
             payload.append("postparl-kraft")
         payload.append("zahlenformat")
+        payload.append("abkuerzungen-dokument-tags")
         return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
     def test_vorgang_with_protocol_pages_gets_a_new_fingerprint(self):

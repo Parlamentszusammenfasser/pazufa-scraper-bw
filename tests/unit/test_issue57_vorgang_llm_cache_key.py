@@ -29,8 +29,8 @@ async def _lookup_key(call, model: str = "gpt-5-nano") -> str:
 @pytest.mark.parametrize(
     ("call", "golden"),
     [
-        (vorgang_kurztitel, "vorgang-kurztitel:8eb029e1637abcf2e205d7c823896d6adaa46e743748b9fdf5b9aa2e2207ff90"),
-        (vorgang_ressort, "vorgang-ressort:97e34c392773e0bfab42b9a7d16109e4205e36091eace1ba86a11152019739e1"),
+        (vorgang_kurztitel, "vorgang-kurztitel:42143915204ba0edfb94d6e114d6ff0c33d81bd83318292d65a6cdf79b258cbb"),
+        (vorgang_ressort, "vorgang-ressort:b16d5c2b3a697aae3daeaef7050ba2dcfa3b584a326823bc4ed26a0fbba0268d"),
     ],
     ids=["kurztitel", "ressort"],
 )

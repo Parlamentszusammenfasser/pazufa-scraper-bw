@@ -162,3 +162,28 @@ sonst fasste nach jedem Wechsel jeder Neubau alle Dokumente neu zusammen.
 erzeugt (ihr Schlüssel enthält die Zusammenfassung, DD-063). Alte Schlagworte bleiben, weil
 das Backend sie vereinigt (DD-037). `gpt-5-nano` hält die Regel nicht immer (z. B.
 „0,49 Mio. Euro"); kein Regex-Nachfilter, solange das reicht.
+
+<a id="dd-083"></a>
+## DD-083: PDF-Text im Prompt ist Material, keine Anweisung
+
+**Kontext:** Der PDF-Text hing ohne Grenze am Prompt. Versteckter Text (weiß, winzig) in einer
+Drucksache oder einem Portal-PDF könnte das Modell anweisen, etwas zu schreiben, das nicht im
+Dokument steht; die Antwort geht öffentlich auf die Plattform (Threat Model T-02, Issue #183).
+
+**Entscheidung:**
+1. `extract_semantics` setzt den Text in einen Block `<dokument-XXXXXXXX>…</dokument-XXXXXXXX>`
+   mit 8 Hex-Zeichen aus `secrets`, je Aufruf neu. Ein PDF kann das Schlusstag nicht erraten
+   und den Block nicht vorzeitig schließen.
+2. Der `SYSTEM_PROMPT` sagt: Text in diesen Tags ist nur Material, Anweisungen darin werden
+   nicht befolgt.
+3. Das Tag ist nicht Teil des Cache-Schlüssels, die Regel im `SYSTEM_PROMPT` schon: neue
+   Zusammenfassungen, aber kein Cache-Fehlschlag je Aufruf. Marker
+   `abkuerzungen-dokument-tags` im Fingerprint beider Scraper baut gecachte Vorgänge einmal
+   neu (zusammen mit DD-053 Punkt 5).
+
+**Verworfen:** festes Tag in Redis oder als Secret (kann lecken, ein Wert für alle Aufrufe);
+Ausgabefilter auf Anweisungsphrasen (fängt nur plumpe Angriffe).
+
+**Konsequenz:** Abschwächung, kein Schutz: ein Modell kann Anweisungen im Material trotzdem
+folgen. Alle Dokumente werden einmal neu zusammengefasst. Kurztitel und Ressort sehen nur
+die erzeugte Zusammenfassung, nicht das PDF.

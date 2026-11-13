@@ -461,7 +461,8 @@ def _print_beteiligung_summary(
 def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungDetail) -> str:
     """What shows progress on the portal (issue #104): status, title, ministry, PDFs, deadline (#148)."""
     pdfs = sorted([link["url"], link["title"]] for link in detail.pdf_links)
-    # One-time rebuilds: registers "fristen" (DD-076), "entwuerfe" (DD-079); money format (DD-081).
+    # One-time rebuilds: registers "fristen" (DD-076), "entwuerfe" (DD-079); money format (DD-081);
+    # summary prompt (DD-053, DD-083).
     payload = [
         process.status,
         detail.title,
@@ -471,5 +472,6 @@ def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungD
         "fristen",
         "entwuerfe",
         "zahlenformat",
+        "abkuerzungen-dokument-tags",
     ]
     return sha256(json.dumps(payload, ensure_ascii=False, default=str).encode()).hexdigest()

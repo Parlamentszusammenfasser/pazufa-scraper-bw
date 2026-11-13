@@ -175,6 +175,8 @@ def _vorgang_fingerprint(raw: RawVorgang, entwuerfe: list[str] | None = None) ->
         payload.append("kurzreferat")
     # Rebuild cached Vorgänge once, so documents are summarised with one money format (DD-081).
     payload.append("zahlenformat")
+    # Rebuild cached Vorgänge once for the new summary prompt (DD-053 abbreviations, DD-083 tags).
+    payload.append("abkuerzungen-dokument-tags")
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 
