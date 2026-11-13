@@ -22,7 +22,7 @@ from bawue.beteiligung_client import BASE_URL
 from bawue.beteiligung_parser import parse_process_detail
 from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY, RedisUnavailableError
 from bawue.pdf_text import PdfNotAvailableError
-from bawue.types import UNSET, Doktyp, Stationstyp, Vorgang, Vorgangstyp
+from bawue.types import UNSET, Doktyp, Stationstyp, Vorgang
 from bawue.upload_throttle import UploadOutcome
 from tests.factories import make_scraper
 from tests.unit.test_bawue_scraper import _InMemoryCache, _make_raw_vorgang
@@ -88,11 +88,8 @@ def _backend_merges(a: Vorgang, b: Vorgang) -> bool:
     def ids(v: Vorgang) -> set[tuple[str, str]]:
         return set() if v.ids is UNSET else {(i.typ, i.id) for i in v.ids}
 
-    # Assumes the fix proposed in pazufa-backend#227: gg-land-parl-haushalt in gg-land-parl's vgtyp_class.
-    def vgtyp_class(v: Vorgang) -> Vorgangstyp:
-        return Vorgangstyp.GG_LAND_PARL if v.typ == Vorgangstyp.GG_LAND_PARL_HAUSHALT else v.typ
-
-    same_frame = a.wahlperiode == b.wahlperiode and vgtyp_class(a) == vgtyp_class(b)
+    # Each BW Vorgangstyp is its own backend class (pazufa-backend#227, v0.3.6).
+    same_frame = a.wahlperiode == b.wahlperiode and a.typ == b.typ
     return same_frame and (a.api_id == b.api_id or bool(ids(a) & ids(b)))
 
 
@@ -174,23 +171,39 @@ def _uebernahmen(cache) -> dict:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("pair", "score"), [(BVANP, "0.86"), (HBEGLG, "0.89")], ids=["18-623", "18-701"])
-async def test_issue180_new_bill_takes_over_the_draft(pair, score):
+async def test_issue180_new_bill_takes_over_the_draft():
     """The backend merges the bill into the draft's Vorgang, which keeps its regent station."""
     cache = _InMemoryCache()
-    regent = await _upload_draft(cache, pair)
+    regent = await _upload_draft(cache, BVANP)
     scraper = _parlis(cache)
 
-    parlis, _, exists = await _build(scraper, _raw(pair), _pdfs(pair))
+    parlis, _, exists = await _build(scraper, _raw(BVANP), _pdfs(BVANP))
 
     assert _backend_merges(regent, parlis)
     assert parlis.api_id == regent.api_id
     assert Stationstyp.PREPARL_REGENT not in [s.typ for s in parlis.stationen]
     assert regent.links[0] in parlis.links
-    exists.assert_called_once_with(ANY, _own_api_id(pair))
-    assert _uebernahmen(cache) == {pair.slug: {"vorgnr": pair.vid, "api_id": regent.api_id}}
+    exists.assert_called_once_with(ANY, _own_api_id(BVANP))
+    assert _uebernahmen(cache) == {BVANP.slug: {"vorgnr": BVANP.vid, "api_id": regent.api_id}}
     # A wrong match would be silent otherwise.
-    assert scraper._entwurf_joins == [f"{pair.vid} ← {pair.slug} ({score})"]
+    assert scraper._entwurf_joins == [f"{BVANP.vid} ← {BVANP.slug} (0.86)"]
+
+
+@pytest.mark.asyncio
+async def test_issue60_haushalt_bill_keeps_its_api_id_and_gains_the_draft_station():
+    """18/701: the backend never merges a -haushalt bill into a gg-land-parl draft; taking its api_id gave HTTP 500."""
+    cache = _InMemoryCache()
+    regent = await _upload_draft(cache, HBEGLG)
+    scraper = _parlis(cache)
+
+    parlis, _, exists = await _build(scraper, _raw(HBEGLG), _pdfs(HBEGLG))
+
+    assert not _backend_merges(regent, parlis)
+    assert parlis.api_id == _own_api_id(HBEGLG)
+    assert Stationstyp.PREPARL_REGENT in [s.typ for s in parlis.stationen]
+    exists.assert_not_called()
+    assert _uebernahmen(cache) == {HBEGLG.slug: {"vorgnr": HBEGLG.vid, "api_id": _own_api_id(HBEGLG)}}
+    assert scraper._entwurf_joins == [f"{HBEGLG.vid} ← {HBEGLG.slug} (0.89)"]
 
 
 @pytest.mark.asyncio
@@ -521,15 +534,15 @@ async def test_draft_the_portal_removed_is_no_candidate():
     """A 404 draft would block every bill in its window for a year; the bill's own draft still wins."""
     cache = _InMemoryCache()
     gone = await _upload_draft(cache, BVANP)
-    regent = await _upload_draft(cache, HBEGLG)
+    await _upload_draft(cache, HBEGLG)
     pdfs: dict[str, str | Exception] = {**_pdfs(BVANP, HBEGLG)}
     gone_pdf = gone.stationen[0].dokumente[0].link
     pdfs[gone_pdf] = PdfNotAvailableError(404, gone_pdf)
     scraper = _parlis(cache)
 
-    parlis, _, _ = await _build(scraper, _raw(HBEGLG), pdfs)
+    await _build(scraper, _raw(HBEGLG), pdfs)
 
-    assert parlis.api_id == regent.api_id
+    assert list(_uebernahmen(cache)) == [HBEGLG.slug]
     assert HBEGLG.vid not in scraper._retry_next_cycle
 
 
