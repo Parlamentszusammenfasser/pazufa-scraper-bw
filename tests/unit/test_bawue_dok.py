@@ -2322,12 +2322,12 @@ class TestIssue42PartialSummaries:
     @pytest.mark.parametrize(
         ("doktyp", "fingerprint"),
         [
-            (Doktyp.ENTWURF, "894079498108303667793eb3d0f7b95269d9629d4c736e8960a50de8e2ebcd0f"),
-            (Doktyp.PREPARL_ENTWURF, "894079498108303667793eb3d0f7b95269d9629d4c736e8960a50de8e2ebcd0f"),
-            (Doktyp.BESCHLUSSEMPF, "dc32ab20dc4d4b71360744afa847855a5b5c881e4cbca6c8399051a3416183b2"),
-            (Doktyp.STELLUNGNAHME, "abfcb830898165e96988088896b3dc8da5059e21a0713e89bfcc372904a4078c"),
-            (Doktyp.REDEPROTOKOLL, "2999889f8b2d20ab676aef17a22123d70a36106e58d36b9996a575af4d163bf4"),
-            (Doktyp.SONSTIG, "c14a1681daec5a563a7144e593d8616a20b93935fb25dac5f2ad60644315ab2f"),  # GENERIC
+            (Doktyp.ENTWURF, "47a4621373de59a01f19cce5e18de27af42f0aa07c2c63f5c03a3eac51d127a9"),
+            (Doktyp.PREPARL_ENTWURF, "47a4621373de59a01f19cce5e18de27af42f0aa07c2c63f5c03a3eac51d127a9"),
+            (Doktyp.BESCHLUSSEMPF, "53aeb1610b98f34f6e8f8e331eb454899216dfc7b45eb4c6814d3ebf3bda988a"),
+            (Doktyp.STELLUNGNAHME, "60212d017fef172ec797b8cfbed22a2f3ea4680a7875158db6c81f5a2bf8edf7"),
+            (Doktyp.REDEPROTOKOLL, "358f67c228f289a141226b1aef46d1e5878611292ca163b227d084802a5d3d94"),
+            (Doktyp.SONSTIG, "b674629fdf12743c78d9169ecaeebf124b72ca64d4506990ff0d6ef28871aa65"),  # GENERIC
         ],
     )
     def test_prompt_fingerprint_is_pinned(self, doktyp, fingerprint):
