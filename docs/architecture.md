@@ -122,8 +122,8 @@ Dashed arrows: the pre-parliamentary stages are optional.
 - Caching: Redis `BawueCache`, no TTL; a Vorgang is skipped only while its PARLIS fingerprint is unchanged (DD-052),
   a Sitzungen date only while its events, Beteiligungsfristen and agenda are unchanged (DD-066, DD-070, DD-076)
 - Models: Generated from the OpenAPI spec by `pazufa-scraper-core` — no hand-written models
-- The PaZuFa backend merges Vorgänge on a shared `api_id` or `vg_ident` — the scraper only keeps them
-  stable, and gives a bill its draft's `api_id` (DD-079)
+- The PaZuFa backend merges Vorgänge of one Vorgangstyp class on a shared `api_id` or `vg_ident` — the
+  scraper only keeps them stable, and gives a `gg-land-parl` bill its draft's `api_id` (DD-079)
 - The backend validates every Vorgang against its track: Stationen sorted by `zp_start`, each type
   mapped to a letter, the letters checked as a prefix of `[tracks.BW].<Vorgangstyp>` from the
   spec's `tracks.toml` (DD-040). Ordering logic must therefore reason about `zp_start`.
@@ -361,7 +361,8 @@ Uses `_raw_cache` to bridge the listing/item phases. Configuration from `[bawue]
 The station rules that need no scraper state (merging, ordering, stable `api_id`s) are plain functions
 in `stationen.py`.
 A Landesregierung bill takes over the `api_id` of the Beteiligung draft whose text its Drucksache
-contains, or gains the draft's station if the backend already has the bill (`entwurf_match.py`, DD-079).
+contains, or gains the draft's station if the backend already has the bill or it is a budget bill
+(`entwurf_match.py`, DD-079).
 
 Only the Vorgangstypen listed under `enabled-vorgangstypen` in `config.toml` are scraped (default: `Gesetzgebung`,
 `Haushaltsgesetzgebung`, `Volksantrag`). These are the only types with full PaZuFa model support. Results with any
