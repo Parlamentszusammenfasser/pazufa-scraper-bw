@@ -46,7 +46,7 @@ def _make_llm():
     from pazufa_corelib.llm import LLMConnector
 
     return LLMConnector(
-        model=os.environ.get("LLM_MODEL", "gpt-5-nano"),
+        model=os.environ.get("LLM_MODEL", "gpt-6-luna"),
         api_key=LLM_PROVIDER_KEY,
     )
 

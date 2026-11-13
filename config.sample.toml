@@ -24,13 +24,10 @@ ltzf-api-key = "SET_VIA_ENV"
 [llm]
 # provider-key is read from the LLM_PROVIDER_KEY env var (keep secrets out of the file).
 # provider-key = "SET_VIA_ENV"
-model = "gpt-5-nano"
+model = "gpt-6-luna"
 # Model alternatives (cost per doc: full document input + ~300 output tokens):
-#   gpt-5-nano     $0.05/$0.40   ~$0.0007/doc  (default, cheapest)
-#   gpt-4.1-nano   $0.10/$0.40   ~$0.0013/doc  (1M context window)
-#   gpt-4o-mini    $0.15/$0.60   ~$0.0020/doc  (proven, older)
-#   gpt-5.4-nano   $0.20/$1.25   ~$0.0028/doc  (newest nano, best quality/cost)
-#   gpt-4.1-mini   $0.40/$1.60   ~$0.0053/doc  (better reasoning)
+#   gpt-6-luna     $0.10/$0.50   ~$0.0015/doc  (default, cheapest; gpt-5-nano successor, issue #196)
+#   gpt-5.6-luna   $0.20/$1.20   ~$0.0030/doc  (previous luna generation)
 #   gpt-5.4-mini   $0.75/$4.50   ~$0.0104/doc  (best quality in budget tier)
 
 # BaWue-specific configuration

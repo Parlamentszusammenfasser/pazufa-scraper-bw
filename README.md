@@ -242,14 +242,14 @@ pipeline checks both linting and formatting on every push and pull request.
 ### LLM Document Enrichment
 
 The scraper optionally enriches documents with LLM-extracted metadata (summary, keywords, short title).
-The provider is OpenAI (`gpt-5-nano` by default). Enrichment is enabled when `LLM_PROVIDER_KEY` is set.
+The provider is OpenAI (`gpt-6-luna` by default). Enrichment is enabled when `LLM_PROVIDER_KEY` is set.
 
 Set the API key in `config.toml` or via the `LLM_PROVIDER_KEY` environment variable:
 
 ```toml
 [llm]
 provider-key = "sk-..."
-model = "gpt-5-nano"              # default; see config.sample.toml for alternatives
+model = "gpt-6-luna"              # default; see config.sample.toml for alternatives
 ```
 
 For plenary protocols (`redeprotokoll`), the summary input is first narrowed to the debated bill's
@@ -294,7 +294,7 @@ cp .env.example .env
 | `LTZF_API_URL`          | PaZuFa backend URL (e.g. `https://staging.api.pazufa.de`) |
 | `LTZF_API_KEY`          | PaZuFa API key (`ltzf_...`)                               |
 | `LLM_PROVIDER_KEY`      | OpenAI API key (`sk-...`)                                 |
-| `LLM_MODEL`             | LLM model override (default `gpt-5-nano`)                 |
+| `LLM_MODEL`             | LLM model override (default `gpt-6-luna`)                 |
 
 **2. Start the stack:**
 ```bash

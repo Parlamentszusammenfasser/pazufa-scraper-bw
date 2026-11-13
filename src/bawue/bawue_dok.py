@@ -95,8 +95,8 @@ class LLMMetrics:
 
 MAX_JSON_RETRIES = 3
 _LLM_LIMIT = 3
-# Above the largest WP17 text (773k). Prose is ≈200k tokens, under gpt-5-nano's 272k input limit;
-# denser tables can still exceed it and then fall back to text-only (issue #182, DD-029).
+# Above the largest WP17 text (773k). Prose is ≈200k tokens, under gpt-6-luna's 922k input limit;
+# past 272k tokens it bills at double rate (issue #182, DD-029).
 MAX_LLM_CHARS = 800_000
 
 
@@ -433,7 +433,7 @@ async def extract_semantics(
     llm: LLMConnector,
     full_text: str,
     doktyp: Doktyp,
-    model: str = "gpt-5-nano",
+    model: str = "gpt-6-luna",
     dok_titel: str | None = None,
     drucksnr: str | None = None,
     body_prompt: str | None = None,
@@ -552,7 +552,7 @@ async def enrich_dokument(
     session,
     llm: LLMConnector,
     dok: Dokument,
-    model: str = "gpt-5-nano",
+    model: str = "gpt-6-luna",
     vorgang_titel: str | None = None,
     vorgang_vnr: str | None = None,
     metrics: LLMMetrics | None = None,

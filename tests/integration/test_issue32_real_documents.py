@@ -60,7 +60,7 @@ PP_17_12_PAGE_HINT = 30
 # The token budget the removed truncation used (DD-013). The regression this test
 # guards is precisely that the relevant debate lived beyond this cut.
 _OLD_TRUNCATE_TOKENS = 12000
-_MODEL = "gpt-5-nano"
+_MODEL = "gpt-6-luna"
 
 # Bill identity, exactly as printed in the protocol: agenda item 4, "Gesetz zur
 # Änderung des Fischereigesetzes für Baden-Württemberg", Drucksache 17/529.

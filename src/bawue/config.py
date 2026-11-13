@@ -124,7 +124,7 @@ class BawueConfig:
             # llm — provider_key enables LLM enrichment (see bawue_vorgaenge_scraper /
             # bawue_beteiligung_scraper).
             ConfigProp("llm_provider_key", "llm.provider-key", "LLM_PROVIDER_KEY"),
-            ConfigProp("llm_model", "llm.model", "LLM_MODEL", None, "gpt-5-nano"),
+            ConfigProp("llm_model", "llm.model", "LLM_MODEL", None, "gpt-6-luna"),
             # Grafana: metrics to the Pushgateway, logs to Loki; both only with a password (DD-082).
             ConfigProp(
                 "prometheus_url", "observability.prometheus-url", "PROMETHEUS_URL", None, "https://prom.pazufa.de/"

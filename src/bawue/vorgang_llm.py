@@ -87,7 +87,7 @@ async def vorgang_kurztitel(
     llm: LLMConnector | None,
     titel: str,
     zusammenfassung: str | None,
-    model: str = "gpt-5-nano",
+    model: str = "gpt-6-luna",
     cache: BawueCache | None = None,
     metrics: LLMMetrics | None = None,
 ) -> str:
@@ -168,7 +168,7 @@ async def vorgang_ressort(
     llm: LLMConnector | None,
     titel: str,
     zusammenfassung: str | None,
-    model: str = "gpt-5-nano",
+    model: str = "gpt-6-luna",
     cache: BawueCache | None = None,
     metrics: LLMMetrics | None = None,
 ) -> Ressort | None:
