@@ -28,7 +28,7 @@ toml = ">=0.10"
 icalendar = ">=7.0"
 certifi = ">=2026.10.23"
 python-json-logger = "^3.2"
-litellm = ">=1.108.3"
+litellm = ">=1.109.1"
 json-repair = "^0.64"
 
 [tool.poetry.group.dev.dependencies]
@@ -38,9 +38,9 @@ json-repair = "^0.64"
 pytest = "^9.2"
 pytest-cov = "^7.0"
 pytest-mock = "^3.15"
-pytest-asyncio = "^1.4"
+pytest-asyncio = "^1.5"
 responses = "^0.26"
-pytest-httpserver = "^1.1"
+pytest-httpserver = "^1.2"
 ruff = "^0.17"
 
 [build-system]
