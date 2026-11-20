@@ -77,7 +77,7 @@ class TestV244180Juristenausbildungsgesetz:
     async def test_gesetzblatt_is_landesregierung_not_fraktion(self):
         gesetz = _by_titel(await _build(_load("v244180")), "Gesetz")
         assert "gesetzblaetter/2026/GBl2026012.pdf" in gesetz.link
-        assert _autoren(gesetz) == ["Landesregierung"]
+        assert _autoren(gesetz) == ["Landesregierung Baden-Württemberg"]
 
     @pytest.mark.asyncio
     async def test_gesetzesbeschluss_is_landtag(self):
@@ -125,7 +125,7 @@ class TestV217223Medienstaatsvertrag:
         # in parliament. Both keep the author PARLIS supplies.
         vorgang = await _build(_load("v217223"))
         entwuerfe = [d for _, d in _dokumente(vorgang) if d.titel == "Gesetzentwurf"]
-        assert [_autoren(d) for d in entwuerfe] == [["Landesregierung"], ["Landesregierung"]]
+        assert [_autoren(d) for d in entwuerfe] == [["Landesregierung Baden-Württemberg"]] * 2
 
 
 class TestV237492StaatshaushaltsplanEinzelplan11:
@@ -146,6 +146,6 @@ class TestV237492StaatshaushaltsplanEinzelplan11:
     @pytest.mark.asyncio
     async def test_no_document_carries_the_landesregierung_except_its_entwurf(self):
         vorgang = await _build(_load("v237492"))
-        carrying = [d.titel for _, d in _dokumente(vorgang) if "Landesregierung" in _autoren(d)]
+        carrying = [d.titel for _, d in _dokumente(vorgang) if "Landesregierung Baden-Württemberg" in _autoren(d)]
         # Twice: the Regierungsentwurf is listed at the cabinet station and in parliament.
         assert carrying == ["Gesetzentwurf", "Gesetzentwurf"]

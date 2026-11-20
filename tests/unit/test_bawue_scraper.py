@@ -688,7 +688,7 @@ class TestBuildVorgang:
         vorgang = await scraper_build_vorgang(raw)
 
         assert vorgang.typ == Vorgangstyp.GG_LAND_PARL
-        assert vorgang.initiatoren[0].organisation == "Landesregierung"
+        assert vorgang.initiatoren[0].organisation == "Landesregierung Baden-Württemberg"
 
         station = vorgang.stationen[0]
         assert station.typ == Stationstyp.PREPARL_REGBSL
@@ -810,7 +810,7 @@ class TestBuildVorgang:
         vorgang = await scraper_build_vorgang(raw)
 
         assert len(vorgang.initiatoren) == 1
-        assert vorgang.initiatoren[0].organisation == "Landesregierung"
+        assert vorgang.initiatoren[0].organisation == "Landesregierung Baden-Württemberg"
 
     @pytest.mark.asyncio
     async def test_missing_initiative_fundstelle_without_autor_produces_empty(self, scraper_build_vorgang):
@@ -1809,7 +1809,7 @@ class TestBuildStationAutoren:
         station = (await scraper_build_vorgang(raw)).stationen[0]
         assert station.typ == Stationstyp.PARL_VOLLVLSGN
         autoren = {d.titel: [a.organisation for a in d.autoren] for d in station.dokumente}
-        assert autoren == {"Zweite Beratung": ["Landtag"], "Änderungsantrag": ["Landesregierung"]}
+        assert autoren == {"Zweite Beratung": ["Landtag"], "Änderungsantrag": ["Landesregierung Baden-Württemberg"]}
 
     @pytest.mark.asyncio
     async def test_multiple_autoren_from_fundstelle(self, scraper_build_vorgang):

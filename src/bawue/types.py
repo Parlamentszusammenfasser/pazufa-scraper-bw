@@ -105,7 +105,7 @@ class CanonicalOrganisation(StrEnum):
     FRAKTION_SPD = "Fraktion der SPD"
     FRAKTION_FDP_DVP = "Fraktion der FDP/DVP"
     FRAKTION_AFD = "Fraktion der AfD"
-    LANDESREGIERUNG = "Landesregierung"
+    LANDESREGIERUNG = "Landesregierung Baden-Württemberg"  # #219: distinguishable from other Länder
     LANDTAG = "Landtag"
 
 
@@ -134,7 +134,7 @@ _ORGANISATION_ALIASES: dict[str, CanonicalOrganisation] = {
     "afdfraktion": CanonicalOrganisation.FRAKTION_AFD,
     "alternativefürdeutschlandafd": CanonicalOrganisation.FRAKTION_AFD,  # seen in BY data
     # Landesregierung
-    "landesregierung": CanonicalOrganisation.LANDESREGIERUNG,
+    "landesregierung": CanonicalOrganisation.LANDESREGIERUNG,  # PARLIS writes the bare form
     "landesregierungbadenwürttemberg": CanonicalOrganisation.LANDESREGIERUNG,
     "badenwürttembergischelandesregierung": CanonicalOrganisation.LANDESREGIERUNG,
     "regierungbadenwürttemberg": CanonicalOrganisation.LANDESREGIERUNG,
