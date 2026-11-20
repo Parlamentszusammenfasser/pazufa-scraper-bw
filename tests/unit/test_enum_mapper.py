@@ -527,7 +527,7 @@ class TestReservedGremiumNames:
 # to Autor.organisation instead of Dokument.titel). The "expected" column
 # is the canonical form canonicalize_organisation should return.
 OBSERVED_ORGANISATIONS: list[tuple[str, str]] = [
-    ("Landesregierung", "Landesregierung"),
+    ("Landesregierung", "Landesregierung Baden-Württemberg"),  # #219: the Land in the name
     ("Fraktion GRÜNE", "Fraktion GRÜNE"),
     ("Fraktion der CDU", "Fraktion der CDU"),
     ("Fraktion der SPD", "Fraktion der SPD"),
@@ -558,7 +558,7 @@ class TestCanonicalOrganisation:
             "Fraktion der SPD",
             "Fraktion der FDP/DVP",
             "Fraktion der AfD",
-            "Landesregierung",
+            "Landesregierung Baden-Württemberg",
             "Landtag",
         }
 

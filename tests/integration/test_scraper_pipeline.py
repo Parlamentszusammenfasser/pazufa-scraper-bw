@@ -124,7 +124,7 @@ class TestGesetzgebungFullLifecycle:
             await s.session.close()
 
         vg = mock_backend.vorgaenge[0]
-        assert vg["initiatoren"][0]["organisation"] == "Landesregierung"
+        assert vg["initiatoren"][0]["organisation"] == "Landesregierung Baden-Württemberg"
 
         station = vg["stationen"][0]
         assert station["typ"] == Stationstyp.PREPARL_REGBSL.value

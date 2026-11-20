@@ -43,13 +43,16 @@ weiter Vorrang.
 unter drei Strings.
 
 **Entscheidung:** `canonicalize_organisation()` bildet eine geschlossene Menge ab
-(`CanonicalOrganisation`: 5 Fraktionen, `Landesregierung`, `Landtag`), Schreibweise wie auf
-der Landtag-Website (`Fraktion GRÜNE` ohne „der"). Varianten löst eine Alias-Tabelle auf
-(ohne Groß-/Kleinschreibung und Sonderzeichen). Alles andere passiert unverändert.
+(`CanonicalOrganisation`: 5 Fraktionen, `Landesregierung Baden-Württemberg`, `Landtag`),
+Schreibweise wie auf der Landtag-Website (`Fraktion GRÜNE` ohne „der"). Varianten löst eine
+Alias-Tabelle auf (ohne Groß-/Kleinschreibung und Sonderzeichen), auch PARLIS' blankes
+„Landesregierung". Alles andere passiert unverändert.
 
 **Konsequenz:** Ministerien und Personen werden nicht normalisiert — Ministerien werden oft
 umbenannt, Personennamen sind zu heterogen. Neue Varianten nach einem vollen Lauf aus dem
-JSONL suchen und als Alias ergänzen (`OBSERVED_ORGANISATIONS` im Test pinnt sie).
+JSONL suchen und als Alias ergänzen (`OBSERVED_ORGANISATIONS` im Test pinnt sie). Die
+Landesregierung trägt das Land im Namen (GitHub #219): Übersichten gruppieren nach Initiator,
+und BE/BB senden ein blankes „Landesregierung" (RP: „Landesregierung Rheinland-Pfalz").
 
 <a id="dd-042"></a>
 ## DD-042: Autor eines Dokuments: wer es erstellt hat, nicht wer den Vorgang startete
@@ -62,7 +65,7 @@ unterzeichnetes Gesetzblatt als „Fraktion der SPD" in der Datenbank (Issues #7
 1. `autor_text` der Fundstelle,
 2. `ausschuss` der Fundstelle (die Spec erlaubt Gremien als Autor),
 3. ausstellendes Organ (`_issuing_organ`): Doktyp `redeprotokoll` → `Landtag`; sonst nach
-   Station: Lesung, Annahme, Ablehnung → `Landtag`, `postparl-gsblt` → `Landesregierung`,
+   Station: Lesung, Annahme, Ablehnung → `Landtag`, `postparl-gsblt` → Landesregierung (DD-022),
 4. Initiator des Vorgangs.
 
 **Konsequenz:** Eingereichte Dokumente (`parl-initiativ`, `preparl-*`, auch angehängte
