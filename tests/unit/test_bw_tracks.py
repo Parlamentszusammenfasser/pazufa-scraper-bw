@@ -72,7 +72,8 @@ def test_invalid_track(track):
 
 def test_every_vorgangstyp_the_scraper_maps_has_a_bw_track():
     """Else „not specified for parliament BW“. ``sonstig`` is off by default; ``gg-land-volk`` is a gap (DD-016)."""
-    mapped = set(VORGANGSTYP_MAP.values()) - {Vorgangstyp.SONSTIG, Vorgangstyp.GG_LAND_VOLK}
+    by_titel = {Vorgangstyp.GG_LAND_PARL_STAATSVERTRAG, Vorgangstyp.GG_LAND_PARL_NACHTRAGSHAUSHALT}  # DD-085
+    mapped = {*VORGANGSTYP_MAP.values(), *by_titel} - {Vorgangstyp.SONSTIG, Vorgangstyp.GG_LAND_VOLK}
     assert mapped <= BW_TRACKS.keys()
 
 

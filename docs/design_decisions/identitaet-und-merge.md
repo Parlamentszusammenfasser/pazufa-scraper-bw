@@ -233,8 +233,8 @@ PARLIS führt Vertragsgesetze als „Gesetzgebung", Nachträge als „Haushaltsg
   (DD-079).
 - Marker mit dem Typ im `vg2:`-Fingerprint baut gespeicherte einmal neu.
 
-**Konsequenz:** Erst mit einem Backend, dessen Tracks beide Typen für BW führen (sonst
-HTTP 400). Jeder Typ hat eine eigene `vgtyp_class`; ein gespeicherter Vorgang wechselt den Typ
+**Konsequenz:** Erst mit einem Backend, das tracks ≥ v0.1.4 lädt (sonst „not specified for
+parliament BW“, HTTP 500, DD-040). Jeder Typ hat eine eigene `vgtyp_class`; ein gespeicherter Vorgang wechselt den Typ
 nicht (HTTP 500, wie DD-077): Ein Admin löscht die gespeicherten Vertragsgesetze und Nachträge
 (WP 18: V-247045; WP 17 vor einem Neulauf), sobald diese Version in der Umgebung läuft. Bis zum
 Löschen scheitert ihr Upload in jedem Lauf, danach fehlen sie bis zum nächsten Lauf.
