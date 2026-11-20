@@ -65,8 +65,8 @@ als HTTP 422 auf.
    - Die jetzt optionalen Zeitpunkte (`zp_start`, `termin`, `zp_modifiziert`, `zp_referenz`)
      setzt BW weiterhin immer.
    - LLM-Tokens gehen in die Metriken (DD-082).
-   - `berichtigung` bleibt ungemappt (DD-057); `gg-land-parl-staatsvertrag` und
-     `gg-land-parl-nachtragshaushalt` sind offen (GitHub #203).
+   - `berichtigung` seit GitHub #204 für Gesetzblatt-Berichtigungen (DD-047);
+     `gg-land-parl-staatsvertrag` und `gg-land-parl-nachtragshaushalt` sind offen (GitHub #203).
 
 **Konsequenz:** corelibs `html_to_text` behandelt einen Text als HTML, sobald ein einzelnes
 Block-Tag vorkommt, und verliert dann alle Absätze — die Garbled-Filter (DD-015) arbeiten
