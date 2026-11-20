@@ -137,8 +137,9 @@ Schwellen unwahrscheinlich, aber möglich; der Laufbericht nennt deshalb jede Ü
 Rückgängig, ohne den Entwurf: Vorgang löschen, im Eintrag `vorgnr` auf `-` setzen (sperrt den
 Entwurf) und `vg2:<vorgnr>` löschen. Geht Redis verloren, lädt der Beteiligungs-Scraper alle
 Entwürfe einmal neu: Ein übernommener zeigt kurz seinen Titel, ein gelöschter Portal-Vorgang kommt
-zurück und steht wieder im Laufbericht. Ministerium und Landesregierung sind nur bei Übernahme
-beide `initiatoren`. PDFs von Kandidaten werden einmal je Lauf gelesen.
+zurück und steht wieder im Laufbericht. Initiator ist auch beim Entwurf die Landesregierung, das
+Ministerium nur Autor seiner Dokumente; das Register trägt es von dort weiter (GitHub #220). PDFs
+von Kandidaten werden einmal je Lauf gelesen.
 
 <a id="dd-043"></a>
 ## DD-043: Der `#page=N`-Anker gehört zur Dokumentidentität

@@ -177,6 +177,9 @@ def _vorgang_fingerprint(raw: RawVorgang, entwuerfe: list[str] | None = None) ->
     payload.append("zahlenformat")
     # Rebuild cached Vorgänge once for the new summary prompt (DD-053 abbreviations, DD-083 tags).
     payload.append("abkuerzungen-dokument-tags")
+    # Re-upload every Vorgang once after the admin deleted all BW Vorgänge: the backend
+    # merges initiatoren and autoren as a union, so the old names stay otherwise (#219, #220).
+    payload.append("landesregierung-bw")
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 

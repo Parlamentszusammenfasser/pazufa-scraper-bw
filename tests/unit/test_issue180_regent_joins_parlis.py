@@ -22,7 +22,7 @@ from bawue.beteiligung_client import BASE_URL
 from bawue.beteiligung_parser import parse_process_detail
 from bawue.cache import ENTWUERFE_KEY, UEBERNAHMEN_KEY, RedisUnavailableError
 from bawue.pdf_text import PdfNotAvailableError
-from bawue.types import UNSET, Doktyp, Stationstyp, Vorgang
+from bawue.types import UNSET, Autor, Doktyp, Stationstyp, Vorgang
 from bawue.upload_throttle import UploadOutcome
 from tests.factories import make_scraper
 from tests.unit.test_bawue_scraper import _InMemoryCache, _make_raw_vorgang
@@ -208,7 +208,7 @@ async def test_bill_uploaded_before_keeps_its_api_id_and_gains_the_draft_station
         portal_dok.link,
         portal_dok.hash_,
         Doktyp.PREPARL_ENTWURF,
-        regent.initiatoren,
+        [Autor(organisation="Ministerium für Finanzen")],  # #220: the ministry wrote the draft
     )
     assert _uebernahmen(cache) == {BVANP.slug: {"vorgnr": BVANP.vid, "api_id": _own_api_id(BVANP)}}
     assert scraper._entwurf_joins == [f"{BVANP.vid} ← {BVANP.slug} (0.86)"]

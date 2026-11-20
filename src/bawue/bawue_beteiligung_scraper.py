@@ -32,6 +32,7 @@ from bawue.types import (
     TODO_MARKER,
     UNSET,
     Autor,
+    CanonicalOrganisation,
     Doktyp,
     Dokument,
     Gremium,
@@ -246,7 +247,8 @@ class BawueBeteiligungScraper(VorgangsScraper):
             "api_id": vorgang.api_id,
             "wahlperiode": vorgang.wahlperiode,
             "portal": vorgang.links[0],
-            "autoren": [autor.to_dict() for autor in vorgang.initiatoren],
+            # The ministry wrote the draft; the Vorgang is the Landesregierung's (#220).
+            "autoren": [autor.to_dict() for autor in vorgang.stationen[0].dokumente[0].autoren],
             "pdfs": [
                 {"url": dok.link, "titel": dok.titel, "datum": dok.zp_referenz.date().isoformat()}
                 for dok in vorgang.stationen[0].dokumente
@@ -370,7 +372,8 @@ class BawueBeteiligungScraper(VorgangsScraper):
             typ=Vorgangstyp.GG_LAND_PARL,
             wahlperiode=self._wahlperiode,
             verfassungsaendernd=is_verfassungsaendernd(detail.title),
-            initiatoren=ministry_autoren,
+            # A government bill is the government's, not its ministry's (#220).
+            initiatoren=[Autor(organisation=CanonicalOrganisation.LANDESREGIERUNG)],
             stationen=[station],
             links=[beteiligung_url],
             ressort=ressort,
@@ -462,7 +465,7 @@ def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungD
     """What shows progress on the portal (issue #104): status, title, ministry, PDFs, deadline (#148)."""
     pdfs = sorted([link["url"], link["title"]] for link in detail.pdf_links)
     # One-time rebuilds: registers "fristen" (DD-076), "entwuerfe" (DD-079); money format (DD-081);
-    # summary prompt (DD-053, DD-083).
+    # summary prompt (DD-053, DD-083); initiator after the BW Vorgänge were deleted (#219, #220).
     payload = [
         process.status,
         detail.title,
@@ -473,5 +476,6 @@ def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungD
         "entwuerfe",
         "zahlenformat",
         "abkuerzungen-dokument-tags",
+        "landesregierung-bw",
     ]
     return sha256(json.dumps(payload, ensure_ascii=False, default=str).encode()).hexdigest()
