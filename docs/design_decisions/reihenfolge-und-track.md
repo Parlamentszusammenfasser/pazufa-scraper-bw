@@ -11,7 +11,7 @@ Buchstaben nach DD-040: `L` = `parl-vollvlsgn`, `A` = `parl-ausschber`, `N` = Ab
 
 **Kontext:** Jeder Upload wird gegen die Trackdatei geprüft, die das Backend lädt: `tracks.toml`
 im Spec-Repo ([parlamentszusammenfasser](https://codeberg.org/PaZuFa/parlamentszusammenfasser),
-Tag `v0.2.9+v0.1.3`). Ältere DDs schrieben `V` für die Lesung und `Z` für die Ablehnung.
+Tag `v0.2.9+v0.1.4`). Ältere DDs schrieben `V` für die Lesung und `Z` für die Ablehnung.
 
 **Entscheidung:** Die Scraper-Regeln richten sich nach der Prüfung im Backend
 (`pazufa-models/src/tracks.rs`, `Tracks::validate`):
@@ -32,7 +32,7 @@ Jeder dieser Fehler kommt beim Collector-`PUT /vorgang` als **HTTP 500** mit dem
 zurück (`api/vorgang.rs`); nur `PUT /vorgang/{id}` antwortet mit 400. Ältere DDs nennen
 „HTTP 400“.
 
-BW (tracks v0.1.3), `gg-land-parl` und `-haushalt` gleich:
+BW (tracks v0.1.4), `gg-land-parl`, `-haushalt` und `-staatsvertrag` gleich:
 
 ```
 ((E*R+)?S)?I((LA*(Z|LJ(C|GA*(C|KA*C?))|LN|LA*(Z|LJ(C|GA*(C|KA*C?))|LN)))|Z)
@@ -42,7 +42,8 @@ Lesbar: optional Entwurf/Kabinett (`S`), Einbringung (`I`), dann zwei oder drei 
 mit Ausschussberichten (`L A* L …`), am Ende Annahme mit Gesetzblatt und Inkrafttreten
 (`J G K`), Ablehnung (`N`) oder Rücknahme (`Z`). Nach `G`/`K` sind weitere `A` (Folgeberichte)
 und ein `C` (Verfassungsgerichtsstopp) erlaubt. Abstimmung in erster Lesung gibt es nicht
-(GO-LT BW §43 Abs. 4, DD-016).
+(GO-LT BW §43 Abs. 4, DD-016). `-nachtragshaushalt` beginnt mit `IA*` statt `I`: Ein Nachtrag
+darf ohne erste Lesung direkt in den Finanzausschuss (GO-LT BW §47a).
 
 **Konsequenz:** `tests/bw_tracks.py` hält eine wörtliche Kopie von `[stations]` und
 `[tracks.BW]` und bildet den Präfix-Match mit `regex.fullmatch(track, partial=True)` nach.

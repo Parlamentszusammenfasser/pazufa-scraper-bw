@@ -1,8 +1,8 @@
 """The backend's track validation for BW, without a backend (DD-040).
 
 Both tables are copied verbatim from the trackfile the backend loads:
-  tracks.toml @ tag v0.2.9+v0.1.3, version 0.1.3
-  https://codeberg.org/PaZuFa/parlamentszusammenfasser/raw/tag/v0.2.9+v0.1.3/tracks.toml
+  tracks.toml @ tag v0.2.9+v0.1.4, version 0.1.4
+  https://codeberg.org/PaZuFa/parlamentszusammenfasser/raw/tag/v0.2.9+v0.1.4/tracks.toml
 Update them together when the backend moves to a new tracks version.
 """
 
@@ -35,6 +35,9 @@ _GG_LAND_PARL = "((E*R+)?S)?I((LA*(Z|LJ(C|GA*(C|KA*C?))|LN|LA*(Z|LJ(C|GA*(C|KA*C
 BW_TRACKS = {
     "gg-land-parl": _GG_LAND_PARL,
     "gg-land-parl-haushalt": _GG_LAND_PARL,
+    "gg-land-parl-staatsvertrag": _GG_LAND_PARL,
+    # IA*: GO-LT BW § 47a allows direct referral to the Finanzausschuss without a first reading
+    "gg-land-parl-nachtragshaushalt": "((E*R+)?S)?IA*((LA*(Z|LJ(C|GA*(C|KA*C?))|LN|LA*(Z|LJ(C|GA*(C|KA*C?))|LN)))|Z)",
 }
 
 
