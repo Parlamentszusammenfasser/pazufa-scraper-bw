@@ -107,10 +107,12 @@ class TestBuildVorgang:
         assert vorgang.typ == Vorgangstyp.GG_LAND_PARL
         # Deterministic and per slug.
         assert str(vorgang.api_id) == str(uuid5(NAMESPACE_URL, "beteiligung-entbuerokratisierung"))
-        assert [a.organisation for a in vorgang.initiatoren] == [
+        # Issue #220: the government initiates the bill, its ministry wrote the draft.
+        assert [a.organisation for a in vorgang.initiatoren] == ["Landesregierung Baden-Württemberg"]
+        [station] = vorgang.stationen
+        assert [a.organisation for d in station.dokumente for a in d.autoren] == [
             "Ministerium des Inneren, für Digitalisierung und Kommunen"
         ]
-        [station] = vorgang.stationen
         assert station.typ == Stationstyp.PREPARL_REGENT
         assert station.gremium.parlament == Parlament.BW
         assert station.gremium.name == "regierung"
@@ -147,13 +149,12 @@ class TestBuildVorgang:
         assert doc.hash_ == placeholder_hash(doc.link)
 
     @pytest.mark.asyncio
-    async def test_empty_ministry_yields_no_initiatoren(self):
+    async def test_empty_ministry_yields_no_dokument_autoren(self):
         """Empty ministry: drop the Autor instead of sending an empty organisation."""
         scraper = _make_scraper()
         detail = _make_detail(ministry="")
         vorgang = await scraper._build_vorgang("entbuerokratisierung", detail)
 
-        assert vorgang.initiatoren == []
         assert vorgang.stationen[0].dokumente[0].autoren == []
 
     @pytest.mark.asyncio

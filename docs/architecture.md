@@ -401,11 +401,11 @@ Configuration from `[beteiligung]` section.
 | `titel`             | Detail page heading (dossier-header h1)         |
 | `kurztitel`         | LLM short title, fallback `titel` (DD-053)      |
 | `typ`               | `Vorgangstyp.GG_LAND_PARL`                      |
-| `initiatoren`       | `[Autor(organisation=ministry)]`                |
+| `initiatoren`       | Landesregierung Baden-Württemberg (#220)        |
 | `ressort`           | LLM-Klassifikation des Schwerpunkts (DD-055)    |
 | Station `typ`       | `Stationstyp.PREPARL_REGENT`                    |
 | Station `gremium`   | `Parlament.BW, "regierung"` (reservierter Name) |
-| Station `dokumente` | Each PDF → `Doktyp.PREPARL_ENTWURF`             |
+| Station `dokumente` | Each PDF → `Doktyp.PREPARL_ENTWURF`, autoren = ministry |
 | Station `zp_start`  | Earliest PDF publication date (DD-074)          |
 | `zusammenfassung`   | Per Dokument: LLM parts (DD-056) + comment deadline `beteiligungsfrist-extern` (DD-075) |
 
