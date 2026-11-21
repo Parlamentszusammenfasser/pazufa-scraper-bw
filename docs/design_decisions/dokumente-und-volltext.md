@@ -30,6 +30,17 @@ Fehlalarme. OCR kostet viel (17/1104: 121 s statt 0,2 s) und rettet bis Faktor 4
 Text. kreuzberg 4.x braucht eine explizite `OcrConfig`; mit Seiten-Hint auch Seitenmarker
 (`_OCR_CONFIG_PAGE_MARKERS`).
 
+**pazufa-parser statt kreuzberg (Issue #216):** Verglichen an 123 WP-17/18-Fundstellen
+(`verify_fulltext --compare-parser`). Der Parser erkennt dasselbe Ausgegeben-Datum (52 von 52),
+aber nur mit `furniture_text()`, denn die Fußzeile ist dort Furniture. Er schneidet dieselben
+Tagesordnungsseiten (43 von 44; 17/19 S. 31: Druckseite „17“ aus „17/1076“ gelesen) und
+ersetzt keinen nativen Text, der die Normalisierung überlebt hätte, durch OCR. Jeder Fall unter
+90 % der heutigen Länge ist Kopf-/Fußzeile oder eine Kopie früherer Seiten, die kreuzberg auf der
+letzten Seite von Protokollen und Drucksachen mitliest; der Parser lässt sie weg. OCR braucht
+die halbe Zeit (116 statt 205 s), native PDFs brauchen mehr (267 statt 16 s, ~5 s je
+Protokoll, weil das ganze Dokument gelesen wird). Entscheidung: umstellen, sobald der Parser
+nur das Fenster liest (`first_page`/`last_page`) und die Druckseite von 17/19 stimmt.
+
 <a id="dd-038"></a>
 ## DD-038: Leeres Seitenfenster fällt auf den Volltext zurück
 
