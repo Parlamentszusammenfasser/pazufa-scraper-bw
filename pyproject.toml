@@ -21,7 +21,8 @@ pazufa-metrics-client = {git = "https://codeberg.org/PaZuFa/pazufa-metrics-clien
 httpx = ">=0.28"          # via corelib transitively; pinned explicitly (used by bawue.api)
 redis = ">=7.4"           # was transitively provided by collector; used by bawue.cache
 python-dotenv = ">=1.0"   # was transitively provided by collector; used by bawue.__main__
-kreuzberg = ">=4.7"       # was transitively provided by collector; used by bawue.pdf_text
+kreuzberg = ">=4.7"       # was transitively provided by collector; pdf_text.extract_pdf_text until #218
+pazufa-pdf-parser = {git = "https://github.com/Parlamentszusammenfasser/pdf-parser.git", tag = "0.10.0"}  # Drucksachen text (issue #217)
 lxml = ">=6.0"
 requests = "^2.32"
 toml = ">=0.10"
@@ -42,8 +43,6 @@ pytest-asyncio = "^1.5"
 responses = "^0.26"
 pytest-httpserver = "^1.2"
 ruff = "^0.17"
-# Only for verify_fulltext --compare-parser (issue #216): measured against kreuzberg, not shipped.
-pazufa-pdf-parser = {git = "https://github.com/Parlamentszusammenfasser/pdf-parser.git", tag = "0.10.0"}
 
 [build-system]
 requires = ["poetry-core"]

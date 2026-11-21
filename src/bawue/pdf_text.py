@@ -12,8 +12,9 @@ from urllib.parse import urlparse
 
 import aiohttp
 import certifi
-from kreuzberg import ConcurrencyConfig, ExtractionConfig, OcrConfig, PageConfig, extract_file
+from kreuzberg import ConcurrencyConfig, ExtractionConfig, OcrConfig, extract_file
 from pazufa_corelib.normalization import normalize_volltext as _core_normalize_volltext
+from pazufa_pdf_parser import Ocr, ParseOptions, PdfDocument, parse
 
 logger = logging.getLogger(__name__)
 
@@ -196,16 +197,6 @@ def _usable_length(text: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-# kreuzberg's marker template is "\n\n<!-- PAGE N -->\n\n", but the surrounding
-# "\n\n" only exists when a marker has page content on both sides. The marker
-# for the document's first page has nothing before it, and the marker for a
-# trailing empty page has nothing after it — in both cases the fixed \n\n is
-# missing, so anchor to the string boundary as an alternative (issue #27: this
-# silently dropped page 1's content for every #page=1-anchored document,
-# substituting whatever page followed it instead of falling back).
-_PAGE_MARKER_RE = re.compile(r"(?:\A|\n\n)<!-- PAGE (\d+) -->(?:\n\n|\Z)")
-
-
 # Pages of a #page=N window: the volltext of an anchored Fundstelle.
 _WINDOW_PAGES = 30
 # Real agenda pages hold ≥ 3584 chars (WP17/18); a page with only its header ~95.
@@ -219,64 +210,25 @@ def parse_page_hint(url: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _page_map(text: str) -> dict[int, str]:
-    """PDF page number → page text, from kreuzberg's page markers (empty without markers)."""
-    parts = _PAGE_MARKER_RE.split(text)
-    # parts alternates: [text_before_first_marker, page_num, text, page_num, text, ...]
-    return {int(parts[i]): parts[i + 1] for i in range(1, len(parts) - 1, 2)}
-
-
-def agenda_text(text: str, page_hint: int | None, druckseiten: list[int] | None) -> tuple[str, list[int]] | None:
-    """The agenda item's pages of a marked protocol text, normalized, with their PDF numbers.
+def agenda_text(doc: PdfDocument, page_hint: int | None, druckseiten: list[int] | None) -> tuple[str, list[int]] | None:
+    """The agenda item's pages of a parsed protocol, normalized, with their PDF numbers.
 
     The anchor is the item's first printed page (verified on 489 WP17/18 Fundstellen), so
     the PDF page is the printed page plus a fixed offset (issue #74). Capped at the volltext
     window: the LLM never reads more than before. None without anchor or pages, or if a
-    page is missing, does not start with its printed number (2635 of 2635 real pages do),
-    or holds little more than its header: then the caller keeps the whole window.
+    page is missing, carries another printed number, or holds little more than its header:
+    then the caller keeps the whole window.
     """
     if not page_hint or not druckseiten:
         return None
     offset = page_hint - druckseiten[0]
-    printed = {p + offset: p for p in druckseiten if p + offset < page_hint + _WINDOW_PAGES}  # PDF → printed
-    page_map = _page_map(text)
-    if not all(re.match(rf"\s*{p}(?!\d)", page_map.get(pdf, "")) for pdf, p in printed.items()):
+    printed = {p + offset: str(p) for p in druckseiten if p + offset < page_hint + _WINDOW_PAGES}  # PDF → printed
+    by_number = {page.number: page.printed_page for page in doc.pages}
+    if not all(by_number.get(pdf) == label for pdf, label in printed.items()):
         return None
     pages = sorted(printed)
-    agenda = normalize_volltext("\n\n".join(page_map[p] for p in pages))
+    agenda = normalize_volltext(doc.text(pages=pages))
     return (agenda, pages) if len(agenda) >= _MIN_AGENDA_PAGE_CHARS * len(pages) else None
-
-
-def extract_relevant_pages(text: str, start_page: int, max_pages: int = _WINDOW_PAGES) -> str:
-    """Extract text from *start_page* through *start_page + max_pages* using page markers.
-
-    Falls back to the full text when no markers are found or when the
-    requested page range lies beyond the document.
-    """
-    page_map = _page_map(text)
-    if not page_map:
-        return text
-
-    end_page = start_page + max_pages
-    relevant = [page_map[p] for p in sorted(page_map) if start_page <= p < end_page]
-
-    if not relevant:
-        return text
-
-    windowed = "\n\n".join(relevant)
-    # A #page=N fragment can point at a blank or near-empty page (e.g. one holding
-    # only a running page number or a "TODO" placeholder). Persisting that window
-    # would drop the document's real content, so fall back to the full text when
-    # the window yields fewer than MIN_TEXT_LENGTH usable chars (issue #50).
-    if len(windowed.strip()) < MIN_TEXT_LENGTH:
-        logger.info(
-            "Page-hint window (page %d) yielded <%d usable chars, falling back to full text",
-            start_page,
-            MIN_TEXT_LENGTH,
-        )
-        return text
-
-    return windowed
 
 
 # ---------------------------------------------------------------------------
@@ -349,26 +301,10 @@ _OCR_CONFIG = ExtractionConfig(
     ocr=OcrConfig(backend="tesseract", language="deu"),
     concurrency=ConcurrencyConfig(max_threads=_OCR_MAX_THREADS),
 )
-# OCR replaces the whole extracted text, so it has to carry the page markers too
-# when a ``#page=N`` hint is in play — otherwise extract_relevant_pages finds
-# none and silently returns the entire document, giving every Antrag of a
-# Sammeldrucksache the same volltext (GitHub issue #20).
-_OCR_CONFIG_PAGE_MARKERS = ExtractionConfig(
-    force_ocr=True,
-    ocr=OcrConfig(backend="tesseract", language="deu"),
-    concurrency=ConcurrencyConfig(max_threads=_OCR_MAX_THREADS),
-    pages=PageConfig(insert_page_markers=True),
-)
 
 
-async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[str, str]:
+async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
     """Extract text and compute SHA256 hash from a PDF file.
-
-    Args:
-        pdf_path: Path to the PDF file.
-        page_markers: Insert kreuzberg's page markers, also on the OCR retry, so the
-            caller can cut a ``#page=N`` window (``extract_relevant_pages``) or a
-            protocol's agenda pages (``agenda_text``, issue #74).
 
     Returns (full_text, hash).  Falls back to OCR, up to MAX_OCR_PAGES pages, when:
     1. Normal extraction yields fewer than 64 characters, or
@@ -379,14 +315,7 @@ async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[
     with open(pdf_path, "rb") as f:
         doc_hash = hashlib.file_digest(f, "sha256").hexdigest()
 
-    if page_markers:
-        config = ExtractionConfig(force_ocr=False, pages=PageConfig(insert_page_markers=True))
-        ocr_config = _OCR_CONFIG_PAGE_MARKERS
-    else:
-        config = ExtractionConfig(force_ocr=False)
-        ocr_config = _OCR_CONFIG
-
-    result = await extract_file(pdf_path, config=config)
+    result = await extract_file(pdf_path, config=ExtractionConfig(force_ocr=False))
     text = result.content or ""
     pages = result.metadata.get("page_count", 0)
 
@@ -396,13 +325,13 @@ async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[
     elif len(text) < MIN_TEXT_LENGTH:
         logger.warning("Normal text extraction yielded <%d chars, retrying with OCR", MIN_TEXT_LENGTH)
         async with _ocr_semaphore():
-            ocr_result = await extract_file(pdf_path, config=ocr_config)
+            ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
         text = ocr_result.content or ""
     elif is_garbled(text):
         logger.warning("Garbled text detected (broken font encoding), retrying with OCR")
         try:
             async with _ocr_semaphore():
-                ocr_result = await extract_file(pdf_path, config=ocr_config)
+                ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
             ocr_text = ocr_result.content or ""
             if ocr_text and not is_garbled(ocr_text) and _usable_length(ocr_text) > _usable_length(text):
                 text = ocr_text
@@ -412,6 +341,40 @@ async def extract_pdf_text(pdf_path: Path, page_markers: bool = False) -> tuple[
             logger.warning("OCR retry failed (%s), keeping original garbled text", type(exc).__name__)
 
     return text, doc_hash
+
+
+# pazufa-parser OCRs page by page and only the pages that need it (DD-015). One Ocr object
+# caps the tesseract processes of all parse() calls in the process: as many pages at a time
+# as kreuzberg's OCR above, a few hundred MB each instead of ~0.66 GB (issue #217).
+_PARSER_OCR = Ocr(max_parallel=_OCR_LIMIT * _OCR_MAX_THREADS)
+_PARSE_OPTIONS = ParseOptions(ocr_engine=_PARSER_OCR, max_ocr_pages=MAX_OCR_PAGES)
+
+
+async def parse_pdf(pdf_path: Path, page_hint: int | None = None) -> PdfDocument:
+    """The parsed PDF; with a ``#page=N`` hint only its window of _WINDOW_PAGES pages.
+
+    A window with fewer than MIN_TEXT_LENGTH chars (a blank anchor page, or one past the
+    end) falls back to the whole document (DD-038, issue #50).
+    """
+    if page_hint is not None:
+        window = await asyncio.to_thread(
+            parse,
+            pdf_path,
+            ParseOptions(
+                ocr_engine=_PARSER_OCR,
+                max_ocr_pages=MAX_OCR_PAGES,
+                first_page=page_hint,
+                last_page=page_hint + _WINDOW_PAGES - 1,
+            ),
+        )
+        if len(window.text().strip()) >= MIN_TEXT_LENGTH:
+            return window
+        logger.info(
+            "Page-hint window (page %d) yielded <%d usable chars, falling back to full text",
+            page_hint,
+            MIN_TEXT_LENGTH,
+        )
+    return await asyncio.to_thread(parse, pdf_path, _PARSE_OPTIONS)
 
 
 async def read_pdf(session, url: str) -> str:

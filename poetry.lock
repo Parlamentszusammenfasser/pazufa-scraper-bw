@@ -2271,7 +2271,7 @@ version = "0.10.0"
 description = "Robust extraction of sanitized text and layout from PDF documents (letters, legal and parliamentary documents)"
 optional = false
 python-versions = ">=3.12"
-groups = ["dev"]
+groups = ["main"]
 files = []
 develop = false
 
@@ -2291,7 +2291,7 @@ version = "13.0.0"
 description = "Python Imaging Library (fork)"
 optional = false
 python-versions = ">=3.11"
-groups = ["dev"]
+groups = ["main"]
 files = [
     {file = "pillow-13.0.0-cp311-cp311-macosx_10_10_x86_64.whl", hash = "sha256:6f38f3f885a09cafc93fd667b1173a92f379e43785d635e7983c893f0da319fb"},
     {file = "pillow-13.0.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:37290fbef0c73e2d51d594eb78fded7dc7170d1c3ad0a890269e6fd8c8c4e061"},
@@ -2781,7 +2781,7 @@ version = "5.15.2"
 description = "Python bindings to PDFium"
 optional = false
 python-versions = ">=3.6"
-groups = ["dev"]
+groups = ["main"]
 files = [
     {file = "pypdfium2-5.15.2-py3-none-android_23_arm64_v8a.whl", hash = "sha256:fe64472c32d0717669c99758ce234066500b0234730dad0327248f09399e9736"},
     {file = "pypdfium2-5.15.2-py3-none-android_23_armeabi_v7a.whl", hash = "sha256:8faaafc2a18b17b3bcfad79b376bb382d536b011cb9e6eee2f4d7e8af0a23167"},
@@ -4053,4 +4053,4 @@ type = ["pytest-mypy (>=1.0.1) ; platform_python_implementation != \"PyPy\""]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<3.15"
-content-hash = "b1fdea48d1e42de16cdcfc5cddb07a6e2550530a3a6a6c234fdc6f8217299c78"
+content-hash = "9c2628f6b806bac97a1c85fa3f864477b9f75204d942d265b868233e7be3935f"
