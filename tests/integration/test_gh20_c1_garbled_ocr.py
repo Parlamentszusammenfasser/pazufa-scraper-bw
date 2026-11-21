@@ -24,7 +24,7 @@ Run with: pytest -m integration tests/integration/test_gh20_c1_garbled_ocr.py
 import aiohttp
 import pytest
 
-from bawue.pdf_text import download_pdf, extract_pdf_text, extract_relevant_pages, normalize_volltext
+from bawue.pdf_text import download_pdf, normalize_volltext, parse_pdf
 
 pytestmark = pytest.mark.integration
 
@@ -38,8 +38,7 @@ async def _volltext(page_hint: int | None) -> str:
     async with aiohttp.ClientSession() as session:
         path = await download_pdf(session, DS_17_1201_URL)
     try:
-        text, _hash = await extract_pdf_text(path, page_markers=page_hint is not None)
-        return normalize_volltext(text if page_hint is None else extract_relevant_pages(text, page_hint))
+        return normalize_volltext((await parse_pdf(path, page_hint)).text())
     finally:
         path.unlink(missing_ok=True)
 
@@ -64,13 +63,8 @@ class TestAsciiShiftGarblingIsRecovered:
 
     @pytest.mark.asyncio
     async def test_page_hint_window_still_selects_one_antrag(self):
-        """OCR output must keep page markers so #page=N still windows the document.
-
-        The OCR retry replaces the whole extracted text; without page markers in
-        the OCR config, ``extract_relevant_pages`` finds none and silently falls
-        back to the full document — giving every Änderungsantrag of this
-        Sammeldrucksache the same volltext.
-        """
+        """An OCRed page still windows the document: every Änderungsantrag of this
+        Sammeldrucksache gets its own volltext."""
         full = await _volltext(None)
         page_4 = await _volltext(4)
 

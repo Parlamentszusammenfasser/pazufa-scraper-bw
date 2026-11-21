@@ -31,7 +31,7 @@ graph LR
         Runner["__main__ Runner / Registry"]
         Cache["Redis BawueCache"]
         APIClient["httpx API Client<br/>(pazufa-scraper-core)"]
-        DocPipeline["Document Pipeline<br/>(kreuzberg + OCR + LLM)"]
+        DocPipeline["Document Pipeline<br/>(pazufa-parser + OCR + LLM)"]
     end
 
     subgraph "BaWue Scrapers"
@@ -138,7 +138,8 @@ Dashed arrows: the pre-parliamentary stages are optional.
 | `aiohttp`             | Async HTTP sessions for the scraping loop                       | BaWue scraper |
 | `httpx`               | Transport for the PaZuFa API client                             | scraper-core  |
 | `pazufa-scraper-core` | API client + models (spec v0.2.7), `LLMConnector`, normalisation | Shared library |
-| `kreuzberg`           | PDF text extraction (normal + OCR fallback)                     | BaWue scraper |
+| `pazufa-pdf-parser`   | Drucksachen text: page layout, furniture, OCR per page          | BaWue scraper |
+| `kreuzberg`           | PDF text of Tagesordnung, Gesetzblatt, Entwurf (until #218)     | BaWue scraper |
 | `redis`               | Caching of processed Vorgänge/Dokumente (`bawue.cache`)         | BaWue scraper |
 | `litellm`             | LLM integration: token counting + LLM calls                     | BaWue + scraper-core |
 
@@ -240,7 +241,8 @@ classDiagram
     class PdfText {
         <<module>>
         +download_pdf(session, url) Path
-        +extract_pdf_text(pdf_path, page_markers) tuple
+        +parse_pdf(pdf_path, page_hint) PdfDocument
+        +extract_pdf_text(pdf_path) tuple
         +normalize_volltext(text) str
         -_ocr_semaphore() Semaphore
     }
@@ -338,7 +340,7 @@ sequenceDiagram
         opt LLM enabled
             BVS->>BDK: enrich_dokument(session, llm, dok)
             BDK->>BDK: download_pdf(url)
-            BDK->>BDK: extract_pdf_text(pdf_path)
+            BDK->>BDK: parse_pdf(pdf_path, page_hint)
             BDK->>BDK: extract_semantics(llm, text, doktyp)
             BDK-->>BVS: enriched Dokument
         end
@@ -469,7 +471,7 @@ metadata extraction. **Disabled by default** — requires `LLM_PROVIDER_KEY` env
 
 **PDF pipeline** (`pdf_text.py`):
 - Downloads PDF via `aiohttp` session to a temporary file
-- Extracts text via `kreuzberg` (normal extraction first; OCR fallback if result < 64 chars or garbled, DD-015)
+- Parses it with `pazufa-pdf-parser` (`parse_pdf`): only the `#page=N` window, headers and footers as furniture, OCR for pages without a usable text layer (DD-015, DD-038)
 - Computes the file's SHA256 (and SHA1, `pdf_sha1`) for the document's row identity (DD-043)
 
 **LLM pipeline:**
