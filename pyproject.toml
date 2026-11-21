@@ -42,6 +42,8 @@ pytest-asyncio = "^1.5"
 responses = "^0.26"
 pytest-httpserver = "^1.2"
 ruff = "^0.17"
+# Only for verify_fulltext --compare-parser (issue #216): measured against kreuzberg, not shipped.
+pazufa-pdf-parser = {git = "https://github.com/Parlamentszusammenfasser/pdf-parser.git", tag = "0.10.0"}
 
 [build-system]
 requires = ["poetry-core"]
