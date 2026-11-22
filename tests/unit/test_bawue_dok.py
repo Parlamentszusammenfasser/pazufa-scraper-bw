@@ -2005,8 +2005,14 @@ class TestPageHintExtraction:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("hint", "pages"),
-        [(None, list(range(1, 12))), (1, [1, 2, 3]), (9, [9, 10, 11]), (12, list(range(1, 12)))],
-        ids=["no-anchor", "first-page-issue27", "window-at-the-end", "past-the-end"],
+        [
+            (None, list(range(1, 12))),
+            (0, list(range(1, 12))),
+            (1, [1, 2, 3]),
+            (9, [9, 10, 11]),
+            (12, list(range(1, 12))),
+        ],
+        ids=["no-anchor", "page-0", "first-page-issue27", "window-at-the-end", "past-the-end"],
     )
     async def test_parse_pdf_reads_the_anchor_window(self, monkeypatch, hint, pages):
         """The real PlPr 18/10 S. 286-296: a window of _WINDOW_PAGES from the anchor, the whole PDF past its end."""

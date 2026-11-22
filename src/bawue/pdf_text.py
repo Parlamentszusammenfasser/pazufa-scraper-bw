@@ -356,7 +356,7 @@ async def parse_pdf(pdf_path: Path, page_hint: int | None = None) -> PdfDocument
     A window with fewer than MIN_TEXT_LENGTH chars (a blank anchor page, or one past the
     end) falls back to the whole document (DD-038, issue #50).
     """
-    if page_hint is not None:
+    if page_hint:  # #page=0 is no page: ParseOptions(first_page=0) raises
         window = await asyncio.to_thread(
             parse,
             pdf_path,
