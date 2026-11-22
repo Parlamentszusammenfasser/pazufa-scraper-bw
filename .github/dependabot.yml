@@ -42,6 +42,6 @@ updates:
     schedule:
       interval: weekly
     ignore:
-      - dependency-name: docker.io/schneefisch/pazufa-bawue-scraper
+      - dependency-name: schneefisch/pazufa-bawue-scraper  # Dependabot drops the docker.io/ prefix
     commit-message:
       prefix: chore
