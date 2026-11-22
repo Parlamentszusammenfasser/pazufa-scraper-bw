@@ -59,7 +59,7 @@ als HTTP 422 auf.
      (`enforce_total_ordering`) lägen sie gleichauf, die Reihenfolge käme aus der Datenbank, und
      der Track-Check des gemergten Vorgangs kann HTTP 400 geben. Zudem änderte das neue `zp_start` die
      Stations-`api_id` (DD-028). Erst mit Backend-Fix und Migration.
-   - `gg-land-parl-haushalt` erst mit einem BW-Track dafür (DD-077).
+   - `gg-land-parl-haushalt` für jede Haushaltsgesetzgebung (DD-077).
    - `parl-anhoerung`, `beschlussprotokoll`, `inhaltsprotokoll` gibt es in BW nicht (DD-057).
 6. **v0.3.3** / Spec 0.2.9 (GitHub #202):
    - Die jetzt optionalen Zeitpunkte (`zp_start`, `termin`, `zp_modifiziert`, `zp_referenz`)
