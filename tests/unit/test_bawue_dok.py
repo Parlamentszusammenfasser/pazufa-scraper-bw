@@ -2035,6 +2035,14 @@ class TestPageHintExtraction:
         assert parse.call_args_list[1].args[1].first_page is None
 
     @pytest.mark.asyncio
+    async def test_issue217_parser_warnings_are_logged(self, caplog):
+        """The parser records problems instead of logging them; an anchor past the end is one."""
+        with caplog.at_level(logging.WARNING, logger="bawue.pdf_text"):
+            await parse_pdf(PDF_FIXTURES / "18_0010_S286-296.pdf", 12)
+
+        assert "page_range_empty" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_issue217_two_parses_at_a_time(self):
         """A parse waiting for OCR holds an executor thread; more at once would starve DNS and downloads."""
         active, peak = [], []

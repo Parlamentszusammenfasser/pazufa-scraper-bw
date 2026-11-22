@@ -15,7 +15,7 @@ import aiohttp
 import certifi
 from kreuzberg import ConcurrencyConfig, ExtractionConfig, OcrConfig, extract_file
 from pazufa_corelib.normalization import normalize_volltext as _core_normalize_volltext
-from pazufa_pdf_parser import Ocr, ParseOptions, PdfDocument, parse
+from pazufa_pdf_parser import Ocr, ParseOptions, PdfDocument, Severity, parse
 
 logger = logging.getLogger(__name__)
 
@@ -355,7 +355,11 @@ _PARSE_SLOT: dict = {}
 async def _parse(pdf_path: Path, options: ParseOptions) -> PdfDocument:
     # A parse holds a default-executor thread while it waits for OCR; unlimited, they starve DNS and downloads.
     async with loop_semaphore(_PARSE_SLOT, _OCR_LIMIT):
-        return await asyncio.to_thread(parse, pdf_path, options)
+        doc = await asyncio.to_thread(parse, pdf_path, options)
+    for issue in doc.report.issues:  # the parser does not log: OCR failures, the OCR page limit, ...
+        if issue.severity >= Severity.WARNING:
+            logger.warning("pazufa-parser %s (page %s): %s", issue.code, issue.page, issue.message)
+    return doc
 
 
 async def parse_pdf(pdf_path: Path, page_hint: int | None = None) -> PdfDocument:
