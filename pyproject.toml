@@ -29,7 +29,7 @@ toml = ">=0.10"
 icalendar = ">=7.0"
 certifi = ">=2026.10.23"
 python-json-logger = "^4.2"
-litellm = ">=1.109.1"
+litellm = ">=1.110.1"
 json-repair = "^0.64"
 
 [tool.poetry.group.dev.dependencies]
