@@ -383,7 +383,7 @@ async def parse_pdf(pdf_path: Path, page_hint: int | None = None) -> PdfDocument
 
 
 async def read_pdf(session, url: str) -> str:
-    """A PDF's normalized volltext, as enrichment would store it."""
+    """A PDF's normalized volltext via kreuzberg, for Entwurf matching (DD-079) until issue #218."""
     pdf_path = await download_pdf(session, url)
     try:
         return normalize_volltext((await extract_pdf_text(pdf_path))[0])
