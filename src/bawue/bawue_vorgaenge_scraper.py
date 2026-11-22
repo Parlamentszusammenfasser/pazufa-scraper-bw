@@ -179,7 +179,8 @@ def _vorgang_fingerprint(raw: RawVorgang, entwuerfe: list[str] | None = None) ->
     payload.append("abkuerzungen-dokument-tags")
     # Re-upload every Vorgang once after the admin deleted all BW Vorgänge: the backend
     # merges initiatoren and autoren as a union, so the old names stay otherwise (#219, #220).
-    payload.append("landesregierung-bw")
+    # `-2`: the first marker ran before the delete, so it was used up.
+    payload.append("landesregierung-bw-2")
     return sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 

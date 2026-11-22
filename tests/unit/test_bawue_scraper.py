@@ -4826,7 +4826,7 @@ class TestIssue161OneTimeRebuild:
             payload.append("tagesordnungspunkt")
         payload.append("zahlenformat")
         payload.append("abkuerzungen-dokument-tags")
-        payload.append("landesregierung-bw")
+        payload.append("landesregierung-bw-2")
         return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
     @pytest.mark.parametrize(
@@ -5073,7 +5073,7 @@ class TestIssue74OneTimeRebuild:
             payload.append("postparl-kraft")
         payload.append("zahlenformat")
         payload.append("abkuerzungen-dokument-tags")
-        payload.append("landesregierung-bw")
+        payload.append("landesregierung-bw-2")
         return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
     def test_vorgang_with_protocol_pages_gets_a_new_fingerprint(self):
