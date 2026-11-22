@@ -1,10 +1,12 @@
 """Tests for document enrichment: bawue_dok and pdf_text."""
 
+import asyncio
 import hashlib
 import json
 import logging
 import re
 import ssl
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -2031,6 +2033,23 @@ class TestPageHintExtraction:
             assert await parse_pdf(Path("x.pdf"), 2) is whole
 
         assert parse.call_args_list[1].args[1].first_page is None
+
+    @pytest.mark.asyncio
+    async def test_issue217_two_parses_at_a_time(self):
+        """A parse waiting for OCR holds an executor thread; more at once would starve DNS and downloads."""
+        active, peak = [], []
+
+        def slow_parse(*_):
+            active.append(None)
+            peak.append(len(active))
+            time.sleep(0.05)
+            active.pop()
+            return _doc([_page(1, SAMPLE_FULL_TEXT)])
+
+        with patch("bawue.pdf_text.parse", side_effect=slow_parse):
+            await asyncio.gather(*(parse_pdf(Path("x.pdf")) for _ in range(5)))
+
+        assert max(peak) == 2
 
 
 # ---------------------------------------------------------------------------

@@ -349,6 +349,13 @@ async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
 # as kreuzberg's OCR above, a few hundred MB each instead of ~0.66 GB (issue #217).
 _PARSER_OCR = Ocr(max_parallel=_OCR_LIMIT * _OCR_MAX_THREADS)
 _PARSE_OPTIONS = ParseOptions(ocr_engine=_PARSER_OCR, max_ocr_pages=MAX_OCR_PAGES)
+_PARSE_SLOT: dict = {}
+
+
+async def _parse(pdf_path: Path, options: ParseOptions) -> PdfDocument:
+    # A parse holds a default-executor thread while it waits for OCR; unlimited, they starve DNS and downloads.
+    async with loop_semaphore(_PARSE_SLOT, _OCR_LIMIT):
+        return await asyncio.to_thread(parse, pdf_path, options)
 
 
 async def parse_pdf(pdf_path: Path, page_hint: int | None = None) -> PdfDocument:
@@ -358,10 +365,8 @@ async def parse_pdf(pdf_path: Path, page_hint: int | None = None) -> PdfDocument
     end) falls back to the whole document (DD-038, issue #50).
     """
     if page_hint:  # #page=0 is no page: ParseOptions(first_page=0) raises
-        window = await asyncio.to_thread(
-            parse,
-            pdf_path,
-            replace(_PARSE_OPTIONS, first_page=page_hint, last_page=page_hint + _WINDOW_PAGES - 1),
+        window = await _parse(
+            pdf_path, replace(_PARSE_OPTIONS, first_page=page_hint, last_page=page_hint + _WINDOW_PAGES - 1)
         )
         if len(window.text().strip()) >= MIN_TEXT_LENGTH:
             return window
@@ -370,7 +375,7 @@ async def parse_pdf(pdf_path: Path, page_hint: int | None = None) -> PdfDocument
             page_hint,
             MIN_TEXT_LENGTH,
         )
-    return await asyncio.to_thread(parse, pdf_path, _PARSE_OPTIONS)
+    return await _parse(pdf_path, _PARSE_OPTIONS)
 
 
 async def read_pdf(session, url: str) -> str:
