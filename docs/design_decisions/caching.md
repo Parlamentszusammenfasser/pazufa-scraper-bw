@@ -57,15 +57,16 @@ vollständig vor.
    Gesetzblatt-Nr. trägt: der einmalige Neubau gecachter Gesetze für DD-071. Bei einem
    Gesetzentwurf der Landesregierung auch die Entwurf-Kandidaten aus dem Register des
    Beteiligungs-Scrapers (Marker `entwuerfe` + Slugs, DD-079). Der Marker `zahlenformat` baut
-   alle gecachten Vorgänge einmal neu (DD-081), `landesregierung-bw` lädt sie nach dem Löschen
+   alle gecachten Vorgänge einmal neu (DD-081), `landesregierung-bw-2` lädt sie nach dem Löschen
    aller BW-Vorgänge neu hoch (GitHub #219/#220: das Backend vereinigt `initiatoren` und
-   `autoren`, ein erneuter Upload allein ließe die alten Namen stehen).
+   `autoren`, ein erneuter Upload allein ließe die alten Namen stehen). Der erste Marker
+   `landesregierung-bw` lief vor dem Löschen und war damit verbraucht.
 3. Nicht gehasht: vom Parser abgeleitete Felder (sonst invalidiert jede Parser-Verbesserung
    alles), die Reihenfolge, Titel/Initiative/Sachgebiet/Typ/Deskriptoren, sonst kein Scraper-Output.
 4. Ein Vorgang mit noch fehlendem PDF (Issue #66) oder künftiger Fundstelle (DD-068) wird
    nicht gecacht.
 5. **Beteiligungsportal** (Issue #104): `vg2:<slug>` hält den Fingerprint aus Status (Liste),
-   Titel, Ministerium, PDF-Links (URL + Titel), Kommentarfrist (DD-075) sowie den Markern `fristen` (DD-076), `entwuerfe` (DD-079), `zahlenformat` (DD-081) und `landesregierung-bw`. Dafür wird die
+   Titel, Ministerium, PDF-Links (URL + Titel), Kommentarfrist (DD-075) sowie den Markern `fristen` (DD-076), `entwuerfe` (DD-079), `zahlenformat` (DD-081) und `landesregierung-bw-2`. Dafür wird die
    Detailseite schon beim Listen gelesen, ein Request je Prozess und Lauf (derzeit ~6) —
    nur so fällt ein neues PDF auf. Scheitert der Abruf, gibt es
    keinen Fingerprint: kein Treffer, kein Cache-Eintrag.

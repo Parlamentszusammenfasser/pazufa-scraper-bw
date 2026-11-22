@@ -476,6 +476,6 @@ def _process_fingerprint(process: RawBeteiligungProcess, detail: RawBeteiligungD
         "entwuerfe",
         "zahlenformat",
         "abkuerzungen-dokument-tags",
-        "landesregierung-bw",
+        "landesregierung-bw-2",
     ]
     return sha256(json.dumps(payload, ensure_ascii=False, default=str).encode()).hexdigest()
