@@ -16,7 +16,7 @@ XSS-Prüfung des Backends aus (HTTP 400).
 
 **Entscheidung:** Drei Stufen:
 1. **Erkennen und OCR:** Drucksachen liest pazufa-parser (`parse_pdf`, Issue #217): Er
-   OCRt nur Seiten ohne brauchbare Textschicht, ab `MAX_OCR_PAGES` solcher Seiten keine, und
+   OCRt nur Seiten ohne brauchbare Textschicht, bei mehr als `MAX_OCR_PAGES` solcher Seiten keine, und
    verwirft kaputten Text, den OCR nicht ersetzt. Für Tagesordnung, Gesetzblatt und Entwurf
    (`extract_pdf_text`, bis Issue #218) gilt kreuzberg: `is_garbled()` schlägt an bei > 5 % Latin-Extended- oder > 0,5 %
    C1-Zeichen (bezogen auf Buchstaben, ganzes Dokument). Dann Tesseract-OCR (`deu`). Das
