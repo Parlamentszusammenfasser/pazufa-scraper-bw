@@ -1,8 +1,5 @@
-ARG PYTHON_VERSION=3.14.10
-ARG PYTHON_MINOR=3.14
-
 # ---- Builder stage ----
-FROM python:${PYTHON_VERSION}-slim AS builder
+FROM python:3.14.10-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f AS builder
 
 # build-essential provides cc/gcc as a fallback for native deps that ship no
 # wheel for this Python version (currently none do).
@@ -29,10 +26,7 @@ RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --only main --no-root
 
 # ---- Runtime stage ----
-ARG PYTHON_VERSION
-ARG PYTHON_MINOR
-FROM python:${PYTHON_VERSION}-slim
-ARG PYTHON_MINOR
+FROM python:3.14.10-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -48,7 +42,7 @@ WORKDIR /app
 # Copy installed Python packages from builder (corelib is a regular installed
 # package now — the git dependency is not an editable install, so no vendored
 # sources need to be present at runtime).
-COPY --from=builder /usr/local/lib/python${PYTHON_MINOR}/site-packages /usr/local/lib/python${PYTHON_MINOR}/site-packages
+COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY src/ src/

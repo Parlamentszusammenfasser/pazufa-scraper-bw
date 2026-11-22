@@ -250,7 +250,7 @@ jobs:
 
       - name: Bump docker-compose image tag
         run: |
-          sed -i -E "s|(image: schneefisch/pazufa-bawue-scraper:)[0-9]+\.[0-9]+\.[0-9]+|\1${{ needs.release.outputs.version }}|" docker-compose.yml
+          sed -i -E "s|(image: (docker\.io/)?schneefisch/pazufa-bawue-scraper:)[0-9]+\.[0-9]+\.[0-9]+|\1${{ needs.release.outputs.version }}|" docker-compose.yml
 
       - name: Open PR
         uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3

@@ -23,3 +23,30 @@ updates:
     commit-message:
       prefix: chore  # "chore(deps):" cuts no release; ships with the next fix/feat
       include: scope
+
+  # Base image in the Dockerfile. Minor/major are ignored: requires-python is <3.15 and the
+  # site-packages path in the Dockerfile names 3.14, so a new minor is a deliberate change.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: python
+        update-types: [version-update:semver-minor, version-update:semver-major]
+    commit-message:
+      prefix: chore
+
+  # Dev/prod compose images. Our own image is bumped by ci.yml's update-compose, not here.
+  # Postgres/Redis majors are ignored: a new Postgres major can't read the old dev-pgdata volume.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: schneefisch/pazufa-bawue-scraper  # Dependabot drops the docker.io/ prefix
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
+      - dependency-name: redis
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: chore
