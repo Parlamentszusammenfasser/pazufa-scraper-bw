@@ -6,6 +6,7 @@ import logging
 import re
 import ssl
 import tempfile
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
@@ -360,12 +361,7 @@ async def parse_pdf(pdf_path: Path, page_hint: int | None = None) -> PdfDocument
         window = await asyncio.to_thread(
             parse,
             pdf_path,
-            ParseOptions(
-                ocr_engine=_PARSER_OCR,
-                max_ocr_pages=MAX_OCR_PAGES,
-                first_page=page_hint,
-                last_page=page_hint + _WINDOW_PAGES - 1,
-            ),
+            replace(_PARSE_OPTIONS, first_page=page_hint, last_page=page_hint + _WINDOW_PAGES - 1),
         )
         if len(window.text().strip()) >= MIN_TEXT_LENGTH:
             return window
