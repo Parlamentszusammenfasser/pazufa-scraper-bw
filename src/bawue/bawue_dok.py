@@ -26,11 +26,10 @@ from bawue.pdf_text import (
     agenda_text,
     ausgegeben_datum,
     download_pdf,
-    extract_pdf_text,
-    extract_relevant_pages,
     loop_semaphore,
     normalize_volltext,
     parse_page_hint,
+    parse_pdf,
     pdf_sha1,
 )
 from bawue.types import Doktyp, Dokument, DokumentHash, HashStrategy, Mime, Zusammenfassungstupel
@@ -615,12 +614,10 @@ async def enrich_dokument(
             logger.warning("PDF download failed for %s, returning original document", dok.link, exc_info=True)
             return EnrichmentResult(dokument=dok, download_failed=True)
 
-        # Extract text + hash, then normalize. The page markers stay until the
-        # window is cut, so a protocol can still pick its agenda pages (issue #74).
-        marked_text, file_hash = await extract_pdf_text(pdf_path, page_markers=page_hint is not None)
-        full_text = normalize_volltext(
-            marked_text if page_hint is None else extract_relevant_pages(marked_text, page_hint)
-        )
+        # The parsed #page=N window (or the whole PDF); a protocol picks its agenda pages from it (issue #74).
+        parsed = await parse_pdf(pdf_path, page_hint)
+        file_hash = parsed.sha256
+        full_text = normalize_volltext(parsed.text())
 
         # A #page=N anchor marks one Fundstelle's window into a PDF that several
         # references share: separate logical documents packed into one
@@ -667,7 +664,7 @@ async def enrich_dokument(
             context_vorgang_vnr = None
             context_drucksnr = None
             cache_hash = file_hash
-            if (agenda := agenda_text(marked_text, page_hint, druckseiten)) is not None:
+            if (agenda := agenda_text(parsed, page_hint, druckseiten)) is not None:
                 summary_text, pages = agenda
                 body_prompt = BODY_PROMPT_REDEPROTOKOLL_TOP
                 cache_hash = hashlib.sha256(f"{file_hash}#pages={pages}".encode()).hexdigest()
@@ -690,7 +687,10 @@ async def enrich_dokument(
         )
         cache_key = _cache_key(cache_hash, prompt_hash)
         # zp_referenz stays the PARLIS date; zp_modifiziert = the printed issue date (issue #23).
-        ausgegeben = ausgegeben_datum(full_text, dok.drucksnr, dok.zp_referenz)
+        # The page-1 header and footer carry the Drucksache and its Ausgegeben date; the parser
+        # leaves them out of the body text (issue #216).
+        furniture = "\n".join(page.furniture_text() for page in parsed.pages)
+        ausgegeben = ausgegeben_datum(f"{furniture}\n\n{full_text}", dok.drucksnr, dok.zp_referenz)
         text_fields = {
             "titel": dok.titel,
             "volltext": full_text,
