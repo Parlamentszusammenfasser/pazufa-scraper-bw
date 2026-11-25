@@ -1,7 +1,7 @@
 """Issue #180 (DD-079): which portal draft a Landesregierung bill grew from, decided by its text.
 
 The texts are the real WP 18 drafts and Drucksachen, normalized volltext as kreuzberg extracted
-it before issue #218. pazufa-parser's text, which ``read_pdf`` returns now, scores within 0.01.
+it before issue #218.
 """
 
 import gzip
