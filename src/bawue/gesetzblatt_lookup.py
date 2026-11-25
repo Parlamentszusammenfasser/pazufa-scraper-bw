@@ -13,13 +13,11 @@ laws — and each would otherwise re-fetch the same detail page.
 
 import asyncio
 import logging
-import tempfile
 from datetime import UTC, datetime, time
-from pathlib import Path
 
 from bawue.gesetzblatt_client import GesetzblattClient
 from bawue.gesetzblatt_parser import RawGesetzblattDetail, parse_detail, parse_inkrafttreten
-from bawue.pdf_text import extract_pdf_text
+from bawue.pdf_text import parse_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -81,13 +79,7 @@ class GesetzblattDateLookup:
             return None
         try:
             content = await asyncio.to_thread(self._client.fetch_pdf, detail.pdf_url)
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(content)
-            pdf_path = Path(tmp.name)
-            try:
-                text, _hash = await extract_pdf_text(pdf_path)
-            finally:
-                pdf_path.unlink(missing_ok=True)
+            text = (await parse_pdf(content)).text()
         except Exception as exc:
             logger.warning("Gesetzblatt %d Nr. %d: PDF unreadable (%s)", jahr, nummer, exc)
             self._unavailable.add((jahr, nummer))

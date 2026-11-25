@@ -4,20 +4,25 @@ Fixture: the agenda of the 14th Plenarsitzung on 21.10.2026 as published on
 https://www.landtag-bw.de/de/aktuelles/tagesordnungen (Stand 16.10.2026), text as
 extracted by ``pdf_text.extract_pdf_text`` (kreuzberg 4.10.3). The extraction differs by
 platform: on Linux (CI, Docker) it has no blank lines between paragraphs, on macOS it has.
+The PDF itself is read as the scraper reads it, on the platform the tests run on.
 """
 
+import asyncio
 from datetime import date
 from pathlib import Path
 
 import pytest
 
+from bawue.pdf_text import extract_pdf_text
 from bawue.tagesordnung import ParsedTop, agenda_links, parse_tops
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "tagesordnung"
 
 
-@pytest.fixture(params=["linux", "macos"])
+@pytest.fixture(params=["linux", "macos", "pdf"])
 def agenda(request) -> str:
+    if request.param == "pdf":
+        return asyncio.run(extract_pdf_text(FIXTURES / "2026-10-21_14_Plenarsitzung.pdf"))
     return (FIXTURES / f"2026-10-21_14_Plenarsitzung.{request.param}.txt").read_text()
 
 

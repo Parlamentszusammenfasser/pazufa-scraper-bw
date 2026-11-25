@@ -15,22 +15,18 @@ ASCII-Verschiebung um +29 mit C1-Steuerzeichen. Falsche `<`/`>` und E-Mail-Heade
 XSS-Prüfung des Backends aus (HTTP 400).
 
 **Entscheidung:** Drei Stufen:
-1. **Erkennen und OCR:** Drucksachen liest pazufa-parser (`parse_pdf`, Issue #217): Er
-   OCRt nur Seiten ohne brauchbare Textschicht, bei mehr als `MAX_OCR_PAGES` solcher Seiten keine, und
-   verwirft kaputten Text, den OCR nicht ersetzt. Für Tagesordnung, Gesetzblatt und Entwurf
-   (`extract_pdf_text`, bis Issue #218) gilt kreuzberg: `is_garbled()` schlägt an bei > 5 % Latin-Extended- oder > 0,5 %
-   C1-Zeichen (bezogen auf Buchstaben, ganzes Dokument). Dann Tesseract-OCR (`deu`). Das
-   Ergebnis gilt nur, wenn mehr nutzbarer Text übrig bleibt als beim Original
-   (`_usable_length`), denn OCR ersetzt den ganzen Text, auch saubere Seiten. PDFs über
-   `MAX_OCR_PAGES` (500 Seiten) behalten ihren nativen Text: OCR-Zeit wächst mit den Seiten
-   (Issue #182).
+1. **Erkennen und OCR:** PDFs liest pazufa-parser (`parse_pdf`; Drucksachen seit Issue #217,
+   Gesetzblatt und Entwurf seit Issue #218): Er OCRt nur Seiten ohne brauchbare Textschicht
+   (Tesseract, `deu`), bei mehr als `MAX_OCR_PAGES` (500) solcher Seiten keine, denn OCR-Zeit
+   wächst mit den Seiten (Issue #182). Kaputten Text, den OCR nicht ersetzt, verwirft er. Nur die
+   Tagesordnung liest noch kreuzberg, ohne OCR (DD-070).
 2. **Absätze filtern:** `normalize_volltext()` verwirft Absätze mit schlechter Qualität
    (C1, Latin-Extended-B, vokallose lange Wörter, > 60 % Großbuchstaben).
 3. **Spitze Klammern** werden zu `‹`/`›`.
 
 **Konsequenz:** Kalibriert an 925 WP-17-PDFs: C1 tritt nur bei echtem Garbling auf, keine
 Fehlalarme. OCR kostet viel (17/1104: 121 s statt 0,2 s) und rettet bis Faktor 4,6 mehr
-Text. kreuzberg 4.x braucht eine explizite `OcrConfig`.
+Text.
 
 **pazufa-parser statt kreuzberg (Issue #216):** Verglichen an 123 WP-17/18-Fundstellen
 (`verify_fulltext --compare-parser`). Der Parser erkennt dasselbe Ausgegeben-Datum (52 von 52),

@@ -138,8 +138,8 @@ Dashed arrows: the pre-parliamentary stages are optional.
 | `aiohttp`             | Async HTTP sessions for the scraping loop                       | BaWue scraper |
 | `httpx`               | Transport for the PaZuFa API client                             | scraper-core  |
 | `pazufa-scraper-core` | API client + models (spec v0.2.7), `LLMConnector`, normalisation | Shared library |
-| `pazufa-pdf-parser`   | Drucksachen text: page layout, furniture, OCR per page          | BaWue scraper |
-| `kreuzberg`           | PDF text of Tagesordnung, Gesetzblatt, Entwurf (until #218)     | BaWue scraper |
+| `pazufa-pdf-parser`   | PDF text: page layout, furniture, OCR per page                  | BaWue scraper |
+| `kreuzberg`           | Tagesordnung text, until pazufa-parser reads it (#218)          | BaWue scraper |
 | `redis`               | Caching of processed Vorgänge/Dokumente (`bawue.cache`)         | BaWue scraper |
 | `litellm`             | LLM integration: token counting + LLM calls                     | BaWue + scraper-core |
 
@@ -241,10 +241,9 @@ classDiagram
     class PdfText {
         <<module>>
         +download_pdf(session, url) Path
-        +parse_pdf(pdf_path, page_hint) PdfDocument
-        +extract_pdf_text(pdf_path) tuple
+        +parse_pdf(pdf, page_hint) PdfDocument
+        +extract_pdf_text(pdf_path) str
         +normalize_volltext(text) str
-        -_ocr_semaphore() Semaphore
     }
 
     class VorgangLlm {
@@ -302,7 +301,7 @@ IDs. Items whose `Vorgangstyp` field doesn't match the enabled set are dropped d
 | Redis caching       | `bawue.cache` — no TTL, `vg2:`/`sz:`/`llm-semantics:`/`drucks-hash:`/`beteiligungsfristen`/`beteiligung-entwuerfe`/`entwurf-uebernahmen` keys (DD-052/066/076/079) |
 | API client          | `pazufa-scraper-core` httpx client + `bawue.upload_throttle` retry |
 | Models              | `pazufa-scraper-core` models generated from OpenAPI spec |
-| Document processing | Kreuzberg/OCR + LLM pipeline (`bawue.pdf_text`, `bawue.bawue_dok`) |
+| Document processing | pazufa-parser/OCR + LLM pipeline (`bawue.pdf_text`, `bawue.bawue_dok`) |
 | Error tolerance     | `bawue.pipeline` — per-item handling, doesn't stop on single failures |
 | Config              | `bawue.config` — 4-tier: Defaults → TOML → env vars → CLI |
 

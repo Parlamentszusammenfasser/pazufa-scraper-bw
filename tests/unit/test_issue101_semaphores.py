@@ -33,13 +33,17 @@ def test_llm_calls_contend_in_two_cycles():
         assert asyncio.run(cycle()) == [{"ok": True}] * 5
 
 
-def test_ocr_limit_is_shared_within_a_cycle_and_fresh_per_cycle():
+def _parse_semaphore():
+    return pdf_text.loop_semaphore(pdf_text._PARSE_SLOT, pdf_text._OCR_LIMIT)
+
+
+def test_parse_limit_is_shared_within_a_cycle_and_fresh_per_cycle():
     async def cycle():
-        sem = pdf_text._ocr_semaphore()
-        assert sem is pdf_text._ocr_semaphore()  # both scrapers share one limit
+        sem = _parse_semaphore()
+        assert sem is _parse_semaphore()  # both scrapers share one limit
 
         async def hold():
-            async with pdf_text._ocr_semaphore():
+            async with _parse_semaphore():
                 await asyncio.sleep(0.01)
 
         await asyncio.gather(*(hold() for _ in range(4)))
@@ -59,7 +63,7 @@ def test_finished_loops_are_released():
         loops.append(weakref.ref(asyncio.get_running_loop()))
 
         async def hold():
-            async with pdf_text._ocr_semaphore():
+            async with _parse_semaphore():
                 await asyncio.sleep(0.01)
 
         await asyncio.gather(*(hold() for _ in range(4)))

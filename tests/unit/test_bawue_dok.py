@@ -39,13 +39,10 @@ from bawue.bawue_dok import (
     zusammenfassung_text,
 )
 from bawue.pdf_text import (
-    MAX_OCR_PAGES,
     PdfNotAvailableError,
     agenda_text,
     ausgegeben_datum,
     download_pdf,
-    extract_pdf_text,
-    is_garbled,
     normalize_volltext,
     paragraph_quality_score,
     parse_page_hint,
@@ -155,14 +152,6 @@ def _doc(pages: list[Page], sha256: str = SAMPLE_HASH) -> PdfDocument:
     )
 
 
-def _mock_extraction_result(content: str = SAMPLE_FULL_TEXT):
-    """Create a mock kreuzberg ExtractionResult."""
-    result = MagicMock()
-    result.content = content
-    result.metadata = {"created_at": "2026-01-15T12:00:00+00:00", "modified_at": "2026-01-15T12:00:00+00:00"}
-    return result
-
-
 def _patch_pdf_pipeline(text_and_hash=SAMPLE_TEXT_AND_HASH, doc: PdfDocument | None = None):
     """Context manager that mocks download_pdf, parse_pdf (*doc*, else one page of *text_and_hash*) and pdf_sha1."""
     text, sha256 = text_and_hash
@@ -270,44 +259,6 @@ class TestDownloadPdf:
             await download_pdf(session, "https://example.com/huge.pdf")
 
 
-# ---------------------------------------------------------------------------
-# TestExtractPdfText
-# ---------------------------------------------------------------------------
-
-
-class TestExtractPdfText:
-    @pytest.mark.asyncio
-    async def test_extracts_text_and_hash(self, tmp_path):
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-
-        mock_result = _mock_extraction_result()
-        with patch("bawue.pdf_text.extract_file", new_callable=AsyncMock, return_value=mock_result) as mock_extract:
-            text, doc_hash = await extract_pdf_text(pdf_file)
-
-        assert text == SAMPLE_FULL_TEXT
-        assert doc_hash == SAMPLE_HASH
-        assert mock_extract.call_count == 1  # clean text: no OCR retry
-
-    @pytest.mark.asyncio
-    async def test_ocr_fallback_on_short_text(self, tmp_path):
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-
-        short_result = _mock_extraction_result(content="Too short")
-        ocr_result = _mock_extraction_result(content=SAMPLE_FULL_TEXT)
-
-        with patch(
-            "bawue.pdf_text.extract_file",
-            new_callable=AsyncMock,
-            side_effect=[short_result, ocr_result],
-        ):
-            text, doc_hash = await extract_pdf_text(pdf_file)
-
-        assert text == SAMPLE_FULL_TEXT
-        assert doc_hash == SAMPLE_HASH
-
-
 class TestReadPdf:
     """The draft match reads PDFs this way (DD-079): as enrichment stores them, no file left behind."""
 
@@ -321,11 +272,14 @@ class TestReadPdf:
 
     @pytest.mark.asyncio
     async def test_normalized_text(self, tmp_path):
+        """Line-break hyphens are joined ("abzu-senken", issue #20), compound hyphens kept."""
         pdf = self._downloaded(tmp_path)
         with patch("bawue.pdf_text.download_pdf", AsyncMock(return_value=pdf)):
             text = await read_pdf(MagicMock(), self.URL)
 
-        assert "abzusenken" in text  # the extracted text has "abzu-senken" (issue #20)
+        for joined in ("abzusenken", "Lebensjahr", "Wahltag", "Gesellschaft", "Jugendverbänden"):
+            assert joined in text
+        assert "Baden-Württemberg" in text
         assert not pdf.exists()
 
     @pytest.mark.asyncio
@@ -333,7 +287,7 @@ class TestReadPdf:
         pdf = self._downloaded(tmp_path)
         with (
             patch("bawue.pdf_text.download_pdf", AsyncMock(return_value=pdf)),
-            patch("bawue.pdf_text.extract_file", AsyncMock(side_effect=RuntimeError("kreuzberg"))),
+            patch("bawue.pdf_text.parse", side_effect=RuntimeError("unreadable")),
             pytest.raises(RuntimeError),
         ):
             await read_pdf(MagicMock(), self.URL)
@@ -1681,74 +1635,6 @@ class TestEnrichDokumentSanitization:
 
 
 # ---------------------------------------------------------------------------
-# TestIsGarbled
-# ---------------------------------------------------------------------------
-
-
-class TestIsGarbled:
-    @pytest.mark.parametrize(
-        "text",
-        [
-            pytest.param(
-                "Gemäß § 50a Absatz 2 der Geschäftsordnung habe ich im Einvernehmen "
-                "mit den Antragstellern die Landesregierung gebeten, zu dem Gesetzentwurf "
-                "der Fraktion FDP/DVP die Anhörung durchzuführen.",
-                id="clean-german",
-            ),
-            # German umlauts (U+00C4-U+00FC) are NOT Latin Extended.
-            pytest.param("Änderung des Gesetzes für Straßenverkehr mit Ölprüfung und Übergabe", id="umlauts"),
-            # ASCII shift without C1 chars leaves no reliable signal; normalize_volltext's
-            # paragraph scoring (vowelless words + uppercase ratio) still removes it.
-            pytest.param(
-                "6WlGWHWDJ%DGHQUWWHPEHUJ3RVWIDFK6WXWWJDUW )UDNWLRQGHU)'3'93]XU:LHGHUHLQIKUXQJ", id="shift-without-c1"
-            ),
-            # A stray C1 char in otherwise clean text must not trigger the OCR retry.
-            pytest.param(
-                "Landtag von Baden-Württemberg, Drucksache 17/1201, Änderungsanträge zum Haushalt. " * 4 + "\x81",
-                id="c1-below-threshold",
-            ),
-            # 4 Latin Extended of 99 alpha chars ≈ 4 %, just below the 5 % threshold.
-            pytest.param("a" * 95 + "ůĂƐŝ", id="latin-ext-below-threshold"),
-            pytest.param("", id="empty"),
-            pytest.param("Kurz.", id="too-short"),
-        ],
-    )
-    def test_not_garbled(self, text):
-        assert is_garbled(text) is False
-
-    @pytest.mark.parametrize(
-        "text",
-        [
-            # DD-015 Muster 1: Latin Extended characters from a broken ToUnicode CMap.
-            pytest.param(
-                "ZĞ͗'ĞƐĞƚǌĞŶƚǁƵƌĨĚĞƌ&ƌĂŬƚŝŽŶĚĞƌ&WͬsWͲ'ĞƐĞƚǌǌƵƌtŝĞĚĞƌŚĞƌƐƚĞůůƵŶŐĚĞƌsĞƌďŝŶĚůŝĐŚŬĞŝƚĚĞƌ'ƌƵŶĚƐĐŚƵůĞŵƉĨĞŚůƵŶŐ",
-                id="latin-extended",
-            ),
-            # Clean first page, garbled rest: overall garbled.
-            pytest.param(
-                "Landtag von Baden-Württemberg\n17. Wahlperiode\nDrucksache 17/4244\n" * 3
-                + "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 20,
-                id="mixed",
-            ),
-            # DD-015 Muster 2 (issue #20): verbatim kreuzberg output for page 2 of Drucksache
-            # 17/1201, every glyph shifted, umlauts in the C1 range (5 / 367 ≈ 1.4 %).
-            pytest.param(
-                "6HLWHYRQ\n/DQGWDJ-YRQ%DGHQ:\x81UWWHPEHUJ  'UXFNVDFKH\n:DKOSHULRGH  (LQJDQJ\n\n\n\n"
-                "bQGHUXQJVDQWUDJ GHU)UDNWLRQ*5h1(XQG\nGHU)UDNWLRQ-GHU&'8\n\n\n"
-                "]X-GHU%HVFKOXVVHPSIHKOXQJ-GHV$XVVFKXVVHV-I\x81U)LQDQ]HQ\n±'UXFNVDFKH1XPPHU\n\n\n"
-                "]X-GHP(QWZXUI-GHV-6WDDWVKDXVKDOWVSODQV-I\x81U\n\n\n'HU/DQGWDJ-ZROOH-EHVFKOLH\x89HQ\n\n"
-                "(LQ]HOSODQ /DQGWDJ\n\n.DSLWHO $OOJHPHLQH%HZLOOLJXQJHQ\n\n=X-lQGHUQ\n6\n\n"
-                "7LWHO\n7LW*U ).= =ZHFNEHVWLPPXQJ\n%HWUDJ\nI\x81U\n\n7VG(85\n"
-                "   %HLKLOIHQ-DXIJUXQG-GHU%HLKLOIHYHURUGQXQJ-XGJORKQH-9HU\nVRUJXQJVHPSIlQJHU-LQQHQ\n",
-                id="issue20-shift-with-c1",
-            ),
-        ],
-    )
-    def test_garbled(self, text):
-        assert is_garbled(text) is True
-
-
-# ---------------------------------------------------------------------------
 # Improvement 1: TestVorwortExtraction
 # ---------------------------------------------------------------------------
 
@@ -1810,181 +1696,6 @@ class TestLLMMetrics:
     def test_format_lines_empty_when_nothing_counted(self):
         """Issue #56: the summaries print the block without a `total > 0` guard."""
         assert LLMMetrics().format_lines() == []
-
-    def test_above_threshold_is_garbled(self):
-        """Just above the threshold should be flagged."""
-        # 80 clean ASCII alpha chars + 20 Latin Extended = 20/100 = 20% (above 5%)
-        clean = "a" * 80
-        garbled = "ůĂƐŝĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂ"  # 20 Latin Extended chars
-        text = clean + garbled
-        assert is_garbled(text) is True
-
-
-# ---------------------------------------------------------------------------
-# TestExtractPdfTextOcrRetry
-# ---------------------------------------------------------------------------
-
-
-class TestExtractPdfTextOcrRetry:
-    @pytest.mark.asyncio
-    async def test_ocr_retry_on_garbled_text(self, tmp_path):
-        """When normal extraction returns garbled text, should retry with OCR."""
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-
-        garbled_text = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10
-        clean_text = "Dies ist ein korrekter deutscher Text mit genügend Zeichen für den Test."
-
-        garbled_result = _mock_extraction_result(content=garbled_text)
-        ocr_result = _mock_extraction_result(content=clean_text)
-
-        with patch(
-            "bawue.pdf_text.extract_file",
-            new_callable=AsyncMock,
-            side_effect=[garbled_result, ocr_result],
-        ):
-            text, _hash = await extract_pdf_text(pdf_file)
-
-        assert text == clean_text
-        assert "ůĂƐƐĞŶ" not in text
-
-    @pytest.mark.asyncio
-    async def test_ocr_retry_uses_german_language(self, tmp_path):
-        """OCR retry must use language='deu' for proper German text extraction."""
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-
-        garbled_text = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10
-        clean_text = "Korrekter deutscher Volltext mit ausreichender Länge."
-
-        garbled_result = _mock_extraction_result(content=garbled_text)
-        ocr_result = _mock_extraction_result(content=clean_text)
-
-        with patch(
-            "bawue.pdf_text.extract_file",
-            new_callable=AsyncMock,
-            side_effect=[garbled_result, ocr_result],
-        ) as mock_extract:
-            await extract_pdf_text(pdf_file)
-
-        # Second call (OCR retry) should use force_ocr=True and language='deu'
-        assert mock_extract.call_count == 2
-        ocr_call_config = mock_extract.call_args_list[1].kwargs["config"]
-        assert ocr_call_config.force_ocr is True
-        assert ocr_call_config.ocr is not None
-        assert ocr_call_config.ocr.language == "deu"
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("content", ["", "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10])
-    async def test_issue182_no_ocr_past_max_ocr_pages(self, tmp_path, content):
-        """Issue #182: OCR time grows with pages, so a longer PDF keeps its native text."""
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-        result = _mock_extraction_result(content=content)
-        result.metadata["page_count"] = MAX_OCR_PAGES + 1
-
-        with patch("bawue.pdf_text.extract_file", new_callable=AsyncMock, return_value=result) as mock_extract:
-            text, _hash = await extract_pdf_text(pdf_file)
-
-        assert mock_extract.call_count == 1
-        assert text == content
-
-    @pytest.mark.asyncio
-    async def test_ocr_failure_keeps_original_text(self, tmp_path):
-        """If OCR retry also returns garbled text, keep original (normalize will strip)."""
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-
-        garbled_text = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10
-
-        garbled_result = _mock_extraction_result(content=garbled_text)
-        still_garbled = _mock_extraction_result(content=garbled_text)
-
-        with patch(
-            "bawue.pdf_text.extract_file",
-            new_callable=AsyncMock,
-            side_effect=[garbled_result, still_garbled],
-        ):
-            text, _ = await extract_pdf_text(pdf_file)
-
-        # Original text returned when OCR doesn't improve it
-        assert text == garbled_text
-
-    @pytest.mark.asyncio
-    async def test_ocr_rejected_when_it_yields_less_usable_text(self, tmp_path):
-        """A clean-but-shorter OCR result must not replace a partly garbled original.
-
-        `is_garbled` measures the whole document, so it also fires on PDFs whose
-        text is only partly broken. OCR replaces everything — including the pages
-        that extracted cleanly — so "not garbled" alone is too weak a bar.
-        """
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-
-        # Mostly clean German prose, with a garbled tail that trips is_garbled.
-        clean_body = "Der Landtag wolle beschließen, den Gesetzentwurf unverändert anzunehmen. " * 10
-        garbled_tail = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 3
-        partly_garbled = f"{clean_body}\n\n{garbled_tail}"
-        # OCR came back clean but recovered far less of the document.
-        sparse_ocr = "Der Landtag wolle beschließen, den Gesetzentwurf anzunehmen."
-
-        assert is_garbled(partly_garbled) is True
-        assert is_garbled(sparse_ocr) is False
-
-        with patch(
-            "bawue.pdf_text.extract_file",
-            new_callable=AsyncMock,
-            side_effect=[
-                _mock_extraction_result(content=partly_garbled),
-                _mock_extraction_result(content=sparse_ocr),
-            ],
-        ):
-            text, _ = await extract_pdf_text(pdf_file)
-
-        assert text == partly_garbled
-
-    @pytest.mark.asyncio
-    async def test_ocr_exception_keeps_original_text(self, tmp_path):
-        """If OCR retry raises an exception, keep original text."""
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-
-        garbled_text = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10
-
-        garbled_result = _mock_extraction_result(content=garbled_text)
-
-        with patch(
-            "bawue.pdf_text.extract_file",
-            new_callable=AsyncMock,
-            side_effect=[garbled_result, RuntimeError("OCR failed")],
-        ):
-            text, _ = await extract_pdf_text(pdf_file)
-
-        assert text == garbled_text
-
-    @pytest.mark.asyncio
-    async def test_logs_garbled_detection(self, tmp_path, caplog):
-        """Should log a warning when garbled text is detected."""
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(SAMPLE_PDF_BYTES)
-
-        garbled_text = "ůĂƐƐĞŶŵŝƚǀĞƌŐůĞŝĐŚďĂƌĞŶĞŐĂďƵŶŐĞŶƵŶĚ " * 10
-        clean_text = "Korrekter Text mit ausreichender Länge für den Test hier."
-
-        garbled_result = _mock_extraction_result(content=garbled_text)
-        ocr_result = _mock_extraction_result(content=clean_text)
-
-        with (
-            patch(
-                "bawue.pdf_text.extract_file",
-                new_callable=AsyncMock,
-                side_effect=[garbled_result, ocr_result],
-            ),
-            caplog.at_level(logging.WARNING, logger="bawue.pdf_text"),
-        ):
-            await extract_pdf_text(pdf_file)
-
-        assert any("garbled" in r.message.lower() for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------

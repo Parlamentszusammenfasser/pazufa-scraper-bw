@@ -4,7 +4,7 @@ Run with: pytest -m integration tests/integration/test_llm_extraction.py
 
 These tests hit a real LLM API and download real PDFs from the BaWue Landtag.
 They verify that the full enrichment pipeline works end-to-end:
-  PDF download → text extraction (kreuzberg) → LLM semantic extraction → enriched Dokument
+  PDF download → text extraction (pazufa-parser) → LLM semantic extraction → enriched Dokument
 """
 
 import os

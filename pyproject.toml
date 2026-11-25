@@ -21,8 +21,8 @@ pazufa-metrics-client = {git = "https://codeberg.org/PaZuFa/pazufa-metrics-clien
 httpx = ">=0.28"          # via corelib transitively; pinned explicitly (used by bawue.api)
 redis = ">=7.4"           # was transitively provided by collector; used by bawue.cache
 python-dotenv = ">=1.0"   # was transitively provided by collector; used by bawue.__main__
-kreuzberg = ">=4.7"       # was transitively provided by collector; pdf_text.extract_pdf_text until #218
-pazufa-pdf-parser = {git = "https://github.com/Parlamentszusammenfasser/pdf-parser.git", tag = "0.10.0"}  # Drucksachen text (issue #217)
+kreuzberg = ">=4.7"       # Tagesordnung text only (pdf_text.extract_pdf_text), until pazufa-parser reads it (#218)
+pazufa-pdf-parser = {git = "https://github.com/Parlamentszusammenfasser/pdf-parser.git", tag = "0.10.0"}  # PDF text (issues #217, #218)
 lxml = ">=6.0"
 requests = "^2.32"
 toml = ">=0.10"
