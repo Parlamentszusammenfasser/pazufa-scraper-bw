@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
-from pazufa_pdf_parser import Block, BlockKind, Metadata, Page, PageSource, PdfDocument, Report
+from pazufa_pdf_parser import Block, BlockKind, Issue, Metadata, Page, PageSource, PdfDocument, Report, Severity
 
 from bawue.bawue_dok import (
     BODY_PROMPT_BESCHLUSSEMPF,
@@ -144,11 +144,11 @@ def _page(number: int, body: str = "", printed: str | None = None, header: str =
     )
 
 
-def _doc(pages: list[Page], sha256: str = SAMPLE_HASH) -> PdfDocument:
+def _doc(pages: list[Page], sha256: str = SAMPLE_HASH, issues: tuple[Issue, ...] = ()) -> PdfDocument:
     """A parsed PDF as pazufa-parser returns it."""
     meta = Metadata(title=None, author=None, created=None, modified=None, page_count=len(pages))
     return PdfDocument(
-        sha256=sha256, metadata=meta, pages=tuple(pages), report=Report(parser_version="test", issues=())
+        sha256=sha256, metadata=meta, pages=tuple(pages), report=Report(parser_version="test", issues=issues)
     )
 
 
@@ -1752,6 +1752,18 @@ class TestPageHintExtraction:
             await parse_pdf(PDF_FIXTURES / "18_0010_S286-296.pdf", 12)
 
         assert "page_range_empty" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_issue218_failed_ocr_is_logged_as_error(self, caplog):
+        """A failed OCR is not retried: the page stays empty and the error shows in the logs."""
+        failed = Issue(severity=Severity.ERROR, step="ocr", code="ocr_failed", message="OCR failed", page=1)
+        doc = _doc([_page(1, "")], issues=(failed,))
+        with patch("bawue.pdf_text.parse", return_value=doc), caplog.at_level(logging.WARNING, logger="bawue.pdf_text"):
+            assert await parse_pdf(Path("x.pdf")) is doc
+
+        assert [(r.levelname, r.getMessage()) for r in caplog.records] == [
+            ("ERROR", "pazufa-parser ocr_failed (page 1): OCR failed")
+        ]
 
     @pytest.mark.asyncio
     async def test_issue217_two_parses_at_a_time(self):

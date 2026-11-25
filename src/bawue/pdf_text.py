@@ -224,7 +224,9 @@ async def _parse(pdf: Source, options: ParseOptions) -> PdfDocument:
         doc = await asyncio.to_thread(parse, pdf, options)
     for issue in doc.report.issues:  # the parser does not log: OCR failures, the OCR page limit, ...
         if issue.severity >= Severity.WARNING:
-            logger.warning("pazufa-parser %s (page %s): %s", issue.code, issue.page, issue.message)
+            # A failed OCR is final: no retry, the page stays without text (issue #218).
+            level = logging.ERROR if issue.severity >= Severity.ERROR else logging.WARNING
+            logger.log(level, "pazufa-parser %s (page %s): %s", issue.code, issue.page, issue.message)
     return doc
 
 
