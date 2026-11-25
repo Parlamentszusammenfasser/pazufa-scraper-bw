@@ -107,7 +107,7 @@ def _analyze_pdf(url: str, doc: PdfDocument) -> dict:
 
 
 async def process_one_pdf(session: aiohttp.ClientSession, url: str) -> dict:
-    """Download and parse one PDF as the scraper does, and return its analysis."""
+    """Download and parse one whole PDF, and return its analysis."""
     try:
         pdf_path = await download_pdf(session, url)
         try:
