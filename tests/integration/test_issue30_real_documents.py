@@ -6,11 +6,11 @@ semantic defects in the summaries of Vorgang V-215974 on staging:
 1. ``Rich terinnen`` — an inner-word break in the summary. Root cause: the
    two-column PARLIS PDF of Drucksache 17/1000 (Staatshaushaltsgesetz 2022)
    hyphenates ``Richterinnen`` at a line end (``Richte-rinnen``); kreuzberg
-   keeps the inline hyphen, so the broken word reached the LLM and was echoed
-   into the summary. This is a *deterministic* text-normalization defect, fixed
-   by the issue-20 hyphen-rejoin pass. The test below downloads the real PDF and
-   verifies the current pipeline produces a clean ``Richterinnen`` — no LLM
-   required, so it runs on network access alone.
+   kept the inline hyphen, so the broken word reached the LLM and was echoed
+   into the summary. pazufa-parser joins the break itself (issue #218), and the
+   issue-20 hyphen-rejoin pass stays as a safety net. The test below downloads the
+   real PDF and verifies the current pipeline produces a clean ``Richterinnen`` — no
+   LLM required, so it runs on network access alone.
 
 2. ``Dreiklang aus Nachhaltigkeit, Ökologie, Ökonomie und Soziales`` — four items
    where the source (Plenarprotokoll 17/25, printed page 1334) lists only three:
@@ -30,7 +30,7 @@ Run with: pytest -m integration tests/integration/test_issue30_real_documents.py
 import aiohttp
 import pytest
 
-from bawue.pdf_text import extract_pdf_text, normalize_volltext
+from bawue.pdf_text import download_pdf, normalize_volltext, parse_pdf
 
 pytestmark = pytest.mark.integration
 
@@ -42,20 +42,17 @@ DS_17_1000_URL = "https://www.landtag-bw.de/files/live/sites/LTBW/files/dokument
 # page 1334 carries the "Dreiklang" passage.
 PP_17_25_URL = "https://www.landtag-bw.de/resource/blob/255474/2d80f4ffbeffdeab3654eac3927df0a0/17_0025_22122021.pdf"
 
-# Broken forms that must NOT survive normalization (from the kreuzberg extraction
-# of DS 17/1000). The trailing hyphen makes each unambiguous — a genuine compound
+# Broken forms that must NOT survive normalization (from the former kreuzberg
+# extraction of DS 17/1000). The trailing hyphen makes each unambiguous — a genuine compound
 # like "Landesrichter- und" keeps its hyphen and is not in this list.
 _BROKEN_TOKENS = ["Richte-rinnen", "Rich terinnen", "Beam-ten", "Ein-gangsamt"]
 
 
 async def _extract(session: aiohttp.ClientSession, url: str) -> str:
     """Download a PDF and return its extracted (un-normalized) text."""
-    from bawue.pdf_text import download_pdf
-
     path = await download_pdf(session, url)
     try:
-        text, _hash = await extract_pdf_text(path)
-        return text
+        return (await parse_pdf(path)).text()
     finally:
         path.unlink(missing_ok=True)
 
@@ -66,14 +63,8 @@ class TestRichterinnenHyphenation:
     @pytest.mark.asyncio
     async def test_richterinnen_is_not_broken_after_normalization(self):
         async with aiohttp.ClientSession() as session:
-            raw = await _extract(session, DS_17_1000_URL)
+            clean = normalize_volltext(await _extract(session, DS_17_1000_URL))
 
-        # Precondition: the raw extraction really does contain the hyphenated
-        # break — otherwise this document no longer reproduces the bug and the
-        # test would pass vacuously.
-        assert "Richte-rinnen" in raw, "source PDF no longer exhibits the hyphenation defect"
-
-        clean = normalize_volltext(raw)
         assert "Richterinnen" in clean, "expected the rejoined word to appear"
         for token in _BROKEN_TOKENS:
             assert token not in clean, f"broken token survived normalization: {token!r}"

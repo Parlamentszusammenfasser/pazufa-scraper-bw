@@ -1,7 +1,7 @@
 """Issue #180 (DD-079): which portal draft a Landesregierung bill grew from, decided by its text.
 
-The texts are the real WP 18 drafts and Drucksachen, extracted as the scraper does
-(``extract_pdf_text`` + ``normalize_volltext``).
+The texts are the real WP 18 drafts and Drucksachen, normalized volltext as kreuzberg extracted
+it before issue #218.
 """
 
 import gzip

@@ -182,7 +182,7 @@ class BawueSitzungenScraper(SitzungsScraper):
             try:
                 pdf_path = await download_pdf(self.session, url)
                 try:
-                    text, _hash = await extract_pdf_text(pdf_path)
+                    text = await extract_pdf_text(pdf_path)
                 finally:
                     pdf_path.unlink(missing_ok=True)
             except Exception as e:

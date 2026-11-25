@@ -15,20 +15,15 @@ import json
 import logging
 import re
 import sys
-import tempfile
 import time
 from datetime import date, timedelta
 from pathlib import Path
 
 import aiohttp
+from pazufa_pdf_parser import PageSource, PdfDocument
 
 from bawue.parlis_client import ParlisClient
-from bawue.pdf_text import (
-    extract_pdf_text,
-    is_garbled,
-    normalize_volltext,
-    paragraph_quality_score,
-)
+from bawue.pdf_text import download_pdf, normalize_volltext, paragraph_quality_score, parse_pdf
 from bawue.wahlperiode import CURRENT_WAHLPERIODE, wahlperiode_start
 
 logger = logging.getLogger(__name__)
@@ -77,17 +72,20 @@ def _paragraph_stats(text: str) -> dict:
     }
 
 
-def _analyze_pdf(url: str, raw_text: str, normalized_text: str, doc_hash: str) -> dict:
+def _analyze_pdf(url: str, doc: PdfDocument) -> dict:
     """Build a detailed analysis dict for one PDF."""
+    raw_text = doc.text()
+    normalized_text = normalize_volltext(raw_text)
     para_stats = _paragraph_stats(raw_text)
 
     return {
         "url": url,
-        "hash": doc_hash,
+        "hash": doc.sha256,
+        "pages": len(doc.pages),
+        "ocr_pages": sum(page.source is PageSource.OCR for page in doc.pages),
         "raw_len": len(raw_text),
         "normalized_len": len(normalized_text),
         "delta_len": len(raw_text) - len(normalized_text),
-        "is_garbled": is_garbled(raw_text),
         "raw_c1_chars": _count_c1(raw_text),
         "norm_c1_chars": _count_c1(normalized_text),
         "raw_cr_count": _count_cr(raw_text),
@@ -108,51 +106,18 @@ def _analyze_pdf(url: str, raw_text: str, normalized_text: str, doc_hash: str) -
 # ---------------------------------------------------------------------------
 
 
-class OcrLogCapture(logging.Handler):
-    """Captures OCR-related log messages from pdf_text."""
-
-    def __init__(self):
-        super().__init__()
-        self.messages: list[str] = []
-
-    def emit(self, record):
-        msg = record.getMessage()
-        if "OCR" in msg or "garbled" in msg.lower():
-            self.messages.append(msg)
-
-
-async def process_one_pdf(session: aiohttp.ClientSession, url: str, ocr_handler: OcrLogCapture) -> dict:
-    """Download one PDF, extract text, normalize, and return analysis."""
-    ocr_handler.messages.clear()
-
-    pdf_path: Path | None = None
+async def process_one_pdf(session: aiohttp.ClientSession, url: str) -> dict:
+    """Download and parse one whole PDF, and return its analysis."""
     try:
-        # Download
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
-            if resp.status != 200:
-                return {"url": url, "error": f"HTTP {resp.status}"}
-            content = await resp.read()
-
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(content)
-            pdf_path = Path(tmp.name)
-
-        # Extract
-        raw_text, doc_hash = await extract_pdf_text(pdf_path)
-
-        # Normalize
-        normalized_text = normalize_volltext(raw_text)
-
-        analysis = _analyze_pdf(url, raw_text, normalized_text, doc_hash)
-        analysis["ocr_messages"] = list(ocr_handler.messages)
-        analysis["pdf_size_bytes"] = len(content)
-        return analysis
-
+        pdf_path = await download_pdf(session, url)
+        try:
+            size = pdf_path.stat().st_size
+            doc = await parse_pdf(pdf_path)
+        finally:
+            pdf_path.unlink(missing_ok=True)
     except Exception as exc:
         return {"url": url, "error": f"{type(exc).__name__}: {exc}"}
-    finally:
-        if pdf_path is not None:
-            pdf_path.unlink(missing_ok=True)
+    return _analyze_pdf(url, doc) | {"pdf_size_bytes": size}
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +185,7 @@ def _print_analysis(analysis: dict, verbosity: int, index: int) -> None:
     print(f"  PDF size:  {analysis.get('pdf_size_bytes', 0):,} bytes", file=sys.stderr)
     print(f"  Raw len:   {analysis['raw_len']:,} chars", file=sys.stderr)
     print(f"  Norm len:  {analysis['normalized_len']:,} chars  (delta: -{analysis['delta_len']:,})", file=sys.stderr)
-    print(f"  Garbled:   {analysis['is_garbled']}", file=sys.stderr)
+    print(f"  OCR pages: {analysis['ocr_pages']}/{analysis['pages']}", file=sys.stderr)
 
     # Normalization step indicators
     steps = []
@@ -241,11 +206,6 @@ def _print_analysis(analysis: dict, verbosity: int, index: int) -> None:
             print(f"    - {s}", file=sys.stderr)
     else:
         print("  Normalization: no changes needed", file=sys.stderr)
-
-    if analysis["ocr_messages"]:
-        print("  OCR events:", file=sys.stderr)
-        for msg in analysis["ocr_messages"]:
-            print(f"    - {msg}", file=sys.stderr)
 
     if verbosity >= 2:
         print("\n  === Raw text (first 500 chars) ===", file=sys.stderr)
@@ -276,8 +236,7 @@ def _print_summary(results: list[dict], duration: float) -> None:
     if not ok:
         return
 
-    garbled = sum(1 for r in ok if r["is_garbled"])
-    ocr_triggered = sum(1 for r in ok if r.get("ocr_messages"))
+    ocr_pdfs = sum(1 for r in ok if r["ocr_pages"])
     total_removed = sum(r["paragraphs"]["removed"] for r in ok)
     total_paras = sum(r["paragraphs"]["total"] for r in ok)
     avg_delta = sum(r["delta_len"] for r in ok) / len(ok)
@@ -285,8 +244,7 @@ def _print_summary(results: list[dict], duration: float) -> None:
     total_cr = sum(r["raw_cr_count"] for r in ok)
     total_angles = sum(r["raw_angle_brackets"] for r in ok)
 
-    print(f"\n  Garbled detected:   {garbled}/{len(ok)}", file=sys.stderr)
-    print(f"  OCR fallback:       {ocr_triggered}/{len(ok)}", file=sys.stderr)
+    print(f"\n  PDFs with OCR:      {ocr_pdfs}/{len(ok)}", file=sys.stderr)
     print(f"  Avg chars removed:  {avg_delta:,.0f}", file=sys.stderr)
     print(f"  C1 chars removed:   {total_c1:,}", file=sys.stderr)
     print(f"  CR chars removed:   {total_cr:,}", file=sys.stderr)
@@ -332,12 +290,6 @@ async def _run(args: argparse.Namespace) -> None:
 
     print(f"Found {len(urls)} PDF URLs, processing...", file=sys.stderr)
 
-    # Set up OCR log capture
-    dok_logger = logging.getLogger("bawue.pdf_text")
-    ocr_handler = OcrLogCapture()
-    ocr_handler.setLevel(logging.WARNING)
-    dok_logger.addHandler(ocr_handler)
-
     # Prepare log output
     LOGDIR.mkdir(exist_ok=True)
     ts = time.strftime("%Y%m%d_%H%M%S")
@@ -350,7 +302,7 @@ async def _run(args: argparse.Namespace) -> None:
         async with aiohttp.ClientSession() as session:
             for i, url in enumerate(urls, 1):
                 logger.info("Processing PDF %d/%d: %s", i, len(urls), url)
-                analysis = await process_one_pdf(session, url, ocr_handler)
+                analysis = await process_one_pdf(session, url)
                 results.append(analysis)
 
                 # Write JSONL line immediately (survives interruption)
@@ -369,9 +321,6 @@ async def _run(args: argparse.Namespace) -> None:
     duration = time.monotonic() - start
     _print_summary(results, duration)
     print(f"\n  Log written to: {logfile}", file=sys.stderr)
-
-    # Clean up handler
-    dok_logger.removeHandler(ocr_handler)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -93,7 +94,7 @@ def _pdf_client(**kwargs) -> MagicMock:
 
 
 def _extracted(text: str):
-    return patch("bawue.gesetzblatt_lookup.extract_pdf_text", return_value=(text, "hash"))
+    return patch("bawue.gesetzblatt_lookup.parse_pdf", return_value=SimpleNamespace(text=lambda: text))
 
 
 class TestInkrafttretenIssue98:
@@ -102,11 +103,12 @@ class TestInkrafttretenIssue98:
     @pytest.mark.asyncio
     async def test_reads_the_cited_pdf(self):
         client = _pdf_client()
-        with _extracted(_LNRSCHG):
+        with _extracted(_LNRSCHG) as parse:
             assert await GesetzblattDateLookup(client).inkrafttreten(2026, 14) == datetime(2026, 6, 1, tzinfo=UTC)
         client.fetch_pdf.assert_called_once_with(
             "https://www.baden-wuerttemberg.de/index.php?eID=dumpFile&f=1&fn=GBl2026011.pdf"
         )
+        parse.assert_awaited_once_with(b"%PDF")
 
     @pytest.mark.asyncio
     async def test_staggered_clause_yields_the_latest_date(self):

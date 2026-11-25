@@ -87,7 +87,9 @@ langen Lauf).
 
 **Konsequenz:** Ohne LLM bleibt das Hash-Register leer, TOPs haben keine Dokumente.
 Ausschüsse bekommen keine TOPs. Ändert sich ein Termin, nachdem die Tagesordnung
-verschwunden ist, gehen seine TOPs verloren.
+verschwunden ist, gehen seine TOPs verloren. Die Tagesordnung liest noch kreuzberg
+(`extract_pdf_text`, ohne OCR): pazufa-parser mischt die Redezeiten-Spalte in TOP-Titel
+(18/14, TOP 7; Issue #218).
 
 <a id="dd-076"></a>
 ## DD-076: Beteiligungsfristen im Kalender

@@ -13,9 +13,9 @@ from urllib.parse import urlparse
 
 import aiohttp
 import certifi
-from kreuzberg import ConcurrencyConfig, ExtractionConfig, OcrConfig, extract_file
+from kreuzberg import extract_file
 from pazufa_corelib.normalization import normalize_volltext as _core_normalize_volltext
-from pazufa_pdf_parser import Ocr, ParseOptions, PdfDocument, Severity, parse
+from pazufa_pdf_parser import Ocr, ParseOptions, PdfDocument, Severity, Source, parse
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ def paragraph_quality_score(text: str) -> float:
     # Signal 1: C1 control characters — never in properly extracted German text
     c1_count = sum(1 for c in text if 0x80 <= ord(c) <= 0x9F)
 
-    # Signal 2: Latin Extended-A+B (0x0100-0x024F, same range as is_garbled)
+    # Signal 2: Latin Extended-A+B (0x0100-0x024F)
     ext_count = sum(1 for c in text if 0x0100 <= ord(c) <= 0x024F)
 
     # Signal 3: long words without German vowels (German is vowel-rich)
@@ -125,72 +125,6 @@ def normalize_volltext(text: str) -> str:
 
     # Pass 2 (issue #20): reassemble words the extractor left hyphenated.
     return _LINEBREAK_HYPHEN_RE.sub("", text)
-
-
-# ---------------------------------------------------------------------------
-# Garbled text detection
-# ---------------------------------------------------------------------------
-
-_GARBLED_LATIN_EXT_THRESHOLD = 0.05  # 5% of alpha chars in Latin Extended → garbled
-# C1 controls never occur in properly extracted text, so any recurring share is a
-# defect. 0.5% sits an order of magnitude above the "one stray char" noise floor
-# and well below the ~1.0-2.0% measured on real Muster-2 documents (DS 17/1201).
-_GARBLED_C1_THRESHOLD = 0.005
-
-
-def is_garbled(text: str) -> bool:
-    """Detect garbled PDF text from broken font encodings (DD-015).
-
-    Flags both patterns DD-015 documents, because both are recoverable by the
-    OCR retry that this function gates:
-
-    * *Muster 1* — Latin Extended characters (U+0100-U+024F) above 5% of all
-      alphabetic characters. They appear when a PDF font lacks a proper
-      ToUnicode CMap and kreuzberg maps glyph IDs to wrong Unicode code points.
-    * *Muster 2* — C1 control characters (0x80-0x9F) above 0.5%, the by-product
-      of the constant ASCII shift (``bQGHUXQJVDQWUDJ`` → ``Änderungsantrag``).
-      Mirrors ``paragraph_quality_score``'s signal 1, but one layer earlier:
-      that scorer only *strips* such paragraphs, leaving the document empty
-      (GitHub issue #20).
-
-    Both ratios are measured over the whole document, so a long, mostly clean
-    PDF with only a few garbled pages stays below the thresholds; those are
-    still caught (and dropped) by ``normalize_volltext``.
-    """
-    if not text or len(text) < MIN_TEXT_LENGTH:
-        return False
-
-    alpha_count = 0
-    latin_ext_count = 0
-    c1_count = 0
-    for c in text:
-        code = ord(c)
-        if c.isalpha():
-            alpha_count += 1
-            if 0x0100 <= code <= 0x024F:
-                latin_ext_count += 1
-        elif 0x80 <= code <= 0x9F:
-            c1_count += 1
-
-    if alpha_count == 0:
-        return False
-
-    return (latin_ext_count / alpha_count) > _GARBLED_LATIN_EXT_THRESHOLD or (
-        c1_count / alpha_count
-    ) > _GARBLED_C1_THRESHOLD
-
-
-def _usable_length(text: str) -> int:
-    """How many characters of *text* survive :func:`normalize_volltext`.
-
-    ``is_garbled`` measures the whole document, so it also fires on PDFs where
-    only part of the text is broken (measured: ~15 % of the affected corpus keeps
-    40-97 % of its content). OCR replaces *everything*, including the pages that
-    extracted cleanly, and is itself lossy on tables — so "not garbled" alone is
-    too weak a bar for accepting the OCR result. Comparing what actually survives
-    normalization on both sides makes the swap a measured decision.
-    """
-    return len(normalize_volltext(text))
 
 
 # ---------------------------------------------------------------------------
@@ -269,108 +203,42 @@ async def download_pdf(session, url: str) -> Path:
     return Path(tmp.name)
 
 
-# OCR is the memory-heavy fallback: kreuzberg rasterizes every PDF page to a
-# ~300 DPI bitmap before running Tesseract. By default its internal Rayon pool
-# renders one page per CPU core in parallel, so a single large document can spike
-# to ~7.5 GB RSS on a 12-core host (measured) — enough to OOM-kill the container
-# on its own. Two guards keep the peak bounded and roughly independent of the
-# host's core count and of how many documents are in flight:
-#
-#   * max_threads=1 forces sequential page rendering *within* one document,
-#     capping it at ~1.3 GB (measured) instead of cores x ~0.7 GB.
-#   * _ocr_semaphore() caps how many documents OCR *at the same time*.
-#
-# Peak OCR memory ≈ 0.65 GB base + (_OCR_LIMIT x max_threads) x ~0.66 GB.
-# The default (2 x 1) targets ~2 GB, comfortably inside a 4 GB container while
-# leaving the fast native-text path (no OCR) free to run at main.max-concurrency.
-#
-# NB: lowering OCR DPI via ImagePreprocessingConfig would shrink each bitmap, but
-# that code path SIGABRTs in kreuzberg 4.9.9, so max_threads is the usable lever.
-_OCR_MAX_THREADS = 1
+async def extract_pdf_text(pdf_path: Path) -> str:
+    """The PDF's text via kreuzberg, without OCR: only for the Tagesordnung, whose speaking-time
+    column pazufa-parser still mixes into the item titles (issue #218, pdf-parser#8)."""
+    return (await extract_file(pdf_path)).content or ""
+
+
+# OCR is the memory-heavy step. pazufa-parser OCRs page by page and only the pages that need it (DD-015);
+# one Ocr object caps the tesseract processes of all parse() calls in the process (issue #217).
 _OCR_LIMIT = 2
 # OCR time grows with pages, not bytes: 0.76 s/page (17/1104); the largest WP17 PDF has 225 pages (issue #182).
 MAX_OCR_PAGES = 500
-_OCR_SLOT: dict = {}
-
-
-def _ocr_semaphore() -> asyncio.Semaphore:
-    return loop_semaphore(_OCR_SLOT, _OCR_LIMIT)
-
-
-_OCR_CONFIG = ExtractionConfig(
-    force_ocr=True,
-    ocr=OcrConfig(backend="tesseract", language="deu"),
-    concurrency=ConcurrencyConfig(max_threads=_OCR_MAX_THREADS),
-)
-
-
-async def extract_pdf_text(pdf_path: Path) -> tuple[str, str]:
-    """Extract text and compute SHA256 hash from a PDF file.
-
-    Returns (full_text, hash).  Falls back to OCR, up to MAX_OCR_PAGES pages, when:
-    1. Normal extraction yields fewer than 64 characters, or
-    2. The extracted text is garbled (broken font encoding detected).
-
-    OCR uses Tesseract with German language for proper character recognition.
-    """
-    with open(pdf_path, "rb") as f:
-        doc_hash = hashlib.file_digest(f, "sha256").hexdigest()
-
-    result = await extract_file(pdf_path, config=ExtractionConfig(force_ocr=False))
-    text = result.content or ""
-    pages = result.metadata.get("page_count", 0)
-
-    if pages > MAX_OCR_PAGES:
-        if len(text) < MIN_TEXT_LENGTH or is_garbled(text):
-            logger.warning("PDF has %d pages, over %d for OCR: keeping its native text", pages, MAX_OCR_PAGES)
-    elif len(text) < MIN_TEXT_LENGTH:
-        logger.warning("Normal text extraction yielded <%d chars, retrying with OCR", MIN_TEXT_LENGTH)
-        async with _ocr_semaphore():
-            ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
-        text = ocr_result.content or ""
-    elif is_garbled(text):
-        logger.warning("Garbled text detected (broken font encoding), retrying with OCR")
-        try:
-            async with _ocr_semaphore():
-                ocr_result = await extract_file(pdf_path, config=_OCR_CONFIG)
-            ocr_text = ocr_result.content or ""
-            if ocr_text and not is_garbled(ocr_text) and _usable_length(ocr_text) > _usable_length(text):
-                text = ocr_text
-            else:
-                logger.warning("OCR did not improve garbled text, keeping original")
-        except Exception as exc:
-            logger.warning("OCR retry failed (%s), keeping original garbled text", type(exc).__name__)
-
-    return text, doc_hash
-
-
-# pazufa-parser OCRs page by page and only the pages that need it (DD-015). One Ocr object
-# caps the tesseract processes of all parse() calls in the process: as many pages at a time
-# as kreuzberg's OCR above, a few hundred MB each instead of ~0.66 GB (issue #217).
-_PARSER_OCR = Ocr(max_parallel=_OCR_LIMIT * _OCR_MAX_THREADS)
-_PARSE_OPTIONS = ParseOptions(ocr_engine=_PARSER_OCR, max_ocr_pages=MAX_OCR_PAGES)
+_PARSE_OPTIONS = ParseOptions(ocr_engine=Ocr(max_parallel=_OCR_LIMIT), max_ocr_pages=MAX_OCR_PAGES)
 _PARSE_SLOT: dict = {}
 
 
-async def _parse(pdf_path: Path, options: ParseOptions) -> PdfDocument:
+async def _parse(pdf: Source, options: ParseOptions) -> PdfDocument:
     # A parse holds a default-executor thread while it waits for OCR; unlimited, they starve DNS and downloads.
     async with loop_semaphore(_PARSE_SLOT, _OCR_LIMIT):
-        doc = await asyncio.to_thread(parse, pdf_path, options)
+        doc = await asyncio.to_thread(parse, pdf, options)
     for issue in doc.report.issues:  # the parser does not log: OCR failures, the OCR page limit, ...
         if issue.severity >= Severity.WARNING:
-            logger.warning("pazufa-parser %s (page %s): %s", issue.code, issue.page, issue.message)
+            # A failed OCR is final: no retry, the page stays without text (issue #218).
+            level = logging.ERROR if issue.severity >= Severity.ERROR else logging.WARNING
+            logger.log(level, "pazufa-parser %s (page %s): %s", issue.code, issue.page, issue.message)
     return doc
 
 
-async def parse_pdf(pdf_path: Path, page_hint: int | None = None) -> PdfDocument:
-    """The parsed PDF; with a ``#page=N`` hint only its window of _WINDOW_PAGES pages.
+async def parse_pdf(pdf: Source, page_hint: int | None = None) -> PdfDocument:
+    """The parsed PDF (a path or its bytes); with a ``#page=N`` hint only its window of _WINDOW_PAGES pages.
 
     A window with fewer than MIN_TEXT_LENGTH chars (a blank anchor page, or one past the
     end) falls back to the whole document (DD-038, issue #50).
     """
     if page_hint:  # #page=0 is no page: ParseOptions(first_page=0) raises
         window = await _parse(
-            pdf_path, replace(_PARSE_OPTIONS, first_page=page_hint, last_page=page_hint + _WINDOW_PAGES - 1)
+            pdf, replace(_PARSE_OPTIONS, first_page=page_hint, last_page=page_hint + _WINDOW_PAGES - 1)
         )
         if len(window.text().strip()) >= MIN_TEXT_LENGTH:
             return window
@@ -379,14 +247,14 @@ async def parse_pdf(pdf_path: Path, page_hint: int | None = None) -> PdfDocument
             page_hint,
             MIN_TEXT_LENGTH,
         )
-    return await _parse(pdf_path, _PARSE_OPTIONS)
+    return await _parse(pdf, _PARSE_OPTIONS)
 
 
 async def read_pdf(session, url: str) -> str:
-    """A PDF's normalized volltext via kreuzberg, for Entwurf matching (DD-079) until issue #218."""
+    """A PDF's normalized volltext, for Entwurf matching (DD-079)."""
     pdf_path = await download_pdf(session, url)
     try:
-        return normalize_volltext((await extract_pdf_text(pdf_path))[0])
+        return normalize_volltext((await parse_pdf(pdf_path)).text())
     finally:
         pdf_path.unlink(missing_ok=True)
 

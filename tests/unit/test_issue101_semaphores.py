@@ -9,7 +9,7 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from bawue import bawue_dok, pdf_text
+from bawue import bawue_dok
 
 
 def _response(*_, **__):
@@ -33,21 +33,6 @@ def test_llm_calls_contend_in_two_cycles():
         assert asyncio.run(cycle()) == [{"ok": True}] * 5
 
 
-def test_ocr_limit_is_shared_within_a_cycle_and_fresh_per_cycle():
-    async def cycle():
-        sem = pdf_text._ocr_semaphore()
-        assert sem is pdf_text._ocr_semaphore()  # both scrapers share one limit
-
-        async def hold():
-            async with pdf_text._ocr_semaphore():
-                await asyncio.sleep(0.01)
-
-        await asyncio.gather(*(hold() for _ in range(4)))
-        return sem
-
-    assert asyncio.run(cycle()) is not asyncio.run(cycle())
-
-
 def test_finished_loops_are_released():
     """A waited-on semaphore references its loop; keeping one per loop would leak a loop per cycle."""
     import gc
@@ -59,7 +44,7 @@ def test_finished_loops_are_released():
         loops.append(weakref.ref(asyncio.get_running_loop()))
 
         async def hold():
-            async with pdf_text._ocr_semaphore():
+            async with bawue_dok._llm_semaphore():
                 await asyncio.sleep(0.01)
 
         await asyncio.gather(*(hold() for _ in range(4)))
