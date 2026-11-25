@@ -28,8 +28,8 @@ XSS-Prüfung des Backends aus (HTTP 400).
 Fehlalarme. OCR kostet viel (17/1104: 121 s statt 0,2 s) und rettet bis Faktor 4,6 mehr
 Text.
 
-**pazufa-parser statt kreuzberg (Issue #216):** Verglichen an 123 WP-17/18-Fundstellen
-(`verify_fulltext --compare-parser`). Der Parser erkennt dasselbe Ausgegeben-Datum (52 von 52),
+**pazufa-parser statt kreuzberg (Issue #216):** Verglichen an 123 WP-17/18-Fundstellen.
+Der Parser erkennt dasselbe Ausgegeben-Datum (52 von 52),
 aber nur mit `furniture_text()`, denn die Fußzeile ist dort Furniture. Er schneidet dieselben
 Tagesordnungsseiten (43 von 44; 17/19 S. 31: Druckseite „17“ aus „17/1076“ gelesen) und
 ersetzt keinen nativen Text, der die Normalisierung überlebt hätte, durch OCR. Jeder Fall unter
