@@ -26,10 +26,10 @@ pazufa-pdf-parser = {git = "https://github.com/Parlamentszusammenfasser/pdf-pars
 lxml = ">=6.0"
 requests = "^2.32"
 toml = ">=0.10"
-icalendar = ">=7.0"
-certifi = ">=2026.10.23"
+icalendar = ">=7.3.2"
+certifi = ">=2026.11.20"
 python-json-logger = "^4.2"
-litellm = ">=1.110.1"
+litellm = ">=1.110.2"
 json-repair = "^0.64"
 
 [tool.poetry.group.dev.dependencies]
