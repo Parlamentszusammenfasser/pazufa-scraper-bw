@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 import aiohttp
 import certifi
-from kreuzberg import ExtractionConfig, extract_file
+from kreuzberg import extract_file
 from pazufa_corelib.normalization import normalize_volltext as _core_normalize_volltext
 from pazufa_pdf_parser import Ocr, ParseOptions, PdfDocument, Severity, Source, parse
 
@@ -206,7 +206,7 @@ async def download_pdf(session, url: str) -> Path:
 async def extract_pdf_text(pdf_path: Path) -> str:
     """The PDF's text via kreuzberg, without OCR: only for the Tagesordnung, whose speaking-time
     column pazufa-parser still mixes into the item titles (issue #218, pdf-parser#8)."""
-    return (await extract_file(pdf_path, config=ExtractionConfig(force_ocr=False))).content or ""
+    return (await extract_file(pdf_path)).content or ""
 
 
 # OCR is the memory-heavy step. pazufa-parser OCRs page by page and only the pages that need it (DD-015);
